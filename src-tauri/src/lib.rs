@@ -3,6 +3,7 @@ use crate::git::service::GitService;
 use crate::projects::service::ProjectService;
 
 mod agents;
+pub mod cli;
 mod core;
 mod fs;
 mod git;
@@ -14,15 +15,6 @@ mod watch;
 use core::database::Database;
 use runtime::RuntimeService;
 use tauri::{Manager, RunEvent};
-
-/// Hidden subcommand: `katrix __hook <EVENT>` runs the agent hook client instead
-/// of launching the app (see hooks::client). Kept in sync with main.rs dispatch.
-pub const HOOK_SUBCOMMAND: &str = "__hook";
-
-/// Entry point for the hook subcommand — brokers one hook event with the bridge.
-pub fn run_hook(event: String) {
-    hooks::client::run(event);
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

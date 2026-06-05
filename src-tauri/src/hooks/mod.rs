@@ -5,7 +5,6 @@
 //! agent proceeds — no fake keystroke. This is the legit, hook-driven rebirth of
 //! the removed `kat`/ipc. See docs/specs/2026-06-05-agent-hooks-permissions.md.
 
-pub mod client;
 pub mod protocol;
 
 use std::collections::HashMap;
@@ -89,7 +88,7 @@ impl HookBridge {
 }
 
 /// The executable agents invoke for their hooks — the katrix app itself, re-run
-/// as `katrix __hook <EVENT>` (see hooks::client). Always co-located with the
+/// as `katrix hook --event <EVENT>` (see cli::hook). Always co-located with the
 /// running app, so no separate sidecar to bundle. `None` only if the OS can't
 /// report our own path, in which case the agent launches without hooks (PTY
 /// parsing fallback).

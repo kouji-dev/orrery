@@ -27,7 +27,7 @@ impl AgentAdapter for CursorAdapter {
     }
 
     fn install_hooks(&self, worktree: &Path, env: &HookEnv) -> std::io::Result<()> {
-        use crate::hooks::client::hook_command;
+        use crate::cli::hook::hook_command;
         let dir = worktree.join(".cursor");
         std::fs::create_dir_all(&dir)?;
         let hooks = serde_json::json!({

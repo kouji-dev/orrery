@@ -26,7 +26,7 @@ impl AgentAdapter for ClaudeAdapter {
     }
 
     fn install_hooks(&self, worktree: &Path, env: &HookEnv) -> std::io::Result<()> {
-        use crate::hooks::client::hook_command;
+        use crate::cli::hook::hook_command;
         let dir = worktree.join(".claude");
         std::fs::create_dir_all(&dir)?;
         // PreToolUse blocks (timeout 600s) so the user has time to decide; Stop +
@@ -80,7 +80,7 @@ mod tests {
         assert!(matcher.contains("Bash") && matcher.contains("Edit"), "gates mutating tools");
         assert_eq!(v["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"], 600);
         let cmd = v["hooks"]["PreToolUse"][0]["hooks"][0]["command"].as_str().unwrap();
-        assert!(cmd.contains("__hook PreToolUse"), "command carries the event: {cmd}");
+        assert!(cmd.contains("hook --event PreToolUse"), "command carries the event: {cmd}");
     }
 
     #[test]

@@ -47,7 +47,7 @@ impl AgentAdapter for CodexAdapter {
     }
 
     fn install_hooks(&self, worktree: &Path, env: &HookEnv) -> std::io::Result<()> {
-        use crate::hooks::client::hook_command;
+        use crate::cli::hook::hook_command;
         let home = Self::home(worktree);
         std::fs::create_dir_all(&home)?;
         // Best-effort: codex reads hooks from config.toml in CODEX_HOME. Exact
