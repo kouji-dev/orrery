@@ -27,15 +27,15 @@ impl AgentAdapter for CursorAdapter {
     }
 
     fn install_hooks(&self, worktree: &Path, env: &HookEnv) -> std::io::Result<()> {
+        use crate::hooks::client::hook_command;
         let dir = worktree.join(".cursor");
         std::fs::create_dir_all(&dir)?;
-        let hook = env.hook_bin.to_string_lossy().to_string();
         let hooks = serde_json::json!({
             "version": 1,
             "hooks": {
-                "beforeShellExecution": [{ "command": hook }],
-                "beforeMCPExecution": [{ "command": hook }],
-                "stop": [{ "command": hook }]
+                "beforeShellExecution": [{ "command": hook_command(&env.hook_bin, "beforeShellExecution") }],
+                "beforeMCPExecution": [{ "command": hook_command(&env.hook_bin, "beforeMCPExecution") }],
+                "stop": [{ "command": hook_command(&env.hook_bin, "stop") }]
             }
         });
         std::fs::write(dir.join("hooks.json"), serde_json::to_vec_pretty(&hooks)?)

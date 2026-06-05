@@ -26,22 +26,24 @@ impl AgentAdapter for ClaudeAdapter {
     }
 
     fn install_hooks(&self, worktree: &Path, env: &HookEnv) -> std::io::Result<()> {
+        use crate::hooks::client::hook_command;
         let dir = worktree.join(".claude");
         std::fs::create_dir_all(&dir)?;
-        let hook = env.hook_bin.to_string_lossy().to_string();
         // PreToolUse blocks (timeout 600s) so the user has time to decide; Stop +
         // UserPromptSubmit are non-blocking status pings (working / done).
+        // Scoped to the *mutating* tools — gating every Read/Grep would bury the
+        // user; the asks that matter are shell + file writes.
         let settings = serde_json::json!({
             "hooks": {
                 "PreToolUse": [{
-                    "matcher": "*",
-                    "hooks": [{ "type": "command", "command": hook, "timeout": 600 }]
+                    "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+                    "hooks": [{ "type": "command", "command": hook_command(&env.hook_bin, "PreToolUse"), "timeout": 600 }]
                 }],
                 "UserPromptSubmit": [{
-                    "hooks": [{ "type": "command", "command": hook }]
+                    "hooks": [{ "type": "command", "command": hook_command(&env.hook_bin, "UserPromptSubmit") }]
                 }],
                 "Stop": [{
-                    "hooks": [{ "type": "command", "command": hook }]
+                    "hooks": [{ "type": "command", "command": hook_command(&env.hook_bin, "Stop") }]
                 }]
             }
         });
@@ -74,9 +76,11 @@ mod tests {
         ClaudeAdapter.install_hooks(wt.path(), &env()).unwrap();
         let body = std::fs::read_to_string(wt.path().join(".claude/settings.json")).unwrap();
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
-        assert_eq!(v["hooks"]["PreToolUse"][0]["matcher"], "*");
+        let matcher = v["hooks"]["PreToolUse"][0]["matcher"].as_str().unwrap();
+        assert!(matcher.contains("Bash") && matcher.contains("Edit"), "gates mutating tools");
         assert_eq!(v["hooks"]["PreToolUse"][0]["hooks"][0]["timeout"], 600);
-        assert!(body.contains("kat-hook"), "hook command points at kat-hook");
+        let cmd = v["hooks"]["PreToolUse"][0]["hooks"][0]["command"].as_str().unwrap();
+        assert!(cmd.contains("__hook PreToolUse"), "command carries the event: {cmd}");
     }
 
     #[test]

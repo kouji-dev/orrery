@@ -6,6 +6,7 @@ mod agents;
 mod core;
 mod fs;
 mod git;
+mod hooks;
 mod projects;
 mod runtime;
 mod watch;
@@ -13,6 +14,15 @@ mod watch;
 use core::database::Database;
 use runtime::RuntimeService;
 use tauri::{Manager, RunEvent};
+
+/// Hidden subcommand: `katrix __hook <EVENT>` runs the agent hook client instead
+/// of launching the app (see hooks::client). Kept in sync with main.rs dispatch.
+pub const HOOK_SUBCOMMAND: &str = "__hook";
+
+/// Entry point for the hook subcommand — brokers one hook event with the bridge.
+pub fn run_hook(event: String) {
+    hooks::client::run(event);
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -35,6 +45,13 @@ pub fn run() {
             app.manage(agent_service);
             app.manage(crate::watch::WatchService::new());
             app.manage(RuntimeService::new());
+            // loopback bridge for native agent hooks (permission round-trip + status)
+            match hooks::HookBridge::start(app.handle().clone()) {
+                Ok(bridge) => {
+                    app.manage(bridge);
+                }
+                Err(e) => log::error!("hook bridge failed to start: {e}"),
+            }
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
@@ -65,6 +82,7 @@ pub fn run() {
             agents::commands::agent_stop,
             agents::commands::agent_input,
             agents::commands::agent_resize,
+            agents::commands::agent_permission_decide,
             agents::commands::detect_tools,
         ])
         .build(tauri::generate_context!())

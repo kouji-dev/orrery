@@ -1,8 +1,10 @@
 use tauri::{AppHandle, Runtime, State};
 use uuid::Uuid;
 
+use crate::agents::adapters::HookEnv;
 use crate::core::errors::{AppError, AppResult};
 use crate::core::events::{emit_entity, Change};
+use crate::hooks::{hook_binary, HookBridge};
 use crate::projects::service::ProjectService;
 use crate::runtime::RuntimeService;
 use crate::watch::WatchService;
@@ -112,6 +114,7 @@ pub fn agent_start<R: Runtime>(
     app: AppHandle<R>,
     rt: State<'_, RuntimeService>,
     svc: State<'_, AgentService>,
+    bridge: State<'_, HookBridge>,
     id: Uuid,
     rows: u16,
     cols: u16,
@@ -119,7 +122,16 @@ pub fn agent_start<R: Runtime>(
     let agent = svc.get(id)?;
     // deliver the initial task prompt only on the very first launch
     let send_prompt = !agent.started;
-    rt.start(app.clone(), &agent, rows, cols, send_prompt)
+    // wire native hooks when the kat-hook helper is present; otherwise launch
+    // bare and rely on the PTY-parsing fallback.
+    let hook_env = hook_binary().map(|hook_bin| HookEnv {
+        agent_id: id.to_string(),
+        tool: agent.tool.clone(),
+        endpoint: bridge.endpoint(),
+        token: bridge.token().to_string(),
+        hook_bin,
+    });
+    rt.start(app.clone(), &agent, rows, cols, send_prompt, hook_env.as_ref())
         .map_err(AppError::Other)?;
     if send_prompt {
         svc.mark_started(id)?;
@@ -188,6 +200,18 @@ pub fn agent_dir(
 ) -> AppResult<Vec<crate::fs::FileNode>> {
     let agent = svc.get(id)?;
     Ok(crate::fs::list_dir(std::path::Path::new(&agent.worktree), &path))
+}
+
+/// Resolve a held permission request with the user's decision (Accept/Reject in
+/// the notification). Wakes the blocked hook so the agent allows/denies the call.
+#[tauri::command]
+pub fn agent_permission_decide(
+    bridge: State<'_, HookBridge>,
+    request_id: Uuid,
+    allow: bool,
+) -> AppResult<()> {
+    bridge.decide(request_id, allow);
+    Ok(())
 }
 
 /// Detection of which CLI coding agents are installed — delegated to the adapter

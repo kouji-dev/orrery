@@ -52,6 +52,16 @@ export class AgentRuntimeService {
   // notification edge-tracking + user-stop flag (a stop is not "work finished")
   private prevNeedsInput: Record<string, boolean> = {};
   private stoppingByUser: Record<string, boolean> = {};
+  // backend hook status (working/idle) — authoritative over PTY title parsing
+  private hookState: Record<string, string> = {};
+  private hookStateAt: Record<string, number> = {};
+
+  /** Tools driven by native blocking hooks — their permission/question signals
+   *  come from the backend, so the PTY heuristic must not also raise them. */
+  private static readonly HOOK_TOOLS = new Set(["claude", "codex", "cursor"]);
+  private hookDriven(tool: string): boolean {
+    return AgentRuntimeService.HOOK_TOOLS.has(tool);
+  }
 
   constructor() {
     // detect installed CLI tools once
@@ -87,6 +97,19 @@ export class AgentRuntimeService {
       this.titleStatus[id] = s;
       this.titleAt[id] = Date.now();
     });
+
+    // backend native-hook signals (authoritative for tools that support hooks):
+    //  • permission → a held tool call; raise a notification carrying its requestId
+    //  • status     → working/idle pings (override the PTY title heuristic)
+    void this.agentsStore
+      .onPermission((p) => this.onPermissionRequest(p))
+      .catch(() => {});
+    void this.agentsStore
+      .onStatus((id, state) => {
+        this.hookState[id] = state;
+        this.hookStateAt[id] = Date.now();
+      })
+      .catch(() => {});
 
     // stream output: raw bytes → xterm, plain-text tail → liveLogs (mini-term)
     void this.agentsStore
@@ -176,6 +199,8 @@ export class AgentRuntimeService {
     this.startedAt[id] = Date.now();
     delete this.titleStatus[id];
     delete this.titleAt[id];
+    delete this.hookState[id];
+    delete this.hookStateAt[id];
     this.prevNeedsInput[id] = false;
     this.patchRuntime(id, { elapsed: 0, working: true, needsInput: false });
     void this.agentsStore
@@ -195,6 +220,8 @@ export class AgentRuntimeService {
     delete this.startedAt[id];
     delete this.titleStatus[id];
     delete this.titleAt[id];
+    delete this.hookState[id];
+    delete this.hookStateAt[id];
     delete this.prevNeedsInput[id];
   }
 
@@ -214,6 +241,11 @@ export class AgentRuntimeService {
 
   private liveState(id: string, now: number): { working: boolean; needsInput: boolean } {
     const outputRecent = now - (this.lastOutputAt[id] ?? 0) < 1500;
+    // a hook status ping (working at turn start, idle at Stop) is authoritative
+    // and event-driven, so it persists until the next ping — not time-decayed.
+    const hs = this.hookState[id];
+    if (hs === "working") return { working: true, needsInput: false };
+    if (hs === "idle") return { working: outputRecent, needsInput: false };
     const ts = this.titleStatus[id];
     if (ts === "permission") return { working: false, needsInput: true };
     let working: boolean;
@@ -234,6 +266,8 @@ export class AgentRuntimeService {
     delete this.startedAt[id];
     delete this.titleStatus[id];
     delete this.titleAt[id];
+    delete this.hookState[id];
+    delete this.hookStateAt[id];
     delete this.prevNeedsInput[id];
     this.patchRuntime(id, { working: false, needsInput: false });
     this.notifications.dismissPendingFor(id, ["permission", "question"]);
@@ -257,8 +291,30 @@ export class AgentRuntimeService {
     }));
   }
 
-  // ---- notification detection (TEMPORARY — moves to the backend later) ----
+  // ---- backend hook-driven permission requests (authoritative) ----
+  private onPermissionRequest(p: {
+    requestId: string;
+    agentId: string;
+    tool: string;
+    detail: string;
+  }) {
+    const ag = this.agents().find((a) => a.id === p.agentId);
+    const name = ag?.name ?? "agent";
+    const note = this.notifications.push({
+      agentId: p.agentId,
+      agentName: name,
+      kind: "permission",
+      title: `${name} needs permission`,
+      detail: p.detail,
+      requestId: p.requestId,
+    });
+    if (note) void this.notifyOS(note);
+  }
+
+  // ---- PTY-parsing fallback (for tools WITHOUT native hooks, e.g. gemini) ----
   private detectNeedsInput(ag: Agent, needsInput: boolean) {
+    // hook-driven tools get permission/question from the backend — don't double-raise
+    if (this.hookDriven(ag.tool)) return;
     const was = this.prevNeedsInput[ag.id] ?? false;
     if (needsInput && !was) {
       const detail = this.promptTail(ag.id);

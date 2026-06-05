@@ -123,4 +123,21 @@ export class AgentsStore {
   onExit(cb: (id: string) => void): Promise<() => void> {
     return this.bridge.on<{ id: string }>(Events.AgentExit, (p) => cb(p.id));
   }
+
+  /** Resolve a hook-held permission request with the user's decision. */
+  permissionDecide(requestId: string, allow: boolean): Promise<void> {
+    return this.bridge.invoke(Commands.AgentPermissionDecide, { requestId, allow });
+  }
+  /** Subscribe to hook-driven permission requests (a tool call held pending the user). */
+  onPermission(
+    cb: (p: { requestId: string; agentId: string; tool: string; detail: string }) => void,
+  ): Promise<() => void> {
+    return this.bridge.on(Events.AgentPermission, cb);
+  }
+  /** Subscribe to non-blocking hook status pings (working / idle). */
+  onStatus(cb: (id: string, state: string) => void): Promise<() => void> {
+    return this.bridge.on<{ id: string; state: string }>(Events.AgentStatus, (p) =>
+      cb(p.id, p.state),
+    );
+  }
 }

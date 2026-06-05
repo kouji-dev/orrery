@@ -29,7 +29,8 @@ pub struct HookEnv {
     pub endpoint: String,
     /// Shared secret the hook echoes so the server only honours our own hooks.
     pub token: String,
-    /// Absolute path to the `kat-hook` helper binary the agent will invoke.
+    /// The executable the agent's hook invokes — the katrix app itself, re-run as
+    /// `katrix __hook <EVENT>` (see hooks::client::hook_command).
     pub hook_bin: PathBuf,
 }
 

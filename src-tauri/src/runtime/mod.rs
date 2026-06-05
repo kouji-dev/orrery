@@ -7,6 +7,7 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use tauri::{AppHandle, Emitter, Runtime};
 use uuid::Uuid;
 
+use crate::agents::adapters::{self, HookEnv};
 use crate::agents::model::Agent;
 
 /// Runs agent CLI tools in their worktrees over a PTY and streams their output.
@@ -49,6 +50,7 @@ impl RuntimeService {
         rows: u16,
         cols: u16,
         send_prompt: bool,
+        hooks: Option<&HookEnv>,
     ) -> Result<(), String> {
         let id = agent.id;
         if self.is_running(id) {
@@ -73,6 +75,22 @@ impl RuntimeService {
 
         let mut cmd = tool_command(&agent.tool, &agent.task, send_prompt);
         cmd.cwd(worktree);
+
+        // install the agent's native blocking hooks (worktree-scoped) + stamp the
+        // env so its kat-hook can call back. Best-effort: a failure here just
+        // means we fall back to PTY parsing, so the agent still launches.
+        if let Some(env) = hooks {
+            if let Some(adapter) = adapters::adapter_for(&agent.tool) {
+                if adapter.supports_hooks() {
+                    if let Err(e) = adapter.install_hooks(worktree, env) {
+                        log::warn!("hook install failed for agent {id}: {e}");
+                    }
+                    for (k, v) in adapter.env(worktree, env) {
+                        cmd.env(k, v);
+                    }
+                }
+            }
+        }
 
         let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
         drop(pair.slave);

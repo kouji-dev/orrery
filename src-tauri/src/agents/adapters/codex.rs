@@ -47,17 +47,20 @@ impl AgentAdapter for CodexAdapter {
     }
 
     fn install_hooks(&self, worktree: &Path, env: &HookEnv) -> std::io::Result<()> {
+        use crate::hooks::client::hook_command;
         let home = Self::home(worktree);
         std::fs::create_dir_all(&home)?;
-        let hook = env.hook_bin.to_string_lossy().to_string();
         // Best-effort: codex reads hooks from config.toml in CODEX_HOME. Exact
         // schema is still firming up upstream; the command + blocking pre-tool
-        // gate are the load-bearing parts.
+        // gate are the load-bearing parts. TOML literal strings ('...') avoid
+        // escaping the quoted command path.
+        let pre = hook_command(&env.hook_bin, "PreToolUse");
+        let stop = hook_command(&env.hook_bin, "Stop");
         let config = format!(
             "# managed by katrix — do not edit\n\
              [hooks]\n\
-             pre_tool_use = {hook:?}\n\
-             stop = {hook:?}\n"
+             pre_tool_use = '{pre}'\n\
+             stop = '{stop}'\n"
         );
         std::fs::write(home.join("config.toml"), config)
     }
