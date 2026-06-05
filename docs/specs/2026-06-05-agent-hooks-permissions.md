@@ -1,7 +1,28 @@
 # Agent hooks — reliable status + remote permission approval
 
-Status: **implemented** — commits d728dd3 (`AgentAdapter` trait + detection) and
-975baff (loopback bridge + permission round-trip), runtime follow-up 55bebef.
+Status: **implemented, then simplified to fire-and-forget** (commit a6221bb).
+After checking how stablyai/orca does it (its hook server acks fire-and-forget,
+HTTP 204 — it does NOT forward decisions; the user approves in the agent's TUI),
+we matched that: the loopback bridge stays for **status + needs-input detection**
+but no longer **holds** the agent. The blocking allow/deny round-trip described
+below is **deferred** — kept here as the design for if/when we add remote approve.
+
+What's live now (a6221bb):
+- Bridge acks every hook immediately (204, no body); the agent never blocks.
+- Hook events are status/needs-input only. Claude installs `Notification`
+  (needs the user) + `UserPromptSubmit`/`Stop` (working/idle). No `PreToolUse`
+  gate (it would notify per tool call).
+- Frontend raises a "needs your input" notification; Accept/Reject are
+  best-effort keystrokes, **Open terminal** is the reliable path.
+- Removed: pending registry, oneshot hold, decide timeout, `decide`,
+  `agent_permission_decide`, the `format_decision`/`Decision` adapter contract.
+
+History — commits d728dd3 (`AgentAdapter` trait + detection), 975baff (the
+blocking bridge), 55bebef (runtime follow-up). The blocking design below lived in
+975baff; restore from there if we implement remote approve.
+
+---
+
 
 **Deviation:** the "tiny no-deps `kat-hook` binary" shipped instead as a proper
 CLI subcommand of the main app binary — `katrix hook --event <EVENT>`
