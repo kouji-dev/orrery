@@ -17,10 +17,8 @@ export class NotificationStore {
   readonly unread = computed(() => this.pending().length);
 
   /**
-   * Add a notification. For a hook-driven request (`requestId` present) every one
-   * is distinct — each holds its own agent tool call — so they are never de-duped.
-   * Heuristic notifications (no requestId) de-dupe a still-pending one of the same
-   * agent+kind so a flickering spinner can't stack duplicates.
+   * Add a notification. De-dupes a still-pending one of the same agent+kind so a
+   * needs-input signal that re-fires can't stack duplicates.
    */
   push(input: {
     agentId: string;
@@ -28,14 +26,11 @@ export class NotificationStore {
     kind: NotificationKind;
     title: string;
     detail: string;
-    requestId?: string;
   }): AgentNotification | null {
-    if (!input.requestId) {
-      const dup = this.list().find(
-        (n) => n.agentId === input.agentId && n.kind === input.kind && n.status === "pending",
-      );
-      if (dup) return null;
-    }
+    const dup = this.list().find(
+      (n) => n.agentId === input.agentId && n.kind === input.kind && n.status === "pending",
+    );
+    if (dup) return null;
     const note: AgentNotification = {
       id: `n${++this.seq}`,
       createdAt: Date.now(),

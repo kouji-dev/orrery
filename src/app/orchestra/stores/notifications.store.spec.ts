@@ -10,26 +10,24 @@ const base = {
 };
 
 describe("NotificationStore", () => {
-  it("de-dupes a still-pending heuristic notification of the same agent+kind", () => {
+  it("de-dupes a still-pending notification of the same agent+kind", () => {
     const s = new NotificationStore();
     expect(s.push(base)).not.toBeNull();
     expect(s.push(base)).toBeNull(); // duplicate pending → dropped
     expect(s.pending().length).toBe(1);
   });
 
-  it("never de-dupes distinct hook requests (each holds its own tool call)", () => {
+  it("allows a new notification once the prior one is resolved", () => {
     const s = new NotificationStore();
-    const a = s.push({ ...base, requestId: "r1" });
-    const b = s.push({ ...base, requestId: "r2" });
-    expect(a).not.toBeNull();
-    expect(b).not.toBeNull();
-    expect(s.pending().length).toBe(2);
-    expect(a!.requestId).toBe("r1");
+    const a = s.push(base)!;
+    s.decide(a.id, "accepted");
+    expect(s.push(base)).not.toBeNull(); // no longer pending → not a dup
+    expect(s.pending().length).toBe(1);
   });
 
   it("decide resolves a notification out of the pending feed", () => {
     const s = new NotificationStore();
-    const n = s.push({ ...base, requestId: "r1" })!;
+    const n = s.push(base)!;
     s.decide(n.id, "accepted", "accepted");
     expect(s.pending().length).toBe(0);
     expect(s.all()[0].status).toBe("accepted");
@@ -37,8 +35,8 @@ describe("NotificationStore", () => {
 
   it("clearResolved keeps only pending notifications", () => {
     const s = new NotificationStore();
-    const keep = s.push({ ...base, requestId: "r1" })!;
-    const gone = s.push({ ...base, requestId: "r2" })!;
+    const keep = s.push({ ...base, agentId: "keep" })!;
+    const gone = s.push({ ...base, agentId: "gone" })!;
     s.decide(gone.id, "rejected");
     s.clearResolved();
     expect(s.all().map((n) => n.id)).toEqual([keep.id]);

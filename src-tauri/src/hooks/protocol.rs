@@ -23,9 +23,10 @@ pub struct HookEnvelope {
 /// The three things a hook tells us, collapsed across every tool's vocabulary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HookEvent {
-    /// Blocking gate — hold and ask the user before the tool runs.
-    Permission,
-    /// Non-blocking status: the agent started a turn.
+    /// The agent needs the user (permission prompt / question / idle waiting).
+    /// We notify; the agent keeps using its own prompt (fire-and-forget).
+    NeedsInput,
+    /// Non-blocking status: the agent started a turn / is acting.
     Working,
     /// Non-blocking status: the agent finished a turn.
     Done,
@@ -36,21 +37,28 @@ pub enum HookEvent {
 /// Map a tool's hook name to our event vocabulary.
 pub fn classify(event: &str) -> HookEvent {
     match event {
-        "PreToolUse" | "PermissionRequest" | "beforeShellExecution" | "beforeMCPExecution" => {
-            HookEvent::Permission
+        // dedicated "needs the user" signals (Claude `Notification` fires on a
+        // permission prompt or 60s idle; others on an explicit permission ask)
+        "Notification" | "PermissionRequest" => HookEvent::NeedsInput,
+        // the agent is actively working
+        "UserPromptSubmit" | "PreToolUse" | "beforeShellExecution" | "beforeMCPExecution" => {
+            HookEvent::Working
         }
-        "UserPromptSubmit" => HookEvent::Working,
         "Stop" | "stop" | "SessionEnd" => HookEvent::Done,
         _ => HookEvent::Other,
     }
 }
 
-/// A one-line, human-readable description of what the agent is about to do —
-/// scraped best-effort from the tool's request payload (the command for a shell
-/// call, the path for a file edit, otherwise the tool name).
+/// A one-line, human-readable description of why the agent needs the user —
+/// scraped best-effort from the hook payload (a notification `message`, else the
+/// tool command / path / name).
 pub fn summarize(env: &HookEnvelope) -> String {
     let p = &env.payload;
-    // claude / codex shape: { tool_name, tool_input: { command | file_path | ... } }
+    // claude `Notification` shape: { message: "Claude needs your permission …" }
+    if let Some(msg) = p.get("message").and_then(Value::as_str) {
+        return msg.to_string();
+    }
+    // claude / codex pre-tool shape: { tool_name, tool_input: { command | file_path | ... } }
     if let Some(name) = p.get("tool_name").and_then(Value::as_str) {
         let input = &p["tool_input"];
         if let Some(cmd) = input.get("command").and_then(Value::as_str) {
@@ -120,15 +128,28 @@ mod tests {
 
     #[test]
     fn classifies_each_tools_hooks() {
-        assert_eq!(classify("PreToolUse"), HookEvent::Permission);
-        assert_eq!(classify("beforeShellExecution"), HookEvent::Permission);
+        assert_eq!(classify("Notification"), HookEvent::NeedsInput);
+        assert_eq!(classify("PermissionRequest"), HookEvent::NeedsInput);
+        assert_eq!(classify("PreToolUse"), HookEvent::Working);
+        assert_eq!(classify("beforeShellExecution"), HookEvent::Working);
         assert_eq!(classify("UserPromptSubmit"), HookEvent::Working);
         assert_eq!(classify("Stop"), HookEvent::Done);
         assert_eq!(classify("whatever"), HookEvent::Other);
     }
 
     #[test]
-    fn summarizes_a_claude_bash_call() {
+    fn summarizes_a_claude_notification_message() {
+        let env = HookEnvelope {
+            agent_id: "a".into(),
+            tool: "claude".into(),
+            event: "Notification".into(),
+            payload: serde_json::json!({ "message": "Claude needs your permission to use Bash" }),
+        };
+        assert_eq!(summarize(&env), "Claude needs your permission to use Bash");
+    }
+
+    #[test]
+    fn summarizes_a_pre_tool_call_when_present() {
         let env = HookEnvelope {
             agent_id: "a".into(),
             tool: "claude".into(),
@@ -162,7 +183,7 @@ mod tests {
 
     #[test]
     fn reads_an_http_post_with_auth_and_body() {
-        let body = r#"{"agentId":"a1","tool":"claude","event":"PreToolUse","payload":null}"#;
+        let body = r#"{"agentId":"a1","tool":"claude","event":"Notification","payload":null}"#;
         let raw = format!(
             "POST / HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer secret\r\nContent-Length: {}\r\n\r\n{}",
             body.len(),
@@ -173,6 +194,6 @@ mod tests {
         assert_eq!(req.auth.as_deref(), Some("secret"));
         let env: HookEnvelope = serde_json::from_str(&req.body).unwrap();
         assert_eq!(env.agent_id, "a1");
-        assert_eq!(classify(&env.event), HookEvent::Permission);
+        assert_eq!(classify(&env.event), HookEvent::NeedsInput);
     }
 }

@@ -311,22 +311,16 @@ export class AgentRuntimeService {
     }));
   }
 
-  // ---- backend hook-driven permission requests (authoritative) ----
-  private onPermissionRequest(p: {
-    requestId: string;
-    agentId: string;
-    tool: string;
-    detail: string;
-  }) {
+  // ---- backend hook-driven needs-input signal (authoritative) ----
+  private onPermissionRequest(p: { agentId: string; tool: string; detail: string }) {
     const ag = this.agents().find((a) => a.id === p.agentId);
     const name = ag?.name ?? "agent";
     const note = this.notifications.push({
       agentId: p.agentId,
       agentName: name,
       kind: "permission",
-      title: `${name} needs permission`,
+      title: `${name} needs your input`,
       detail: p.detail,
-      requestId: p.requestId,
     });
     if (note) void this.notifyOS(note);
   }

@@ -1,12 +1,11 @@
 use std::path::Path;
 
-use super::{claude_style_decision, AgentAdapter, Decision, HookEnv};
+use super::{AgentAdapter, HookEnv};
 
 /// OpenAI Codex CLI. Codex has no per-directory hook file; it reads config from
 /// `$CODEX_HOME`. We point it at a *managed* home inside the worktree
 /// (`.katrix/codex`) via the `CODEX_HOME` env stamp, so we never touch the
-/// user's real `~/.codex`. Its pre-tool hook uses the same `hookSpecificOutput`
-/// decision schema as Claude.
+/// user's real `~/.codex`. Fire-and-forget status hooks only.
 pub struct CodexAdapter;
 
 impl CodexAdapter {
@@ -51,9 +50,8 @@ impl AgentAdapter for CodexAdapter {
         let home = Self::home(worktree);
         std::fs::create_dir_all(&home)?;
         // Best-effort: codex reads hooks from config.toml in CODEX_HOME. Exact
-        // schema is still firming up upstream; the command + blocking pre-tool
-        // gate are the load-bearing parts. TOML literal strings ('...') avoid
-        // escaping the quoted command path.
+        // schema is still firming up upstream; these are fire-and-forget status
+        // pings. TOML literal strings ('...') avoid escaping the quoted command.
         let pre = hook_command(&env.hook_bin, "PreToolUse");
         let stop = hook_command(&env.hook_bin, "Stop");
         let config = format!(
@@ -63,10 +61,6 @@ impl AgentAdapter for CodexAdapter {
              stop = '{stop}'\n"
         );
         std::fs::write(home.join("config.toml"), config)
-    }
-
-    fn format_decision(&self, decision: Decision, reason: &str) -> String {
-        claude_style_decision(decision, reason)
     }
 }
 
@@ -81,7 +75,7 @@ mod tests {
             tool: "codex".into(),
             endpoint: "http://127.0.0.1:5000".into(),
             token: "tok".into(),
-            hook_bin: PathBuf::from("/opt/katrix/kat-hook"),
+            hook_bin: PathBuf::from("/opt/katrix/katrix"),
         }
     }
 
@@ -91,7 +85,7 @@ mod tests {
         CodexAdapter.install_hooks(wt.path(), &env()).unwrap();
         let cfg = CodexAdapter::home(wt.path()).join("config.toml");
         let body = std::fs::read_to_string(cfg).unwrap();
-        assert!(body.contains("kat-hook"));
+        assert!(body.contains("hook --event"));
         assert!(body.contains("[hooks]"));
     }
 

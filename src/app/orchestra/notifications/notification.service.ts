@@ -10,10 +10,9 @@ import { AgentActionsService } from "../agents/agent-actions.service";
  * NotificationStore (filled by the backend hook bridge via AgentRuntimeService);
  * this service performs the side effect of a decision and records it.
  *
- * For a hook-driven permission (`requestId` present), Accept/Reject resolve the
- * held tool call through the backend — the agent then proceeds or refuses for
- * real. Without a requestId (un-hooked tools, e.g. gemini) we fall back to a
- * best-effort PTY keystroke; "Open terminal" stays the fully reliable path.
+ * Hooks are fire-and-forget (we don't forward the decision yet — like orca), so
+ * Accept/Reject send a best-effort PTY keystroke; "Open terminal" is the fully
+ * reliable path where the user approves in the agent's own TUI.
  */
 @Injectable({ providedIn: "root" })
 export class NotificationService {
@@ -30,26 +29,22 @@ export class NotificationService {
     this.store.clearResolved();
   }
 
-  /** Accept a permission request: resolve the held hook (or fall back to a keystroke). */
+  /** Accept: best-effort affirmative keystroke (approve in the terminal for real). */
   accept(n: AgentNotification) {
-    if (n.kind === "permission") this.resolvePermission(n, true);
+    if (n.kind === "permission") {
+      void this.agentsStore.input(n.agentId, "y\r").catch(() => {});
+    }
     this.store.decide(n.id, "accepted", "accepted");
     this.ui.flash("accepted · " + n.agentName);
   }
 
-  /** Reject a permission request: deny the held hook (or fall back to a keystroke). */
+  /** Reject: best-effort negative keystroke (decline in the terminal for real). */
   reject(n: AgentNotification) {
-    if (n.kind === "permission") this.resolvePermission(n, false);
+    if (n.kind === "permission") {
+      void this.agentsStore.input(n.agentId, "n\r").catch(() => {});
+    }
     this.store.decide(n.id, "rejected", "rejected");
     this.ui.flash("rejected · " + n.agentName);
-  }
-
-  private resolvePermission(n: AgentNotification, allow: boolean) {
-    if (n.requestId) {
-      void this.agentsStore.permissionDecide(n.requestId, allow).catch(() => {});
-    } else {
-      void this.agentsStore.input(n.agentId, allow ? "y\r" : "n\r").catch(() => {});
-    }
   }
 
   /** Open the agent's terminal for full context (and resolve a question). */

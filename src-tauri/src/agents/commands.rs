@@ -204,18 +204,6 @@ pub fn agent_dir(
     Ok(crate::fs::list_dir(std::path::Path::new(&agent.worktree), &path))
 }
 
-/// Resolve a held permission request with the user's decision (Accept/Reject in
-/// the notification). Wakes the blocked hook so the agent allows/denies the call.
-#[tauri::command]
-pub fn agent_permission_decide(
-    bridge: State<'_, HookBridge>,
-    request_id: Uuid,
-    allow: bool,
-) -> AppResult<()> {
-    bridge.decide(request_id, allow);
-    Ok(())
-}
-
 /// Detection of which CLI coding agents are installed — delegated to the adapter
 /// registry so only-installed tools are offered (and, later, hooked).
 #[tauri::command]

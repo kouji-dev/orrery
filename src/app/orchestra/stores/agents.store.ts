@@ -124,13 +124,9 @@ export class AgentsStore {
     return this.bridge.on<{ id: string }>(Events.AgentExit, (p) => cb(p.id));
   }
 
-  /** Resolve a hook-held permission request with the user's decision. */
-  permissionDecide(requestId: string, allow: boolean): Promise<void> {
-    return this.bridge.invoke(Commands.AgentPermissionDecide, { requestId, allow });
-  }
-  /** Subscribe to hook-driven permission requests (a tool call held pending the user). */
+  /** Subscribe to hook-driven needs-input signals (the agent wants the user). */
   onPermission(
-    cb: (p: { requestId: string; agentId: string; tool: string; detail: string }) => void,
+    cb: (p: { agentId: string; tool: string; detail: string }) => void,
   ): Promise<() => void> {
     return this.bridge.on(Events.AgentPermission, cb);
   }

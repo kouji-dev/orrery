@@ -40,7 +40,6 @@ export const Commands = {
   AgentStop: 'agent_stop',
   AgentInput: 'agent_input',
   AgentResize: 'agent_resize',
-  AgentPermissionDecide: 'agent_permission_decide',
   DetectTools: 'detect_tools',
 } as const;
 
@@ -55,7 +54,7 @@ export const Events = {
   AgentOutput: 'agent://output',
   AgentExit: 'agent://exit',
   AgentAsk: 'agent://ask',
-  /** A hook is holding an agent's tool call pending the user's allow/deny. */
+  /** A hook signalled the agent needs the user (permission prompt / question). */
   AgentPermission: 'agent://permission',
   /** Non-blocking status ping from a hook (working / idle). */
   AgentStatus: 'agent://status',

@@ -74,7 +74,6 @@ pub fn run() {
             agents::commands::agent_stop,
             agents::commands::agent_input,
             agents::commands::agent_resize,
-            agents::commands::agent_permission_decide,
             agents::commands::detect_tools,
         ])
         .build(tauri::generate_context!())

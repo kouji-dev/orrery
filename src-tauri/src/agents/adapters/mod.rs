@@ -80,55 +80,16 @@ pub trait AgentAdapter: Send + Sync {
         ]
     }
 
-    /// Install the blocking pre-tool hook (and status hooks) so the agent calls
-    /// our `kat-hook`. Scoped to the worktree (or a managed home) — never the
-    /// user's real global config. No-op for tools without usable hooks.
+    /// Install the agent's status + needs-input hooks (fire-and-forget) so it
+    /// calls `katrix hook` on those events. Scoped to the worktree (or a managed
+    /// home) — never the user's real global config. No-op for tools without
+    /// usable hooks.
     fn install_hooks(&self, worktree: &Path, env: &HookEnv) -> std::io::Result<()>;
 
-    /// Does this tool have a blocking hook we drive (vs. PTY-parse fallback)?
+    /// Does this tool have hooks we drive (vs. PTY-parse fallback)?
     fn supports_hooks(&self) -> bool {
         true
     }
-
-    /// stdout JSON that tells the agent to allow/deny the held tool call. Emitted
-    /// by `kat-hook` once the user (or a timeout) resolves the request.
-    fn format_decision(&self, decision: Decision, reason: &str) -> String;
-}
-
-/// The outcome the user (or a timeout) hands back for a held tool request.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Decision {
-    Allow,
-    Deny,
-    /// Defer to the tool's own prompt (timeout / unknown) — nothing hangs.
-    Ask,
-}
-
-impl Decision {
-    pub fn from_allow(allow: bool) -> Self {
-        if allow {
-            Decision::Allow
-        } else {
-            Decision::Deny
-        }
-    }
-}
-
-/// Claude/Codex share the `hookSpecificOutput` PreToolUse decision schema.
-pub(crate) fn claude_style_decision(decision: Decision, reason: &str) -> String {
-    let permission = match decision {
-        Decision::Allow => "allow",
-        Decision::Deny => "deny",
-        Decision::Ask => "ask",
-    };
-    serde_json::json!({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": permission,
-            "permissionDecisionReason": reason,
-        }
-    })
-    .to_string()
 }
 
 /// Every known adapter, installed or not.
@@ -202,17 +163,5 @@ mod tests {
         let a = ClaudeAdapter;
         assert_eq!(a.argv(None), vec!["claude"]);
         assert_eq!(a.argv(Some("fix login")), vec!["claude", "fix login"]);
-    }
-
-    #[test]
-    fn claude_style_decision_encodes_permission_and_reason() {
-        let json = claude_style_decision(Decision::Deny, "blocked by user");
-        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(v["hookSpecificOutput"]["permissionDecision"], "deny");
-        assert_eq!(v["hookSpecificOutput"]["hookEventName"], "PreToolUse");
-        assert_eq!(
-            v["hookSpecificOutput"]["permissionDecisionReason"],
-            "blocked by user"
-        );
     }
 }

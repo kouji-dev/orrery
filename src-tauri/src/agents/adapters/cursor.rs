@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use super::{AgentAdapter, Decision, HookEnv};
+use super::{AgentAdapter, HookEnv};
 
 /// Cursor Agent. Reads `.cursor/hooks.json` from the project root, so a
-/// worktree-scoped hooks file drives `beforeShellExecution` / `beforeMCPExecution`
-/// (the blocking gates) plus a `stop` status ping. Decisions use Cursor's own
-/// `{"permission": ...}` schema.
+/// worktree-scoped hooks file installs fire-and-forget status pings:
+/// `beforeShellExecution` / `beforeMCPExecution` (working) + `stop` (idle).
+/// Cursor has no dedicated needs-input hook — that falls to the PTY fallback.
 pub struct CursorAdapter;
 
 impl AgentAdapter for CursorAdapter {
@@ -40,15 +40,6 @@ impl AgentAdapter for CursorAdapter {
         });
         std::fs::write(dir.join("hooks.json"), serde_json::to_vec_pretty(&hooks)?)
     }
-
-    fn format_decision(&self, decision: Decision, reason: &str) -> String {
-        let permission = match decision {
-            Decision::Allow => "allow",
-            Decision::Deny => "deny",
-            Decision::Ask => "ask",
-        };
-        serde_json::json!({ "permission": permission, "userMessage": reason }).to_string()
-    }
 }
 
 #[cfg(test)]
@@ -62,7 +53,7 @@ mod tests {
             tool: "cursor".into(),
             endpoint: "http://127.0.0.1:5000".into(),
             token: "tok".into(),
-            hook_bin: PathBuf::from("/opt/katrix/kat-hook"),
+            hook_bin: PathBuf::from("/opt/katrix/katrix"),
         }
     }
 
@@ -76,13 +67,6 @@ mod tests {
         assert!(v["hooks"]["beforeShellExecution"][0]["command"]
             .as_str()
             .unwrap()
-            .contains("kat-hook"));
-    }
-
-    #[test]
-    fn decision_uses_cursor_permission_schema() {
-        let json = CursorAdapter.format_decision(Decision::Deny, "no");
-        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(v["permission"], "deny");
+            .contains("hook --event beforeShellExecution"));
     }
 }

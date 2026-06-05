@@ -119,11 +119,6 @@ export interface AgentNotification {
   createdAt: number;
   status: NotificationStatus;
   decision?: string; // human-readable record of what the user chose
-  /**
-   * For a hook-driven permission request: the backend request id to resolve via
-   * `agent_permission_decide`. Absent → fall back to a best-effort PTY keystroke.
-   */
-  requestId?: string;
 }
 
 export interface DiffLine {

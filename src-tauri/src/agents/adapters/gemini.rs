@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use super::{claude_style_decision, AgentAdapter, Decision, HookEnv};
+use super::{AgentAdapter, HookEnv};
 
-/// Gemini CLI. No blocking pre-tool hook we drive yet, so it runs as a plain
-/// interactive session and falls back to PTY title/output parsing for status.
-/// Kept in the registry so detection still reports whether it is installed.
+/// Gemini CLI. No hooks we drive yet, so it runs as a plain interactive session
+/// and falls back to PTY title/output parsing for status. Kept in the registry
+/// so detection still reports whether it is installed.
 pub struct GeminiAdapter;
 
 impl AgentAdapter for GeminiAdapter {
@@ -31,10 +31,6 @@ impl AgentAdapter for GeminiAdapter {
 
     fn install_hooks(&self, _worktree: &Path, _env: &HookEnv) -> std::io::Result<()> {
         Ok(()) // no usable hook surface yet — PTY-parse fallback only
-    }
-
-    fn format_decision(&self, decision: Decision, reason: &str) -> String {
-        claude_style_decision(decision, reason)
     }
 }
 
