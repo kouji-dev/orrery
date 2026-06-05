@@ -43,17 +43,36 @@ import { mix } from "../utils";
             <div style="flex:1">
               <label class="field-label">Project</label>
               <select class="osel" [value]="projectId()" (change)="setProject($any($event.target).value)">
-                @for (p of store.projects(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
+                @for (p of store.projects(); track p.id) { <option [value]="p.id" [selected]="p.id === projectId()">{{ p.name }}</option> }
               </select>
               <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ proj.path }}</div>
             </div>
             <div style="flex:1">
               <label class="field-label">Source branch</label>
               <select class="osel" [value]="branch()" (change)="branch.set($any($event.target).value)">
-                @for (b of (proj.branches ?? [proj.branch ?? 'main']); track b) { <option [value]="b">{{ b }}</option> }
+                @for (b of proj.branches; track b) { <option [value]="b" [selected]="b === branch()">{{ b }}</option> }
               </select>
-              <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px">base · {{ proj.head }}</div>
+              @if (!proj.branches?.length) {
+                <div style="font-size:9.5px;color:var(--st-blocked);margin-top:6px">no branch found — project git is not initialized</div>
+              } @else {
+                <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px">base · {{ proj.head }}</div>
+              }
             </div>
+          </div>
+
+          <!-- name (drives the worktree, unique per project) -->
+          <div>
+            <label class="field-label">Name</label>
+            <div style="display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:0 10px">
+              <app-icon name="agent" size="sm" color="var(--ink-4)" />
+              <input
+                [value]="name()"
+                (input)="name.set($any($event.target).value)"
+                placeholder="e.g. fix-login-bug"
+                style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:10px 0;color:var(--ink);font-family:var(--font-mono);font-size:12.5px"
+              />
+            </div>
+            <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px">unique per project · becomes the worktree → <span style="color:var(--ink-3)">{{ worktreePreview() }}</span></div>
           </div>
 
           <!-- agent tool -->
@@ -71,6 +90,9 @@ import { mix } from "../utils";
                 >
                   <app-tool-badge [tool]="tl.id" [size]="20" />
                   <span [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'" style="font-size:10.5px">{{ tl.name }}</span>
+                  @if (!store.toolAvailable(tl.id)) {
+                    <span class="tnum" style="font-size:8px;color:var(--st-blocked)">not found</span>
+                  }
                 </button>
               }
             </div>
@@ -81,7 +103,7 @@ import { mix } from "../utils";
             <div style="flex:1">
               <label class="field-label">Model</label>
               <select class="osel" [value]="model()" (change)="model.set($any($event.target).value)">
-                @for (m of tool.models; track m) { <option [value]="m">{{ m }}</option> }
+                @for (m of tool.models; track m) { <option [value]="m" [selected]="m === model()">{{ m }}</option> }
               </select>
             </div>
             @if (tool.effort) {
@@ -122,7 +144,7 @@ import { mix } from "../utils";
           <span style="font-size:10px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ {{ store.worktreeRoot }}/{{ proj.id }}-…</span>
           <div style="margin-left:auto;display:flex;gap:8px;flex:none">
             <button class="btn ghost-hair" (click)="store.closeSpawn()">Cancel</button>
-            <button class="btn primary" (click)="submit()"><app-icon name="bolt" size="sm" />Spawn agent</button>
+            <button class="btn primary" [disabled]="!name().trim() || !branch()" (click)="submit()"><app-icon name="bolt" size="sm" />Spawn agent</button>
           </div>
         </div>
       </div>
@@ -139,16 +161,22 @@ export class SpawnModalComponent implements AfterViewInit {
 
   readonly projectId = signal<string>(this.defaultProject || this.store.projects()[0].id);
   readonly toolId = signal<Agent["tool"]>("claude");
+  readonly name = signal("");
   readonly prompt = signal("");
 
   readonly currentTool = computed(() => AGENT_TOOLS.find((t) => t.id === this.toolId())!);
   readonly project = computed(
     () => this.store.projects().find((p) => p.id === this.projectId()) || this.store.projects()[0],
   );
+  // mirror the backend slug so the user sees the worktree name they'll get
+  readonly worktreePreview = computed(
+    () => this.name().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "—",
+  );
 
   readonly model = signal<string>(this.currentTool().models[0]);
   readonly effort = signal<string | null>(this.currentTool().effort ? "high" : null);
-  readonly branch = signal<string>(this.project().branch ?? "main");
+  // the backend guarantees a git project has ≥1 branch ("main"); take the first.
+  readonly branch = signal<string>(this.project().branches?.[0] ?? "");
 
   private promptEl = viewChild<ElementRef<HTMLTextAreaElement>>("promptEl");
 
@@ -158,7 +186,7 @@ export class SpawnModalComponent implements AfterViewInit {
 
   setProject(id: string) {
     this.projectId.set(id);
-    this.branch.set(this.project().branch ?? "main");
+    this.branch.set(this.project().branches?.[0] ?? "");
   }
   setTool(id: Agent["tool"]) {
     this.toolId.set(id);
@@ -167,12 +195,14 @@ export class SpawnModalComponent implements AfterViewInit {
     this.effort.set(tool.effort ? "high" : null);
   }
   submit() {
+    if (!this.name().trim() || !this.branch()) return;
     this.store.spawn({
       projectId: this.projectId(),
       branch: this.branch(),
       toolId: this.toolId(),
       model: this.model(),
       effort: this.effort(),
+      name: this.name().trim(),
       prompt: this.prompt().trim() || "Explore and improve the codebase",
     });
   }

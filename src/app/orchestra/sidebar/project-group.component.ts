@@ -35,7 +35,13 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
         >
           <app-icon [name]="p.icon" size="sm" [px]="12" [color]="p.color" />
         </span>
-        <span style="font-size:12.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.name }}</span>
+        <span
+          [style.color]="p.folderExists ? 'var(--ink)' : 'var(--ink-3)'"
+          style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+        >{{ p.name }}</span>
+        @if (!p.folderExists) {
+          <app-icon name="flag" size="sm" [px]="11" color="var(--st-blocked)" title="folder not found — right-click to relocate" />
+        }
         @if (needs() > 0) {
           <span class="tnum" style="font-size:9px;font-weight:700;color:var(--st-blocked)">{{ needs() }}!</span>
         }

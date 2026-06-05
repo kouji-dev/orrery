@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
-import { Agent, Commit, Project } from "../models";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from "@angular/core";
+import { Agent, AgentFile, Commit, Project } from "../models";
 import { OrchestraStore } from "../orchestra.store";
 import { IconComponent } from "../shared/icon.component";
 import { fileDir, fileName } from "../utils";
@@ -11,7 +11,6 @@ import { CommitFeedComponent } from "./commit-feed.component";
   imports: [IconComponent, CommitFeedComponent],
   template: `
     @if (!agent()) {
-      <!-- global commit feed -->
       <div class="scroll-y" style="flex:1;padding:8px 0">
         <div class="up" style="font-size:9px;color:var(--ink-3);padding:6px 14px">Commit feed · all worktrees</div>
         <app-commit-feed [commits]="store.commits()" />
@@ -33,18 +32,38 @@ import { CommitFeedComponent } from "./commit-feed.component";
           </div>
         </div>
 
-        <!-- working tree status -->
-        <div style="padding:10px 14px 6px">
-          <div style="display:flex;align-items:center;gap:6px">
-            <span class="up" style="font-size:9px;color:var(--ink-3)">{{ staged() ? 'Staged changes' : 'Changes' }}</span>
-            <span class="tnum" style="font-size:9px;color:var(--ink-4)">{{ ag.files.length }}</span>
-          </div>
+        <!-- changed files (selectable) -->
+        <div style="padding:10px 14px 6px;display:flex;align-items:center;gap:7px">
+          @if (changes().length) {
+            <button (click)="toggleAll()" [title]="allSelected() ? 'Deselect all' : 'Select all'"
+              [style.border]="'1px solid ' + (allSelected() ? 'var(--accent)' : 'var(--hair-2)')"
+              [style.background]="allSelected() ? 'var(--accent)' : 'transparent'"
+              style="flex:none;width:14px;height:14px;border-radius:4px;display:grid;place-items:center;cursor:pointer;padding:0">
+              @if (allSelected()) { <app-icon name="check" size="sm" [px]="10" color="#06070b" /> }
+            </button>
+          }
+          <span class="up" style="font-size:9px;color:var(--ink-3)">Changes</span>
+          <span class="tnum" style="font-size:9px;color:var(--ink-4)">{{ changes().length }}</span>
+          @if (selected().size) { <span class="tnum" style="font-size:9px;color:var(--accent)">{{ selected().size }} selected</span> }
+          @if (changesLoading()) { <span class="tnum" style="font-size:9px;color:var(--ink-4)">· scanning…</span> }
         </div>
-        @if (ag.files.length) {
-          @for (f of ag.files; track f.path) {
-            <div style="display:flex;align-items:center;gap:8px;padding:4px 14px;font-size:11px">
+
+        @if (changesLoading()) {
+          <div style="padding:4px 14px 8px;font-size:10.5px;color:var(--ink-4)">scanning worktree…</div>
+        } @else if (changes().length) {
+          @for (f of changes(); track f.path) {
+            <div
+              (click)="toggle(f.path)"
+              [style.background]="isSelected(f.path) ? 'var(--panel-2)' : 'transparent'"
+              style="display:flex;align-items:center;gap:8px;padding:4px 14px;font-size:11px;cursor:pointer"
+            >
+              <span
+                [style.border]="'1px solid ' + (isSelected(f.path) ? 'var(--accent)' : 'var(--hair-2)')"
+                [style.background]="isSelected(f.path) ? 'var(--accent)' : 'transparent'"
+                style="flex:none;width:13px;height:13px;border-radius:3px;display:grid;place-items:center"
+              >@if (isSelected(f.path)) { <app-icon name="check" size="sm" [px]="9" color="#06070b" /> }</span>
               <span [style.color]="stateInk(f.state)" style="flex:none;width:12px;text-align:center;font-size:9px;font-weight:700">{{ f.state }}</span>
-              <span [style.color]="staged() ? 'var(--ink-2)' : 'var(--ink)'" [title]="f.path" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              <span [title]="f.path" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                 <span style="color:var(--ink-4)">{{ fdir(f.path) }}</span>{{ fname(f.path) }}
               </span>
               <span class="tnum" style="flex:none;font-size:9.5px;display:flex;gap:4px">
@@ -57,27 +76,27 @@ import { CommitFeedComponent } from "./commit-feed.component";
           <div style="padding:4px 14px 8px;font-size:10.5px;color:var(--ink-4)">clean — no working changes</div>
         }
 
-        <!-- git action buttons -->
+        <!-- actions -->
         <div style="padding:12px;display:grid;gap:7px">
-          @if (ag.files.length > 0) {
-            <button class="btn ghost-hair" (click)="staged.set(!staged())" style="justify-content:flex-start">
-              <app-icon name="stage" size="sm" />{{ staged() ? 'Unstage all' : 'Stage all changes' }}
-            </button>
+          @if (changes().length) {
+            <input
+              [value]="commitMsg()"
+              (input)="commitMsg.set($any($event.target).value)"
+              placeholder="commit message…"
+              style="background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:8px 10px;color:var(--ink);font-family:var(--font-mono);font-size:11.5px;outline:none"
+            />
           }
-          <button class="btn ghost-hair" [disabled]="ag.files.length === 0" (click)="store.act(ag.id, 'commit')" style="justify-content:flex-start">
-            <app-icon name="commit" size="sm" />Commit {{ staged() ? 'staged' : 'all' }}
+          <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="commit(ag.id)" style="justify-content:flex-start">
+            <app-icon name="commit" size="sm" />Commit {{ selected().size ? selected().size + ' selected' : 'all' }}
           </button>
           <button class="btn ghost-hair" [disabled]="ag.commits === 0" (click)="store.act(ag.id, 'push')" style="justify-content:flex-start">
             <app-icon name="push" size="sm" />Push to origin
           </button>
-          <button class="btn ghost-hair" [disabled]="ag.commits === 0" (click)="store.act(ag.id, 'pr')" style="justify-content:flex-start">
-            <app-icon name="pr" size="sm" />Open pull request
-          </button>
           <button class="btn primary" [disabled]="ag.commits === 0" (click)="store.act(ag.id, 'merge')" style="justify-content:center">
             <app-icon name="merge" size="sm" />Merge {{ ag.branch.replace('agent/', '') }} → {{ project() ? project()!.branch : 'main' }}
           </button>
-          <button class="btn ghost-hair" [disabled]="ag.files.length === 0" (click)="store.act(ag.id, 'discard')" style="justify-content:flex-start;color:var(--st-blocked)">
-            <app-icon name="discard" size="sm" />Discard working changes
+          <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="discard(ag.id)" style="justify-content:flex-start;color:var(--st-blocked)">
+            <app-icon name="discard" size="sm" />Discard {{ selected().size ? selected().size + ' selected' : 'all' }}
           </button>
         </div>
 
@@ -95,17 +114,69 @@ export class GitTabComponent {
   readonly store = inject(OrchestraStore);
   readonly agent = input<Agent | null>(null);
   readonly project = input<Project | undefined>(undefined);
-  readonly staged = signal(false);
 
   readonly fname = fileName;
   readonly fdir = fileDir;
 
-  readonly totAdd = computed(() => (this.agent()?.files ?? []).reduce((s, f) => s + f.add, 0));
-  readonly totDel = computed(() => (this.agent()?.files ?? []).reduce((s, f) => s + f.del, 0));
+  readonly changes = computed<AgentFile[]>(() => this.agent()?.git_changes?.files ?? []);
+  readonly changesLoading = computed(() => this.agent()?.git_changes?.loading ?? false);
+  readonly totAdd = computed(() => this.changes().reduce((s, f) => s + f.add, 0));
+  readonly totDel = computed(() => this.changes().reduce((s, f) => s + f.del, 0));
   readonly agentCommits = computed<Commit[]>(() => {
     const ag = this.agent();
     return ag ? this.store.commits().filter((c) => c.agent === ag.id) : [];
   });
+
+  readonly selected = signal<Set<string>>(new Set());
+  readonly commitMsg = signal("");
+  readonly allSelected = computed(() => {
+    const ch = this.changes();
+    return ch.length > 0 && ch.every((f) => this.selected().has(f.path));
+  });
+
+  private lastId: string | null = null;
+  constructor() {
+    // clear the selection when switching agents
+    effect(() => {
+      const id = this.agent()?.id ?? null;
+      if (id !== this.lastId) {
+        this.lastId = id;
+        this.selected.set(new Set());
+        this.commitMsg.set("");
+      }
+    });
+  }
+
+  isSelected(path: string): boolean {
+    return this.selected().has(path);
+  }
+  toggle(path: string) {
+    this.selected.update((s) => {
+      const n = new Set(s);
+      if (n.has(path)) n.delete(path);
+      else n.add(path);
+      return n;
+    });
+  }
+  toggleAll() {
+    this.selected.set(this.allSelected() ? new Set() : new Set(this.changes().map((f) => f.path)));
+  }
+  // the paths to act on: the selection, or [] (= all) when nothing is selected
+  private targetPaths(): string[] {
+    const sel = this.selected();
+    return sel.size ? this.changes().filter((f) => sel.has(f.path)).map((f) => f.path) : [];
+  }
+
+  commit(id: string) {
+    const msg = this.commitMsg().trim() || "wip: " + (this.agent()?.name ?? "");
+    this.store.commitAgent(id, this.targetPaths(), msg);
+    this.commitMsg.set("");
+    this.selected.set(new Set());
+  }
+  discard(id: string) {
+    this.store.discardAgent(id, this.targetPaths());
+    this.selected.set(new Set());
+  }
 
   stateInk(state: string): string {
     return state === "A" ? "var(--code-add-ink)" : state === "D" ? "var(--code-del-ink)" : "var(--accent-2)";

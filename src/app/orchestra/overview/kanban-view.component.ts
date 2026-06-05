@@ -72,6 +72,6 @@ export class KanbanViewComponent {
     return STATUS_META[key].color;
   }
   add(ag: Agent): number {
-    return ag.files.reduce((s, f) => s + f.add, 0);
+    return (ag.git_changes?.files ?? []).reduce((s, f) => s + f.add, 0);
   }
 }

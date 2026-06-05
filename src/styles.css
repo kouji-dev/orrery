@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
 
 /* =========================================================================
    ORCHESTRA — multi-agent orchestrator IDE
@@ -220,7 +221,6 @@ app-overview,
 app-workspace,
 app-diff-view,
 app-terminal,
-app-chat,
 app-files-tab,
 app-inbox-tab,
 app-git-tab,

@@ -44,7 +44,7 @@ const KIND_META: Record<string, KindMeta> = {
             <button class="btn ghost-hair" (click)="resolve.emit('always')" title="Always allow this command">∞</button>
           }
           @case ('decision') {
-            <button class="btn primary" style="flex:1;justify-content:center" (click)="resolve.emit('open')"><app-icon name="chat" size="sm" />Answer in chat</button>
+            <button class="btn primary" style="flex:1;justify-content:center" (click)="resolve.emit('open')"><app-icon name="terminal" size="sm" />Answer in terminal</button>
           }
           @case ('review') {
             <button class="btn primary" style="flex:1;justify-content:center" (click)="resolve.emit('merge')"><app-icon name="merge" size="sm" />Merge</button>

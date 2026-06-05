@@ -19,9 +19,9 @@ import { MiniTermComponent } from "./mini-term.component";
       style="padding:14px;display:flex;flex-direction:column;gap:11px;cursor:pointer;transition:border-color 0.15s,transform 0.15s"
     >
       <div style="display:flex;align-items:flex-start;gap:10px">
-        <div style="position:relative;flex:none">
-          <app-ring [value]="ag.progress" [size]="36" [stroke]="3" [color]="meta().color" />
-          <span class="tnum" style="position:absolute;inset:0;display:grid;place-items:center;font-size:9px;color:var(--ink-2)">{{ pct() }}</span>
+        <div style="position:relative;flex:none" [class.working]="ag.working">
+          <app-ring [value]="ringValue()" [size]="36" [stroke]="3" [color]="meta().color" />
+          <span class="tnum" style="position:absolute;inset:0;display:grid;place-items:center;font-size:9px;color:var(--ink-2)">{{ centerLabel() }}</span>
         </div>
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:7px;min-width:0">
@@ -58,7 +58,7 @@ import { MiniTermComponent } from "./mini-term.component";
       <app-mini-term [agentId]="ag.id" />
 
       <div class="tnum" style="display:flex;align-items:center;gap:10px;font-size:10.5px;color:var(--ink-3)">
-        <span style="display:flex;gap:4px"><app-icon name="file" size="sm" [px]="11" />{{ ag.files.length }}</span>
+        <span style="display:flex;gap:4px"><app-icon name="file" size="sm" [px]="11" />{{ (ag.git_changes?.files?.length ?? 0) }}</span>
         <span style="color:var(--code-add-ink)">+{{ totAdd() }}</span>
         <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
         <span style="display:flex;gap:4px"><app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}</span>
@@ -79,8 +79,8 @@ import { MiniTermComponent } from "./mini-term.component";
             <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="store.act(ag.id, 'start')"><app-icon name="play" size="sm" />Start now</button>
           }
           @default {
-            <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="store.act(ag.id, ag.status === 'running' ? 'pause' : 'resume')">
-              <app-icon [name]="ag.status === 'running' ? 'pause' : 'play'" size="sm" />{{ ag.status === 'running' ? 'Pause' : 'Resume' }}
+            <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="store.act(ag.id, ag.status === 'running' ? 'pause' : ag.started ? 'resume' : 'start')">
+              <app-icon [name]="ag.status === 'running' ? 'pause' : 'play'" size="sm" />{{ ag.status === 'running' ? 'Pause' : ag.started ? 'Resume' : 'Start' }}
             </button>
           }
         }
@@ -94,6 +94,19 @@ import { MiniTermComponent } from "./mini-term.component";
         border-color: var(--hair-2) !important;
         transform: translateY(-2px);
       }
+      /* breathing pulse on the liveness ring while the agent is actively working */
+      .working {
+        animation: livePulse 1.4s ease-in-out infinite;
+      }
+      @keyframes livePulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
     `,
   ],
 })
@@ -105,7 +118,37 @@ export class AgentCardComponent {
   readonly fmt = fmtDur;
   readonly mix = mix;
   readonly meta = computed(() => STATUS_META[this.agent().status]);
-  readonly pct = computed(() => Math.round(this.agent().progress * 100));
-  readonly totAdd = computed(() => this.agent().files.reduce((s, f) => s + f.add, 0));
-  readonly totDel = computed(() => this.agent().files.reduce((s, f) => s + f.del, 0));
+  // ring + center now reflect REAL liveness (not a fabricated %): a full status
+  // ring, with the center showing live/idle/done rather than a fake percentage.
+  readonly ringValue = computed(() => {
+    switch (this.agent().status) {
+      case "done":
+      case "running":
+      case "blocked":
+        return 1;
+      case "waiting":
+        return 0.66;
+      default:
+        return 0.12; // idle / queued
+    }
+  });
+  readonly centerLabel = computed(() => {
+    const a = this.agent();
+    switch (a.status) {
+      case "done":
+        return "✓";
+      case "blocked":
+        return "!";
+      case "waiting":
+        return "wait";
+      case "queued":
+        return "q";
+      case "idle":
+        return "—";
+      default:
+        return a.working ? "live" : a.needsInput ? "input" : "idle"; // running
+    }
+  });
+  readonly totAdd = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.add, 0));
+  readonly totDel = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.del, 0));
 }

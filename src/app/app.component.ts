@@ -9,6 +9,7 @@ import { SidebarComponent } from "./orchestra/sidebar/sidebar.component";
 import { StatusBarComponent } from "./orchestra/status-bar/status-bar.component";
 import { TopBarComponent } from "./orchestra/top-bar/top-bar.component";
 import { TweaksPanelComponent } from "./orchestra/tweaks/tweaks-panel.component";
+import { DevPanelComponent } from "./orchestra/dev-tools/dev-panel.component";
 import { WorkspaceComponent } from "./orchestra/workspace/workspace.component";
 
 @Component({
@@ -25,6 +26,7 @@ import { WorkspaceComponent } from "./orchestra/workspace/workspace.component";
     AddProjectModalComponent,
     ContextMenuComponent,
     TweaksPanelComponent,
+    DevPanelComponent,
   ],
   template: `
     <div class="bg-texture"></div>
@@ -55,6 +57,7 @@ import { WorkspaceComponent } from "./orchestra/workspace/workspace.component";
     @if (store.addingProject()) { <app-add-project-modal /> }
     <app-context-menu />
     <app-tweaks-panel />
+    <app-dev-panel />
   `,
 })
 export class AppComponent {

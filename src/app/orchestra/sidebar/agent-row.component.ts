@@ -34,7 +34,7 @@ import { fmtDur } from "../utils";
       <div style="display:flex;align-items:center;gap:6px;padding-left:15px">
         <app-icon name="branch" size="sm" [px]="11" color="var(--ink-4)" />
         <span style="font-size:10.5px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
-        @if (ag.files.length > 0) {
+        @if ((ag.git_changes?.files?.length ?? 0) > 0) {
           <span class="tnum" style="margin-left:auto;font-size:10px;display:flex;gap:5px;flex:none">
             <span style="color:var(--code-add-ink)">+{{ totAdd() }}</span>
             <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
@@ -67,8 +67,8 @@ export class AgentRowComponent {
   readonly active = input<boolean>(false);
 
   readonly fmt = fmtDur;
-  readonly totAdd = computed(() => this.agent().files.reduce((s, f) => s + f.add, 0));
-  readonly totDel = computed(() => this.agent().files.reduce((s, f) => s + f.del, 0));
+  readonly totAdd = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.add, 0));
+  readonly totDel = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.del, 0));
   readonly needs = computed(() => {
     const ag = this.agent();
     return (

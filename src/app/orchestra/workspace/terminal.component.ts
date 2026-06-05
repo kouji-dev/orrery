@@ -2,50 +2,48 @@ import {
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
+  inject,
   input,
   viewChild,
 } from "@angular/core";
-import { Agent, LogLine } from "../models";
-import { logColor, logPrefix } from "../utils";
+import { Agent } from "../models";
+import { TerminalService } from "../terminal.service";
 
+/**
+ * Hosts the agent's persistent xterm terminal. The Terminal instance lives in
+ * TerminalService (survives tab switches); this component just attaches it to
+ * the visible host and re-attaches when the shown agent changes.
+ */
 @Component({
   selector: "app-terminal",
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div #scroll class="scroll-y" style="flex:1;background:var(--bg);padding:12px 16px;font-size:12px;line-height:1.7">
-      <div style="color:var(--ink-4);margin-bottom:8px;font-size:10.5px">── session: {{ agent().worktree }} · {{ agent().branch }} ──</div>
-      @for (l of lines(); track $index) {
-        <div [style.color]="lc(l.t)" style="display:flex;gap:9px;white-space:pre-wrap;word-break:break-word">
-          <span [style.color]="l.t === 'cmd' ? 'var(--accent)' : 'var(--ink-4)'" style="flex:none;user-select:none;width:10px;text-align:center">{{ lp(l.t) }}</span>
-          <span style="flex:1">{{ l.s }}</span>
-        </div>
-      }
-      @if (streaming()) {
-        <div style="display:flex;gap:9px;color:var(--accent)">
-          <span style="width:10px;text-align:center;color:var(--accent)">$</span>
-          <span class="caret"></span>
-        </div>
-      }
+    <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--bg)">
+      <div style="color:var(--ink-4);padding:8px 14px 4px;font-size:10.5px">── session: {{ agent().worktree }} · {{ agent().branch }} ──</div>
+      <div #host style="flex:1;min-height:0;padding:2px 10px 8px"></div>
     </div>
   `,
 })
 export class TerminalComponent {
+  private terminals = inject(TerminalService);
   readonly agent = input.required<Agent>();
-  readonly lines = input.required<LogLine[]>();
-  readonly streaming = input<boolean>(false);
 
-  readonly lc = logColor;
-  readonly lp = logPrefix;
-
-  private scrollEl = viewChild<ElementRef<HTMLDivElement>>("scroll");
+  private host = viewChild.required<ElementRef<HTMLDivElement>>("host");
+  private detach: (() => void) | null = null;
+  private shownId: string | null = null;
 
   constructor() {
-    // auto-scroll to bottom whenever new log lines stream in
+    inject(DestroyRef).onDestroy(() => this.detach?.());
+    // (re)attach the persistent terminal after render, whenever the agent changes
     afterRenderEffect(() => {
-      this.lines(); // track
-      const el = this.scrollEl()?.nativeElement;
-      if (el) el.scrollTop = el.scrollHeight;
+      const el = this.host().nativeElement;
+      const id = this.agent().id;
+      if (id === this.shownId) return;
+      this.shownId = id;
+      this.detach?.();
+      this.detach = this.terminals.attach(id, el);
     });
   }
 }

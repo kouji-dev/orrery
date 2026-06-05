@@ -21,39 +21,45 @@ interface TabDef {
   template: `
     @let scope = store.activeAgent();
     <aside style="display:flex;flex-direction:column;min-height:0;background:var(--panel);border-left:1px solid var(--hair)">
-      <!-- scope header -->
-      <div style="display:flex;align-items:center;gap:8px;padding:0 12px;height:38px;border-bottom:1px solid var(--hair)">
-        @if (scope) {
+      @if (scope) {
+        <!-- agent header -->
+        <div style="display:flex;align-items:center;gap:8px;padding:0 12px;height:38px;border-bottom:1px solid var(--hair)">
           <app-status-dot [status]="scope.status" />
           <span style="font-size:11.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ scope.name }}</span>
           @if (project()) {
             <span class="chip" [style.color]="project()!.color" [style.border-color]="mix(project()!.color, 65)" style="font-size:9px;padding:1px 6px">{{ project()!.name }}</span>
           }
-        } @else {
-          <app-icon name="layers" size="sm" color="var(--accent)" />
-          <span style="font-size:11.5px;font-weight:600;color:var(--ink-2)">All projects</span>
-        }
-      </div>
+        </div>
 
-      <!-- tab bar -->
-      <div style="display:flex;align-items:center;padding:0 6px;border-bottom:1px solid var(--hair);height:36px">
-        @for (t of tabs(); track t.key) {
-          @let on = tab() === t.key;
-          <button class="btn" (click)="tab.set(t.key)" [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'" style="padding:7px 10px;border-radius:0;position:relative;flex:1;justify-content:center">
-            @if (on) { <span style="position:absolute;left:8px;right:8px;bottom:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent-2))"></span> }
-            <app-icon [name]="t.icon" size="sm" [color]="on ? 'var(--accent)' : null" />
-            <span style="font-size:11px">{{ t.label }}</span>
-            @if (t.badge) {
-              <span class="chip tnum" [style.border-color]="mix('var(--accent)', 60)" style="font-size:9px;padding:0 5px;color:var(--accent)">{{ t.badge }}</span>
-            }
-          </button>
-        }
-      </div>
+        <!-- tab bar -->
+        <div style="display:flex;align-items:center;padding:0 6px;border-bottom:1px solid var(--hair);height:36px">
+          @for (t of tabs(); track t.key) {
+            @let on = tab() === t.key;
+            <button class="btn" (click)="tab.set(t.key)" [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'" style="padding:7px 10px;border-radius:0;position:relative;flex:1;justify-content:center">
+              @if (on) { <span style="position:absolute;left:8px;right:8px;bottom:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent-2))"></span> }
+              <app-icon [name]="t.icon" size="sm" [color]="on ? 'var(--accent)' : null" />
+              <span style="font-size:11px">{{ t.label }}</span>
+              @if (t.badge) {
+                <span class="chip tnum" [style.border-color]="mix('var(--accent)', 60)" style="font-size:9px;padding:0 5px;color:var(--accent)">{{ t.badge }}</span>
+              }
+            </button>
+          }
+        </div>
 
-      @switch (tab()) {
-        @case ('files') { <app-files-tab [agent]="scope" [project]="project()" /> }
-        @case ('inbox') { <app-inbox-tab [scopeAgent]="scope" /> }
-        @case ('git') { <app-git-tab [agent]="scope" [project]="project()" /> }
+        @switch (tab()) {
+          @case ('files') { <app-files-tab [agent]="scope" [project]="project()" /> }
+          @case ('inbox') { <app-inbox-tab [scopeAgent]="scope" /> }
+          @case ('git') { <app-git-tab [agent]="scope" [project]="project()" /> }
+        }
+      } @else {
+        <!-- empty: this panel is agent-scoped -->
+        <div style="flex:1;display:grid;place-items:center;padding:24px;text-align:center">
+          <div>
+            <app-icon name="layers" size="lg" color="var(--hair-2)" />
+            <div style="font-size:11.5px;color:var(--ink-3);margin-top:10px">No agent selected</div>
+            <div style="font-size:10px;color:var(--ink-4);margin-top:3px">Open an agent to see its files, git &amp; inbox</div>
+          </div>
+        </div>
       }
     </aside>
   `,

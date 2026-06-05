@@ -17,7 +17,10 @@ import { STATUS_META } from "../utils";
           style="position:relative;padding:7px 14px 7px 8px;cursor:pointer;border-radius:var(--r-sm);margin:0 6px"
         >
           <span [style.border]="'2px solid ' + color(c.agent)" style="position:absolute;left:-12px;top:11px;width:9px;height:9px;border-radius:50%;background:var(--panel)"></span>
-          <div style="font-size:11.5px;color:var(--ink);line-height:1.4;text-wrap:pretty">{{ c.msg }}</div>
+          <div
+            [title]="c.msg"
+            style="font-size:11.5px;color:var(--ink);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"
+          >{{ c.msg }}</div>
           <div class="tnum" style="display:flex;align-items:center;gap:7px;margin-top:3px;font-size:9.5px;color:var(--ink-4)">
             @if (!compact()) { <span [style.color]="color(c.agent)">{{ ag ? ag.name : c.agent }}</span> }
             <span class="chip" style="font-size:9px;padding:0 5px">{{ c.sha }}</span>

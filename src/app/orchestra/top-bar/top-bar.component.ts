@@ -4,11 +4,12 @@ import { OrchestraStore } from "../orchestra.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { LogoComponent } from "./logo.component";
+import { NotificationCenterComponent } from "./notification-center.component";
 
 @Component({
   selector: "app-top-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LogoComponent, IconComponent, StatusDotComponent],
+  imports: [LogoComponent, IconComponent, StatusDotComponent, NotificationCenterComponent],
   template: `
     <header
       style="display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--hair);height:44px;position:relative;z-index:5"
@@ -72,6 +73,7 @@ import { LogoComponent } from "./logo.component";
 
       <!-- actions -->
       <div style="display:flex;align-items:center;gap:8px;padding:0 12px;flex:none">
+        <app-notification-center />
         <button [class]="'btn ' + (store.running() ? 'ghost-hair' : 'primary')" (click)="store.toggleRunAll()">
           <app-icon [name]="store.running() ? 'pause' : 'play'" size="sm" />
           {{ store.running() ? 'Pause all' : 'Run all' }}

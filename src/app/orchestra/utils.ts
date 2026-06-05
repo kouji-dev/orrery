@@ -112,6 +112,90 @@ export function logPrefix(t: LogKind | string): string {
   );
 }
 
+// Matches CSI (\x1b[ … final), OSC (\x1b] … BEL/ST) and 2-char escape sequences.
+const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/g;
+
+/** Strip ANSI / escape sequences from a PTY chunk for plain-text display. */
+export function stripAnsi(s: string): string {
+  return s.replace(ANSI_RE, "");
+}
+
+/**
+ * Fold a raw PTY chunk into a rolling plain-text tail of at most `max` lines.
+ * Handles \n (new line) and \r (overwrite the current line); the last array
+ * entry is the in-progress line. Used only for the compact overview mini-term —
+ * the full xterm view renders the raw stream itself.
+ */
+export function appendPtyTail(prev: string[], chunk: string, max = 60): string[] {
+  const lines = prev.length ? prev.slice() : [""];
+  for (const ch of stripAnsi(chunk)) {
+    if (ch === "\n") lines.push("");
+    else if (ch === "\r") lines[lines.length - 1] = "";
+    else if (ch === "\t") lines[lines.length - 1] += "  ";
+    else if (ch >= " ") lines[lines.length - 1] += ch;
+    // remaining control characters are dropped
+  }
+  return lines.length > max ? lines.slice(lines.length - max) : lines;
+}
+
+// ---- terminal-title status detection ----
+// CLI coding agents encode live state in their OSC window title: an animated
+// braille spinner (or tool glyph / keyword) while working, a distinct glyph
+// when idle or waiting on the user. Reading the title lets us tell "actively
+// working" from "waiting for input" without the agent reporting anything.
+export type TitleStatus = "working" | "permission" | "idle";
+
+const BRAILLE_SPINNER_RE = /[⠀-⣿]/; // ⠋⠙⠹… spinner frames
+// "working" | "thinking" | "running" | "generating", but not inside another
+// word ("reworking") or a path ("~/codex/working").
+const WORKING_KEYWORDS_RE = /(?<![\w./\\-])(working|thinking|running|generating)(?![\w-])/i;
+const GEMINI_WORKING = "✦"; // ✦
+const GEMINI_SILENT_WORKING = "⏲"; // ⏲
+const PERMISSION_GLYPH = "✋"; // ✋ (gemini permission prompt)
+const CLAUDE_IDLE = "✳"; // ✳ (claude idle prefix)
+const GEMINI_IDLE = "◇"; // ◇
+
+/**
+ * Classify a terminal title. Returns null when the title carries no recognized
+ * signal (e.g. a plain cwd) so the caller can fall back to output activity.
+ */
+export function detectTitleStatus(title: string): TitleStatus | null {
+  if (!title) return null;
+  if (title.includes(PERMISSION_GLYPH)) return "permission";
+  if (
+    BRAILLE_SPINNER_RE.test(title) ||
+    title.includes(GEMINI_WORKING) ||
+    title.includes(GEMINI_SILENT_WORKING) ||
+    WORKING_KEYWORDS_RE.test(title)
+  ) {
+    return "working";
+  }
+  if (title.includes(CLAUDE_IDLE) || title.includes(GEMINI_IDLE)) return "idle";
+  return null;
+}
+
+// ---- prompt classification (notification typing) ----
+// Heuristic: does the scraped terminal prompt read like a yes/no permission
+// request (→ Accept/Reject actions) vs an open question (→ open the terminal)?
+const PERMISSION_RE =
+  /\b(y\/n|\[y\/n]|\(y\/n\)|yes\/no|proceed\??|do you want|allow\b|permission|approve|grant\b|confirm\b|continue\?|press y|1\.?\s*yes)\b|❯\s*1\.?\s*yes/i;
+
+export function isPermissionPrompt(text: string): boolean {
+  return PERMISSION_RE.test(text);
+}
+
+/**
+ * Does the scraped terminal tail read like the agent is blocked on the user?
+ * Catches y/n permission prompts and trailing questions — the signal CLI agents
+ * that don't set a "waiting" terminal title (claude/codex) still leave in output.
+ */
+export function isAwaitingInput(tail: string): boolean {
+  if (!tail) return false;
+  if (isPermissionPrompt(tail)) return true;
+  const last = tail.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? "";
+  return /\?\s*$/.test(last); // a trailing question
+}
+
 export function toolMeta(id: string) {
   return (
     AGENT_TOOLS.find((t) => t.id === id) || {

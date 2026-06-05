@@ -1,0 +1,126 @@
+import { inject, Injectable } from "@angular/core";
+import { BRIDGE, Commands, Events } from "../data-source/bridge";
+import { Agent, AgentFile, FileDiff, FileNode } from "../models";
+import { bindFacade } from "../state/entity-facade";
+import { createEntityStore } from "../state/entity-store";
+
+/**
+ * Backend-backed source of truth for agent identity/config/status.
+ * Live runtime metrics (elapsed/progress/logs/files/pending) are an overlay
+ * kept in OrchestraStore until the real runtime exists (task #7).
+ */
+@Injectable({ providedIn: "root" })
+export class AgentsStore {
+  private bridge = inject(BRIDGE);
+  private store = createEntityStore<Agent>((a) => a.id);
+
+  readonly all = this.store.all;
+  readonly loading = this.store.loading;
+
+  private facade = bindFacade(this.store, this.bridge, {
+    listCommand: Commands.AgentList,
+    events: {
+      created: Events.AgentCreated,
+      updated: Events.AgentUpdated,
+      deleted: Events.AgentDeleted,
+    },
+  });
+
+  constructor() {
+    void this.init();
+  }
+  private async init() {
+    try {
+      await this.facade.listen();
+      await this.facade.load();
+    } catch {
+      // backend unavailable — start empty
+    }
+  }
+
+  // ---- mutations: invoke only; the store updates from agent:// events ----
+  spawn(req: {
+    projectId: string;
+    tool: string;
+    model: string;
+    effort: string | null;
+    name: string;
+    task: string;
+    base: string;
+  }): Promise<Agent> {
+    return this.bridge.invoke<Agent>(Commands.AgentSpawn, { req });
+  }
+  update(
+    id: string,
+    patch: { status?: string; task?: string; model?: string; name?: string },
+  ): Promise<Agent> {
+    return this.bridge.invoke<Agent>(Commands.AgentUpdate, { id, req: patch });
+  }
+  async remove(id: string): Promise<void> {
+    await this.bridge.invoke(Commands.AgentRemove, { id });
+  }
+  detectTools(): Promise<Array<{ id: string; available: boolean }>> {
+    return this.bridge.invoke(Commands.DetectTools);
+  }
+  /** Worktree file tree (source recursed, ignored dirs as lazy stubs). */
+  tree(id: string): Promise<FileNode[]> {
+    return this.bridge.invoke<FileNode[]>(Commands.AgentTree, { id });
+  }
+  /** Immediate children of one directory — to lazily expand an unloaded folder. */
+  listDir(id: string, path: string): Promise<FileNode[]> {
+    return this.bridge.invoke<FileNode[]>(Commands.AgentDir, { id, path });
+  }
+  /** Working-tree changes in the agent's worktree (git status). */
+  changes(id: string): Promise<AgentFile[]> {
+    return this.bridge.invoke<AgentFile[]>(Commands.AgentChanges, { id });
+  }
+  /** Commit selected paths (empty = all) in the worktree; resolves the short sha. */
+  commit(id: string, message: string, paths: string[]): Promise<string> {
+    return this.bridge.invoke<string>(Commands.AgentCommit, { id, message, paths });
+  }
+  /** Discard selected paths (empty = all) in the worktree. */
+  discard(id: string, paths: string[]): Promise<void> {
+    return this.bridge.invoke(Commands.AgentDiscard, { id, paths });
+  }
+  /** Merge the agent's branch into the source project's branch. */
+  merge(id: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentMerge, { id });
+  }
+  /** Old/new content of a file for the diff view. */
+  diff(id: string, path: string): Promise<FileDiff> {
+    return this.bridge.invoke<FileDiff>(Commands.AgentDiff, { id, path });
+  }
+  /** Start watching an agent's worktree for changes (replaces any previous watch). */
+  watch(id: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentWatch, { id });
+  }
+  /** Subscribe to worktree-changed events. Resolves an unsubscribe fn. */
+  onWorktreeChanged(cb: (id: string) => void): Promise<() => void> {
+    return this.bridge.on<{ id: string }>(Events.AgentChanged, (p) => cb(p.id));
+  }
+
+  /** Launch the agent's tool process (PTY-streamed), sized to the visible terminal. */
+  start(id: string, rows = 0, cols = 0): Promise<void> {
+    return this.bridge.invoke(Commands.AgentStart, { id, rows, cols });
+  }
+  /** Stop the agent's running process. */
+  stop(id: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentStop, { id });
+  }
+  /** Forward terminal keystrokes into the agent's PTY stdin. */
+  input(id: string, data: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentInput, { id, data });
+  }
+  /** Resize the agent's PTY to match the visible terminal. */
+  resize(id: string, rows: number, cols: number): Promise<void> {
+    return this.bridge.invoke(Commands.AgentResize, { id, rows, cols });
+  }
+  /** Subscribe to streamed process output. */
+  onOutput(cb: (id: string, chunk: string) => void): Promise<() => void> {
+    return this.bridge.on<{ id: string; chunk: string }>(Events.AgentOutput, (p) => cb(p.id, p.chunk));
+  }
+  /** Subscribe to process-exit events. */
+  onExit(cb: (id: string) => void): Promise<() => void> {
+    return this.bridge.on<{ id: string }>(Events.AgentExit, (p) => cb(p.id));
+  }
+}

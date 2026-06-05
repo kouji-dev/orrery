@@ -1,20 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from "@angular/core";
-import { DIFFS } from "../data";
-import { Agent, Diff } from "../models";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from "@angular/core";
+import { Agent, AgentFile, FileDiff } from "../models";
 import { IconComponent } from "../shared/icon.component";
+import { AgentsStore } from "../stores/agents.store";
 import { fileDir, fileName, mix } from "../utils";
+import { CodeDiffComponent } from "./code-diff.component";
 
 @Component({
   selector: "app-diff-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, CodeDiffComponent],
   template: `
-    @let ag = agent();
     <div style="flex:1;display:grid;grid-template-columns:236px 1fr;min-height:0">
       <!-- file list -->
       <div class="scroll-y" style="border-right:1px solid var(--hair);background:var(--panel);padding:6px 0">
-        <div class="up" style="font-size:9px;color:var(--ink-3);padding:6px 14px 4px">Changed files · {{ ag.files.length }}</div>
-        @for (f of ag.files; track f.path; let i = $index) {
+        <div class="up" style="font-size:9px;color:var(--ink-3);padding:6px 14px 4px">Changed files · {{ changes().length }}</div>
+        @for (f of changes(); track f.path; let i = $index) {
           <div
             class="diff-file"
             [class.sel]="sel() === i"
@@ -37,32 +37,24 @@ import { fileDir, fileName, mix } from "../utils";
               @if (f.del > 0) { <span style="color:var(--code-del-ink)">−{{ f.del }}</span> }
             </span>
           </div>
+        } @empty {
+          <div style="padding:10px 14px;font-size:10.5px;color:var(--ink-4)">no changes</div>
         }
       </div>
 
       <!-- diff body -->
-      <div class="scroll-y" style="background:var(--bg)">
-        <div style="position:sticky;top:0;display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--hair);font-size:11.5px">
+      <div style="display:flex;flex-direction:column;min-height:0;background:var(--bg)">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--hair);font-size:11.5px">
           <app-icon name="file" size="sm" color="var(--ink-3)" />
-          <span>{{ diff().file }}</span>
-          <span class="chip" style="margin-left:auto;font-size:9.5px">{{ diff().lang }}</span>
+          <span>{{ current()?.path ?? '—' }}</span>
+          @if (loading()) { <span class="chip tnum" style="margin-left:auto;font-size:9.5px">loading…</span> }
         </div>
-        @if (diff().hunks.length) {
-          @for (h of diff().hunks; track $index) {
-            <div style="padding:5px 14px;font-size:11px;color:var(--accent-2);background:color-mix(in oklch,var(--accent-2),transparent 93%)">{{ h.meta }}</div>
-            @for (ln of h.lines; track $index) {
-              <div
-                [style.background]="ln.k === '+' ? 'var(--code-add-bg)' : ln.k === '-' ? 'var(--code-del-bg)' : 'transparent'"
-                style="display:flex;font-size:12px;line-height:1.7"
-              >
-                <span class="tnum" style="width:44px;flex:none;text-align:right;padding:0 10px 0 0;color:var(--ink-4);user-select:none">{{ ln.n }}</span>
-                <span [style.color]="ln.k === '+' ? 'var(--code-add-ink)' : ln.k === '-' ? 'var(--code-del-ink)' : 'var(--ink-4)'" style="width:16px;flex:none;text-align:center;user-select:none">{{ ln.k }}</span>
-                <span [style.color]="ln.k === '+' ? 'var(--code-add-ink)' : ln.k === '-' ? 'var(--code-del-ink)' : 'var(--ink-2)'" style="flex:1;white-space:pre-wrap;word-break:break-word;padding-right:14px">{{ ln.s || ' ' }}</span>
-              </div>
-            }
-          }
-        } @else {
-          <div style="padding:30px;text-align:center;color:var(--ink-4);font-size:12px">no diff preview for this file</div>
+        @if (current() && diff(); as d) {
+          <app-code-diff style="flex:1;min-height:0" [oldText]="d.old" [newText]="d.new" [lang]="d.lang" />
+        } @else if (!current()) {
+          <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:12px">no changed files</div>
+        } @else if (!loading()) {
+          <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:12px">no diff</div>
         }
       </div>
     </div>
@@ -79,22 +71,55 @@ import { fileDir, fileName, mix } from "../utils";
   ],
 })
 export class DiffViewComponent {
+  private agents = inject(AgentsStore);
   readonly agent = input.required<Agent>();
   readonly sel = signal(0);
 
   readonly fname = fileName;
   readonly fdir = fileDir;
 
-  readonly diff = computed<Diff>(() => {
-    const ag = this.agent();
-    return (
-      DIFFS[ag.id] || {
-        file: ag.files[0]?.path ?? "",
-        lang: "",
-        hunks: [],
+  readonly changes = computed(() => this.agent().git_changes?.files ?? []);
+  readonly current = computed<AgentFile | undefined>(() => this.changes()[this.sel()]);
+  readonly diff = signal<FileDiff | null>(null);
+  readonly loading = signal(false);
+  private gen = 0;
+  private lastId: string | null = null;
+
+  constructor() {
+    // reset selection to the first file when switching agents
+    effect(() => {
+      const id = this.agent().id;
+      if (id !== this.lastId) {
+        this.lastId = id;
+        this.sel.set(0);
       }
-    );
-  });
+    });
+    // load the diff for the selected file (superseded on rapid changes)
+    effect(() => {
+      const ag = this.agent();
+      const f = this.current();
+      if (!f) {
+        this.diff.set(null);
+        return;
+      }
+      const g = ++this.gen;
+      this.loading.set(true);
+      void this.agents
+        .diff(ag.id, f.path)
+        .then((d) => {
+          if (this.gen === g) {
+            this.diff.set(d);
+            this.loading.set(false);
+          }
+        })
+        .catch(() => {
+          if (this.gen === g) {
+            this.diff.set(null);
+            this.loading.set(false);
+          }
+        });
+    });
+  }
 
   stateInk(state: string): string {
     return state === "A" ? "var(--code-add-ink)" : state === "D" ? "var(--code-del-ink)" : "var(--accent-2)";

@@ -56,34 +56,48 @@ import { mix } from "../utils";
                   style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:10px 0;color:var(--ink);font-family:var(--font-mono);font-size:12.5px"
                 />
               </div>
-              <button class="btn ghost-hair" (click)="picker.click()"><app-icon name="folderOpen" size="sm" />Browse…</button>
-              <input #picker type="file" [attr.webkitdirectory]="''" [attr.directory]="''" multiple style="display:none" (change)="onPick($event)" />
+              <button class="btn ghost-hair" (click)="browse()"><app-icon name="folderOpen" size="sm" />Browse…</button>
             </div>
             @if (name()) {
               <div style="font-size:10px;color:var(--ink-4);margin-top:6px">project name → <span style="color:var(--ink-2)">{{ name() }}</span></div>
             }
           </div>
 
-          <!-- git detection + init -->
-          <div
-            (click)="gitInit.set(!gitInit())"
-            [style.background]="detectedGit() ? mix('var(--st-done)', 92) : 'var(--panel-2)'"
-            [style.border]="'1px solid ' + (detectedGit() ? mix('var(--st-done)', 70) : 'var(--hair)')"
-            style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r-md);cursor:pointer"
-          >
-            <span
-              [style.border]="'1px solid ' + (gitInit() ? 'var(--accent)' : 'var(--hair-2)')"
-              [style.background]="gitInit() ? 'var(--accent)' : 'transparent'"
-              style="flex:none;width:16px;height:16px;border-radius:4px;display:grid;place-items:center"
+          <!-- git: detected → static success alert, otherwise → init toggle -->
+          @if (detectedGit()) {
+            <div
+              [style.background]="mix('var(--st-done)', 92)"
+              [style.border]="'1px solid ' + mix('var(--st-done)', 70)"
+              style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r-md)"
             >
-              @if (gitInit()) { <app-icon name="check" size="sm" [px]="11" color="#06070b" /> }
-            </span>
-            <div style="flex:1">
-              <div style="font-size:11.5px;color:var(--ink)">{{ detectedGit() ? 'Existing git repository detected' : 'Run git init (no .git found)' }}</div>
-              <div style="font-size:9.5px;color:var(--ink-4);margin-top:2px">{{ detectedGit() ? 'you can still re-initialize' : 'initializes a repo so agents can branch + commit' }}</div>
+              <span style="flex:none;width:16px;height:16px;border-radius:4px;display:grid;place-items:center;background:var(--st-done)">
+                <app-icon name="check" size="sm" [px]="11" color="#06070b" />
+              </span>
+              <div style="flex:1">
+                <div style="font-size:11.5px;color:var(--ink)">Git repository already exists</div>
+                <div style="font-size:9.5px;color:var(--ink-4);margin-top:2px">agents can branch + commit right away</div>
+              </div>
+              <app-icon name="git" size="sm" color="var(--st-done)" />
             </div>
-            <app-icon [name]="detectedGit() ? 'git' : 'bolt'" size="sm" [color]="detectedGit() ? 'var(--st-done)' : 'var(--accent)'" />
-          </div>
+          } @else {
+            <div
+              (click)="gitInit.set(!gitInit())"
+              style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r-md);cursor:pointer;background:var(--panel-2);border:1px solid var(--hair)"
+            >
+              <span
+                [style.border]="'1px solid ' + (gitInit() ? 'var(--accent)' : 'var(--hair-2)')"
+                [style.background]="gitInit() ? 'var(--accent)' : 'transparent'"
+                style="flex:none;width:16px;height:16px;border-radius:4px;display:grid;place-items:center"
+              >
+                @if (gitInit()) { <app-icon name="check" size="sm" [px]="11" color="#06070b" /> }
+              </span>
+              <div style="flex:1">
+                <div style="font-size:11.5px;color:var(--ink)">Run git init (no .git found)</div>
+                <div style="font-size:9.5px;color:var(--ink-4);margin-top:2px">initializes a repo so agents can branch + commit</div>
+              </div>
+              <app-icon name="bolt" size="sm" color="var(--accent)" />
+            </div>
+          }
 
           <!-- icon -->
           <div>
@@ -141,8 +155,8 @@ export class AddProjectModalComponent implements AfterViewInit {
   readonly gitInit = signal(true);
 
   readonly name = computed(() => {
-    const d = this.dir();
-    return d ? d.replace(/\/+$/, "").split("/").pop() || "" : "";
+    const d = this.dir().replace(/[/\\]+$/, "");
+    return d ? d.split(/[/\\]/).pop() || "" : "";
   });
   readonly detectedGit = signal(false);
 
@@ -167,14 +181,9 @@ export class AddProjectModalComponent implements AfterViewInit {
     this.dirEl()?.nativeElement.focus();
   }
 
-  onPick(e: Event) {
-    const files = (e.target as HTMLInputElement).files;
-    if (files && files.length) {
-      const f = files[0] as File & { webkitRelativePath?: string };
-      const rel = f.webkitRelativePath || f.name;
-      const folder = rel.split("/")[0];
-      this.dir.set("~/" + folder);
-    }
+  async browse() {
+    const dir = await this.projects.pickDirectory();
+    if (dir) this.dir.set(dir);
   }
 
   submit() {

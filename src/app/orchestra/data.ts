@@ -1,13 +1,5 @@
 // ORCHESTRA mock data — multi-project, multi-agent git orchestration
-import {
-  Agent,
-  AgentTool,
-  ChatMessage,
-  Commit,
-  Diff,
-  LogLine,
-  Project,
-} from "./models";
+import { AgentTool, Commit, Diff, LogLine, Project } from "./models";
 
 export const ORG = "northwind";
 export const WORKTREE_ROOT = "~/.orchestra/worktrees";
@@ -19,7 +11,8 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: "Claude Code",
     short: "claude",
     accent: "#d98a5b",
-    models: ["opus-4.6", "sonnet-4.6", "haiku-4.6"],
+    // aliases (not dated IDs) so they always resolve to the latest — opus is 4.8 today
+    models: ["opus", "sonnet", "haiku"],
     effort: false,
   },
   {
@@ -61,6 +54,7 @@ export const PROJECTS: Project[] = [
     color: "#a855f7",
     icon: "box",
     hasGit: true,
+    folderExists: true,
     branches: ["main", "develop", "release/2.4", "hotfix/refund-rounding"],
     files: [
       "src/index.ts",
@@ -90,6 +84,7 @@ export const PROJECTS: Project[] = [
     color: "#22d3ee",
     icon: "globe",
     hasGit: true,
+    folderExists: true,
     branches: ["main", "develop", "feat/new-settings"],
     files: [
       "src/main.tsx",
@@ -115,6 +110,7 @@ export const PROJECTS: Project[] = [
     color: "#34e0a1",
     icon: "server",
     hasGit: true,
+    folderExists: true,
     branches: ["main", "staging"],
     files: [
       "main.tf",
@@ -128,211 +124,6 @@ export const PROJECTS: Project[] = [
   },
 ];
 
-// status: running | blocked | waiting | done | idle | queued
-export const AGENTS: Agent[] = [
-  {
-    id: "a1",
-    projectId: "p_pay",
-    tool: "claude",
-    model: "sonnet-4.6",
-    name: "stripe-retry",
-    task: "Add exponential-backoff retry to Stripe webhook handler",
-    status: "running",
-    branch: "agent/stripe-retry",
-    worktree: "agent-a1",
-    base: "a3f91c2",
-    commits: 2,
-    elapsed: 412,
-    progress: 0.68,
-    files: [
-      { path: "src/webhooks/stripe.ts", add: 34, del: 6, state: "M" },
-      { path: "src/webhooks/retry.ts", add: 88, del: 0, state: "A" },
-      { path: "src/config/queue.ts", add: 5, del: 2, state: "M" },
-      { path: "test/webhooks/retry.test.ts", add: 61, del: 0, state: "A" },
-    ],
-    pending: [
-      { id: "pm1", kind: "permission", title: "Run shell command", cmd: "pnpm add p-retry@5", when: "now" },
-    ],
-  },
-  {
-    id: "b2",
-    projectId: "p_pay",
-    tool: "claude",
-    model: "opus-4.6",
-    name: "jwt-refresh",
-    task: "Migrate auth to short-lived JWT + rotating refresh tokens",
-    status: "blocked",
-    branch: "agent/jwt-refresh",
-    worktree: "agent-b2",
-    base: "a3f91c2",
-    commits: 4,
-    elapsed: 1284,
-    progress: 0.52,
-    blockReason: "Needs decision: store refresh tokens in Redis or Postgres?",
-    files: [
-      { path: "src/auth/jwt.ts", add: 120, del: 44, state: "M" },
-      { path: "src/auth/refresh.ts", add: 96, del: 0, state: "A" },
-      { path: "src/middleware/session.ts", add: 18, del: 31, state: "M" },
-      { path: "migrations/0042_refresh_tokens.sql", add: 22, del: 0, state: "A" },
-    ],
-    pending: [
-      { id: "pm2", kind: "decision", title: "Storage backend decision", cmd: "Redis vs Postgres for refresh tokens", when: "4m" },
-    ],
-  },
-  {
-    id: "c3",
-    projectId: "p_pay",
-    tool: "codex",
-    model: "gpt-5.1-codex",
-    effort: "high",
-    name: "reconcile-refactor",
-    task: "Refactor nightly reconciliation job into idempotent steps",
-    status: "running",
-    branch: "agent/reconcile-refactor",
-    worktree: "agent-c3",
-    base: "a3f91c2",
-    commits: 1,
-    elapsed: 196,
-    progress: 0.34,
-    files: [
-      { path: "src/jobs/reconcile.ts", add: 47, del: 80, state: "M" },
-      { path: "src/jobs/steps/", add: 210, del: 0, state: "A" },
-    ],
-    pending: [],
-  },
-  {
-    id: "d4",
-    projectId: "p_pay",
-    tool: "claude",
-    model: "sonnet-4.6",
-    name: "checkout-tests",
-    task: "Write integration tests for the checkout → capture flow",
-    status: "done",
-    branch: "agent/checkout-tests",
-    worktree: "agent-d4",
-    base: "a3f91c2",
-    commits: 3,
-    elapsed: 642,
-    progress: 1,
-    files: [
-      { path: "test/integration/checkout.test.ts", add: 184, del: 0, state: "A" },
-      { path: "test/fixtures/cards.ts", add: 40, del: 0, state: "A" },
-      { path: "test/helpers/server.ts", add: 12, del: 4, state: "M" },
-    ],
-    pending: [
-      { id: "pm3", kind: "review", title: "Ready to merge", cmd: "agent/checkout-tests → main", when: "2m" },
-    ],
-  },
-  {
-    id: "e5",
-    projectId: "p_pay",
-    tool: "gemini",
-    model: "gemini-2.5-flash",
-    name: "node22",
-    task: "Upgrade runtime to Node 22 and bump all dependencies",
-    status: "waiting",
-    branch: "agent/node22",
-    worktree: "agent-e5",
-    base: "a3f91c2",
-    commits: 0,
-    elapsed: 38,
-    progress: 0.08,
-    waitReason: "Waiting on CI: 3 checks queued",
-    files: [
-      { path: "package.json", add: 28, del: 28, state: "M" },
-      { path: ".nvmrc", add: 1, del: 1, state: "M" },
-    ],
-    pending: [
-      { id: "pm4", kind: "permission", title: "Push branch to origin", cmd: "git push -u origin agent/node22", when: "1m" },
-    ],
-  },
-  {
-    id: "f6",
-    projectId: "p_pay",
-    tool: "cursor",
-    model: "composer-1",
-    name: "idempotency-keys",
-    task: "Add idempotency keys to the public payments API",
-    status: "queued",
-    branch: "agent/idempotency-keys",
-    worktree: "agent-f6",
-    base: "a3f91c2",
-    commits: 0,
-    elapsed: 0,
-    progress: 0,
-    files: [],
-    pending: [],
-  },
-  {
-    id: "g7",
-    projectId: "p_web",
-    tool: "claude",
-    model: "sonnet-4.6",
-    name: "settings-redesign",
-    task: "Rebuild the account settings page with the new design tokens",
-    status: "running",
-    branch: "agent/settings-redesign",
-    worktree: "agent-g7",
-    base: "7d10b4e",
-    commits: 2,
-    elapsed: 308,
-    progress: 0.46,
-    files: [
-      { path: "src/pages/Settings.tsx", add: 142, del: 96, state: "M" },
-      { path: "src/styles/theme.css", add: 38, del: 4, state: "M" },
-      { path: "src/components/Toggle.tsx", add: 54, del: 0, state: "A" },
-    ],
-    pending: [],
-  },
-  {
-    id: "h8",
-    projectId: "p_web",
-    tool: "codex",
-    model: "gpt-5.1-codex",
-    effort: "medium",
-    name: "a11y-audit",
-    task: "Fix WCAG AA contrast + keyboard-nav issues across the dashboard",
-    status: "waiting",
-    branch: "agent/a11y-audit",
-    worktree: "agent-h8",
-    base: "7d10b4e",
-    commits: 1,
-    elapsed: 122,
-    progress: 0.21,
-    waitReason: "Waiting on review of focus-trap approach",
-    files: [
-      { path: "src/components/Nav.tsx", add: 22, del: 14, state: "M" },
-      { path: "src/components/Table.tsx", add: 31, del: 9, state: "M" },
-    ],
-    pending: [
-      { id: "pm5", kind: "review", title: "Review focus-trap approach", cmd: "see src/components/Nav.tsx", when: "3m" },
-    ],
-  },
-  {
-    id: "i9",
-    projectId: "p_infra",
-    tool: "gemini",
-    model: "gemini-2.5-pro",
-    name: "tf-modules",
-    task: "Split monolithic main.tf into reusable network/db/cache modules",
-    status: "done",
-    branch: "agent/tf-modules",
-    worktree: "agent-i9",
-    base: "f02ce91",
-    commits: 5,
-    elapsed: 904,
-    progress: 1,
-    files: [
-      { path: "main.tf", add: 18, del: 240, state: "M" },
-      { path: "modules/network/main.tf", add: 96, del: 0, state: "A" },
-      { path: "modules/db/main.tf", add: 88, del: 0, state: "A" },
-      { path: "modules/cache/main.tf", add: 44, del: 0, state: "A" },
-    ],
-    pending: [
-      { id: "pm6", kind: "review", title: "Ready to merge", cmd: "agent/tf-modules → main", when: "12m" },
-    ],
-  },
-];
 
 // terminal log lines per agent
 export const LOGS: Record<string, LogLine[]> = {
@@ -593,44 +384,6 @@ export const DIFFS: Record<string, Diff> = {
       },
     ],
   },
-};
-
-export const CHATS: Record<string, ChatMessage[]> = {
-  a1: [
-    { role: "user", s: "Add retry with exponential backoff to the Stripe webhook handler. Cap at 5 attempts.", time: "−6m" },
-    { role: "agent", s: "On it. I'll add a `withRetry` helper with a 1→16s schedule, mark only 429/5xx as retryable, and honor `Retry-After`.", time: "−6m" },
-    { role: "agent", s: "Helper + tests in place, 6/6 passing. Type-check is running — I'll commit once it's green.", time: "now" },
-  ],
-  b2: [
-    { role: "user", s: "Move auth to short-lived JWTs with rotating refresh tokens.", time: "−21m" },
-    { role: "agent", s: "JWT issuing + rotation logic is done. One open decision blocks the store:", time: "−4m" },
-    { role: "agent", s: "Where should refresh tokens live — Redis (fast, volatile) or Postgres (durable, auditable)? This affects the migration I scaffold next.", time: "−4m", decision: true },
-  ],
-  c3: [
-    { role: "user", s: "Break the 240-line reconcile() into idempotent steps.", time: "−3m" },
-    { role: "agent", s: "Extracting into 5 step modules under jobs/steps/. Each takes a shared context and is safe to re-run. 3 of 5 done.", time: "now" },
-  ],
-  d4: [
-    { role: "user", s: "Integration tests for checkout → capture.", time: "−11m" },
-    { role: "agent", s: "14 tests covering auth, confirm, capture, partial capture, and decline paths. All green, committed. Ready to merge.", time: "−2m" },
-  ],
-  e5: [
-    { role: "user", s: "Upgrade to Node 22, bump deps.", time: "−1m" },
-    { role: "agent", s: "Bumped engines + Fastify 5 + 11 other deps. Triggered CI on the branch — waiting on lint, typecheck, and the test matrix.", time: "now" },
-  ],
-  f6: [{ role: "sys", s: "Agent queued. Will start when a worktree frees up (max 5 concurrent).", time: "queued" }],
-  g7: [
-    { role: "user", s: "Rebuild the account settings page with the new design tokens.", time: "−5m" },
-    { role: "agent", s: "Swapping legacy color vars for the token set and adding a reusable <Toggle/>. 9 component tests green so far.", time: "now" },
-  ],
-  h8: [
-    { role: "user", s: "Fix WCAG AA contrast + keyboard nav across the dashboard.", time: "−2m" },
-    { role: "agent", s: "Found 14 contrast + 6 focus issues. Before I wire the focus-trap in the nav drawer — keep it within the drawer or release focus on Escape only?", time: "−2m", decision: true },
-  ],
-  i9: [
-    { role: "user", s: "Split the monolithic main.tf into modules.", time: "−16m" },
-    { role: "agent", s: "Extracted network/db/cache modules, terraform validate passes. Ready to merge.", time: "−12m" },
-  ],
 };
 
 export const COMMITS: Commit[] = [

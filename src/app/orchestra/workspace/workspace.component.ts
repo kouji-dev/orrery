@@ -5,7 +5,6 @@ import { IconComponent } from "../shared/icon.component";
 import { StatusPillComponent } from "../shared/status-pill.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { fmtDur, mix, toolMeta } from "../utils";
-import { ChatComponent } from "./chat.component";
 import { DiffViewComponent } from "./diff-view.component";
 import { TerminalComponent } from "./terminal.component";
 
@@ -25,7 +24,6 @@ interface PaneDef {
     ToolBadgeComponent,
     DiffViewComponent,
     TerminalComponent,
-    ChatComponent,
   ],
   template: `
     @let ag = agent();
@@ -35,12 +33,19 @@ interface PaneDef {
         <div style="display:flex;align-items:center;gap:10px">
           <h1 class="disp" style="font-size:15px;font-weight:600">{{ ag.name }}</h1>
           <app-status-pill [status]="ag.status" [filled]="true" />
-          @if (ag.status === 'running') { <div class="activity" style="width:60px"></div> }
+          @if (ag.status === 'running') {
+            @if (ag.working) { <div class="activity" style="width:60px"></div> }
+            <span style="font-size:10px" [style.color]="ag.needsInput ? 'var(--st-blocked)' : 'var(--ink-3)'">
+              {{ ag.working ? 'working…' : ag.needsInput ? 'needs input' : 'quiet' }}
+            </span>
+          }
           <div style="margin-left:auto;display:flex;gap:6px">
             @if (ag.status === 'running') {
               <button class="btn ghost-hair" (click)="store.act(ag.id, 'pause')"><app-icon name="pause" size="sm" />Pause</button>
             } @else if (ag.status !== 'done') {
-              <button class="btn ghost-hair" (click)="store.act(ag.id, 'resume')"><app-icon name="play" size="sm" />Resume</button>
+              <button class="btn ghost-hair" (click)="store.act(ag.id, ag.started ? 'resume' : 'start')">
+                <app-icon name="play" size="sm" />{{ ag.started ? 'Resume' : 'Start' }}
+              </button>
             }
             <button class="btn ghost-hair" (click)="store.act(ag.id, 'commit')"><app-icon name="commit" size="sm" />Commit</button>
             <button [class]="'btn ' + (ag.status === 'done' ? 'primary' : 'ghost-hair')" (click)="store.act(ag.id, 'merge')">
@@ -58,10 +63,14 @@ interface PaneDef {
             </span>
           }
           <span style="display:flex;gap:5px"><app-icon name="branch" size="sm" [px]="12" color="var(--accent-2)" />{{ ag.branch }}</span>
-          <span style="display:flex;gap:5px"><app-icon name="folder" size="sm" [px]="12" />{{ ag.worktree }}</span>
-          <span style="display:flex;gap:5px;align-items:center"><app-tool-badge [tool]="ag.tool" [size]="13" />{{ tool(ag.tool).name }} · {{ ag.model }}{{ ag.effort ? ' · ' + ag.effort : '' }}</span>
+          <span style="display:flex;gap:5px;align-items:center" [title]="tool(ag.tool).name"><app-tool-badge [tool]="ag.tool" [size]="13" />{{ ag.model }}{{ ag.effort ? ' · ' + ag.effort : '' }}</span>
           <span style="display:flex;gap:5px"><app-icon name="commit" size="sm" [px]="12" />{{ ag.commits }} commits</span>
           <span style="display:flex;gap:5px"><app-icon name="clock" size="sm" [px]="12" />{{ ag.elapsed ? fmt(ag.elapsed) : '—' }}</span>
+        </div>
+        <!-- full worktree path, beneath the project/branch row -->
+        <div class="tnum" style="margin-top:6px;font-size:10px;color:var(--ink-4);display:flex;gap:5px;align-items:center">
+          <app-icon name="folder" size="sm" [px]="12" />
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="ag.worktree">{{ ag.worktree }}</span>
         </div>
       </div>
 
@@ -87,8 +96,7 @@ interface PaneDef {
       <!-- pane body -->
       @switch (pane()) {
         @case ('diff') { <app-diff-view [agent]="ag" /> }
-        @case ('terminal') { <app-terminal [agent]="ag" [lines]="logs()" [streaming]="ag.status === 'running'" /> }
-        @case ('chat') { <app-chat [agent]="ag" /> }
+        @case ('terminal') { <app-terminal [agent]="ag" /> }
       }
     </div>
   `,
@@ -103,13 +111,11 @@ export class WorkspaceComponent {
   readonly mix = mix;
   readonly tool = toolMeta;
 
-  readonly logs = computed(() => this.store.liveLogs()[this.agent().id] || []);
   readonly panes = computed<PaneDef[]>(() => {
     const ag = this.agent();
     return [
-      { key: "diff", icon: "diff", label: "Diff", badge: ag.files.length },
+      { key: "diff", icon: "diff", label: "Diff", badge: ag.git_changes?.files.length ?? 0 },
       { key: "terminal", icon: "terminal", label: "Terminal" },
-      { key: "chat", icon: "chat", label: "Chat", badge: ag.status === "blocked" ? "!" : null },
     ];
   });
 
