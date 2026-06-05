@@ -1,7 +1,6 @@
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::OptionalExtension;
 use uuid::Uuid;
 
 use crate::core::database::DB;
@@ -177,6 +176,8 @@ impl ProjectService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::Connection;
+    use std::sync::{Arc, Mutex};
 
     fn svc() -> ProjectService {
         let db: DB = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));

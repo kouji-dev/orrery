@@ -19,7 +19,12 @@ pub fn run() {
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(core::logger::plugin())
-        .invoke_handler(tauri::generate_handler![])
+        .invoke_handler(tauri::generate_handler![
+            projects::commands::project_list,
+            projects::commands::project_create,
+            projects::commands::project_remove,
+            projects::commands::project_detect_git,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
