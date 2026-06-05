@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -6,10 +7,11 @@ use notify::{RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter, Runtime};
 use uuid::Uuid;
 
-/// Watches the *active* agent's worktree and emits `agent://changed` on edits.
-/// Only one watch is active at a time (the agent currently being viewed).
+/// Watches every agent's worktree concurrently and emits `agent://changed` on
+/// edits. One watcher per agent (keyed by id) so background agents stay live —
+/// not just the one currently on screen.
 pub struct WatchService {
-    current: Mutex<Option<(Uuid, notify::RecommendedWatcher)>>,
+    watchers: Mutex<HashMap<Uuid, notify::RecommendedWatcher>>,
 }
 
 impl Default for WatchService {
@@ -20,13 +22,14 @@ impl Default for WatchService {
 
 impl WatchService {
     pub fn new() -> Self {
-        Self { current: Mutex::new(None) }
+        Self { watchers: Mutex::new(HashMap::new()) }
     }
 
-    /// Watch `path` for the given agent, replacing any previous watch (which stops it).
+    /// Watch `path` for `id`, replacing that agent's previous watcher (if any).
+    /// Other agents' watchers are untouched.
     pub fn watch<R: Runtime>(&self, app: AppHandle<R>, id: Uuid, path: PathBuf) {
-        let mut guard = self.current.lock().unwrap();
-        *guard = None; // drop the previous watcher → stops watching
+        let mut guard = self.watchers.lock().unwrap();
+        guard.remove(&id); // drop this agent's previous watcher → stops it
         if !path.is_dir() {
             return;
         }
@@ -49,12 +52,13 @@ impl WatchService {
 
         if let Ok(mut watcher) = notify::recommended_watcher(handler) {
             if watcher.watch(&path, RecursiveMode::Recursive).is_ok() {
-                *guard = Some((id, watcher));
+                guard.insert(id, watcher);
             }
         }
     }
 
-    pub fn unwatch(&self) {
-        *self.current.lock().unwrap() = None;
+    /// Stop watching one agent's worktree (e.g. when it is removed).
+    pub fn unwatch(&self, id: Uuid) {
+        self.watchers.lock().unwrap().remove(&id);
     }
 }

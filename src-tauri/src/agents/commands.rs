@@ -49,9 +49,11 @@ pub fn agent_remove<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, AgentService>,
     projects: State<'_, ProjectService>,
+    watch: State<'_, WatchService>,
     id: Uuid,
 ) -> AppResult<()> {
     let project_path = svc.get(id).ok().and_then(|a| projects.path_of(a.project_id).ok());
+    watch.unwatch(id); // stop watching its worktree before tearing it down
     svc.remove(id, project_path.as_deref().map(std::path::Path::new))?;
     emit_entity(&app, "agent", Change::Deleted, serde_json::json!({ "id": id }));
     Ok(())

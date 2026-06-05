@@ -54,7 +54,8 @@ export class AgentRuntimeService {
   private stoppingByUser: Record<string, boolean> = {};
   // backend hook status (working/idle) — authoritative over PTY title parsing
   private hookState: Record<string, string> = {};
-  private hookStateAt: Record<string, number> = {};
+  // agents whose worktree we've already set up watching + an initial scan for
+  private watched = new Set<string>();
 
   /** Tools driven by native blocking hooks — their permission/question signals
    *  come from the backend, so the PTY heuristic must not also raise them. */
@@ -72,21 +73,22 @@ export class AgentRuntimeService {
       )
       .catch(() => {});
 
-    // load the active agent's worktree transients (debounced via supersession)
+    // watch + initially scan EVERY agent's worktree (not just the active tab), so
+    // background agents show live file-tree/diff too. Each id is set up once; the
+    // backend keeps one watcher per agent.
     effect(() => {
-      const id = this.ui.activeTab();
-      if (id !== "orchestrator") {
-        this.loadChanges(id);
-        this.loadFiles(id);
-        void this.agentsStore.watch(id).catch(() => {});
+      for (const a of this.agentsStore.all()) {
+        if (this.watched.has(a.id)) continue;
+        this.watched.add(a.id);
+        this.loadChanges(a.id);
+        this.loadFiles(a.id);
+        void this.agentsStore.watch(a.id).catch(() => {});
       }
     });
     void this.agentsStore
       .onWorktreeChanged((id) => {
-        if (this.ui.activeTab() === id) {
-          this.loadFiles(id);
-          this.loadChanges(id);
-        }
+        this.loadFiles(id);
+        this.loadChanges(id);
       })
       .catch(() => {});
 
@@ -107,7 +109,6 @@ export class AgentRuntimeService {
     void this.agentsStore
       .onStatus((id, state) => {
         this.hookState[id] = state;
-        this.hookStateAt[id] = Date.now();
       })
       .catch(() => {});
 
@@ -200,7 +201,6 @@ export class AgentRuntimeService {
     delete this.titleStatus[id];
     delete this.titleAt[id];
     delete this.hookState[id];
-    delete this.hookStateAt[id];
     this.prevNeedsInput[id] = false;
     this.patchRuntime(id, { elapsed: 0, working: true, needsInput: false });
     void this.agentsStore
@@ -221,8 +221,8 @@ export class AgentRuntimeService {
     delete this.titleStatus[id];
     delete this.titleAt[id];
     delete this.hookState[id];
-    delete this.hookStateAt[id];
     delete this.prevNeedsInput[id];
+    this.watched.delete(id);
   }
 
   // ---- live tick: real elapsed + working/needsInput, plus notification edges ----
@@ -231,7 +231,7 @@ export class AgentRuntimeService {
     this.agents().forEach((ag) => {
       if (ag.status !== "running") return;
       const elapsed = Math.max(0, Math.round((now - (this.startedAt[ag.id] ?? now)) / 1000));
-      const { working, needsInput } = this.liveState(ag.id, now);
+      const { working, needsInput } = this.liveState(ag, now);
       if (ag.elapsed !== elapsed || ag.working !== working || ag.needsInput !== needsInput) {
         this.patchRuntime(ag.id, { elapsed, working, needsInput });
       }
@@ -239,13 +239,27 @@ export class AgentRuntimeService {
     });
   }
 
-  private liveState(id: string, now: number): { working: boolean; needsInput: boolean } {
+  /**
+   * Live working/needsInput for an agent. Two disjoint sources — no overlap:
+   *  • hooked tools (claude/codex/cursor): the backend is the single source of
+   *    truth. working = a turn is in progress (status ping); needsInput = a held
+   *    permission request is pending in the feed.
+   *  • un-hooked tools (gemini): the PTY title/output heuristic — the fallback
+   *    floor for tools we can't hook.
+   */
+  private liveState(ag: Agent, now: number): { working: boolean; needsInput: boolean } {
+    const id = ag.id;
     const outputRecent = now - (this.lastOutputAt[id] ?? 0) < 1500;
-    // a hook status ping (working at turn start, idle at Stop) is authoritative
-    // and event-driven, so it persists until the next ping — not time-decayed.
-    const hs = this.hookState[id];
-    if (hs === "working") return { working: true, needsInput: false };
-    if (hs === "idle") return { working: outputRecent, needsInput: false };
+
+    if (this.hookDriven(ag.tool)) {
+      const hs = this.hookState[id];
+      // status pings are event-driven (working at turn start, idle at Stop) so
+      // they persist until the next ping; output recency only bridges the gap
+      // before the first ping arrives.
+      const working = hs === "working" || (hs === undefined && outputRecent);
+      return { working, needsInput: this.hasPendingPermission(id) };
+    }
+
     const ts = this.titleStatus[id];
     if (ts === "permission") return { working: false, needsInput: true };
     let working: boolean;
@@ -261,13 +275,19 @@ export class AgentRuntimeService {
     return { working, needsInput };
   }
 
+  /** Is a hook-driven permission request currently pending for this agent? */
+  private hasPendingPermission(id: string): boolean {
+    return this.notifications
+      .pending()
+      .some((n) => n.agentId === id && n.kind === "permission");
+  }
+
   private onExit(id: string) {
     this.terminals.exit(id);
     delete this.startedAt[id];
     delete this.titleStatus[id];
     delete this.titleAt[id];
     delete this.hookState[id];
-    delete this.hookStateAt[id];
     delete this.prevNeedsInput[id];
     this.patchRuntime(id, { working: false, needsInput: false });
     this.notifications.dismissPendingFor(id, ["permission", "question"]);
