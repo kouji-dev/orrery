@@ -1,26 +1,23 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
-import { Agent, PendingItem } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { Agent } from "../models";
+import { NotificationService } from "../notifications/notification.service";
+import { NotificationCardComponent } from "../notifications/notification-card.component";
 import { EmptyStateComponent } from "./empty-state.component";
-import { PendingCardComponent } from "./pending-card.component";
 
-interface InboxEntry {
-  agent: Agent;
-  item: PendingItem;
-}
-
+/** Pending notifications for the active agent (or all agents) — the same real
+ *  feed the top-bar bell shows, scoped to this panel. */
 @Component({
   selector: "app-inbox-tab",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PendingCardComponent, EmptyStateComponent],
+  imports: [NotificationCardComponent, EmptyStateComponent],
   template: `
     @if (items().length) {
       <div class="scroll-y" style="flex:1;padding-bottom:8px">
         @if (!scopeAgent()) {
           <div class="up" style="font-size:9px;color:var(--ink-3);padding:10px 14px 2px">All projects · {{ items().length }} pending</div>
         }
-        @for (e of items(); track $index) {
-          <app-pending-card [agent]="e.agent" [item]="e.item" (resolve)="store.handleInbox(e.agent.id, e.item, $event)" />
+        @for (n of items(); track n.id) {
+          <app-notification-card [notification]="n" />
         }
       </div>
     } @else {
@@ -29,14 +26,13 @@ interface InboxEntry {
   `,
 })
 export class InboxTabComponent {
-  readonly store = inject(OrchestraStore);
+  private notifications = inject(NotificationService);
   readonly scopeAgent = input<Agent | null>(null);
 
-  readonly items = computed<InboxEntry[]>(() => {
-    const list = this.scopeAgent() ? [this.scopeAgent()!] : this.store.agents();
-    const out: InboxEntry[] = [];
-    list.forEach((a) => (a.pending || []).forEach((p) => out.push({ agent: a, item: p })));
-    return out;
+  readonly items = computed(() => {
+    const pending = this.notifications.pending();
+    const sa = this.scopeAgent();
+    return sa ? pending.filter((n) => n.agentId === sa.id) : pending;
   });
   readonly emptyText = computed(() => {
     const sa = this.scopeAgent();

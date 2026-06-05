@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from "@angular/core";
 import { Agent, AgentStatus } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { STATUS_META } from "../utils";
@@ -27,7 +27,7 @@ interface Col {
           @for (ag of items; track ag.id) {
             <div
               class="surface rise kanban-card"
-              (click)="store.openAgent(ag.id)"
+              (click)="ui.openAgent(ag.id)"
               style="padding:11px;cursor:pointer;display:flex;flex-direction:column;gap:7px"
             >
               <div style="display:flex;align-items:center;gap:7px">
@@ -55,7 +55,7 @@ interface Col {
   styles: [`.kanban-card:hover { border-color: var(--hair-2) !important; }`],
 })
 export class KanbanViewComponent {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
   readonly agents = input.required<Agent[]>();
 
   readonly cols: Col[] = [

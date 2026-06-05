@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from "@angular/core";
 import { Agent, AgentStatus, Project } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { ProjectActionsService } from "../projects/project-actions.service";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { mix } from "../utils";
 import { AgentRowComponent } from "./agent-row.component";
@@ -24,7 +25,7 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
       <div
         class="proj-row"
         (click)="toggle.emit(p.id)"
-        (contextmenu)="store.openMenu($event, store.projectMenu(p.id))"
+        (contextmenu)="ui.openMenu($event, projects.projectMenu(p.id))"
         style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;position:relative;margin:0 6px;border-radius:var(--r-md)"
       >
         <app-icon [name]="collapsed() ? 'chevron' : 'chevronD'" size="sm" [px]="11" color="var(--ink-4)" />
@@ -79,7 +80,8 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
   ],
 })
 export class ProjectGroupComponent {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
+  readonly projects = inject(ProjectActionsService);
   readonly project = input.required<Project>();
   readonly agents = input.required<Agent[]>();
   readonly activeAgent = input<string | null>(null);
@@ -94,6 +96,6 @@ export class ProjectGroupComponent {
 
   spawnHere(e: MouseEvent) {
     e.stopPropagation();
-    this.store.openSpawn(this.project().id);
+    this.ui.openSpawn(this.project().id);
   }
 }

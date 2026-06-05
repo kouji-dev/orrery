@@ -9,7 +9,7 @@ import {
   signal,
   viewChild,
 } from "@angular/core";
-import { OrchestraStore } from "../orchestra.store";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { MenuItem } from "../models";
 
@@ -18,7 +18,7 @@ import { MenuItem } from "../models";
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent],
   template: `
-    @let menu = store.contextMenu();
+    @let menu = ui.contextMenu();
     @if (menu) {
       <div
         #box
@@ -63,19 +63,19 @@ import { MenuItem } from "../models";
   ],
 })
 export class ContextMenuComponent {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
   readonly pos = signal<{ x: number; y: number }>({ x: 0, y: 0 });
   private box = viewChild<ElementRef<HTMLDivElement>>("box");
 
   constructor() {
     // seed position from the requested click point whenever a menu opens
     effect(() => {
-      const m = this.store.contextMenu();
+      const m = this.ui.contextMenu();
       if (m) this.pos.set({ x: m.x, y: m.y });
     });
     // clamp into the viewport after the menu is laid out
     afterRenderEffect(() => {
-      const m = this.store.contextMenu();
+      const m = this.ui.contextMenu();
       const el = this.box()?.nativeElement;
       if (!m || !el) return;
       const r = el.getBoundingClientRect();
@@ -91,18 +91,18 @@ export class ContextMenuComponent {
   run(it: MenuItem) {
     if (it.disabled) return;
     it.onClick?.();
-    this.store.closeMenu();
+    this.ui.closeMenu();
   }
 
   @HostListener("document:mousedown", ["$event"])
   onDown(e: MouseEvent) {
-    if (!this.store.contextMenu()) return;
+    if (!this.ui.contextMenu()) return;
     const el = this.box()?.nativeElement;
-    if (el && !el.contains(e.target as Node)) this.store.closeMenu();
+    if (el && !el.contains(e.target as Node)) this.ui.closeMenu();
   }
 
   @HostListener("document:keydown.escape")
   onEsc() {
-    this.store.closeMenu();
+    this.ui.closeMenu();
   }
 }

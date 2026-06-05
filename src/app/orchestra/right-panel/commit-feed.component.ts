@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input } from "@angular/core";
 import { Commit } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { UiStore } from "../ui/ui.store";
 import { STATUS_META } from "../utils";
 
 @Component({
@@ -34,18 +35,19 @@ import { STATUS_META } from "../utils";
   styles: [`.commit-row:hover { background: var(--panel-2); }`],
 })
 export class CommitFeedComponent {
-  private store = inject(OrchestraStore);
+  private runtime = inject(AgentRuntimeService);
+  private ui = inject(UiStore);
   readonly commits = input.required<Commit[]>();
   readonly compact = input<boolean>(false);
 
   agentFor(id: string) {
-    return this.store.agents().find((a) => a.id === id);
+    return this.runtime.agents().find((a) => a.id === id);
   }
   color(id: string): string {
     const ag = this.agentFor(id);
     return ag ? STATUS_META[ag.status].color : "var(--ink-3)";
   }
   open(id: string) {
-    if (this.agentFor(id)) this.store.openAgent(id);
+    if (this.agentFor(id)) this.ui.openAgent(id);
   }
 }

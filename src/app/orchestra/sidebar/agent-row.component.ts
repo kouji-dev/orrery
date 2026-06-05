@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Agent } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentActionsService } from "../agents/agent-actions.service";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
@@ -15,8 +16,8 @@ import { fmtDur } from "../utils";
     <div
       class="agent-row"
       [class.active]="active()"
-      (click)="store.openAgent(ag.id)"
-      (contextmenu)="store.openMenu($event, store.agentMenu(ag.id))"
+      (click)="ui.openAgent(ag.id)"
+      (contextmenu)="ui.openMenu($event, agentActions.agentMenu(ag.id))"
       style="display:flex;flex-direction:column;gap:3px;padding:6px 10px 7px;cursor:pointer;position:relative;border-radius:var(--r-md);margin:1px 8px 1px 14px"
     >
       @if (active()) {
@@ -62,7 +63,8 @@ import { fmtDur } from "../utils";
   ],
 })
 export class AgentRowComponent {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
+  readonly agentActions = inject(AgentActionsService);
   readonly agent = input.required<Agent>();
   readonly active = input<boolean>(false);
 

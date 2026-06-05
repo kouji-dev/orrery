@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from "@angular/core";
 import { Agent } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { ProjectActionsService } from "../projects/project-actions.service";
 import { AgentCardComponent } from "./agent-card.component";
 
 @Component({
@@ -10,12 +10,12 @@ import { AgentCardComponent } from "./agent-card.component";
   template: `
     <div style="display:grid;gap:14px;padding:18px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));align-content:start">
       @for (ag of agents(); track ag.id) {
-        <app-agent-card [agent]="ag" [proj]="store.projectOf(ag.projectId)" />
+        <app-agent-card [agent]="ag" [proj]="projects.projectOf(ag.projectId)" />
       }
     </div>
   `,
 })
 export class GridViewComponent {
-  readonly store = inject(OrchestraStore);
+  readonly projects = inject(ProjectActionsService);
   readonly agents = input.required<Agent[]>();
 }

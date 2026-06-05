@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from "@angular/core";
 import { Agent, Project } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentActionsService } from "../agents/agent-actions.service";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusPillComponent } from "../shared/status-pill.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
@@ -41,14 +42,14 @@ interface PaneDef {
           }
           <div style="margin-left:auto;display:flex;gap:6px">
             @if (ag.status === 'running') {
-              <button class="btn ghost-hair" (click)="store.act(ag.id, 'pause')"><app-icon name="pause" size="sm" />Pause</button>
+              <button class="btn ghost-hair" (click)="agentActions.act(ag.id, 'pause')"><app-icon name="pause" size="sm" />Pause</button>
             } @else if (ag.status !== 'done') {
-              <button class="btn ghost-hair" (click)="store.act(ag.id, ag.started ? 'resume' : 'start')">
+              <button class="btn ghost-hair" (click)="agentActions.act(ag.id, ag.started ? 'resume' : 'start')">
                 <app-icon name="play" size="sm" />{{ ag.started ? 'Resume' : 'Start' }}
               </button>
             }
-            <button class="btn ghost-hair" (click)="store.act(ag.id, 'commit')"><app-icon name="commit" size="sm" />Commit</button>
-            <button [class]="'btn ' + (ag.status === 'done' ? 'primary' : 'ghost-hair')" (click)="store.act(ag.id, 'merge')">
+            <button class="btn ghost-hair" (click)="agentActions.act(ag.id, 'commit')"><app-icon name="commit" size="sm" />Commit</button>
+            <button [class]="'btn ' + (ag.status === 'done' ? 'primary' : 'ghost-hair')" (click)="agentActions.act(ag.id, 'merge')">
               <app-icon name="merge" size="sm" />Merge to main
             </button>
           </div>
@@ -102,7 +103,8 @@ interface PaneDef {
   `,
 })
 export class WorkspaceComponent {
-  readonly store = inject(OrchestraStore);
+  readonly agentActions = inject(AgentActionsService);
+  private ui = inject(UiStore);
   readonly agent = input.required<Agent>();
   readonly project = input<Project | undefined>(undefined);
 
@@ -126,7 +128,7 @@ export class WorkspaceComponent {
       const id = this.agent().id;
       if (id !== this.lastId) {
         this.lastId = id;
-        this.pane.set(this.store.paneHint[id] || "diff");
+        this.pane.set(this.ui.paneHint[id] || "diff");
       }
     });
   }

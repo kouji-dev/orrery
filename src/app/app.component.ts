@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/c
 import { ContextMenuComponent } from "./orchestra/context-menu/context-menu.component";
 import { AddProjectModalComponent } from "./orchestra/modals/add-project-modal.component";
 import { SpawnModalComponent } from "./orchestra/modals/spawn-modal.component";
-import { OrchestraStore } from "./orchestra/orchestra.store";
+import { AgentRuntimeService } from "./orchestra/agents/agent-runtime.service";
+import { ProjectActionsService } from "./orchestra/projects/project-actions.service";
+import { UiStore } from "./orchestra/ui/ui.store";
 import { OverviewComponent } from "./orchestra/overview/overview.component";
 import { RightPanelComponent } from "./orchestra/right-panel/right-panel.component";
 import { SidebarComponent } from "./orchestra/sidebar/sidebar.component";
@@ -34,18 +36,18 @@ import { WorkspaceComponent } from "./orchestra/workspace/workspace.component";
     <div class="shell">
       <app-top-bar />
 
-      <div class="workspace" [class.no-right]="!store.tweaks().rightPanel">
+      <div class="workspace" [class.no-right]="!ui.tweaks().rightPanel">
         <app-sidebar />
 
-        @if (store.activeTab() === 'orchestrator') {
+        @if (ui.activeTab() === 'orchestrator') {
           <app-overview />
-        } @else if (store.activeAgent(); as ag) {
-          <app-workspace [agent]="ag" [project]="store.projectOf(ag.projectId)" />
+        } @else if (runtime.activeAgent(); as ag) {
+          <app-workspace [agent]="ag" [project]="projects.projectOf(ag.projectId)" />
         } @else {
           <div style="display:grid;place-items:center;color:var(--ink-4)">agent not found</div>
         }
 
-        @if (store.tweaks().rightPanel) {
+        @if (ui.tweaks().rightPanel) {
           <app-right-panel />
         }
       </div>
@@ -53,15 +55,17 @@ import { WorkspaceComponent } from "./orchestra/workspace/workspace.component";
       <app-status-bar />
     </div>
 
-    @if (store.spawning()) { <app-spawn-modal /> }
-    @if (store.addingProject()) { <app-add-project-modal /> }
+    @if (ui.spawning()) { <app-spawn-modal /> }
+    @if (ui.addingProject()) { <app-add-project-modal /> }
     <app-context-menu />
     <app-tweaks-panel />
     <app-dev-panel />
   `,
 })
 export class AppComponent {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
+  readonly runtime = inject(AgentRuntimeService);
+  readonly projects = inject(ProjectActionsService);
   // keep a stable reference for templates
-  readonly activeAgent = computed(() => this.store.activeAgent());
+  readonly activeAgent = computed(() => this.runtime.activeAgent());
 }

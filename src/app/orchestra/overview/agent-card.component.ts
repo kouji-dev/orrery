@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Agent, Project } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentActionsService } from "../agents/agent-actions.service";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { RingComponent } from "../shared/ring.component";
 import { StatusPillComponent } from "../shared/status-pill.component";
@@ -15,7 +16,7 @@ import { MiniTermComponent } from "./mini-term.component";
     @let ag = agent();
     <div
       class="surface rise agent-card"
-      (click)="store.openAgent(ag.id)"
+      (click)="ui.openAgent(ag.id)"
       style="padding:14px;display:flex;flex-direction:column;gap:11px;cursor:pointer;transition:border-color 0.15s,transform 0.15s"
     >
       <div style="display:flex;align-items:flex-start;gap:10px">
@@ -70,21 +71,21 @@ import { MiniTermComponent } from "./mini-term.component";
       <div style="display:flex;gap:6px" (click)="$event.stopPropagation()">
         @switch (ag.status) {
           @case ('done') {
-            <button class="btn primary" style="flex:1;justify-content:center" (click)="store.act(ag.id, 'merge')"><app-icon name="merge" size="sm" />Merge</button>
+            <button class="btn primary" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, 'merge')"><app-icon name="merge" size="sm" />Merge</button>
           }
           @case ('blocked') {
-            <button class="btn primary" style="flex:1;justify-content:center" (click)="store.openAgent(ag.id)"><app-icon name="chat" size="sm" />Answer</button>
+            <button class="btn primary" style="flex:1;justify-content:center" (click)="ui.openAgent(ag.id)"><app-icon name="chat" size="sm" />Answer</button>
           }
           @case ('queued') {
-            <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="store.act(ag.id, 'start')"><app-icon name="play" size="sm" />Start now</button>
+            <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, 'start')"><app-icon name="play" size="sm" />Start now</button>
           }
           @default {
-            <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="store.act(ag.id, ag.status === 'running' ? 'pause' : ag.started ? 'resume' : 'start')">
+            <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, ag.status === 'running' ? 'pause' : ag.started ? 'resume' : 'start')">
               <app-icon [name]="ag.status === 'running' ? 'pause' : 'play'" size="sm" />{{ ag.status === 'running' ? 'Pause' : ag.started ? 'Resume' : 'Start' }}
             </button>
           }
         }
-        <button class="btn ghost-hair" (click)="store.openAgent(ag.id)" style="padding:5px 9px"><app-icon name="terminal" size="sm" />Open</button>
+        <button class="btn ghost-hair" (click)="ui.openAgent(ag.id)" style="padding:5px 9px"><app-icon name="terminal" size="sm" />Open</button>
       </div>
     </div>
   `,
@@ -111,7 +112,8 @@ import { MiniTermComponent } from "./mini-term.component";
   ],
 })
 export class AgentCardComponent {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
+  readonly agentActions = inject(AgentActionsService);
   readonly agent = input.required<Agent>();
   readonly proj = input<Project | undefined>(undefined);
 

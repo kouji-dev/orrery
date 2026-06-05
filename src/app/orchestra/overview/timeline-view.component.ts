@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Agent } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { UiStore } from "../ui/ui.store";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { fmtDur, mix, STATUS_META } from "../utils";
 
@@ -19,7 +19,7 @@ import { fmtDur, mix, STATUS_META } from "../utils";
         @let w = width(ag);
         <div
           class="timeline-row"
-          (click)="store.openAgent(ag.id)"
+          (click)="ui.openAgent(ag.id)"
           style="display:grid;grid-template-columns:150px 1fr 70px;gap:12px;align-items:center;padding:9px 4px;cursor:pointer;border-radius:var(--r-sm);border-bottom:1px solid var(--hair)"
         >
           <div style="display:flex;align-items:center;gap:7px;min-width:0">
@@ -50,7 +50,7 @@ import { fmtDur, mix, STATUS_META } from "../utils";
   styles: [`.timeline-row:hover { background: var(--panel-2); }`],
 })
 export class TimelineViewComponent {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
   readonly agents = input.required<Agent[]>();
 
   readonly fmt = fmtDur;

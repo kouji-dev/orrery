@@ -10,7 +10,10 @@ import {
 } from "@angular/core";
 import { AGENT_TOOLS } from "../data";
 import { Agent } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentActionsService } from "../agents/agent-actions.service";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { ProjectActionsService } from "../projects/project-actions.service";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { mix } from "../utils";
@@ -23,7 +26,7 @@ import { mix } from "../utils";
     @let proj = project();
     @let tool = currentTool();
     <div
-      (click)="store.closeSpawn()"
+      (click)="ui.closeSpawn()"
       style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
     >
       <div
@@ -43,7 +46,7 @@ import { mix } from "../utils";
             <div style="flex:1">
               <label class="field-label">Project</label>
               <select class="osel" [value]="projectId()" (change)="setProject($any($event.target).value)">
-                @for (p of store.projects(); track p.id) { <option [value]="p.id" [selected]="p.id === projectId()">{{ p.name }}</option> }
+                @for (p of projects.all(); track p.id) { <option [value]="p.id" [selected]="p.id === projectId()">{{ p.name }}</option> }
               </select>
               <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ proj.path }}</div>
             </div>
@@ -90,7 +93,7 @@ import { mix } from "../utils";
                 >
                   <app-tool-badge [tool]="tl.id" [size]="20" />
                   <span [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'" style="font-size:10.5px">{{ tl.name }}</span>
-                  @if (!store.toolAvailable(tl.id)) {
+                  @if (!runtime.toolAvailable(tl.id)) {
                     <span class="tnum" style="font-size:8px;color:var(--st-blocked)">not found</span>
                   }
                 </button>
@@ -141,9 +144,9 @@ import { mix } from "../utils";
         </div>
 
         <div style="padding:12px 18px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;flex:none">
-          <span style="font-size:10px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ {{ store.worktreeRoot }}/{{ proj.id }}-…</span>
+          <span style="font-size:10px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ {{ ui.worktreeRoot }}/{{ proj.id }}-…</span>
           <div style="margin-left:auto;display:flex;gap:8px;flex:none">
-            <button class="btn ghost-hair" (click)="store.closeSpawn()">Cancel</button>
+            <button class="btn ghost-hair" (click)="ui.closeSpawn()">Cancel</button>
             <button class="btn primary" [disabled]="!name().trim() || !branch()" (click)="submit()"><app-icon name="bolt" size="sm" />Spawn agent</button>
           </div>
         </div>
@@ -153,20 +156,23 @@ import { mix } from "../utils";
   styles: [`.spawn-textarea:focus { border-color: var(--accent) !important; }`],
 })
 export class SpawnModalComponent implements AfterViewInit {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
+  readonly projects = inject(ProjectActionsService);
+  readonly runtime = inject(AgentRuntimeService);
+  readonly agentActions = inject(AgentActionsService);
   readonly tools = AGENT_TOOLS;
   readonly mix = mix;
 
-  private defaultProject = this.store.spawning()?.project ?? null;
+  private defaultProject = this.ui.spawning()?.project ?? null;
 
-  readonly projectId = signal<string>(this.defaultProject || this.store.projects()[0].id);
+  readonly projectId = signal<string>(this.defaultProject || this.projects.all()[0].id);
   readonly toolId = signal<Agent["tool"]>("claude");
   readonly name = signal("");
   readonly prompt = signal("");
 
   readonly currentTool = computed(() => AGENT_TOOLS.find((t) => t.id === this.toolId())!);
   readonly project = computed(
-    () => this.store.projects().find((p) => p.id === this.projectId()) || this.store.projects()[0],
+    () => this.projects.all().find((p) => p.id === this.projectId()) || this.projects.all()[0],
   );
   // mirror the backend slug so the user sees the worktree name they'll get
   readonly worktreePreview = computed(
@@ -196,7 +202,7 @@ export class SpawnModalComponent implements AfterViewInit {
   }
   submit() {
     if (!this.name().trim() || !this.branch()) return;
-    this.store.spawn({
+    this.agentActions.spawn({
       projectId: this.projectId(),
       branch: this.branch(),
       toolId: this.toolId(),

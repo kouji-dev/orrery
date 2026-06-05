@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
 import { PALETTES } from "../data";
 import { VizMode } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 
 @Component({
@@ -9,7 +9,7 @@ import { IconComponent } from "../shared/icon.component";
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent],
   template: `
-    @let t = store.tweaks();
+    @let t = ui.tweaks();
     <!-- launcher -->
     <button
       class="tweak-fab"
@@ -37,7 +37,7 @@ import { IconComponent } from "../shared/icon.component";
           <span class="tweak-label">Mode</span>
           <div class="seg">
             @for (m of ['dark', 'light']; track m) {
-              <button [class.on]="t.theme === m" (click)="store.setTweak('theme', $any(m))">{{ m }}</button>
+              <button [class.on]="t.theme === m" (click)="ui.setTweak('theme', $any(m))">{{ m }}</button>
             }
           </div>
         </div>
@@ -49,7 +49,7 @@ import { IconComponent } from "../shared/icon.component";
                 class="swatch"
                 [class.on]="t.palette[0] === p.value[0] && t.palette[1] === p.value[1]"
                 [title]="p.name"
-                (click)="store.setTweak('palette', p.value)"
+                (click)="ui.setTweak('palette', p.value)"
                 [style.background]="'linear-gradient(135deg,' + p.value[0] + ',' + p.value[1] + ')'"
               ></button>
             }
@@ -62,13 +62,13 @@ import { IconComponent } from "../shared/icon.component";
           <span class="tweak-label">Density</span>
           <div class="seg">
             @for (d of ['compact', 'regular', 'comfy']; track d) {
-              <button [class.on]="t.density === d" (click)="store.setTweak('density', $any(d))">{{ d }}</button>
+              <button [class.on]="t.density === d" (click)="ui.setTweak('density', $any(d))">{{ d }}</button>
             }
           </div>
         </div>
         <div class="tweak-row">
           <span class="tweak-label">Right panel</span>
-          <button class="toggle" [class.on]="t.rightPanel" (click)="store.setTweak('rightPanel', !t.rightPanel)"><span></span></button>
+          <button class="toggle" [class.on]="t.rightPanel" (click)="ui.setTweak('rightPanel', !t.rightPanel)"><span></span></button>
         </div>
 
         <!-- Orchestrator -->
@@ -81,7 +81,7 @@ import { IconComponent } from "../shared/icon.component";
         </div>
         <div class="tweak-row">
           <span class="tweak-label">Live motion</span>
-          <button class="toggle" [class.on]="t.motion" (click)="store.setTweak('motion', !t.motion)"><span></span></button>
+          <button class="toggle" [class.on]="t.motion" (click)="ui.setTweak('motion', !t.motion)"><span></span></button>
         </div>
       </div>
     }
@@ -179,13 +179,13 @@ import { IconComponent } from "../shared/icon.component";
   ],
 })
 export class TweaksPanelComponent {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
   readonly open = signal(false);
 
   readonly palettes = Object.entries(PALETTES).map(([name, value]) => ({ name, value }));
   readonly vizOptions: VizMode[] = ["grid", "kanban", "graph", "timeline"];
 
   setViz(e: Event) {
-    this.store.setTweak("defaultViz", (e.target as HTMLSelectElement).value as VizMode);
+    this.ui.setTweak("defaultViz", (e.target as HTMLSelectElement).value as VizMode);
   }
 }

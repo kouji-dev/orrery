@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Agent, Project } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { UiStore } from "../ui/ui.store";
 import { STATUS_META } from "../utils";
 
 interface AgentNode {
@@ -60,7 +60,7 @@ interface Laid {
         <circle [attr.cx]="xRoot" [attr.cy]="g.rootY" r="40" fill="url(#orch-core)" />
         <circle [attr.cx]="xRoot" [attr.cy]="g.rootY" r="20" fill="var(--panel-3)" stroke="var(--accent)" stroke-width="1.6" />
         <text [attr.x]="xRoot" [attr.y]="g.rootY + 1" text-anchor="middle" font-family="var(--font-disp)" font-size="9" font-weight="700" fill="var(--ink)">ORCH</text>
-        <text [attr.x]="xRoot" [attr.y]="g.rootY + 36" text-anchor="middle" font-family="var(--font-mono)" font-size="9" fill="var(--ink-3)">{{ store.org }}</text>
+        <text [attr.x]="xRoot" [attr.y]="g.rootY + 36" text-anchor="middle" font-family="var(--font-mono)" font-size="9" fill="var(--ink-3)">{{ ui.org }}</text>
 
         <!-- project nodes -->
         @for (l of g.laid; track l.p.id) {
@@ -75,7 +75,7 @@ interface Laid {
         <!-- agent nodes -->
         @for (l of g.laid; track l.p.id) {
           @for (n of l.agentNodes; track n.ag.id) {
-            <g style="cursor:pointer" (click)="store.openAgent(n.ag.id)">
+            <g style="cursor:pointer" (click)="ui.openAgent(n.ag.id)">
               <circle [attr.cx]="xAgent" [attr.cy]="n.y" r="8" fill="var(--panel-3)" [attr.stroke]="color(n.ag)" stroke-width="2" />
               <circle [attr.cx]="xAgent" [attr.cy]="n.y" r="3.2" [attr.fill]="color(n.ag)">
                 @if (n.ag.status === 'running') {
@@ -95,7 +95,7 @@ interface Laid {
   `,
 })
 export class GraphViewComponent {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
   readonly agents = input.required<Agent[]>();
   readonly projects = input.required<Project[]>();
 

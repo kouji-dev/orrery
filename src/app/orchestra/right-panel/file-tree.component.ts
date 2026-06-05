@@ -1,7 +1,7 @@
 import { ScrollingModule } from "@angular/cdk/scrolling";
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Agent, FileNode, Project } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { IconComponent } from "../shared/icon.component";
 
 interface FlatRow {
@@ -55,7 +55,7 @@ interface FlatRow {
   `,
 })
 export class FileTreeComponent {
-  private store = inject(OrchestraStore);
+  private runtime = inject(AgentRuntimeService);
   readonly agent = input.required<Agent>();
   readonly project = input<Project | undefined>(undefined);
 
@@ -84,7 +84,7 @@ export class FileTreeComponent {
     if (!node.isDir) return;
     const isOpen = this.isOpen(node);
     if (!isOpen && node.children === null) {
-      this.store.expandDir(this.agent().id, node.path); // lazy-load stub folders
+      this.runtime.expandDir(this.agent().id, node.path); // lazy-load stub folders
     }
     this.openMap.update((m) => ({ ...m, [node.path]: !isOpen }));
   }

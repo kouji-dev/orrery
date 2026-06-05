@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { ProjectActionsService } from "../projects/project-actions.service";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ProjectsStore } from "../stores/projects.store";
 
@@ -37,12 +39,12 @@ import { ProjectsStore } from "../stores/projects.store";
         <!-- Projects -->
         <div class="dbg-section">
           <span>ProjectsStore.projects</span>
-          <span class="dbg-meta">{{ store.projects().length }} rows · loading={{ projects.loading() }}</span>
+          <span class="dbg-meta">{{ projects.all().length }} rows · loading={{ projects.loading() }}</span>
         </div>
         <div class="dbg-scroll"><table class="dbg">
           <thead><tr><th>id</th><th>name</th><th>path</th><th>hasGit</th><th>folderExists</th><th>branch</th><th>head</th></tr></thead>
           <tbody>
-            @for (p of store.projects(); track p.id) {
+            @for (p of projects.all(); track p.id) {
               <tr>
                 <td [title]="p.id">{{ p.id.slice(0, 8) }}</td>
                 <td>{{ p.name }}</td>
@@ -60,13 +62,13 @@ import { ProjectsStore } from "../stores/projects.store";
 
         <!-- Agents -->
         <div class="dbg-section">
-          <span>OrchestraStore.agents</span>
-          <span class="dbg-meta">{{ store.agents().length }} rows</span>
+          <span>AgentRuntimeService.agents</span>
+          <span class="dbg-meta">{{ runtime.agents().length }} rows</span>
         </div>
         <div class="dbg-scroll"><table class="dbg">
           <thead><tr><th>id</th><th>projectId</th><th>name</th><th>status</th><th>tool</th><th>branch</th><th>commits</th></tr></thead>
           <tbody>
-            @for (a of store.agents(); track a.id) {
+            @for (a of runtime.agents(); track a.id) {
               <tr>
                 <td [title]="a.id">{{ a.id }}</td>
                 <td [title]="a.projectId">{{ a.projectId }}</td>
@@ -84,14 +86,14 @@ import { ProjectsStore } from "../stores/projects.store";
 
         <!-- Tabs -->
         <div class="dbg-section">
-          <span>OrchestraStore.tabs</span>
-          <span class="dbg-meta">active={{ store.activeTab() }}</span>
+          <span>UiStore.tabs</span>
+          <span class="dbg-meta">active={{ ui.activeTab() }}</span>
         </div>
         <div class="dbg-scroll"><table class="dbg">
           <thead><tr><th>id</th><th>active</th></tr></thead>
           <tbody>
-            @for (t of store.tabs(); track t.id) {
-              <tr><td>{{ t.id }}</td><td>{{ bool(t.id === store.activeTab()) }}</td></tr>
+            @for (t of ui.tabs(); track t.id) {
+              <tr><td>{{ t.id }}</td><td>{{ bool(t.id === ui.activeTab()) }}</td></tr>
             } @empty {
               <tr><td colspan="2" class="dbg-empty">empty</td></tr>
             }
@@ -100,13 +102,13 @@ import { ProjectsStore } from "../stores/projects.store";
 
         <!-- Commits -->
         <div class="dbg-section">
-          <span>OrchestraStore.commits</span>
-          <span class="dbg-meta">{{ store.commits().length }} rows</span>
+          <span>ProjectActionsService.commits</span>
+          <span class="dbg-meta">{{ projectActions.commits().length }} rows</span>
         </div>
         <div class="dbg-scroll"><table class="dbg">
           <thead><tr><th>sha</th><th>agent</th><th>projectId</th><th>msg</th><th>when</th></tr></thead>
           <tbody>
-            @for (c of store.commits().slice(0, 12); track c.sha) {
+            @for (c of projectActions.commits().slice(0, 12); track c.sha) {
               <tr>
                 <td>{{ c.sha }}</td>
                 <td>{{ c.agent }}</td>
@@ -181,7 +183,9 @@ import { ProjectsStore } from "../stores/projects.store";
   ],
 })
 export class DevPanelComponent {
-  readonly store = inject(OrchestraStore);
+  readonly runtime = inject(AgentRuntimeService);
+  readonly ui = inject(UiStore);
+  readonly projectActions = inject(ProjectActionsService);
   readonly projects = inject(ProjectsStore);
   readonly open = signal(false);
 

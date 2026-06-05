@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { NotificationService } from "../notifications/notification.service";
+import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { mix } from "../utils";
@@ -19,7 +21,7 @@ interface TabDef {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, StatusDotComponent, FilesTabComponent, InboxTabComponent, GitTabComponent],
   template: `
-    @let scope = store.activeAgent();
+    @let scope = runtime.activeAgent();
     <aside style="display:flex;flex-direction:column;min-height:0;background:var(--panel);border-left:1px solid var(--hair)">
       @if (scope) {
         <!-- agent header -->
@@ -65,19 +67,20 @@ interface TabDef {
   `,
 })
 export class RightPanelComponent {
-  readonly store = inject(OrchestraStore);
+  readonly runtime = inject(AgentRuntimeService);
+  private projects = inject(ProjectActionsService);
+  private notifications = inject(NotificationService);
   readonly tab = signal<string>("files");
   readonly mix = mix;
 
   readonly project = computed(() => {
-    const sa = this.store.activeAgent();
-    return sa ? this.store.projectOf(sa.projectId) : undefined;
+    const sa = this.runtime.activeAgent();
+    return sa ? this.projects.projectOf(sa.projectId) : undefined;
   });
   readonly pendingCount = computed(() => {
-    const sa = this.store.activeAgent();
-    return sa
-      ? (sa.pending || []).length
-      : this.store.agents().reduce((s, a) => s + (a.pending ? a.pending.length : 0), 0);
+    const sa = this.runtime.activeAgent();
+    const pending = this.notifications.pending();
+    return sa ? pending.filter((n) => n.agentId === sa.id).length : pending.length;
   });
   readonly tabs = computed<TabDef[]>(() => [
     { key: "files", icon: "folder", label: "Files" },

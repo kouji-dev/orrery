@@ -10,7 +10,8 @@ import {
   viewChild,
 } from "@angular/core";
 import { PROJECT_COLORS, PROJECT_ICONS } from "../data";
-import { OrchestraStore } from "../orchestra.store";
+import { ProjectActionsService } from "../projects/project-actions.service";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ProjectsStore } from "../stores/projects.store";
 import { mix } from "../utils";
@@ -21,7 +22,7 @@ import { mix } from "../utils";
   imports: [IconComponent],
   template: `
     <div
-      (click)="store.closeAddProject()"
+      (click)="ui.closeAddProject()"
       style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
     >
       <div
@@ -135,7 +136,7 @@ import { mix } from "../utils";
         </div>
 
         <div style="padding:12px 18px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px">
-          <button class="btn ghost-hair" (click)="store.closeAddProject()">Cancel</button>
+          <button class="btn ghost-hair" (click)="ui.closeAddProject()">Cancel</button>
           <button class="btn primary" [disabled]="!dir().trim()" (click)="submit()"><app-icon name="plus" size="sm" />Add project</button>
         </div>
       </div>
@@ -143,7 +144,8 @@ import { mix } from "../utils";
   `,
 })
 export class AddProjectModalComponent implements AfterViewInit {
-  readonly store = inject(OrchestraStore);
+  readonly ui = inject(UiStore);
+  private projectActions = inject(ProjectActionsService);
   private projects = inject(ProjectsStore);
   readonly icons = PROJECT_ICONS;
   readonly colors = PROJECT_COLORS;
@@ -189,7 +191,7 @@ export class AddProjectModalComponent implements AfterViewInit {
   submit() {
     const path = this.dir().trim();
     if (!path) return;
-    this.store.addProject({
+    this.projectActions.addProject({
       path,
       name: this.name(),
       icon: this.icon(),

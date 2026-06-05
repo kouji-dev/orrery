@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from "@angular/core";
 import { Agent, AgentFile, Commit, Project } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentActionsService } from "../agents/agent-actions.service";
+import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
 import { fileDir, fileName } from "../utils";
 import { CommitFeedComponent } from "./commit-feed.component";
@@ -13,7 +14,7 @@ import { CommitFeedComponent } from "./commit-feed.component";
     @if (!agent()) {
       <div class="scroll-y" style="flex:1;padding:8px 0">
         <div class="up" style="font-size:9px;color:var(--ink-3);padding:6px 14px">Commit feed · all worktrees</div>
-        <app-commit-feed [commits]="store.commits()" />
+        <app-commit-feed [commits]="projects.commits()" />
       </div>
     } @else {
       @let ag = agent()!;
@@ -89,10 +90,10 @@ import { CommitFeedComponent } from "./commit-feed.component";
           <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="commit(ag.id)" style="justify-content:flex-start">
             <app-icon name="commit" size="sm" />Commit {{ selected().size ? selected().size + ' selected' : 'all' }}
           </button>
-          <button class="btn ghost-hair" [disabled]="ag.commits === 0" (click)="store.act(ag.id, 'push')" style="justify-content:flex-start">
+          <button class="btn ghost-hair" [disabled]="ag.commits === 0" (click)="agentActions.act(ag.id, 'push')" style="justify-content:flex-start">
             <app-icon name="push" size="sm" />Push to origin
           </button>
-          <button class="btn primary" [disabled]="ag.commits === 0" (click)="store.act(ag.id, 'merge')" style="justify-content:center">
+          <button class="btn primary" [disabled]="ag.commits === 0" (click)="agentActions.act(ag.id, 'merge')" style="justify-content:center">
             <app-icon name="merge" size="sm" />Merge {{ ag.branch.replace('agent/', '') }} → {{ project() ? project()!.branch : 'main' }}
           </button>
           <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="discard(ag.id)" style="justify-content:flex-start;color:var(--st-blocked)">
@@ -111,7 +112,8 @@ import { CommitFeedComponent } from "./commit-feed.component";
   `,
 })
 export class GitTabComponent {
-  readonly store = inject(OrchestraStore);
+  readonly projects = inject(ProjectActionsService);
+  readonly agentActions = inject(AgentActionsService);
   readonly agent = input<Agent | null>(null);
   readonly project = input<Project | undefined>(undefined);
 
@@ -124,7 +126,7 @@ export class GitTabComponent {
   readonly totDel = computed(() => this.changes().reduce((s, f) => s + f.del, 0));
   readonly agentCommits = computed<Commit[]>(() => {
     const ag = this.agent();
-    return ag ? this.store.commits().filter((c) => c.agent === ag.id) : [];
+    return ag ? this.projects.commits().filter((c) => c.agent === ag.id) : [];
   });
 
   readonly selected = signal<Set<string>>(new Set());
@@ -169,12 +171,12 @@ export class GitTabComponent {
 
   commit(id: string) {
     const msg = this.commitMsg().trim() || "wip: " + (this.agent()?.name ?? "");
-    this.store.commitAgent(id, this.targetPaths(), msg);
+    this.agentActions.commitAgent(id, this.targetPaths(), msg);
     this.commitMsg.set("");
     this.selected.set(new Set());
   }
   discard(id: string) {
-    this.store.discardAgent(id, this.targetPaths());
+    this.agentActions.discardAgent(id, this.targetPaths());
     this.selected.set(new Set());
   }
 

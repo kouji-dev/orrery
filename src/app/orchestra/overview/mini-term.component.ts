@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { logColor, logPrefix } from "../utils";
 
 /** Last 3 log lines for an agent — shown on overview cards. */
@@ -21,9 +21,9 @@ import { logColor, logPrefix } from "../utils";
   `,
 })
 export class MiniTermComponent {
-  private store = inject(OrchestraStore);
+  private runtime = inject(AgentRuntimeService);
   readonly agentId = input.required<string>();
   readonly lc = logColor;
   readonly lp = logPrefix;
-  readonly lines = computed(() => (this.store.liveLogs()[this.agentId()] || []).slice(-3));
+  readonly lines = computed(() => (this.runtime.liveLogs()[this.agentId()] || []).slice(-3));
 }

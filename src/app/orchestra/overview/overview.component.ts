@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { AgentStatus, VizMode } from "../models";
-import { OrchestraStore } from "../orchestra.store";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { ProjectActionsService } from "../projects/project-actions.service";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { GraphViewComponent } from "./graph-view.component";
 import { GridViewComponent } from "./grid-view.component";
@@ -32,7 +34,7 @@ interface VizDef {
         <div style="margin-right:24px">
           <h1 class="disp" style="font-size:16px;font-weight:600;letter-spacing:-0.02em">Orchestrator</h1>
           <span style="font-size:10.5px;color:var(--ink-3)">
-            {{ store.agents().length }} agents across {{ store.projects().length }} projects · {{ store.org }}
+            {{ runtime.agents().length }} agents across {{ projects.all().length }} projects · {{ ui.org }}
           </span>
         </div>
         <app-stat-block [n]="count('running')" label="Running" color="var(--st-running)" [pulse]="true" />
@@ -42,10 +44,10 @@ interface VizDef {
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
           <div style="display:flex;gap:2px;padding:3px;background:var(--panel-2);border-radius:var(--r-md);border:1px solid var(--hair)">
             @for (v of viz; track v.key) {
-              @let on = store.viz() === v.key;
+              @let on = ui.viz() === v.key;
               <button
                 class="btn"
-                (click)="store.viz.set(v.key)"
+                (click)="ui.viz.set(v.key)"
                 [style.background]="on ? 'var(--panel-3)' : 'transparent'"
                 [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'"
                 [style.box-shadow]="on ? '0 0 0 1px var(--hair-2)' : 'none'"
@@ -55,24 +57,26 @@ interface VizDef {
               </button>
             }
           </div>
-          <button class="btn primary" (click)="store.openSpawn(null)"><app-icon name="plus" size="sm" />Spawn</button>
+          <button class="btn primary" (click)="ui.openSpawn(null)"><app-icon name="plus" size="sm" />Spawn</button>
         </div>
       </div>
 
       <!-- body -->
       <div class="scroll-y" style="flex:1">
-        @switch (store.viz()) {
-          @case ('grid') { <app-grid-view [agents]="store.agents()" /> }
-          @case ('kanban') { <app-kanban-view [agents]="store.agents()" /> }
-          @case ('graph') { <app-graph-view [agents]="store.agents()" [projects]="store.projects()" /> }
-          @case ('timeline') { <app-timeline-view [agents]="store.agents()" /> }
+        @switch (ui.viz()) {
+          @case ('grid') { <app-grid-view [agents]="runtime.agents()" /> }
+          @case ('kanban') { <app-kanban-view [agents]="runtime.agents()" /> }
+          @case ('graph') { <app-graph-view [agents]="runtime.agents()" [projects]="projects.all()" /> }
+          @case ('timeline') { <app-timeline-view [agents]="runtime.agents()" /> }
         }
       </div>
     </div>
   `,
 })
 export class OverviewComponent {
-  readonly store = inject(OrchestraStore);
+  readonly runtime = inject(AgentRuntimeService);
+  readonly projects = inject(ProjectActionsService);
+  readonly ui = inject(UiStore);
   readonly viz: VizDef[] = [
     { key: "grid", icon: "grid", label: "Grid" },
     { key: "kanban", icon: "columns", label: "Board" },
@@ -81,6 +85,6 @@ export class OverviewComponent {
   ];
 
   count(s: AgentStatus): number {
-    return this.store.agents().filter((a) => a.status === s).length;
+    return this.runtime.agents().filter((a) => a.status === s).length;
   }
 }

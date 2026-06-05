@@ -4,7 +4,7 @@ import { AgentNotification, NotificationKind, NotificationStatus } from "../mode
 /**
  * In-memory feed of agent notifications (questions, permission requests, work
  * done). Holds data + the user's decision only — side effects (sending a PTY
- * keystroke, opening the terminal, merging) are performed by OrchestraStore.
+ * keystroke, opening the terminal, merging) are performed by NotificationService.
  */
 @Injectable({ providedIn: "root" })
 export class NotificationStore {

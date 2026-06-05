@@ -6,8 +6,8 @@ import { createEntityStore } from "../state/entity-store";
 
 /**
  * Backend-backed source of truth for agent identity/config/status.
- * Live runtime metrics (elapsed/progress/logs/files/pending) are an overlay
- * kept in OrchestraStore until the real runtime exists (task #7).
+ * Live runtime metrics (elapsed/working/files) are an overlay kept in
+ * AgentRuntimeService and merged over these records.
  */
 @Injectable({ providedIn: "root" })
 export class AgentsStore {
