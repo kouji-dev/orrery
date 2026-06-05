@@ -1,15 +1,15 @@
-import { computed, effect, Injectable, signal } from "@angular/core";
+import { computed, effect, inject, Injectable, signal } from "@angular/core";
 import {
   AGENTS,
   AGENT_TOOLS,
   COMMITS,
   LOGS,
   ORG,
-  PROJECTS,
   SPAWN_NAMES,
   STREAM,
   WORKTREE_ROOT,
 } from "./data";
+import { ProjectsStore } from "./stores/projects.store";
 import {
   Agent,
   Commit,
@@ -54,8 +54,9 @@ export interface AddProjectRequest {
 @Injectable({ providedIn: "root" })
 export class OrchestraStore {
   // ---- core state ----
+  private projectsStore = inject(ProjectsStore);
   readonly tweaks = signal<Tweaks>({ ...TWEAK_DEFAULTS });
-  readonly projects = signal<Project[]>(clone(PROJECTS));
+  readonly projects = this.projectsStore.all;
   readonly agents = signal<Agent[]>(clone(AGENTS));
   readonly tabs = signal<Tab[]>([{ id: "orchestrator" }, { id: "a1" }]);
   readonly activeTab = signal<string>("orchestrator");
@@ -76,7 +77,6 @@ export class OrchestraStore {
 
   private streamIdx: Record<string, number> = {};
   private spawnCount = 0;
-  private projCount = 0;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly org = ORG;
@@ -313,7 +313,7 @@ export class OrchestraStore {
       status: "running",
       branch: "agent/" + name,
       worktree: proj.id + "-" + id,
-      base: proj.head,
+      base: proj.head ?? "main",
       commits: 0,
       elapsed: 0,
       progress: 0.02,
@@ -361,32 +361,31 @@ export class OrchestraStore {
   }
 
   removeProject(id: string) {
-    const p = this.projects().find((x) => x.id === id);
-    this.projects.update((prev) => prev.filter((x) => x.id !== id));
+    const p = this.projectOf(id);
+    void this.projectsStore
+      .remove(id)
+      .then(() => this.flash("removed project " + (p ? p.name : id)));
     this.agents.update((prev) => prev.filter((a) => a.projectId !== id));
-    this.flash("removed project " + (p ? p.name : id));
   }
 
   addProject(req: AddProjectRequest) {
-    this.projCount += 1;
-    const id = "pn" + this.projCount;
-    const head = req.gitInit ? "0000000" : Math.random().toString(16).slice(2, 9);
-    const proj: Project = {
-      id,
-      name: req.name,
-      org: ORG,
-      icon: req.icon,
-      color: req.color,
-      path: req.path,
-      branch: "main",
-      head,
-      hasGit: true,
-      branches: ["main"],
-      files: [],
-    };
-    this.projects.update((prev) => [...prev, proj]);
+    void this.projectsStore
+      .create({
+        name: req.name,
+        path: req.path,
+        icon: req.icon,
+        color: req.color,
+        withGit: req.gitInit,
+      })
+      .then((p) => this.flash("added project " + p.name))
+      .catch((e: { kind?: string; message?: string }) =>
+        this.flash(
+          e?.kind === "project" || e?.kind === "notFound"
+            ? e.message ?? "failed"
+            : "add failed",
+        ),
+      );
     this.addingProject.set(false);
-    this.flash(req.gitInit ? "initialized git + added " + req.name : "added project " + req.name);
   }
 
   // ---- context menus ----

@@ -35,7 +35,7 @@ export class FileTreeComponent {
     const stateMap: Record<string, "A" | "M" | "D"> = {};
     (ag.files || []).forEach((f) => (stateMap[f.path] = f.state));
     const allPaths = Array.from(
-      new Set([...(proj ? proj.files : []), ...(ag.files || []).map((f) => f.path)]),
+      new Set([...(proj?.files ?? []), ...(ag.files || []).map((f) => f.path)]),
     );
     return buildTree(allPaths, stateMap);
   });

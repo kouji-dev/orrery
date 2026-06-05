@@ -12,6 +12,7 @@ import {
 import { PROJECT_COLORS, PROJECT_ICONS } from "../data";
 import { OrchestraStore } from "../orchestra.store";
 import { IconComponent } from "../shared/icon.component";
+import { ProjectsStore } from "../stores/projects.store";
 import { mix } from "../utils";
 
 @Component({
@@ -129,6 +130,7 @@ import { mix } from "../utils";
 })
 export class AddProjectModalComponent implements AfterViewInit {
   readonly store = inject(OrchestraStore);
+  private projects = inject(ProjectsStore);
   readonly icons = PROJECT_ICONS;
   readonly colors = PROJECT_COLORS;
   readonly mix = mix;
@@ -142,18 +144,22 @@ export class AddProjectModalComponent implements AfterViewInit {
     const d = this.dir();
     return d ? d.replace(/\/+$/, "").split("/").pop() || "" : "";
   });
-  readonly detectedGit = computed(() => {
-    const d = this.dir();
-    return /(\/code\/|github|\.git)/i.test(d) && d.length > 4;
-  });
+  readonly detectedGit = signal(false);
 
   private dirEl = viewChild<ElementRef<HTMLInputElement>>("dirEl");
 
   constructor() {
-    // mirror the prototype: re-derive the git-init default whenever detection flips
     effect(() => {
-      const detected = this.detectedGit();
-      this.gitInit.set(!detected);
+      const d = this.dir().trim();
+      if (!d) {
+        this.detectedGit.set(false);
+        this.gitInit.set(true);
+        return;
+      }
+      void this.projects.detectGit(d).then((found) => {
+        this.detectedGit.set(found);
+        this.gitInit.set(!found);
+      });
     });
   }
 

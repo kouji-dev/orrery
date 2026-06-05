@@ -50,7 +50,7 @@ import { mix } from "../utils";
             <div style="flex:1">
               <label class="field-label">Source branch</label>
               <select class="osel" [value]="branch()" (change)="branch.set($any($event.target).value)">
-                @for (b of proj.branches; track b) { <option [value]="b">{{ b }}</option> }
+                @for (b of (proj.branches ?? [proj.branch ?? 'main']); track b) { <option [value]="b">{{ b }}</option> }
               </select>
               <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px">base · {{ proj.head }}</div>
             </div>
@@ -148,7 +148,7 @@ export class SpawnModalComponent implements AfterViewInit {
 
   readonly model = signal<string>(this.currentTool().models[0]);
   readonly effort = signal<string | null>(this.currentTool().effort ? "high" : null);
-  readonly branch = signal<string>(this.project().branch);
+  readonly branch = signal<string>(this.project().branch ?? "main");
 
   private promptEl = viewChild<ElementRef<HTMLTextAreaElement>>("promptEl");
 
@@ -158,7 +158,7 @@ export class SpawnModalComponent implements AfterViewInit {
 
   setProject(id: string) {
     this.projectId.set(id);
-    this.branch.set(this.project().branch);
+    this.branch.set(this.project().branch ?? "main");
   }
   setTool(id: Agent["tool"]) {
     this.toolId.set(id);

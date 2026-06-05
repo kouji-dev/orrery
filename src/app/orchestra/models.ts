@@ -42,16 +42,16 @@ export interface AgentTool {
 export interface Project {
   id: string;
   name: string;
-  org: string;
   path: string;
-  repo?: string;
-  branch: string;
-  head: string;
-  color: string;
   icon: string;
-  hasGit: boolean;
-  branches: string[];
-  files: string[];
+  color: string;
+  hasGit?: boolean;
+  org?: string;
+  branch?: string;
+  head?: string;
+  repo?: string;
+  branches?: string[];
+  files?: string[];
 }
 
 export interface Agent {
