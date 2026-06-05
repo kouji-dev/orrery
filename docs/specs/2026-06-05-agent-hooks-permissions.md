@@ -1,6 +1,13 @@
 # Agent hooks — reliable status + remote permission approval
 
-Status: **approved, not yet implemented** (implement after this is committed).
+Status: **implemented** — commits d728dd3 (`AgentAdapter` trait + detection) and
+975baff (loopback bridge + permission round-trip), runtime follow-up 55bebef.
+
+**Deviation:** the "tiny no-deps `kat-hook` binary" shipped instead as a hidden
+subcommand of the main app binary — `katrix __hook <EVENT>` (`src-tauri/src/hooks/client.rs`,
+std-only). Same logic, but always co-located with the app, so no sidecar to bundle.
+`hook_binary()` returns `current_exe()`; the adapter hook configs invoke
+`"<exe>" __hook <EVENT>`.
 
 ## Goal
 
