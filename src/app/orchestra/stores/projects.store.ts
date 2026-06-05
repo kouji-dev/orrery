@@ -21,8 +21,12 @@ export class ProjectsStore {
     void this.init();
   }
   private async init() {
-    await this.facade.listen();
-    await this.facade.load();
+    try {
+      await this.facade.listen();
+      await this.facade.load();
+    } catch {
+      // backend unavailable (e.g. opened outside the Tauri shell) — start empty
+    }
   }
 
   byId(id: string): Project | undefined {

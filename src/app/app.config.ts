@@ -7,7 +7,6 @@ import { provideRouter } from "@angular/router";
 
 import { routes } from "./app.routes";
 import { BRIDGE } from "./orchestra/data-source/bridge";
-import { MockBridge } from "./orchestra/data-source/mock-bridge";
 import { TauriBridge } from "./orchestra/data-source/tauri-bridge";
 
 export const appConfig: ApplicationConfig = {
@@ -15,12 +14,7 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
-    {
-      provide: BRIDGE,
-      useFactory: () =>
-        (window as unknown as { __TAURI__?: unknown }).__TAURI__
-          ? new TauriBridge()
-          : new MockBridge(),
-    },
+    // Real backend only — data comes from the Tauri/SQLite layer.
+    { provide: BRIDGE, useFactory: () => new TauriBridge() },
   ],
 };
