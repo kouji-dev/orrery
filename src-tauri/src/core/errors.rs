@@ -68,7 +68,7 @@ mod tests {
     }
 
     #[test]
-    fn db_error_serializes_with_db_kind() {
+    fn other_error_serializes_with_other_kind() {
         let err = AppError::Other("boom".into());
         let v: serde_json::Value = serde_json::from_str(&serde_json::to_string(&err).unwrap()).unwrap();
         assert_eq!(v["kind"], "other");

@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use uuid::Uuid;
 
 use crate::core::database::DB;
@@ -82,7 +82,8 @@ impl ProjectService {
                 [id.to_string()],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )
-            .ok()
+            .optional()
+            .map_err(DbError::Sqlite)?
         };
         match row {
             Some((name, path, icon, color, has_git)) => {
