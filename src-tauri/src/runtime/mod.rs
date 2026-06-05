@@ -150,18 +150,19 @@ impl RuntimeService {
     }
 }
 
-/// Map a tool id → its CLI invocation. The task prompt is appended only on the
-/// first launch; resumes open the tool bare. NOTE: exact flags need live tuning.
+/// Map a tool id → its CLI invocation via its adapter. The task prompt is passed
+/// only on the first launch; resumes open the tool bare. Unknown tools fall back
+/// to invoking the id verbatim.
 fn tool_command(tool: &str, task: &str, send_prompt: bool) -> CommandBuilder {
-    let mut c = match tool {
-        "claude" => CommandBuilder::new("claude"),
-        "codex" => CommandBuilder::new("codex"),
-        "cursor" => CommandBuilder::new("cursor-agent"),
-        "gemini" => CommandBuilder::new("gemini"),
-        other => CommandBuilder::new(other),
-    };
-    if send_prompt && !task.is_empty() {
-        c.arg(task);
+    let prompt = if send_prompt && !task.is_empty() { Some(task) } else { None };
+    match crate::agents::adapters::adapter_for(tool) {
+        Some(adapter) => adapter.build_command(prompt),
+        None => {
+            let mut c = CommandBuilder::new(tool);
+            if let Some(t) = prompt {
+                c.arg(t);
+            }
+            c
+        }
     }
-    c
 }

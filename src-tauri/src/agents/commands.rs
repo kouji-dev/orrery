@@ -190,32 +190,9 @@ pub fn agent_dir(
     Ok(crate::fs::list_dir(std::path::Path::new(&agent.worktree), &path))
 }
 
-#[derive(serde::Serialize)]
-pub struct ToolStatus {
-    pub id: String,
-    pub available: bool,
-}
-
-/// Is `cmd` an executable on PATH? Pure filesystem check — never spawns a process.
-fn which(cmd: &str) -> bool {
-    let Some(paths) = std::env::var_os("PATH") else {
-        return false;
-    };
-    let exts: &[&str] = if cfg!(windows) {
-        &["", ".exe", ".cmd", ".bat"]
-    } else {
-        &[""]
-    };
-    std::env::split_paths(&paths).any(|dir| {
-        exts.iter().any(|ext| dir.join(format!("{cmd}{ext}")).is_file())
-    })
-}
-
-/// Best-effort detection of which CLI coding agents are installed.
+/// Detection of which CLI coding agents are installed — delegated to the adapter
+/// registry so only-installed tools are offered (and, later, hooked).
 #[tauri::command]
-pub fn detect_tools() -> Vec<ToolStatus> {
-    ["claude", "codex", "cursor", "gemini"]
-        .iter()
-        .map(|id| ToolStatus { id: id.to_string(), available: which(id) })
-        .collect()
+pub fn detect_tools() -> Vec<super::adapters::ToolStatus> {
+    super::adapters::installed()
 }
