@@ -3,11 +3,13 @@
 Status: **implemented** — commits d728dd3 (`AgentAdapter` trait + detection) and
 975baff (loopback bridge + permission round-trip), runtime follow-up 55bebef.
 
-**Deviation:** the "tiny no-deps `kat-hook` binary" shipped instead as a hidden
-subcommand of the main app binary — `katrix __hook <EVENT>` (`src-tauri/src/hooks/client.rs`,
-std-only). Same logic, but always co-located with the app, so no sidecar to bundle.
-`hook_binary()` returns `current_exe()`; the adapter hook configs invoke
-`"<exe>" __hook <EVENT>`.
+**Deviation:** the "tiny no-deps `kat-hook` binary" shipped instead as a proper
+CLI subcommand of the main app binary — `katrix hook --event <EVENT>`
+(`src-tauri/src/cli/`, clap; transport std-only). Same logic, but always
+co-located with the app, so no sidecar to bundle. `hook_binary()` returns
+`current_exe()`; the adapter hook configs invoke `"<exe>" hook --event <EVENT>`,
+with connection/identity via the `KATRIX_*` env stamped on the agent process and
+the payload via stdin (the agents' own hook protocol).
 
 ## Goal
 
