@@ -229,3 +229,21 @@ export interface ContextMenuState {
   y: number;
   items: MenuItem[];
 }
+
+// ---- system metrics (status-bar cpu/memory monitor) ----
+// One subtree's roll-up: the app's own tree ("app"/"katrix") or an agent's
+// (uuid string / agent name). cpu is a percent (may exceed 100 on multi-core);
+// memBytes is resident bytes.
+export interface ProcMetric {
+  id: string;
+  label: string;
+  cpu: number;
+  memBytes: number;
+}
+
+// A whole snapshot pushed on `system://metrics` every 3s: machine totals + rows.
+export interface SystemMetrics {
+  totalCpu: number;
+  totalMemBytes: number;
+  procs: ProcMetric[];
+}

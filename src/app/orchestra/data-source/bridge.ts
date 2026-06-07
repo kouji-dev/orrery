@@ -44,6 +44,7 @@ export const Commands = {
   AgentDecide: 'agent_decide',
   AgentResize: 'agent_resize',
   DetectTools: 'detect_tools',
+  SystemMetrics: 'system_metrics',
 } as const;
 
 export const Events = {
@@ -63,6 +64,8 @@ export const Events = {
   AgentStatus: 'agent://status',
   /** Action-carrying activity from a pre-tool hook (e.g. "Bash: npm test"). */
   AgentActivity: 'agent://activity',
+  /** Fresh cpu/memory snapshot for the app + every running agent (pushed every 3s). */
+  SystemMetrics: 'system://metrics',
 } as const;
 
 export const BRIDGE = new InjectionToken<Bridge>('BRIDGE');
