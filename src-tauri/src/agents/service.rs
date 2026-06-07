@@ -255,10 +255,10 @@ impl AgentService {
         self.git.discard(Path::new(&rec.worktree), paths)
     }
 
-    /// Merge the agent's branch into the source project's current branch.
-    pub fn merge(&self, id: Uuid, project_path: &Path) -> AppResult<()> {
+    /// Push the agent's branch to `origin` (deterministic backend push).
+    pub fn push(&self, id: Uuid) -> AppResult<()> {
         let rec = self.record(id)?;
-        self.git.merge(project_path, &rec.branch)
+        self.git.push(Path::new(&rec.worktree), "origin", &rec.branch)
     }
 
     /// Old/new content of a file in the agent's worktree, for the diff view.

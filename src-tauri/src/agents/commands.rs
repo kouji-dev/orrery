@@ -101,15 +101,27 @@ pub fn agent_discard(svc: State<'_, AgentService>, id: Uuid, paths: Vec<String>)
     svc.discard(id, &paths)
 }
 
+/// Backend push: push the agent's branch to origin (deterministic).
 #[tauri::command]
-pub fn agent_merge(
+pub fn agent_push(svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
+    svc.push(id)
+}
+
+/// AI-driven completion action: resolve the predefined prompt for `kind`
+/// (commit/push/rebase/merge) and type it into the agent's RUNNING PTY. Errors if
+/// the process isn't running (the UI enables these only when running) or `kind` is
+/// unknown. Fire-and-forward — the agent runs the git with its own tools.
+#[tauri::command]
+pub fn agent_action(
+    rt: State<'_, RuntimeService>,
     svc: State<'_, AgentService>,
-    projects: State<'_, ProjectService>,
     id: Uuid,
+    kind: String,
 ) -> AppResult<()> {
     let agent = svc.get(id)?;
-    let project_path = projects.path_of(agent.project_id)?;
-    svc.merge(id, std::path::Path::new(&project_path))
+    let prompt = super::prompts::action_prompt(&kind, &agent.branch, &agent.base)
+        .ok_or_else(|| AppError::Other(format!("unknown action: {kind}")))?;
+    rt.write(id, &format!("{prompt}\r")).map_err(AppError::Other)
 }
 
 #[tauri::command]
