@@ -2,20 +2,30 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from "@an
 import { Agent } from "../models";
 import { NotificationService } from "../notifications/notification.service";
 import { NotificationCardComponent } from "../notifications/notification-card.component";
+import { IconComponent } from "../shared/icon.component";
 import { EmptyStateComponent } from "./empty-state.component";
 
-/** Pending notifications for the active agent (or all agents) — the same real
- *  feed the top-bar bell shows, scoped to this panel. */
+/** Full notification feed for the active agent (or all agents) — the same real
+ *  feed the top-bar bell shows, scoped to this panel. Keeps history: resolved
+ *  cards stay (dimmed) so past decisions remain visible; the badge upstream
+ *  still tracks only the pending subset. */
 @Component({
   selector: "app-inbox-tab",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NotificationCardComponent, EmptyStateComponent],
+  imports: [NotificationCardComponent, IconComponent, EmptyStateComponent],
   template: `
     @if (items().length) {
-      <div class="scroll-y" style="flex:1;padding-bottom:8px">
-        @if (!scopeAgent()) {
-          <div class="up" style="font-size:9px;color:var(--ink-3);padding:10px 14px 2px">All projects · {{ items().length }} pending</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:8px 12px 6px;border-bottom:1px solid var(--hair)">
+        <span class="up" style="font-size:9px;letter-spacing:0.08em;color:var(--ink-3)">
+          {{ scopeAgent() ? '' : 'All projects · ' }}{{ pendingCount() }} pending · {{ items().length }} total
+        </span>
+        @if (hasResolved()) {
+          <button class="btn ghost-hair" style="margin-left:auto;padding:2px 7px;font-size:10px" (click)="notifications.clearResolved()">
+            <app-icon name="x" size="sm" />Clear read
+          </button>
         }
+      </div>
+      <div class="scroll-y" style="flex:1;padding-bottom:8px">
         @for (n of items(); track n.id) {
           <app-notification-card [notification]="n" />
         }
@@ -26,16 +36,19 @@ import { EmptyStateComponent } from "./empty-state.component";
   `,
 })
 export class InboxTabComponent {
-  private notifications = inject(NotificationService);
+  readonly notifications = inject(NotificationService);
   readonly scopeAgent = input<Agent | null>(null);
 
+  /** Full feed (newest-first), scoped to the agent — history is preserved. */
   readonly items = computed(() => {
-    const pending = this.notifications.pending();
+    const all = this.notifications.all();
     const sa = this.scopeAgent();
-    return sa ? pending.filter((n) => n.agentId === sa.id) : pending;
+    return sa ? all.filter((n) => n.agentId === sa.id) : all;
   });
+  readonly pendingCount = computed(() => this.items().filter((n) => n.status === "pending").length);
+  readonly hasResolved = computed(() => this.items().some((n) => n.status !== "pending"));
   readonly emptyText = computed(() => {
     const sa = this.scopeAgent();
-    return sa ? "No pending actions for " + sa.name : "Inbox zero — no pending actions";
+    return sa ? "No notifications for " + sa.name : "Inbox zero — no notifications";
   });
 }

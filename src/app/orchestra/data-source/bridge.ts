@@ -39,6 +39,9 @@ export const Commands = {
   AgentStart: 'agent_start',
   AgentStop: 'agent_stop',
   AgentInput: 'agent_input',
+  AgentAllow: 'agent_allow',
+  AgentDeny: 'agent_deny',
+  AgentDecide: 'agent_decide',
   AgentResize: 'agent_resize',
   DetectTools: 'detect_tools',
 } as const;
@@ -58,6 +61,8 @@ export const Events = {
   AgentPermission: 'agent://permission',
   /** Non-blocking status ping from a hook (working / idle). */
   AgentStatus: 'agent://status',
+  /** Action-carrying activity from a pre-tool hook (e.g. "Bash: npm test"). */
+  AgentActivity: 'agent://activity',
 } as const;
 
 export const BRIDGE = new InjectionToken<Bridge>('BRIDGE');

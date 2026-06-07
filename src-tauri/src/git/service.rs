@@ -42,6 +42,8 @@ fn lang_from_path(rel: &str) -> &'static str {
         "md" | "markdown" => "markdown",
         "rs" => "rust",
         "py" => "python",
+        "java" => "java",
+        "yaml" | "yml" => "yaml",
         _ => "",
     }
 }
@@ -355,7 +357,12 @@ impl GitService {
         };
         let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
         let mut opts = git2::DiffOptions::new();
-        opts.include_untracked(true).recurse_untracked_dirs(true);
+        // `show_untracked_content` is what makes the line-level diff callback fire
+        // for untracked files — without it a brand-new N-line file reports +0/-0
+        // because git2 only emits its delta header, never its lines.
+        opts.include_untracked(true)
+            .recurse_untracked_dirs(true)
+            .show_untracked_content(true);
         let diff = match repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts)) {
             Ok(d) => d,
             Err(_) => return Vec::new(),
@@ -564,6 +571,10 @@ mod tests {
         let st = svc.status(dir.path());
         assert!(st.iter().any(|c| c.path == "a.txt" && c.state == "M"), "{st:?}");
         assert!(st.iter().any(|c| c.path == "new.txt" && c.state == "A"), "{st:?}");
+        // a brand-new untracked file must report its added line count, not +0
+        let new = st.iter().find(|c| c.path == "new.txt").unwrap();
+        assert_eq!(new.add, 1, "untracked file counts added lines: {st:?}");
+        assert_eq!(new.del, 0, "untracked file has no deletions: {st:?}");
     }
 
     #[test]

@@ -1,6 +1,14 @@
 import { inject, Injectable } from "@angular/core";
 import { BRIDGE, Commands, Events } from "../data-source/bridge";
-import { Agent, AgentFile, FileDiff, FileNode } from "../models";
+import {
+  ActivityKind,
+  Agent,
+  AgentFile,
+  FileDiff,
+  FileNode,
+  PermissionQuestion,
+  PermissionSuggestion,
+} from "../models";
 import { bindFacade } from "../state/entity-facade";
 import { createEntityStore } from "../state/entity-store";
 
@@ -111,6 +119,19 @@ export class AgentsStore {
   input(id: string, data: string): Promise<void> {
     return this.bridge.invoke(Commands.AgentInput, { id, data });
   }
+  /** Approve the agent's pending permission prompt (tool-correct keystrokes). */
+  allow(id: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentAllow, { id });
+  }
+  /** Deny the agent's pending permission prompt (tool-correct keystrokes). */
+  deny(id: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentDeny, { id });
+  }
+  /** Select option `choice` (1-based) in the agent's pending numbered SELECT
+   *  prompt (best-effort PTY keystrokes; assumes a numbered TUI select). */
+  decide(id: string, choice: number): Promise<void> {
+    return this.bridge.invoke(Commands.AgentDecide, { id, choice });
+  }
   /** Resize the agent's PTY to match the visible terminal. */
   resize(id: string, rows: number, cols: number): Promise<void> {
     return this.bridge.invoke(Commands.AgentResize, { id, rows, cols });
@@ -124,9 +145,23 @@ export class AgentsStore {
     return this.bridge.on<{ id: string }>(Events.AgentExit, (p) => cb(p.id));
   }
 
-  /** Subscribe to hook-driven needs-input signals (the agent wants the user). */
+  /** Subscribe to hook-driven needs-input signals (the agent wants the user).
+   *  Carries the full permission detail: tool + mode + command/description/
+   *  filePath + suggested settings rules (suggestions is [] for non-Claude tools),
+   *  plus a human `summary` headline and, for AskUserQuestion-style prompts, the
+   *  structured `questions` (each with optional header + options). */
   onPermission(
-    cb: (p: { agentId: string; tool: string; detail: string }) => void,
+    cb: (p: {
+      agentId: string;
+      tool: string;
+      mode?: string;
+      command?: string;
+      description?: string;
+      filePath?: string;
+      suggestions?: PermissionSuggestion[];
+      summary?: string;
+      questions?: PermissionQuestion[];
+    }) => void,
   ): Promise<() => void> {
     return this.bridge.on(Events.AgentPermission, cb);
   }
@@ -135,5 +170,20 @@ export class AgentsStore {
     return this.bridge.on<{ id: string; state: string }>(Events.AgentStatus, (p) =>
       cb(p.id, p.state),
     );
+  }
+  /** Subscribe to action-carrying activity from hooks (e.g. "Bash: npm test").
+   *  The payload carries the precise hook `event` (e.g. "PreToolUse") so the
+   *  runtime can log/branch on which hook produced the detail, plus a `kind`
+   *  (user/agent/tool/success/error/question/info) used to colorize the preview. */
+  onActivity(
+    cb: (id: string, detail: string, event: string, kind: ActivityKind) => void,
+  ): Promise<() => void> {
+    return this.bridge.on<{
+      agentId: string;
+      tool: string;
+      event: string;
+      kind: ActivityKind;
+      detail: string;
+    }>(Events.AgentActivity, (p) => cb(p.agentId, p.detail, p.event, p.kind));
   }
 }

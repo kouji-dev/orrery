@@ -13,13 +13,20 @@ mod runtime;
 mod watch;
 
 use core::database::Database;
+use runtime::jobobj::JobGuard;
 use runtime::RuntimeService;
-use tauri::{Manager, RunEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // Install the OS process-tree kill mechanism FIRST so every process
+            // we later spawn (agents + their subtrees) inherits it. On Windows
+            // this is a kill-on-close Job Object; the guard must live for the
+            // whole process lifetime, so we hand it to Tauri managed state and
+            // never drop it early. Best-effort: failures are logged, not fatal.
+            app.manage(JobGuard::install());
             let pool = Database::get(app);
             let git = GitService::new();
             // projects table is created first so agents can reference it later
@@ -43,6 +50,17 @@ pub fn run() {
                     app.manage(bridge);
                 }
                 Err(e) => log::error!("hook bridge failed to start: {e}"),
+            }
+            // Install katrix's status/needs-input hooks GLOBALLY (merged into the
+            // user's real config). Harmless for non-katrix runs — the hook only
+            // brokers when the KATRIX_* env is present. Best-effort: never abort
+            // startup if this fails.
+            match (app.path().home_dir(), crate::hooks::hook_binary()) {
+                (Ok(home), Some(hook_bin)) => {
+                    crate::agents::adapters::install_global_hooks(&home, &hook_bin);
+                }
+                (Err(e), _) => log::warn!("global hook install skipped: no home dir: {e}"),
+                (_, None) => log::warn!("global hook install skipped: no hook binary"),
             }
             Ok(())
         })
@@ -73,21 +91,43 @@ pub fn run() {
             agents::commands::agent_start,
             agents::commands::agent_stop,
             agents::commands::agent_input,
+            agents::commands::agent_allow,
+            agents::commands::agent_deny,
+            agents::commands::agent_decide,
             agents::commands::agent_resize,
             agents::commands::detect_tools,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|handle, event| {
-            // on shutdown (for any reason we can intercept): kill every PTY
-            // process and mark in-flight agents idle so a relaunch is clean.
-            if let RunEvent::Exit = event {
+            // Tear down every PTY process (and, on Unix, its process group) and
+            // mark in-flight agents idle so a relaunch is clean. Idempotent, so
+            // firing on multiple shutdown signals is safe.
+            //
+            // NOTE: this graceful path only runs for shutdowns we can intercept.
+            // A force-kill/crash fires NO RunEvent — that case is covered on
+            // Windows by the kill-on-close Job Object installed at startup.
+            let teardown = || {
                 if let Some(rt) = handle.try_state::<RuntimeService>() {
                     rt.stop_all();
                 }
                 if let Some(svc) = handle.try_state::<AgentService>() {
                     let _ = svc.reset_running();
                 }
+            };
+            match event {
+                // Event loop is exiting (final).
+                RunEvent::Exit => teardown(),
+                // App is about to exit (e.g. last window closed / programmatic
+                // exit). Tear down here too so agents die before we leave the UI.
+                RunEvent::ExitRequested { .. } => teardown(),
+                // A window-close path: catch it so closing the window also tears
+                // agents down, even if the app lingers afterward.
+                RunEvent::WindowEvent {
+                    event: WindowEvent::CloseRequested { .. } | WindowEvent::Destroyed,
+                    ..
+                } => teardown(),
+                _ => {}
             }
         });
 }

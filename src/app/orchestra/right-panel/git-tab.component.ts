@@ -21,9 +21,9 @@ import { CommitFeedComponent } from "./commit-feed.component";
       <div class="scroll-y" style="flex:1">
         <!-- branch header -->
         <div style="padding:10px 14px;border-bottom:1px solid var(--hair)">
-          <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;min-width:0">
             <app-icon name="branch" size="sm" color="var(--accent-2)" />
-            <span style="font-size:11.5px;color:var(--ink)">{{ ag.branch }}</span>
+            <span [title]="ag.branch" style="font-size:11.5px;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch }}</span>
           </div>
           <div class="tnum" style="font-size:10px;color:var(--ink-4);display:flex;gap:8px">
             <span>base {{ ag.base }}</span><span>·</span>

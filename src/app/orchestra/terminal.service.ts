@@ -1,12 +1,19 @@
-import { inject, Injectable, OnDestroy } from "@angular/core";
+import { inject, Injectable, OnDestroy, signal } from "@angular/core";
 import { FitAddon } from "@xterm/addon-fit";
+import { ISearchOptions, SearchAddon } from "@xterm/addon-search";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { ITheme, Terminal } from "@xterm/xterm";
 import { AgentsStore } from "./stores/agents.store";
 
 interface TermHandle {
   term: Terminal;
   fit: FitAddon;
+  search: SearchAddon;
   ro?: ResizeObserver;
+  /** WebGL renderer is loaded once, after the terminal is first opened in the DOM. */
+  webglLoaded?: boolean;
 }
 
 const MONO =
@@ -24,6 +31,20 @@ export class TerminalService implements OnDestroy {
   private handles = new Map<string, TermHandle>();
   private titleCb?: (id: string, title: string) => void;
 
+  // Per-agent revision counter, bumped AFTER xterm finishes parsing each write so
+  // the buffer is current when read. Lets signal consumers (e.g. the overview
+  // mini-term reading `tail()`) react to live terminal output.
+  private revision = signal<Record<string, number>>({});
+  /** Read-only revision map — bumps per agent id whenever its buffer changes. */
+  readonly rev = this.revision.asReadonly();
+  /** Current revision for one agent (its value changes on each parsed write). */
+  revOf(id: string): number {
+    return this.revision()[id] ?? 0;
+  }
+  private bumpRevision(id: string) {
+    this.revision.update((m) => ({ ...m, [id]: (m[id] ?? 0) + 1 }));
+  }
+
   /** Subscribe to OSC window-title changes from any agent's terminal. */
   onTitle(cb: (id: string, title: string) => void) {
     this.titleCb = cb;
@@ -34,6 +55,7 @@ export class TerminalService implements OnDestroy {
     let h = this.handles.get(id);
     if (!h) {
       const term = new Terminal({
+        allowProposedApi: true,
         cursorBlink: true,
         fontFamily: MONO,
         fontSize: 12,
@@ -43,10 +65,29 @@ export class TerminalService implements OnDestroy {
       });
       const fit = new FitAddon();
       term.loadAddon(fit);
+
+      // Open clickable URLs in the system browser via Tauri's opener — a plain
+      // window.open is blocked in the webview, so route through the opener plugin.
+      term.loadAddon(
+        new WebLinksAddon((_event, uri) => {
+          void import("@tauri-apps/plugin-opener")
+            .then((m) => m.openUrl(uri))
+            .catch(() => {});
+        }),
+      );
+
+      // Correct wide-char/emoji/box-drawing widths for the agent TUIs.
+      term.loadAddon(new Unicode11Addon());
+      term.unicode.activeVersion = "11";
+
+      // In-buffer search; the component drives it via findNext/findPrevious/clearSearch.
+      const search = new SearchAddon();
+      term.loadAddon(search);
+
       term.onData((data) => void this.agents.input(id, data).catch(() => {}));
       term.onResize(({ cols, rows }) => void this.agents.resize(id, rows, cols).catch(() => {}));
       term.onTitleChange((title) => this.titleCb?.(id, title)); // live agent state
-      h = { term, fit };
+      h = { term, fit, search };
       this.handles.set(id, h);
     }
     return h;
@@ -54,7 +95,29 @@ export class TerminalService implements OnDestroy {
 
   /** Write a raw PTY chunk to the agent's terminal (buffers even if unattached). */
   write(id: string, chunk: string) {
-    this.handle(id).term.write(chunk);
+    // xterm `write` is async — its callback fires once the chunk is fully parsed,
+    // so the buffer is current when `tail()` runs in the bumped revision's effect.
+    this.handle(id).term.write(chunk, () => this.bumpRevision(id));
+  }
+
+  /**
+   * Last `n` NON-EMPTY rendered rows from an agent's terminal buffer — the
+   * authoritative, fully ANSI/VT-interpreted text the user sees in the full
+   * view. Returns [] if no terminal exists yet. No box-drawing stripping: the
+   * buffer already holds the final rendered frame, so what's here is real
+   * content (a stale TUI frame can't linger behind the live one).
+   */
+  tail(id: string, n: number): string[] {
+    const h = this.handles.get(id);
+    if (!h) return [];
+    const buf = h.term.buffer.active;
+    const out: string[] = [];
+    const total = buf.baseY + h.term.rows; // scrollback base + visible rows
+    for (let i = 0; i < total; i++) {
+      const s = buf.getLine(i)?.translateToString(true).trim();
+      if (s) out.push(s);
+    }
+    return out.slice(-n);
   }
 
   /** Current fitted size of an agent's terminal, if one exists (no side effects). */
@@ -81,6 +144,40 @@ export class TerminalService implements OnDestroy {
     this.handle(id).term.write(`\x1b[2m${text}\x1b[0m\r\n`);
   }
 
+  // ── Search ────────────────────────────────────────────────────────────────
+  // Subtle accent-tinted decorations so matches read against the dark theme.
+  private searchDecorations(): ISearchOptions["decorations"] {
+    const cs = getComputedStyle(document.documentElement);
+    const accent = cs.getPropertyValue("--accent").trim() || "#a855f7";
+    return {
+      matchBackground: accent,
+      matchBorder: accent,
+      matchOverviewRuler: accent,
+      activeMatchBackground: accent,
+      activeMatchBorder: accent,
+      activeMatchColorOverviewRuler: accent,
+    };
+  }
+
+  /** Find the next match for `query` (no-op if the terminal doesn't exist). */
+  findNext(id: string, query: string, opts?: ISearchOptions): boolean {
+    const h = this.handles.get(id);
+    if (!h) return false;
+    return h.search.findNext(query, { decorations: this.searchDecorations(), ...opts });
+  }
+
+  /** Find the previous match for `query` (no-op if the terminal doesn't exist). */
+  findPrevious(id: string, query: string, opts?: ISearchOptions): boolean {
+    const h = this.handles.get(id);
+    if (!h) return false;
+    return h.search.findPrevious(query, { decorations: this.searchDecorations(), ...opts });
+  }
+
+  /** Clear search highlight decorations (no-op if the terminal doesn't exist). */
+  clearSearch(id: string) {
+    this.handles.get(id)?.search.clearDecorations();
+  }
+
   /** Mount the agent's terminal into `el`, sizing it to fit; returns a detach fn. */
   attach(id: string, el: HTMLElement): () => void {
     const h = this.handle(id);
@@ -91,6 +188,7 @@ export class TerminalService implements OnDestroy {
     } else if (h.term.element.parentElement !== el) {
       el.replaceChildren(h.term.element); // move our instance in, evicting any prior one
     }
+    this.loadWebgl(h); // needs a canvas — only safe once the terminal is in the DOM
     this.refit(h);
     const ro = new ResizeObserver(() => this.refit(h));
     ro.observe(el);
@@ -124,6 +222,23 @@ export class TerminalService implements OnDestroy {
       h.fit.fit();
     } catch {
       // host not laid out yet — a later ResizeObserver tick will retry
+    }
+  }
+
+  /**
+   * Load the WebGL renderer once, after the terminal has a canvas in the DOM.
+   * On context loss we dispose the addon (xterm falls back to the DOM renderer),
+   * and any construction failure is swallowed so we degrade gracefully.
+   */
+  private loadWebgl(h: TermHandle) {
+    if (h.webglLoaded || !h.term.element) return;
+    h.webglLoaded = true;
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      h.term.loadAddon(webgl);
+    } catch {
+      // no WebGL available — keep the default renderer
     }
   }
 

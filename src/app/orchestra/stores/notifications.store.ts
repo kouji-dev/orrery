@@ -20,13 +20,27 @@ export class NotificationStore {
    * Add a notification. De-dupes a still-pending one of the same agent+kind so a
    * needs-input signal that re-fires can't stack duplicates.
    */
-  push(input: {
-    agentId: string;
-    agentName: string;
-    kind: NotificationKind;
-    title: string;
-    detail: string;
-  }): AgentNotification | null {
+  push(
+    input: {
+      agentId: string;
+      agentName: string;
+      kind: NotificationKind;
+      title: string;
+      detail: string;
+    } & Partial<
+      Pick<
+        AgentNotification,
+        | "tool"
+        | "command"
+        | "description"
+        | "filePath"
+        | "mode"
+        | "suggestions"
+        | "summary"
+        | "questions"
+      >
+    >,
+  ): AgentNotification | null {
     const dup = this.list().find(
       (n) => n.agentId === input.agentId && n.kind === input.kind && n.status === "pending",
     );

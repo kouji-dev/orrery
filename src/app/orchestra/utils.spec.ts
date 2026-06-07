@@ -58,6 +58,47 @@ describe("appendPtyTail", () => {
   it("expands tabs to spaces", () => {
     expect(appendPtyTail([], "a\tb")).toEqual(["a  b"]);
   });
+
+  it("resets the buffer on a clear-screen so a redraw doesn't stack frames", () => {
+    const a = appendPtyTail([], "old frame line 1\nold frame line 2\n");
+    // ESC[2J (clear screen) + ESC[H (home) then the new frame
+    const b = appendPtyTail(a, "\x1b[2J\x1b[Hfresh frame\n");
+    expect(b).toEqual(["fresh frame", ""]);
+  });
+
+  it("clears with ESC[3J as well", () => {
+    const a = appendPtyTail([], "stale\n");
+    expect(appendPtyTail(a, "\x1b[3Jnew")).toEqual(["new"]);
+  });
+
+  it("overwrites in place when the cursor is homed (ESC[H) without a clear", () => {
+    const a = appendPtyTail([], "AAAA\nBBBB");
+    // home cursor, write over the top line
+    const b = appendPtyTail(a, "\x1b[Hxx");
+    expect(b).toEqual(["xxAA", "BBBB"]);
+  });
+
+  it("moves up and overwrites with cursor-up (ESC[nA) — a spinner repaint", () => {
+    // first frame: a label line, then a spinner line below
+    const a = appendPtyTail([], "Building\n");
+    // cursor up 1, erase the line, repaint -> overwrites "Building"
+    const b = appendPtyTail(a, "\x1b[1A\x1b[2KBuilt");
+    expect(b).toEqual(["Built", ""]);
+  });
+
+  it("erases to end of line with ESC[K", () => {
+    const a = appendPtyTail([], "long progress text");
+    // carriage return, write short text, erase the rest of the line
+    const b = appendPtyTail(a, "\rdone\x1b[K");
+    expect(b).toEqual(["done"]);
+  });
+
+  it("positions the cursor with ESC[row;colH (1-based) overwriting in place", () => {
+    const a = appendPtyTail([], "line1\nline2\nline3");
+    // row 2, col 3 (1-based) -> overwrite chars 3..4 of "line2" -> "liXX2"
+    const b = appendPtyTail(a, "\x1b[2;3HXX");
+    expect(b).toEqual(["line1", "liXX2", "line3"]);
+  });
 });
 
 describe("detectTitleStatus", () => {

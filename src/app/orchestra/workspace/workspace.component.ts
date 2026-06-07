@@ -49,7 +49,7 @@ interface PaneDef {
               </button>
             }
             <button class="btn ghost-hair" (click)="agentActions.act(ag.id, 'commit')"><app-icon name="commit" size="sm" />Commit</button>
-            <button [class]="'btn ' + (ag.status === 'done' ? 'primary' : 'ghost-hair')" (click)="agentActions.act(ag.id, 'merge')">
+            <button class="btn primary" (click)="agentActions.act(ag.id, 'merge')">
               <app-icon name="merge" size="sm" />Merge to main
             </button>
           </div>
@@ -108,7 +108,7 @@ export class WorkspaceComponent {
   readonly agent = input.required<Agent>();
   readonly project = input<Project | undefined>(undefined);
 
-  readonly pane = signal<string>("diff");
+  readonly pane = signal<string>("terminal");
   readonly fmt = fmtDur;
   readonly mix = mix;
   readonly tool = toolMeta;
@@ -122,13 +122,24 @@ export class WorkspaceComponent {
   });
 
   private lastId: string | null = null;
+  private lastPaneSeq = 0;
   constructor() {
     // reset the active pane when switching to a different agent, honoring any pane hint
     effect(() => {
       const id = this.agent().id;
       if (id !== this.lastId) {
         this.lastId = id;
-        this.pane.set(this.ui.paneHint[id] || "diff");
+        this.pane.set(this.ui.paneHint[id] || "terminal");
+      }
+    });
+    // honor a one-shot pane request even for the already-active agent (e.g. inbox
+    // "open terminal"). seq de-dupes; manual tab clicks set pane directly so they
+    // never touch paneRequest and are never clobbered here.
+    effect(() => {
+      const req = this.ui.paneRequest();
+      if (req && req.id === this.agent().id && req.seq !== this.lastPaneSeq) {
+        this.lastPaneSeq = req.seq;
+        this.pane.set(req.pane);
       }
     });
   }

@@ -1,5 +1,13 @@
 import { computed, effect, inject, Injectable, signal } from "@angular/core";
-import { Agent, AgentNotification, FileNode, LogLine } from "../models";
+import {
+  ActivityKind,
+  Agent,
+  AgentNotification,
+  FileNode,
+  LogLine,
+  PermissionQuestion,
+  PermissionSuggestion,
+} from "../models";
 import { NotificationStore } from "../stores/notifications.store";
 import { AgentsStore } from "../stores/agents.store";
 import { TerminalService } from "../terminal.service";
@@ -37,6 +45,18 @@ export class AgentRuntimeService {
   });
   readonly liveLogs = signal<Record<string, LogLine[]>>({});
   readonly toolsAvailable = signal<Record<string, boolean>>({});
+  // Per-agent ROLLING list of hook-driven activity entries — each
+  // `{detail, event, kind}` where detail is the latest message content scraped
+  // from the agent's transcript (assistant text / thinking / tool use) or the
+  // structured tool summary, event is the precise hook that produced it
+  // ("PreToolUse", "SessionStart", …), and kind classifies the line
+  // (user/agent/tool/success/error/question/info) so the preview can colorize it.
+  // Capped at the last 10 entries per agent; consecutive identical entries are
+  // skipped. The card mirrors the LAST 3 entries as a single-line feed (oldest
+  // first, newest last).
+  readonly activity = signal<
+    Record<string, { detail: string; event: string; kind: ActivityKind }[]>
+  >({});
 
   readonly activeAgent = computed<Agent | null>(() => {
     const id = this.ui.activeTab();
@@ -111,6 +131,11 @@ export class AgentRuntimeService {
         this.hookState[id] = state;
       })
       .catch(() => {});
+    // activity feed: append each {detail, event, kind} entry, dedupe consecutive
+    // duplicates, cap at the last 10 — drives the overview mini-term preview.
+    void this.agentsStore
+      .onActivity((id, detail, event, kind) => this.pushActivity(id, detail, event, kind))
+      .catch(() => {});
 
     // stream output: raw bytes → xterm, plain-text tail → liveLogs (mini-term)
     void this.agentsStore
@@ -143,6 +168,53 @@ export class AgentRuntimeService {
 
   toolAvailable(id: string): boolean {
     return this.toolsAvailable()[id] !== false;
+  }
+
+  // ---- hook-driven activity (rolling last-10 message entries) ----
+  /** Append an {detail, event, kind} entry for an agent, capped at the last 10.
+   *  Skips a blank detail or one identical to the current last entry (the backend
+   *  already dedups across hooks, but consecutive identical entries are dropped
+   *  here too). */
+  private pushActivity(id: string, detail: string, event: string, kind: ActivityKind) {
+    const next = detail.trim();
+    if (!next) return;
+    this.activity.update((m) => {
+      const list = m[id] ?? [];
+      const last = list[list.length - 1];
+      if (last && last.detail === next && last.event === event) return m;
+      return { ...m, [id]: [...list, { detail: next, event, kind }].slice(-10) };
+    });
+  }
+  /** The LAST 3 stored messages, each collapsed to ONE trimmed single line
+   *  (first non-empty line of the detail) carrying its `kind`, in chronological
+   *  order — oldest first, newest last. [] before any hook fires. The overview
+   *  card renders this as a 3-message feed (newest at the bottom), colorized by
+   *  kind. */
+  activityFor(id: string): { text: string; kind: ActivityKind }[] {
+    const list = this.activity()[id];
+    if (!list?.length) return [];
+    return list
+      .slice(-3)
+      .map((e) => ({
+        text:
+          e.detail
+            .split("\n")
+            .map((l) => l.trim())
+            .find((l) => l.length > 0) ?? "",
+        kind: e.kind,
+      }))
+      .filter((r) => r.text.length > 0);
+  }
+  /** The hook `event` of the latest activity entry (for logging), or null if none. */
+  latestEvent(id: string): string | null {
+    const list = this.activity()[id];
+    return list?.[list.length - 1]?.event ?? null;
+  }
+  private clearActivity(id: string) {
+    this.activity.update((m) => {
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
   }
 
   // ---- worktree scans (async, superseded per worktree) ----
@@ -202,6 +274,7 @@ export class AgentRuntimeService {
     delete this.titleAt[id];
     delete this.hookState[id];
     this.prevNeedsInput[id] = false;
+    this.clearActivity(id); // a fresh run starts with an empty feed
     this.patchRuntime(id, { elapsed: 0, working: true, needsInput: false });
     void this.agentsStore
       .start(id, sz?.rows ?? 0, sz?.cols ?? 0)
@@ -222,6 +295,7 @@ export class AgentRuntimeService {
     delete this.titleAt[id];
     delete this.hookState[id];
     delete this.prevNeedsInput[id];
+    this.clearActivity(id);
     this.watched.delete(id);
   }
 
@@ -312,15 +386,41 @@ export class AgentRuntimeService {
   }
 
   // ---- backend hook-driven needs-input signal (authoritative) ----
-  private onPermissionRequest(p: { agentId: string; tool: string; detail: string }) {
+  // Carries the FULL permission detail now: tool + mode + command/description/
+  // filePath + suggested settings rules, plus a human `summary` headline and, for
+  // AskUserQuestion-style prompts, structured `questions` (header + options). We
+  // keep a concise `detail` for the OS notification / collapsed views — preferring
+  // the backend `summary` when present — and store the structured fields so the
+  // card can render the full breakdown (display-only).
+  private onPermissionRequest(p: {
+    agentId: string;
+    tool: string;
+    mode?: string;
+    command?: string;
+    description?: string;
+    filePath?: string;
+    suggestions?: PermissionSuggestion[];
+    summary?: string;
+    questions?: PermissionQuestion[];
+  }) {
     const ag = this.agents().find((a) => a.id === p.agentId);
     const name = ag?.name ?? "agent";
+    const detail =
+      p.summary || p.command || p.description || p.filePath || p.tool || "needs your input";
     const note = this.notifications.push({
       agentId: p.agentId,
       agentName: name,
       kind: "permission",
       title: `${name} needs your input`,
-      detail: p.detail,
+      detail,
+      tool: p.tool,
+      command: p.command,
+      description: p.description,
+      filePath: p.filePath,
+      mode: p.mode,
+      suggestions: p.suggestions,
+      summary: p.summary,
+      questions: p.questions,
     });
     if (note) void this.notifyOS(note);
   }

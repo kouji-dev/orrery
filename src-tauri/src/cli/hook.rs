@@ -44,6 +44,15 @@ pub fn hook_command(exe: &Path, event: &str) -> String {
     format!("\"{}\" {} --event {}", exe.display(), super::SUBCOMMANDS[0], event)
 }
 
+/// The registration gate: a globally-installed hook only brokers with the bridge
+/// when ALL of endpoint + token + agent-id are present (i.e. the process was
+/// launched by katrix, which stamps the KATRIX_* env). For any other run — the
+/// user's own plain CLI session in an unregistered project — every field is
+/// empty and the hook is a harmless no-op. ("Mark as candidate" is future work.)
+pub fn should_broker(endpoint: &str, token: &str, agent_id: &str) -> bool {
+    !endpoint.is_empty() && !token.is_empty() && !agent_id.is_empty()
+}
+
 /// Run the `hook` subcommand: resolve inputs, broker with the bridge, print the
 /// decision. No bridge / no response = print nothing, so the agent proceeds with
 /// its own normal flow and never hangs on katrix.
@@ -56,9 +65,16 @@ pub fn run(args: HookArgs) {
     let endpoint = or_env(args.endpoint, "KATRIX_ENDPOINT");
     let token = or_env(args.token, "KATRIX_TOKEN");
 
-    if endpoint.is_empty() {
-        return; // not launched by katrix with a bridge — behave as a no-op
+    // Registration gate: a globally-installed hook stays a no-op unless this run
+    // was launched by katrix (all KATRIX_* env present). This is what keeps the
+    // global install harmless for the user's own CLI sessions.
+    if !should_broker(&endpoint, &token, &agent_id) {
+        return;
     }
+
+    // Best-effort diagnostic: confirms a katrix-launched hook actually brokered and
+    // to which bridge endpoint. Surfaces with verbose logging.
+    log::debug!("hook broker: event={} endpoint={}", args.event, endpoint);
 
     let payload = args.payload.unwrap_or_else(|| {
         let mut s = String::new();
@@ -139,5 +155,16 @@ mod tests {
     #[test]
     fn quote_escapes_control_chars() {
         assert_eq!(quote("a\"b\n"), "\"a\\\"b\\n\"");
+    }
+
+    #[test]
+    fn should_broker_only_when_all_three_present() {
+        // all present → katrix-launched → broker
+        assert!(should_broker("http://127.0.0.1:5000", "tok", "a1"));
+        // any one missing → not katrix-launched → no-op
+        assert!(!should_broker("", "tok", "a1"), "missing endpoint");
+        assert!(!should_broker("http://127.0.0.1:5000", "", "a1"), "missing token");
+        assert!(!should_broker("http://127.0.0.1:5000", "tok", ""), "missing agent-id");
+        assert!(!should_broker("", "", ""), "all missing");
     }
 }

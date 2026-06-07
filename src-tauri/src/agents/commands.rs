@@ -124,14 +124,15 @@ pub fn agent_start<R: Runtime>(
     let agent = svc.get(id)?;
     // deliver the initial task prompt only on the very first launch
     let send_prompt = !agent.started;
-    // wire native hooks when the kat-hook helper is present; otherwise launch
-    // bare and rely on the PTY-parsing fallback.
-    let hook_env = hook_binary().map(|hook_bin| HookEnv {
+    // Hooks are installed globally at startup; here we only stamp the KATRIX_*
+    // env so this katrix-launched agent's hook brokers with the bridge. Gated on
+    // the hook binary resolving (current_exe) — without it the hook can't run, so
+    // we launch bare and rely on the PTY-parsing fallback.
+    let hook_env = hook_binary().map(|_hook_bin| HookEnv {
         agent_id: id.to_string(),
         tool: agent.tool.clone(),
         endpoint: bridge.endpoint(),
         token: bridge.token().to_string(),
-        hook_bin,
     });
     rt.start(app.clone(), &agent, rows, cols, send_prompt, hook_env.as_ref())
         .map_err(AppError::Other)?;
@@ -167,6 +168,47 @@ pub fn agent_stop<R: Runtime>(
 #[tauri::command]
 pub fn agent_input(rt: State<'_, RuntimeService>, id: Uuid, data: String) -> AppResult<()> {
     rt.write(id, &data).map_err(AppError::Other)
+}
+
+/// Approve the agent's pending permission prompt by typing the tool's
+/// approve-keystrokes into its PTY. Resolves the agent's tool → adapter →
+/// `allow_keys()` so the RIGHT keys go to each tool's prompt UI (best-effort
+/// until hook decision-forwarding lands; see `AgentAdapter::allow_keys`).
+#[tauri::command]
+pub fn agent_allow(rt: State<'_, RuntimeService>, svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
+    let tool = svc.get(id)?.tool;
+    let adapter = super::adapters::adapter_for(&tool)
+        .ok_or_else(|| AppError::Other(format!("unknown tool: {tool}")))?;
+    rt.write(id, adapter.allow_keys()).map_err(AppError::Other)
+}
+
+/// Deny the agent's pending permission prompt by typing the tool's
+/// deny-keystrokes into its PTY (mirror of [`agent_allow`], using `deny_keys()`).
+#[tauri::command]
+pub fn agent_deny(rt: State<'_, RuntimeService>, svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
+    let tool = svc.get(id)?.tool;
+    let adapter = super::adapters::adapter_for(&tool)
+        .ok_or_else(|| AppError::Other(format!("unknown tool: {tool}")))?;
+    rt.write(id, adapter.deny_keys()).map_err(AppError::Other)
+}
+
+/// Select option `choice` (1-based) in the agent's pending numbered SELECT prompt
+/// (e.g. an AskUserQuestion-style ask) by typing the tool's decide-keystrokes
+/// into its PTY. Resolves the agent's tool → adapter → `decide_keys(choice)`
+/// (mirror of [`agent_allow`]). Best-effort, fire-and-forget — NOT a forwarded
+/// decision; assumes a numbered select where 1..N maps to the displayed options
+/// (see `AgentAdapter::decide_keys`).
+#[tauri::command]
+pub fn agent_decide(
+    rt: State<'_, RuntimeService>,
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    choice: u32,
+) -> AppResult<()> {
+    let tool = svc.get(id)?.tool;
+    let adapter = super::adapters::adapter_for(&tool)
+        .ok_or_else(|| AppError::Other(format!("unknown tool: {tool}")))?;
+    rt.write(id, &adapter.decide_keys(choice)).map_err(AppError::Other)
 }
 
 /// Resize the agent's PTY to match the visible terminal (cols × rows).

@@ -36,6 +36,10 @@ export class UiStore {
   readonly activeTab = signal<string>("orchestrator");
   // pane hint when an agent tab is opened from a deep action
   readonly paneHint: Record<string, string> = {};
+  // one-shot reactive pane request — fires even when the agent is already active
+  // (seq increments per request so re-clicking the same target re-fires)
+  private paneSeq = 0;
+  readonly paneRequest = signal<{ id: string; pane: string; seq: number } | null>(null);
 
   readonly query = signal<string>("");
   readonly running = signal<boolean>(true);
@@ -97,6 +101,7 @@ export class UiStore {
     if (pane) this.paneHint[id] = pane;
     this.tabs.update((prev) => (prev.find((x) => x.id === id) ? prev : [...prev, { id }]));
     this.activeTab.set(id);
+    if (pane) this.paneRequest.set({ id, pane, seq: ++this.paneSeq });
   }
   selectTab(id: string) {
     this.activeTab.set(id);

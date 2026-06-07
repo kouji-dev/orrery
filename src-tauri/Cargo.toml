@@ -34,6 +34,23 @@ notify = "6.1.1"
 portable-pty = "0.8.1"
 tauri-plugin-notification = "2.3.3"
 clap = { version = "4.5", features = ["derive"] }
+toml_edit = "0.22"
+
+# Windows-only: Job Object APIs so the whole agent process tree dies with us,
+# even on force-kill/crash (kill-on-job-close). Already in the tree via tauri.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
+
+# Unix-only: portable-pty already makes each PTY child a session leader
+# (setsid), so killing the process group reaches grandchildren too. libc is
+# already in the tree via portable-pty.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3.27.0"

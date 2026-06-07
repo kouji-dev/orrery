@@ -57,6 +57,10 @@ export const ICONS: Record<string, string> = {
   dotsV: "M12 5a1 1 0 100-.01M12 12a1 1 0 100-.01M12 19a1 1 0 100-.01",
   folderOpen: "M4 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2H4V7zM3 9h18l-2 9a1 1 0 01-1 .8H6a1 1 0 01-1-.8L3 9z",
   enter: "M9 10l-4 4 4 4M5 14h11a4 4 0 004-4V5",
+  // question/help: a circle with a "?" stem + dot — for question-type notifications
+  question: "M12 3a9 9 0 100 18 9 9 0 000-18zM9.2 9.2a2.8 2.8 0 015.5.8c0 1.9-2.8 2.5-2.8 4M12 17h.01",
+  // shield: a guarded action — for command/permission notifications
+  shield: "M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z",
 };
 
 export interface StatusMeta {
@@ -120,20 +124,124 @@ export function stripAnsi(s: string): string {
   return s.replace(ANSI_RE, "");
 }
 
+// A single ANSI/escape token (CSI / OSC / 2-char) OR one plain character. We
+// walk the chunk token-by-token so the cursor/erase CSI sequences can be acted
+// on (not just deleted) — a deleted clear-screen would otherwise leave a TUI's
+// previous frame stacked on top of the new one, which is the garbage we're
+// trying to avoid in the preview.
+const TOKEN_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]|[\s\S]/g;
+// A CSI sequence captured into [, params, final] so we can interpret it.
+const CSI_RE = /^\x1b\[([0-9;?]*)([@-~])$/;
+
+// Drop OSC titles and 2-char escapes up front; CSI sequences are kept so the
+// folder below can interpret cursor/erase moves token-by-token.
+function stripUnactionable(s: string): string {
+  return s.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/g, "");
+}
+
 /**
- * Fold a raw PTY chunk into a rolling plain-text tail of at most `max` lines.
- * Handles \n (new line) and \r (overwrite the current line); the last array
- * entry is the in-progress line. Used only for the compact overview mini-term —
- * the full xterm view renders the raw stream itself.
+ * Fold a raw PTY chunk into a rolling plain-text screen of at most `max` lines,
+ * interpreting the cursor/erase control sequences a TUI uses to redraw in place
+ * rather than just stripping them. This keeps a redraw (claude/codex/gemini
+ * full-frame repaint) from leaving stale rows stacked behind the new frame.
+ *
+ * Lightweight, NOT a full terminal grid — it tracks a current row/column and
+ * handles: \n, \r, \t, cursor up/down/home/position (A/B/H/f), horizontal
+ * absolute (G), erase-in-line (K) and erase-in-display (J / 1J / 2J / 3J).
+ * Anything else (colors, SGR, OSC titles, etc.) is dropped. Used only for the
+ * compact overview mini-term — the full xterm view renders the raw stream.
  */
 export function appendPtyTail(prev: string[], chunk: string, max = 60): string[] {
   const lines = prev.length ? prev.slice() : [""];
-  for (const ch of stripAnsi(chunk)) {
-    if (ch === "\n") lines.push("");
-    else if (ch === "\r") lines[lines.length - 1] = "";
-    else if (ch === "\t") lines[lines.length - 1] += "  ";
-    else if (ch >= " ") lines[lines.length - 1] += ch;
-    // remaining control characters are dropped
+  let row = lines.length - 1; // cursor row (index into `lines`)
+  let col = lines[row].length; // cursor column within that row
+
+  const ensureRow = () => {
+    if (row < 0) row = 0;
+    while (lines.length <= row) lines.push("");
+  };
+  const writeAt = (text: string) => {
+    ensureRow();
+    const line = lines[row];
+    // overwrite-in-place (pad with spaces if the cursor is past the line end)
+    const head = col <= line.length ? line.slice(0, col) : line.padEnd(col);
+    lines[row] = head + text + line.slice(col + text.length);
+    col += text.length;
+  };
+
+  const tokens = stripUnactionable(chunk).match(TOKEN_RE) ?? [];
+  for (const tok of tokens) {
+    if (tok === "\n") {
+      row += 1;
+      col = 0;
+      ensureRow();
+      continue;
+    }
+    if (tok === "\r") {
+      col = 0;
+      continue;
+    }
+    if (tok === "\t") {
+      writeAt("  ");
+      continue;
+    }
+    if (tok.length === 1) {
+      if (tok >= " ") writeAt(tok);
+      continue; // drop remaining stray control chars
+    }
+    // multi-char: a CSI we may need to act on (others stripped upstream)
+    const m = CSI_RE.exec(tok);
+    if (!m) continue;
+    const params = m[1];
+    const final = m[2];
+    const n = parseInt(params, 10);
+    switch (final) {
+      case "A": // cursor up
+        row = Math.max(0, row - (isNaN(n) ? 1 : n));
+        break;
+      case "B": // cursor down
+        row += isNaN(n) ? 1 : n;
+        ensureRow();
+        break;
+      case "G": // cursor horizontal absolute (1-based)
+        col = isNaN(n) ? 0 : Math.max(0, n - 1);
+        break;
+      case "H":
+      case "f": {
+        // cursor position "row;col" (1-based); bare = home (top-left)
+        const [r, c] = params.split(";");
+        row = r ? Math.max(0, parseInt(r, 10) - 1) : 0;
+        col = c ? Math.max(0, parseInt(c, 10) - 1) : 0;
+        ensureRow();
+        break;
+      }
+      case "K": // erase in line: 0=to end (default), 1=to start, 2=whole
+        ensureRow();
+        if (params === "1") lines[row] = " ".repeat(col) + lines[row].slice(col);
+        else if (params === "2") lines[row] = "";
+        else lines[row] = lines[row].slice(0, col);
+        break;
+      case "J": // erase in display
+        if (params === "2" || params === "3") {
+          // clear whole screen → reset the buffer (kills a stale TUI frame)
+          lines.length = 0;
+          lines.push("");
+          row = 0;
+          col = 0;
+        } else if (params === "1") {
+          for (let i = 0; i < row; i++) lines[i] = "";
+          ensureRow();
+          lines[row] = lines[row].slice(col);
+        } else {
+          // 0 (default): erase from cursor to end of screen
+          ensureRow();
+          lines[row] = lines[row].slice(0, col);
+          lines.length = row + 1;
+        }
+        break;
+      default:
+        break; // SGR (m) and friends: nothing to do
+    }
   }
   return lines.length > max ? lines.slice(lines.length - max) : lines;
 }
@@ -225,4 +333,92 @@ export function hexRgb(hex: string): string {
 // color-mix helper to keep templates terse
 export function mix(color: string, transparentPct: number): string {
   return `color-mix(in oklch, ${color}, transparent ${transparentPct}%)`;
+}
+
+// ---- file language tag (diff header) ----
+// Human-readable language label from a file's extension, for the diff view's
+// language tag. Common extensions map to friendly names; anything unknown falls
+// back to the raw extension uppercased (e.g. "toml" -> "TOML").
+const LANG_LABELS: Record<string, string> = {
+  ts: "typescript",
+  mts: "typescript",
+  cts: "typescript",
+  tsx: "typescript react",
+  js: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  jsx: "javascript react",
+  rs: "rust",
+  py: "python",
+  rb: "ruby",
+  go: "go",
+  java: "java",
+  kt: "kotlin",
+  swift: "swift",
+  c: "c",
+  h: "c",
+  cpp: "c++",
+  cc: "c++",
+  cxx: "c++",
+  hpp: "c++",
+  cs: "c#",
+  php: "php",
+  sh: "shell",
+  bash: "shell",
+  zsh: "shell",
+  ps1: "powershell",
+  html: "html",
+  htm: "html",
+  css: "css",
+  scss: "scss",
+  sass: "sass",
+  less: "less",
+  json: "json",
+  jsonc: "json",
+  yaml: "yaml",
+  yml: "yaml",
+  toml: "toml",
+  xml: "xml",
+  md: "markdown",
+  markdown: "markdown",
+  mdx: "markdown",
+  sql: "sql",
+  tf: "terraform",
+  hcl: "hcl",
+  dockerfile: "dockerfile",
+  vue: "vue",
+  svelte: "svelte",
+};
+
+export function langTag(path: string): string {
+  const name = path.replace(/\/$/, "").split("/").pop() ?? "";
+  if (/^dockerfile$/i.test(name)) return "dockerfile";
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return ""; // no extension
+  const ext = name.slice(dot + 1).toLowerCase();
+  return LANG_LABELS[ext] ?? ext.toUpperCase();
+}
+
+// ---- file-status label (diff header) ----
+// Maps the git status char from an AgentFile to a human-readable label.
+export function fileStateLabel(state: string): string {
+  return (
+    ({ A: "new file", D: "deleted", M: "modified", R: "renamed" } as Record<string, string>)[
+      state
+    ] ?? "modified"
+  );
+}
+
+// ---- hunk header (diff header) ----
+// Build a `@@ -a,b +c,d @@` style hunk header from old/new line counts. The
+// backend FileDiff carries only old/new content (not the raw patch header), so
+// for a whole-file view we synthesize a single hunk spanning both versions.
+// A new file → `@@ -0,0 +1,N @@`; a deleted file → `@@ -1,M +0,0 @@`.
+export function hunkHeader(oldText: string, newText: string): string {
+  const count = (s: string) => (s.length ? s.replace(/\n$/, "").split("\n").length : 0);
+  const o = count(oldText);
+  const n = count(newText);
+  const oldRange = o ? `-1,${o}` : "-0,0";
+  const newRange = n ? `+1,${n}` : "+0,0";
+  return `@@ ${oldRange} ${newRange} @@`;
 }

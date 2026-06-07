@@ -109,16 +109,68 @@ export interface Agent {
 export type NotificationKind = "question" | "permission" | "done";
 export type NotificationStatus = "pending" | "accepted" | "rejected" | "dismissed";
 
+// The classification carried by agent://activity, used to colorize each preview
+// row in the overview mini-term: who/what produced the line.
+export type ActivityKind =
+  | "user"
+  | "agent"
+  | "tool"
+  | "success"
+  | "error"
+  | "question"
+  | "info";
+
+// A settings-rule suggestion attached to a permission request. Only Claude
+// emits these; codex/cursor/gemini send []. Display-only for now — the action
+// (persist the rule / return a decision) is deferred to the remote-approval phase.
+export interface PermissionSuggestion {
+  behavior: "allow" | "deny";
+  rule: string; // a settings rule string, e.g. `Bash(rm *)`
+  description: string;
+}
+
+// One option offered for an AskUserQuestion-style question: a short `label` (the
+// choice) and an optional longer `description` (revealed on hover in the card).
+export interface PermissionOption {
+  label: string;
+  description?: string;
+}
+
+// One question in an AskUserQuestion-style permission prompt. `header` is a short
+// label/category for the question; `options` are the CONCRETE choices Claude
+// offered (each label + optional description). `multiSelect` is whether more than
+// one option may be picked (Claude's flag, default false → single-select).
+//
+// NOTE: Claude's TUI auto-appends an "Other" free-text choice AFTER these
+// concrete `options` (its number = options.length + 1). That choice is NOT in the
+// payload — the multi-step question UI synthesizes it so the user can type a
+// custom answer.
+export interface PermissionQuestion {
+  question: string;
+  header?: string;
+  options?: PermissionOption[];
+  multiSelect?: boolean;
+}
+
 export interface AgentNotification {
   id: string;
   agentId: string;
   agentName: string;
   kind: NotificationKind;
   title: string;
-  detail: string; // scraped prompt / context from the terminal
+  detail: string; // scraped prompt / context, or a concise permission summary
   createdAt: number;
   status: NotificationStatus;
   decision?: string; // human-readable record of what the user chose
+  // ---- structured permission detail (kind === "permission"; all optional) ----
+  tool?: string; // the tool being invoked, e.g. "Bash", "Edit"
+  command?: string; // the concrete command / args, when present
+  description?: string; // a human description of the requested action
+  filePath?: string; // the file the action targets, when present
+  mode?: string; // the agent's permission mode, when present
+  suggestions?: PermissionSuggestion[]; // suggested settings rules (Claude only)
+  summary?: string; // a human headline for the prompt (e.g. AskUserQuestion summary)
+  questions?: PermissionQuestion[]; // AskUserQuestion-style questions + options (display-only)
 }
 
 export interface DiffLine {
