@@ -103,19 +103,26 @@ export class AgentActionsService {
       .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "push failed"));
   }
 
-  /** AI-driven completion action: type the predefined prompt into the agent's PTY.
-   *  Only valid while running (the tool must be at its prompt to receive input);
-   *  switches to the terminal so the user watches it run. */
+  /** AI-driven completion action: type the predefined prompt into the agent's PTY,
+   *  switching to the terminal so the user watches it run. If the agent is idle it
+   *  is launched first (resuming its session when it has one), then the prompt is
+   *  sent after a short delay so the tool has reached its input — the PTY must be
+   *  live to receive the keystrokes. */
   aiAction(id: string, kind: "commit" | "push" | "rebase" | "merge") {
     const ag = this.agents().find((a) => a.id === id);
-    if (!ag || ag.status !== "running") {
-      this.ui.flash("start the agent first");
+    if (!ag) return;
+    this.ui.openAgent(id, "terminal");
+    const send = () =>
+      void this.agentsStore
+        .action(id, kind)
+        .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "action failed"));
+    if (ag.status === "running") {
+      send();
       return;
     }
-    this.ui.openAgent(id, "terminal");
-    void this.agentsStore
-      .action(id, kind)
-      .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "action failed"));
+    this.ui.flash("starting " + ag.name + "…");
+    this.runtime.startProcess(id, { resume: ag.started });
+    setTimeout(send, 1800);
   }
 
   // ---- spawn / duplicate / remove ----
@@ -206,14 +213,12 @@ export class AgentActionsService {
       {
         label: "Rebase onto " + branchTarget,
         icon: "sparkles",
-        disabled: ag.status !== "running",
         onClick: () => this.act(id, "rebase"),
       },
       {
         label: "Merge " + branchTarget + " → " + ag.branch.replace("agent/", ""),
         icon: "sparkles",
         accent: "var(--st-done)",
-        disabled: ag.status !== "running",
         onClick: () => this.act(id, "merge"),
       },
       { sep: true },

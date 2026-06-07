@@ -38,10 +38,18 @@ import { CostStore } from "../metrics/cost.store";
         <app-icon name="link" size="sm" [px]="11" />orchestrator: healthy
       </span>
 
-      <!-- total Claude cost (ccusage); hidden when ccusage is unavailable -->
+      <!-- total Claude cost (ccusage); hover → bigger tooltip. hidden when unavailable -->
       @if (cost.cost()?.available) {
-        <span class="tnum" style="display:flex;gap:5px;align-items:center" title="Total Claude cost (ccusage)">
+        <span class="cost-readout tnum" style="position:relative;display:flex;gap:5px;align-items:center;cursor:default">
           <app-icon name="sparkles" size="sm" [px]="11" [color]="'var(--accent)'" />\${{ cost.cost()!.totalCost.toFixed(2) }}
+          <span
+            class="cost-tip"
+            style="position:absolute;bottom:calc(100% + 8px);right:0;z-index:90;width:max-content;background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));padding:9px 12px;text-align:right"
+          >
+            <span style="display:block;font-size:9.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em">Total Claude cost</span>
+            <span class="tnum" style="display:block;font-size:19px;font-weight:600;color:var(--ink);line-height:1.35">\${{ cost.cost()!.totalCost.toFixed(2) }}</span>
+            <span style="display:block;font-size:9.5px;color:var(--ink-3)">all usage · via ccusage</span>
+          </span>
         </span>
       }
 
@@ -100,6 +108,18 @@ import { CostStore } from "../metrics/cost.store";
     `
       .gauge:hover {
         color: var(--ink-2) !important;
+      }
+      .cost-tip {
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(4px);
+        transition: opacity 0.12s ease, transform 0.12s ease;
+        pointer-events: none;
+      }
+      .cost-readout:hover .cost-tip {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
       }
     `,
   ],

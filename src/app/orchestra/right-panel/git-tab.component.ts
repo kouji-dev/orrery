@@ -92,7 +92,7 @@ import { CommitFeedComponent } from "./commit-feed.component";
             <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="commit(ag.id)" style="flex:1;min-width:0;justify-content:flex-start">
               <app-icon name="commit" size="sm" />Commit {{ selected().size ? selected().size + ' selected' : 'all' }}
             </button>
-            <button class="btn ghost-hair" [disabled]="ag.status !== 'running'" [title]="ag.status === 'running' ? 'Let the agent commit' : 'Start the agent first'" (click)="agentActions.aiAction(ag.id, 'commit')" style="flex:none;padding:0 9px">
+            <button class="btn ghost-hair" [disabled]="changes().length === 0" title="Let the agent commit" (click)="agentActions.aiAction(ag.id, 'commit')" style="flex:none;padding:0 9px">
               <app-icon name="sparkles" size="sm" color="var(--accent)" />
             </button>
           </div>
@@ -102,19 +102,19 @@ import { CommitFeedComponent } from "./commit-feed.component";
             <button class="btn ghost-hair" [disabled]="ag.commits === 0" (click)="agentActions.pushAgent(ag.id)" style="flex:1;min-width:0;justify-content:flex-start">
               <app-icon name="push" size="sm" />Push to origin
             </button>
-            <button class="btn ghost-hair" [disabled]="ag.status !== 'running'" [title]="ag.status === 'running' ? 'Let the agent push' : 'Start the agent first'" (click)="agentActions.aiAction(ag.id, 'push')" style="flex:none;padding:0 9px">
+            <button class="btn ghost-hair" [disabled]="ag.commits === 0" title="Let the agent push" (click)="agentActions.aiAction(ag.id, 'push')" style="flex:none;padding:0 9px">
               <app-icon name="sparkles" size="sm" color="var(--accent)" />
             </button>
           </div>
 
-          <!-- Rebase (AI only) -->
-          <button class="btn ghost-hair" [disabled]="ag.status !== 'running'" [title]="ag.status === 'running' ? '' : 'Start the agent first'" (click)="agentActions.aiAction(ag.id, 'rebase')" style="justify-content:flex-start;min-width:0">
+          <!-- Rebase (AI) -->
+          <button class="btn ghost-hair" title="Let the agent rebase (resolves conflicts)" (click)="agentActions.aiAction(ag.id, 'rebase')" style="justify-content:flex-start;min-width:0">
             <app-icon name="sparkles" size="sm" color="var(--accent)" />
             <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Rebase onto {{ project() ? project()!.branch : 'main' }}</span>
           </button>
 
-          <!-- Merge (AI only): base → branch -->
-          <button class="btn primary" [disabled]="ag.status !== 'running'" [title]="ag.status === 'running' ? '' : 'Start the agent first'" (click)="agentActions.aiAction(ag.id, 'merge')" style="justify-content:center;min-width:0">
+          <!-- Merge (AI): base → branch -->
+          <button class="btn primary" title="Let the agent merge (resolves conflicts)" (click)="agentActions.aiAction(ag.id, 'merge')" style="justify-content:center;min-width:0">
             <app-icon name="sparkles" size="sm" />
             <span
               [title]="'Merge ' + (project() ? project()!.branch : 'main') + ' → ' + ag.branch.replace('agent/', '')"
