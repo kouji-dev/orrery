@@ -27,7 +27,8 @@ export interface AgentFile {
   path: string;
   add: number;
   del: number;
-  state: "A" | "M" | "D";
+  state: "A" | "M" | "D" | "R"; // R = renamed/moved
+  oldPath?: string; // R only: the pre-move path
 }
 
 // Old (HEAD) vs new (working tree) content of a file, for the diff view.

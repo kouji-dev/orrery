@@ -45,6 +45,11 @@ export class TerminalService implements OnDestroy {
     this.revision.update((m) => ({ ...m, [id]: (m[id] ?? 0) + 1 }));
   }
 
+  // Per-agent live search result { index (0-based, -1 = none), count } — bumped by
+  // the SearchAddon's onDidChangeResults so the search box can show "n / total".
+  private searchRes = signal<Record<string, { index: number; count: number }>>({});
+  readonly searchResults = this.searchRes.asReadonly();
+
   /** Subscribe to OSC window-title changes from any agent's terminal. */
   onTitle(cb: (id: string, title: string) => void) {
     this.titleCb = cb;
@@ -83,6 +88,36 @@ export class TerminalService implements OnDestroy {
       // In-buffer search; the component drives it via findNext/findPrevious/clearSearch.
       const search = new SearchAddon();
       term.loadAddon(search);
+      // surface match position/count so the search box can show "n / total"
+      search.onDidChangeResults((r) =>
+        this.searchRes.update((m) => ({ ...m, [id]: { index: r.resultIndex, count: r.resultCount } })),
+      );
+
+      // Clipboard: Ctrl/Cmd+Shift+C copies the selection, Ctrl/Cmd+Shift+V pastes
+      // (plain Ctrl+C must still reach the program as an interrupt). Returning
+      // false tells xterm we handled the key — don't forward it to the PTY.
+      term.attachCustomKeyEventHandler((e) => {
+        if (e.type !== "keydown") return true;
+        const mod = e.ctrlKey || e.metaKey;
+        if (mod && e.shiftKey && (e.key === "C" || e.key === "c")) {
+          const sel = term.getSelection();
+          if (sel) {
+            void navigator.clipboard.writeText(sel).catch(() => {});
+            return false;
+          }
+          return true;
+        }
+        if (mod && e.shiftKey && (e.key === "V" || e.key === "v")) {
+          void navigator.clipboard
+            .readText()
+            .then((t) => {
+              if (t) term.paste(t);
+            })
+            .catch(() => {});
+          return false;
+        }
+        return true;
+      });
 
       term.onData((data) => void this.agents.input(id, data).catch(() => {}));
       term.onResize(({ cols, rows }) => void this.agents.resize(id, rows, cols).catch(() => {}));

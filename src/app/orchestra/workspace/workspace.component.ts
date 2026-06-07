@@ -16,9 +16,10 @@ import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusPillComponent } from "../shared/status-pill.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
-import { fmtDur, mix, toolMeta } from "../utils";
+import { fileName, fmtDur, mix, toolMeta } from "../utils";
 import { DiffViewComponent } from "./diff-view.component";
 import { TerminalComponent } from "./terminal.component";
+import { FileViewerComponent } from "./file-viewer.component";
 
 interface PaneDef {
   key: string;
@@ -36,6 +37,7 @@ interface PaneDef {
     ToolBadgeComponent,
     DiffViewComponent,
     TerminalComponent,
+    FileViewerComponent,
   ],
   template: `
     @let ag = agent();
@@ -133,15 +135,42 @@ interface PaneDef {
             }
           </button>
         }
+        <!-- dynamic, closable file tab (opened from the right-panel file tree) -->
+        @if (openFilePath(); as fp) {
+          @let on = pane() === 'file';
+          <div
+            (click)="pane.set('file')"
+            [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'"
+            style="display:flex;align-items:center;gap:7px;padding:9px 10px 9px 12px;cursor:pointer;position:relative;border-left:1px solid var(--hair)"
+          >
+            @if (on) { <span style="position:absolute;left:8px;right:8px;bottom:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent-2))"></span> }
+            <app-icon name="file" size="sm" [color]="on ? 'var(--accent)' : null" />
+            <span style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="fp">{{ fname(fp) }}</span>
+            <button class="file-close" (click)="closeFileTab($event)" title="Close" style="background:transparent;border:none;color:var(--ink-4);cursor:pointer;display:flex;padding:1px;border-radius:3px">
+              <app-icon name="x" size="sm" />
+            </button>
+          </div>
+        }
       </div>
 
       <!-- pane body -->
       @switch (pane()) {
         @case ('diff') { <app-diff-view [agent]="ag" /> }
         @case ('terminal') { <app-terminal [agent]="ag" /> }
+        @case ('file') {
+          @if (openFilePath(); as fp) { <app-file-viewer [agent]="ag" [path]="fp" /> }
+        }
       }
     </div>
   `,
+  styles: [
+    `
+      .file-close:hover {
+        color: var(--ink) !important;
+        background: var(--panel-2);
+      }
+    `,
+  ],
 })
 export class WorkspaceComponent {
   readonly agentActions = inject(AgentActionsService);
@@ -153,6 +182,15 @@ export class WorkspaceComponent {
   readonly fmt = fmtDur;
   readonly mix = mix;
   readonly tool = toolMeta;
+  readonly fname = fileName;
+  // the file open in this agent's workspace (drives the closable file tab)
+  readonly openFilePath = computed(() => this.ui.openFile()[this.agent().id]);
+
+  closeFileTab(e: MouseEvent) {
+    e.stopPropagation();
+    this.ui.closeFile(this.agent().id);
+    if (this.pane() === "file") this.pane.set("diff");
+  }
 
   // the Start/Resume arrow dropdown (Continue session → claude --resume <id>)
   readonly resumeMenuOpen = signal(false);
@@ -211,6 +249,10 @@ export class WorkspaceComponent {
         this.lastPaneSeq = req.seq;
         this.pane.set(req.pane);
       }
+    });
+    // if the open file is cleared while the file pane is active, fall back to diff
+    effect(() => {
+      if (this.pane() === "file" && !this.openFilePath()) this.pane.set("diff");
     });
   }
 }

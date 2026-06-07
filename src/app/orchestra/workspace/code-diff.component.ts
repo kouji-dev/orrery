@@ -7,44 +7,11 @@ import {
   OnDestroy,
   viewChild,
 } from "@angular/core";
-import { css } from "@codemirror/lang-css";
-import { html } from "@codemirror/lang-html";
-import { java } from "@codemirror/lang-java";
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
-import { markdown } from "@codemirror/lang-markdown";
-import { python } from "@codemirror/lang-python";
-import { rust } from "@codemirror/lang-rust";
-import { yaml } from "@codemirror/lang-yaml";
 import { MergeView } from "@codemirror/merge";
 import { EditorState, Extension } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView, lineNumbers } from "@codemirror/view";
-
-function langExt(lang: string): Extension {
-  switch (lang) {
-    case "javascript":
-      return javascript({ typescript: true });
-    case "json":
-      return json();
-    case "css":
-      return css();
-    case "html":
-      return html();
-    case "markdown":
-      return markdown();
-    case "rust":
-      return rust();
-    case "python":
-      return python();
-    case "java":
-      return java();
-    case "yaml":
-      return yaml();
-    default:
-      return [];
-  }
-}
+import { langExt } from "./code-lang";
 
 @Component({
   selector: "app-code-diff",
@@ -91,14 +58,32 @@ function langExt(lang: string): Extension {
       :host ::ng-deep .cm-merge-b .cm-changedLine { background-color: rgba(52, 224, 161, 0.15) !important; }
       :host ::ng-deep .cm-merge-a .cm-changedLine,
       :host ::ng-deep .cm-deletedChunk { background-color: rgba(255, 93, 122, 0.15) !important; }
-      :host ::ng-deep .cm-changedText,
+      /* full-line ins/del markers stay flat — the row tint on .cm-changedLine carries it */
       :host ::ng-deep .cm-insertedLine,
       :host ::ng-deep .cm-deletedLine,
-      :host ::ng-deep .cm-deletedLine del,
-      :host ::ng-deep .cm-deletedText {
+      :host ::ng-deep .cm-deletedLine del {
         background: none !important;
         background-color: transparent !important;
         text-decoration: none !important;
+      }
+      /* within-line changed text: brightly highlight only the changed sub-word
+         (word-level diff — e.g. "Humain" in greet → greetHumain) over the row tint */
+      :host ::ng-deep .cm-merge-b .cm-changedText {
+        background-color: rgba(52, 224, 161, 0.34) !important;
+        border-radius: 2px;
+      }
+      :host ::ng-deep .cm-merge-a .cm-changedText,
+      :host ::ng-deep .cm-deletedChunk .cm-deletedText {
+        background-color: rgba(255, 93, 122, 0.34) !important;
+        border-radius: 2px;
+        text-decoration: none !important;
+      }
+      /* keep oneDark for syntax colors, but force OUR background (not its #282c34) */
+      :host ::ng-deep .cm-editor {
+        background-color: var(--bg) !important;
+      }
+      :host ::ng-deep .cm-gutters {
+        background-color: var(--bg) !important;
       }
     `,
   ],
@@ -136,7 +121,7 @@ export class CodeDiffComponent implements OnDestroy {
       parent: el,
       collapseUnchanged: { margin: 3, minSize: 4 },
       gutter: true,
-      highlightChanges: false,
+      highlightChanges: true, // mark the changed run within a line (.cm-changedText)
     });
   }
 }

@@ -2,6 +2,7 @@ import { ScrollingModule } from "@angular/cdk/scrolling";
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Agent, FileNode, Project } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 
 interface FlatRow {
@@ -29,7 +30,7 @@ interface FlatRow {
         <cdk-virtual-scroll-viewport itemSize="24" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y">
           <div
             *cdkVirtualFor="let row of rows()"
-            (click)="toggle(row.node)"
+            (click)="onRow(row.node)"
             [style.padding-left.px]="8 + row.depth * 13"
             style="height:24px;display:flex;align-items:center;gap:6px;cursor:pointer;padding-right:8px;border-radius:5px"
           >
@@ -38,14 +39,18 @@ interface FlatRow {
               <app-icon [name]="isOpen(row.node) ? 'folderOpen' : 'folder'" size="sm" [px]="13" [color]="row.node.ignored ? 'var(--ink-4)' : 'var(--accent)'" />
             } @else {
               <span style="width:11px;flex:none"></span>
-              <app-icon name="file" size="sm" [px]="12" color="var(--ink-4)" />
+              <app-icon name="file" size="sm" [px]="12" [color]="stateOf(row.node.path) ? stateInk(stateOf(row.node.path)!) : 'var(--ink-4)'" />
             }
             <span
               [style.color]="row.node.ignored ? 'var(--ink-4)' : row.node.isDir ? 'var(--ink-2)' : 'var(--ink-3)'"
               [style.opacity]="row.node.ignored ? 0.7 : 1"
               style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
             >{{ row.node.name }}</span>
-            @if (row.node.ignored) { <span class="chip" style="margin-left:auto;font-size:8px;padding:0 4px;color:var(--ink-4)">ignored</span> }
+            @if (row.node.ignored) {
+              <span class="chip" style="margin-left:auto;font-size:8px;padding:0 4px;color:var(--ink-4)">ignored</span>
+            } @else if (!row.node.isDir && stateOf(row.node.path); as st) {
+              <span class="tnum" [style.color]="stateInk(st)" style="margin-left:auto;flex:none;font-size:9px;font-weight:700;padding-left:6px">{{ st }}</span>
+            }
           </div>
         </cdk-virtual-scroll-viewport>
       } @else {
@@ -56,12 +61,34 @@ interface FlatRow {
 })
 export class FileTreeComponent {
   private runtime = inject(AgentRuntimeService);
+  private ui = inject(UiStore);
   readonly agent = input.required<Agent>();
   readonly project = input<Project | undefined>(undefined);
 
   readonly nodes = computed<FileNode[]>(() => this.agent().files?.nodes ?? []);
   readonly loading = computed(() => this.agent().files?.loading ?? false);
   readonly openMap = signal<Record<string, boolean>>({});
+
+  // git status by (normalized) path → mark changed files in the tree with A/M/D
+  readonly stateMap = computed<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const f of this.agent().git_changes?.files ?? []) {
+      map[f.path.replace(/\\/g, "/")] = f.state;
+    }
+    return map;
+  });
+  stateOf(path: string): string | undefined {
+    return this.stateMap()[path.replace(/\\/g, "/")];
+  }
+  stateInk(state: string): string {
+    return state === "A"
+      ? "var(--code-add-ink)"
+      : state === "D"
+        ? "var(--code-del-ink)"
+        : state === "R"
+          ? "var(--accent)"
+          : "var(--accent-2)";
+  }
 
   // flatten the open tree into the list of visible rows (depth carries indentation)
   readonly rows = computed<FlatRow[]>(() => {
@@ -79,6 +106,14 @@ export class FileTreeComponent {
 
   isOpen(node: FileNode): boolean {
     return this.openMap()[node.path] === true;
+  }
+  // dirs expand/collapse; files open in the agent's workspace (closable file tab)
+  onRow(node: FileNode) {
+    if (node.isDir) {
+      this.toggle(node);
+      return;
+    }
+    this.ui.openFileInWorkspace(this.agent().id, node.path);
   }
   toggle(node: FileNode) {
     if (!node.isDir) return;

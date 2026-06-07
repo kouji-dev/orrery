@@ -111,6 +111,23 @@ export class UiStore {
     if (this.activeTab() === id) this.activeTab.set("orchestrator");
   }
 
+  // ---- workspace file viewer ----
+  // path of the file currently open in each agent's workspace (a closable tab
+  // next to Diff/Terminal). Opened from the right-panel file tree.
+  readonly openFile = signal<Record<string, string>>({});
+  /** Open `path` in the agent's workspace as the file tab + jump to that pane. */
+  openFileInWorkspace(agentId: string, path: string) {
+    this.openFile.update((m) => ({ ...m, [agentId]: path }));
+    this.openAgent(agentId, "file"); // ensure the agent tab + switch to the file pane
+  }
+  /** Close the file tab for an agent. */
+  closeFile(agentId: string) {
+    this.openFile.update((m) => {
+      const { [agentId]: _drop, ...rest } = m;
+      return rest;
+    });
+  }
+
   // ---- run toggle ----
   toggleRunAll() {
     const wasRunning = this.running();

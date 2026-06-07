@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  computed,
   DestroyRef,
   ElementRef,
   inject,
@@ -51,6 +52,9 @@ import { TerminalService } from "../terminal.service";
               style="width:160px;background:transparent;border:0;outline:0;color:var(--ink-2);
                      font-size:12px;font-family:inherit"
             />
+            @if (matchInfo()) {
+              <span class="tnum" style="font-size:10px;color:var(--ink-4);padding:0 2px;white-space:nowrap">{{ matchInfo() }}</span>
+            }
             <button type="button" title="Previous (Shift+Enter)" (click)="prev()" [style]="btn">↑</button>
             <button type="button" title="Next (Enter)" (click)="next()" [style]="btn">↓</button>
             <button type="button" title="Close (Esc)" (click)="close()" [style]="btn">✕</button>
@@ -72,6 +76,13 @@ export class TerminalComponent {
 
   readonly searchOpen = signal(false);
   readonly query = signal("");
+
+  /** "n / total" for the current search, or "" when there's no active query. */
+  readonly matchInfo = computed(() => {
+    if (!this.query()) return "";
+    const r = this.terminals.searchResults()[this.agent().id];
+    return r && r.count > 0 ? `${r.index + 1}/${r.count}` : "0/0";
+  });
 
   /** Shared style for the tiny prev/next/close affordances. */
   readonly btn =

@@ -29,32 +29,87 @@ const LIST_DEFAULT = 236;
     >
       <!-- file list -->
       <div class="scroll-y" style="background:var(--panel);padding:6px 0">
-        <div class="up" style="font-size:9px;color:var(--ink-3);padding:6px 14px 4px">Changed files · {{ changes().length }}</div>
-        @for (f of changes(); track f.path; let i = $index) {
-          <div
-            class="diff-file"
-            [class.sel]="sel() === i"
-            (click)="sel.set(i)"
-            style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;margin:1px 6px;border-radius:var(--r-sm)"
-          >
-            <span
-              [style.color]="stateInk(f.state)"
-              [style.background]="stateBg(f.state)"
-              style="flex:none;width:14px;height:14px;border-radius:3px;display:grid;place-items:center;font-size:9px;font-weight:700"
-            >{{ f.state }}</span>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fname(f.path) }}</div>
-              @if (fdir(f.path)) {
-                <div style="font-size:9.5px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(f.path) }}</div>
-              }
-            </div>
-            <span class="tnum" style="font-size:9.5px;display:flex;gap:4px;flex:none">
-              <span style="color:var(--code-add-ink)">+{{ f.add }}</span>
-              @if (f.del > 0) { <span style="color:var(--code-del-ink)">−{{ f.del }}</span> }
-            </span>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px 6px 14px">
+          <span class="up" style="font-size:9px;color:var(--ink-3)">Changed · {{ changes().length }}</span>
+          <!-- tree / flat toggle -->
+          <div style="margin-left:auto;display:flex;gap:2px;padding:2px;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
+            <button
+              class="btn"
+              (click)="treeMode.set(true)"
+              title="Tree view"
+              [style.background]="treeMode() ? 'var(--panel-3)' : 'transparent'"
+              [style.color]="treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
+              [style.box-shadow]="treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
+              style="padding:3px 7px;border-radius:4px;gap:5px;font-size:10px"
+            ><app-icon name="graph" size="sm" [px]="12" [color]="treeMode() ? 'var(--accent)' : null" />Tree</button>
+            <button
+              class="btn"
+              (click)="treeMode.set(false)"
+              title="Flattened view"
+              [style.background]="!treeMode() ? 'var(--panel-3)' : 'transparent'"
+              [style.color]="!treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
+              [style.box-shadow]="!treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
+              style="padding:3px 7px;border-radius:4px;gap:5px;font-size:10px"
+            ><app-icon name="dots" size="sm" [px]="12" [color]="!treeMode() ? 'var(--accent)' : null" />Flat</button>
           </div>
-        } @empty {
+        </div>
+
+        @if (!changes().length) {
           <div style="padding:10px 14px;font-size:10.5px;color:var(--ink-4)">no changes</div>
+        } @else if (treeMode()) {
+          <!-- tree view: folders + indented file leaves -->
+          @for (row of treeRows(); track row.path) {
+            @if (row.dir) {
+              <div (click)="toggleDir(row.path)" style="display:flex;align-items:center;gap:6px;padding:4px 8px;cursor:pointer" [style.padding-left.px]="8 + row.depth * 13">
+                <app-icon [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" size="sm" [px]="11" color="var(--ink-4)" />
+                <app-icon [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" size="sm" [px]="13" color="var(--ink-4)" />
+                <span style="font-size:11px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
+              </div>
+            } @else {
+              <div
+                class="diff-file"
+                [class.sel]="current()?.path === row.path"
+                (click)="selPath.set(row.path)"
+                [style.padding-left.px]="12 + row.depth * 13"
+                style="display:flex;align-items:center;gap:7px;padding:4px 10px;cursor:pointer;margin:1px 6px;border-radius:var(--r-sm)"
+              >
+                <span [style.color]="stateInk(row.file!.state)" [style.background]="stateBg(row.file!.state)" style="flex:none;width:14px;height:14px;border-radius:3px;display:grid;place-items:center;font-size:9px;font-weight:700">{{ row.file!.state }}</span>
+                <span [title]="row.file!.state === 'R' && row.file!.oldPath ? ('renamed from ' + row.file!.oldPath) : row.name" style="flex:1;min-width:0;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
+                <span class="tnum" style="font-size:9.5px;display:flex;gap:4px;flex:none">
+                  <span style="color:var(--code-add-ink)">+{{ row.file!.add }}</span>
+                  @if (row.file!.del > 0) { <span style="color:var(--code-del-ink)">−{{ row.file!.del }}</span> }
+                </span>
+              </div>
+            }
+          }
+        } @else {
+          <!-- flat view -->
+          @for (f of changes(); track f.path) {
+            <div
+              class="diff-file"
+              [class.sel]="current()?.path === f.path"
+              (click)="selPath.set(f.path)"
+              style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;margin:1px 6px;border-radius:var(--r-sm)"
+            >
+              <span
+                [style.color]="stateInk(f.state)"
+                [style.background]="stateBg(f.state)"
+                style="flex:none;width:14px;height:14px;border-radius:3px;display:grid;place-items:center;font-size:9px;font-weight:700"
+              >{{ f.state }}</span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fname(f.path) }}</div>
+                @if (f.state === 'R' && f.oldPath) {
+                  <div [title]="'renamed from ' + f.oldPath" style="font-size:9.5px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">← {{ f.oldPath }}</div>
+                } @else if (fdir(f.path)) {
+                  <div style="font-size:9.5px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(f.path) }}</div>
+                }
+              </div>
+              <span class="tnum" style="font-size:9.5px;display:flex;gap:4px;flex:none">
+                <span style="color:var(--code-add-ink)">+{{ f.add }}</span>
+                @if (f.del > 0) { <span style="color:var(--code-del-ink)">−{{ f.del }}</span> }
+              </span>
+            </div>
+          }
         }
       </div>
 
@@ -222,14 +277,43 @@ const LIST_DEFAULT = 236;
 export class DiffViewComponent {
   private agents = inject(AgentsStore);
   readonly agent = input.required<Agent>();
-  readonly sel = signal(0);
+  // selection by PATH (works across both flat + tree views); treeMode toggles them
+  readonly selPath = signal<string | null>(null);
+  readonly treeMode = signal(false);
 
   readonly fname = fileName;
   readonly fdir = fileDir;
   readonly stateLabel = fileStateLabel;
 
   readonly changes = computed(() => this.agent().git_changes?.files ?? []);
-  readonly current = computed<AgentFile | undefined>(() => this.changes()[this.sel()]);
+  // the effectively-selected file: the one matching selPath, else the first
+  readonly current = computed<AgentFile | undefined>(() => {
+    const cs = this.changes();
+    return cs.find((f) => f.path === this.selPath()) ?? cs[0];
+  });
+  // nested folder tree of the changed files, for the "Tree" view
+  readonly diffTree = computed<DiffNode[]>(() => buildDiffTree(this.changes()));
+  // collapsed folders (path → false); default: folders are OPEN
+  readonly dirOpen = signal<Record<string, boolean>>({});
+  // the visible rows: walk the tree, skipping children of collapsed folders
+  readonly treeRows = computed<DiffRow[]>(() => {
+    const open = this.dirOpen();
+    const out: DiffRow[] = [];
+    const walk = (nodes: DiffNode[], depth: number) => {
+      for (const n of nodes) {
+        out.push({ dir: n.dir, name: n.name, path: n.path, depth, file: n.file });
+        if (n.dir && open[n.path] !== false) walk(n.children, depth + 1);
+      }
+    };
+    walk(this.diffTree(), 0);
+    return out;
+  });
+  isDirOpen(path: string): boolean {
+    return this.dirOpen()[path] !== false;
+  }
+  toggleDir(path: string) {
+    this.dirOpen.update((m) => ({ ...m, [path]: !(m[path] !== false) }));
+  }
   readonly diff = signal<FileDiff | null>(null);
   readonly loading = signal(false);
   private gen = 0;
@@ -273,7 +357,7 @@ export class DiffViewComponent {
       const id = this.agent().id;
       if (id !== this.lastId) {
         this.lastId = id;
-        this.sel.set(0);
+        this.selPath.set(null); // current() falls back to the first changed file
       }
     });
     // load the diff for the selected file (superseded on rapid changes)
@@ -287,7 +371,7 @@ export class DiffViewComponent {
       const g = ++this.gen;
       this.loading.set(true);
       void this.agents
-        .diff(ag.id, f.path)
+        .diff(ag.id, f.path, f.oldPath)
         .then((d) => {
           if (this.gen === g) {
             this.diff.set(d);
@@ -328,11 +412,69 @@ export class DiffViewComponent {
   }
 
   stateInk(state: string): string {
-    return state === "A" ? "var(--code-add-ink)" : state === "D" ? "var(--code-del-ink)" : "var(--accent-2)";
+    return state === "A"
+      ? "var(--code-add-ink)"
+      : state === "D"
+        ? "var(--code-del-ink)"
+        : state === "R"
+          ? "var(--accent)"
+          : "var(--accent-2)";
   }
   stateBg(state: string): string {
-    return state === "A" ? "var(--code-add-bg)" : state === "D" ? "var(--code-del-bg)" : mix("var(--accent-2)", 86);
+    return state === "A"
+      ? "var(--code-add-bg)"
+      : state === "D"
+        ? "var(--code-del-bg)"
+        : state === "R"
+          ? mix("var(--accent)", 86)
+          : mix("var(--accent-2)", 86);
   }
+}
+
+// ----- "Tree" view: build a nested folder tree from the changed-file paths -----
+interface DiffRow {
+  dir: boolean;
+  name: string;
+  path: string;
+  depth: number;
+  file?: AgentFile;
+}
+interface DiffNode {
+  dir: boolean;
+  name: string;
+  path: string;
+  file?: AgentFile;
+  children: DiffNode[];
+}
+
+// Dirs first then files, alphabetical at each level. File leaves carry their
+// AgentFile for state/counts. The component flattens this respecting per-folder
+// open state (collapsible).
+function buildDiffTree(files: AgentFile[]): DiffNode[] {
+  const root: DiffNode = { dir: true, name: "", path: "", children: [] };
+  const dirAt = new Map<string, DiffNode>([["", root]]);
+  for (const f of files) {
+    const parts = f.path.split("/");
+    let parentPath = "";
+    parts.forEach((part, i) => {
+      const isFile = i === parts.length - 1;
+      const path = parentPath ? `${parentPath}/${part}` : part;
+      if (isFile) {
+        dirAt.get(parentPath)!.children.push({ dir: false, name: part, path, file: f, children: [] });
+      } else if (!dirAt.has(path)) {
+        const node: DiffNode = { dir: true, name: part, path, children: [] };
+        dirAt.get(parentPath)!.children.push(node);
+        dirAt.set(path, node);
+      }
+      parentPath = path;
+    });
+  }
+  const sortRec = (nodes: DiffNode[]) => {
+    nodes.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
+    for (const n of nodes) if (n.dir) sortRec(n.children);
+  };
+  sortRec(root.children);
+  return root.children;
 }
 
 // ----- line-count helpers (header counts) -----

@@ -104,9 +104,10 @@ export class AgentsStore {
   action(id: string, kind: "commit" | "push" | "rebase" | "merge"): Promise<void> {
     return this.bridge.invoke(Commands.AgentAction, { id, kind });
   }
-  /** Old/new content of a file for the diff view. */
-  diff(id: string, path: string): Promise<FileDiff> {
-    return this.bridge.invoke<FileDiff>(Commands.AgentDiff, { id, path });
+  /** Old/new content of a file for the diff view. `oldPath` (the pre-move path)
+   *  is passed for renamed/moved files so the OLD side reads the right content. */
+  diff(id: string, path: string, oldPath?: string): Promise<FileDiff> {
+    return this.bridge.invoke<FileDiff>(Commands.AgentDiff, { id, path, oldPath });
   }
   /** Start watching an agent's worktree for changes (replaces any previous watch). */
   watch(id: string): Promise<void> {
