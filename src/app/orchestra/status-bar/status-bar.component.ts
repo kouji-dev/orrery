@@ -1,8 +1,17 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  ElementRef,
+  HostListener,
+  inject,
+  signal,
+} from "@angular/core";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
+import { MetricsStore } from "../metrics/metrics.store";
 
 @Component({
   selector: "app-status-bar",
@@ -27,13 +36,113 @@ import { IconComponent } from "../shared/icon.component";
         }
         <app-icon name="link" size="sm" [px]="11" />orchestrator: healthy
       </span>
+
+      <!-- bottom-right cpu/memory gauge; click → popover anchored ABOVE the bar -->
+      <span style="position:relative;display:flex">
+        <button
+          type="button"
+          class="gauge"
+          (click)="toggle($event)"
+          [style.color]="open() ? 'var(--ink)' : 'var(--ink-3)'"
+          style="display:flex;align-items:center;gap:7px;border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:10.5px;padding:0"
+        >
+          <app-icon name="cpu" size="sm" [px]="11" [color]="'var(--accent)'" />
+          <span class="tnum">CPU {{ cpuPct() }}% · MEM {{ totalMem() }}</span>
+          <!-- mini bar reflecting total cpu (clamped 0–100) -->
+          <span style="position:relative;width:30px;height:4px;border-radius:2px;background:var(--panel-2);overflow:hidden">
+            <span
+              [style.width.%]="cpuBar()"
+              style="position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:2px"
+            ></span>
+          </span>
+        </button>
+
+        @if (open()) {
+          <div
+            class="rise"
+            style="position:absolute;bottom:100%;right:0;margin-bottom:8px;z-index:80;min-width:248px;background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));overflow:hidden"
+          >
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 11px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--ink-2)">
+              <span style="display:flex;gap:6px;align-items:center">
+                <app-icon name="cpu" size="sm" [px]="12" [color]="'var(--accent)'" />resources
+              </span>
+              <span class="tnum" style="color:var(--ink-3)">{{ cpuPct() }}% · {{ totalMem() }}</span>
+            </div>
+            <div style="max-height:228px;overflow:auto;padding:5px">
+              @for (p of procs(); track p.id) {
+                <div style="display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:6px">
+                  <span
+                    class="dot"
+                    [style.background]="p.id === 'app' ? 'var(--accent-2,var(--accent))' : 'var(--st-running)'"
+                  ></span>
+                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--ink-2)">{{ p.label }}</span>
+                  <span class="tnum" style="color:var(--ink-3);font-size:10.5px">{{ fmtCpu(p.cpu) }}%</span>
+                  <span class="tnum" style="color:var(--ink-4);font-size:10.5px;min-width:54px;text-align:right">{{ fmtMem(p.memBytes) }}</span>
+                </div>
+              } @empty {
+                <div style="padding:10px 8px;font-size:11px;color:var(--ink-4)">no metrics yet</div>
+              }
+            </div>
+          </div>
+        }
+      </span>
     </footer>
   `,
+  styles: [
+    `
+      .gauge:hover {
+        color: var(--ink-2) !important;
+      }
+    `,
+  ],
 })
 export class StatusBarComponent {
   readonly runtime = inject(AgentRuntimeService);
   readonly projects = inject(ProjectActionsService);
   readonly ui = inject(UiStore);
+  readonly metrics = inject(MetricsStore);
+  private host = inject(ElementRef<HTMLElement>);
+
   readonly running = computed(() => this.runtime.agents().filter((a) => a.status === "running").length);
   readonly blocked = computed(() => this.runtime.agents().filter((a) => a.status === "blocked").length);
+
+  readonly open = signal(false);
+
+  // ---- gauge readouts ----
+  readonly cpuPct = computed(() => Math.round(this.metrics.metrics()?.totalCpu ?? 0));
+  readonly cpuBar = computed(() => Math.min(100, Math.max(0, this.cpuPct())));
+  readonly totalMem = computed(() => this.fmtMem(this.metrics.metrics()?.totalMemBytes ?? 0));
+  // app subtree first, then agents, both already in backend order
+  readonly procs = computed(() => this.metrics.metrics()?.procs ?? []);
+
+  toggle(e: MouseEvent) {
+    e.stopPropagation();
+    this.open.update((v) => !v);
+  }
+
+  fmtCpu(cpu: number): number {
+    return Math.round(cpu);
+  }
+
+  /** Human-readable bytes: B / KB / MB / GB, one decimal above KB. */
+  fmtMem(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${Math.round(kb)} KB`;
+    const mb = kb / 1024;
+    if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    return `${(mb / 1024).toFixed(1)} GB`;
+  }
+
+  // close on outside click / Esc (mirrors context-menu.component.ts)
+  @HostListener("document:mousedown", ["$event"])
+  onDown(e: MouseEvent) {
+    if (!this.open()) return;
+    if (!this.host.nativeElement.contains(e.target as Node)) this.open.set(false);
+  }
+
+  @HostListener("document:keydown.escape")
+  onEsc() {
+    if (this.open()) this.open.set(false);
+  }
 }

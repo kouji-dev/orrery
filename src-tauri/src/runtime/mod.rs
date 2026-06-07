@@ -53,6 +53,18 @@ impl RuntimeService {
         self.procs.lock().unwrap().contains_key(&id)
     }
 
+    /// `(id, pid)` for every running agent that has a captured child pid. Used by
+    /// the metrics push loop to sample each agent's process subtree. Agents whose
+    /// `pid` was never captured (None) are skipped.
+    pub fn pids(&self) -> Vec<(Uuid, u32)> {
+        self.procs
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(id, p)| p.pid.map(|pid| (*id, pid)))
+            .collect()
+    }
+
     /// Launch the agent's tool in its worktree over a PTY, streaming output as
     /// `agent://output` events. The initial task prompt is passed only on the
     /// first launch (`send_prompt`); resumes start a bare interactive session.

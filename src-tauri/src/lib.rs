@@ -8,6 +8,7 @@ mod core;
 mod fs;
 mod git;
 mod hooks;
+mod metrics;
 mod projects;
 mod runtime;
 mod watch;
@@ -62,6 +63,33 @@ pub fn run() {
                 (Err(e), _) => log::warn!("global hook install skipped: no home dir: {e}"),
                 (_, None) => log::warn!("global hook install skipped: no hook binary"),
             }
+
+            // Metrics push loop: sample the app + every running agent's process
+            // subtree (cpu%/mem) every 3s and emit `system://metrics`. sysinfo
+            // derives per-process cpu% from the delta between two refreshes, so we
+            // warm up with one refresh before the loop, then refresh+emit each tick.
+            let metrics_app = app.handle().clone();
+            std::thread::spawn(move || {
+                use tauri::{Emitter, Manager};
+                let app_pid = std::process::id();
+                let mut sampler = metrics::MetricsSampler::new();
+                sampler.refresh(); // warm-up: first sample's cpu% would otherwise be 0
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    sampler.refresh();
+                    let (Some(runtime), Some(agents)) = (
+                        metrics_app.try_state::<RuntimeService>(),
+                        metrics_app.try_state::<AgentService>(),
+                    ) else {
+                        continue; // services not ready yet (shouldn't happen post-setup)
+                    };
+                    let m = metrics::commands::sample_with_labels(
+                        &sampler, app_pid, &runtime, &agents,
+                    );
+                    let _ = metrics_app.emit("system://metrics", m);
+                }
+            });
+
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
@@ -96,6 +124,7 @@ pub fn run() {
             agents::commands::agent_decide,
             agents::commands::agent_resize,
             agents::commands::detect_tools,
+            metrics::commands::system_metrics,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
