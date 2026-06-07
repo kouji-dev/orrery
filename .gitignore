@@ -43,3 +43,4 @@ Thumbs.db
 
 # scratch verification screenshots
 .verify/
+/Screenshot *.png
