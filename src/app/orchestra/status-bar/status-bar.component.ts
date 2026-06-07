@@ -47,7 +47,7 @@ import { MetricsStore } from "../metrics/metrics.store";
           style="display:flex;align-items:center;gap:7px;border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:10.5px;padding:0"
         >
           <app-icon name="cpu" size="sm" [px]="11" [color]="'var(--accent)'" />
-          <span class="tnum">CPU {{ cpuPct() }}% · MEM {{ totalMem() }}</span>
+          <span class="tnum">CPU {{ cpuPct() }}% · MEM {{ usedMem() }} / {{ totalMem() }}</span>
           <!-- mini bar reflecting total cpu (clamped 0–100) -->
           <span style="position:relative;width:30px;height:4px;border-radius:2px;background:var(--panel-2);overflow:hidden">
             <span
@@ -60,13 +60,13 @@ import { MetricsStore } from "../metrics/metrics.store";
         @if (open()) {
           <div
             class="rise"
-            style="position:absolute;bottom:100%;right:0;margin-bottom:8px;z-index:80;min-width:248px;background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));overflow:hidden"
+            style="position:absolute;bottom:100%;right:0;margin-bottom:8px;z-index:90;min-width:248px;background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));overflow:hidden"
           >
             <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 11px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--ink-2)">
               <span style="display:flex;gap:6px;align-items:center">
                 <app-icon name="cpu" size="sm" [px]="12" [color]="'var(--accent)'" />resources
               </span>
-              <span class="tnum" style="color:var(--ink-3)">{{ cpuPct() }}% · {{ totalMem() }}</span>
+              <span class="tnum" style="color:var(--ink-3)">{{ cpuPct() }}% · {{ usedMem() }} / {{ totalMem() }}</span>
             </div>
             <div style="max-height:228px;overflow:auto;padding:5px">
               @for (p of procs(); track p.id) {
@@ -111,6 +111,8 @@ export class StatusBarComponent {
   // ---- gauge readouts ----
   readonly cpuPct = computed(() => Math.round(this.metrics.metrics()?.totalCpu ?? 0));
   readonly cpuBar = computed(() => Math.min(100, Math.max(0, this.cpuPct())));
+  // machine RAM in use / installed (e.g. "18.2 GB" / "31.7 GB")
+  readonly usedMem = computed(() => this.fmtMem(this.metrics.metrics()?.usedMemBytes ?? 0));
   readonly totalMem = computed(() => this.fmtMem(this.metrics.metrics()?.totalMemBytes ?? 0));
   // app subtree first, then agents, both already in backend order
   readonly procs = computed(() => this.metrics.metrics()?.procs ?? []);

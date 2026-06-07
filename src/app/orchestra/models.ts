@@ -244,8 +244,11 @@ export interface ProcMetric {
 }
 
 // A whole snapshot pushed on `system://metrics` every 3s: machine totals + rows.
+// usedMemBytes/totalMemBytes are the machine's RAM in use / installed (NOT a sum
+// of process RSS); totalCpu is the global cpu%.
 export interface SystemMetrics {
   totalCpu: number;
+  usedMemBytes: number;
   totalMemBytes: number;
   procs: ProcMetric[];
 }

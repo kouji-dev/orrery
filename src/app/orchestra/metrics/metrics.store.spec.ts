@@ -28,7 +28,8 @@ function makeStore() {
 
 const sample: SystemMetrics = {
   totalCpu: 12.4,
-  totalMemBytes: 540 * 1024 * 1024,
+  usedMemBytes: 18.2 * 1024 * 1024 * 1024,
+  totalMemBytes: 31.7 * 1024 * 1024 * 1024,
   procs: [
     { id: "app", label: "katrix", cpu: 4.0, memBytes: 200 * 1024 * 1024 },
     { id: "uuid-1", label: "nova", cpu: 8.4, memBytes: 340 * 1024 * 1024 },

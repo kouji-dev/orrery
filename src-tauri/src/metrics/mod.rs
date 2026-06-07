@@ -17,11 +17,15 @@ pub struct ProcMetric {
     pub mem_bytes: u64,
 }
 
-/// The whole snapshot pushed to the UI every tick: machine totals + per-subtree rows.
+/// The whole snapshot pushed to the UI every tick: machine totals + per-subtree
+/// rows. `total_cpu` is the global cpu%; `used_mem_bytes`/`total_mem_bytes` are the
+/// machine's RAM in use / installed (NOT a sum of process RSS — that double-counts
+/// shared pages and never matches the real installed RAM).
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemMetrics {
     pub total_cpu: f32,
+    pub used_mem_bytes: u64,
     pub total_mem_bytes: u64,
     pub procs: Vec<ProcMetric>,
 }
@@ -51,10 +55,15 @@ impl MetricsSampler {
         Self { sys: System::new() }
     }
 
-    /// Refresh process cpu + memory. sysinfo derives cpu% from the delta between
-    /// two refreshes, so the first call after construction yields 0% cpu — callers
-    /// do one warm-up refresh before the first real sample.
+    /// Refresh system RAM, global cpu, and per-process cpu + memory. sysinfo
+    /// derives cpu% (global AND per-process) from the delta between two refreshes,
+    /// so the first call after construction yields 0% cpu — callers do one warm-up
+    /// refresh before the first real sample.
     pub fn refresh(&mut self) {
+        // machine RAM (total/used) + global cpu% — these back the gauge headline,
+        // and are distinct from the per-process roll-up below.
+        self.sys.refresh_memory();
+        self.sys.refresh_cpu_usage();
         self.sys.refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
@@ -63,8 +72,10 @@ impl MetricsSampler {
     }
 
     /// Sample the app subtree (pid `app_pid`, labelled "katrix") plus one subtree
-    /// per agent. Each row aggregates the pid AND all its descendants. Totals are
-    /// the machine-wide cpu% and the sum of every sampled process's memory.
+    /// per agent. Each row aggregates the pid AND all its descendants — so the
+    /// "katrix" row rolls up the Rust core PLUS its WebView2 child processes (the UI
+    /// renderer/GPU procs), which hold the bulk of the app's memory. Totals are the
+    /// machine's global cpu% and RAM used/installed.
     pub fn sample(&self, app_pid: u32, agents: &[(Uuid, u32)]) -> SystemMetrics {
         let map = self.process_map();
 
@@ -76,7 +87,8 @@ impl MetricsSampler {
 
         SystemMetrics {
             total_cpu: self.sys.global_cpu_usage(),
-            total_mem_bytes: map.values().map(|p| p.mem_bytes).sum(),
+            used_mem_bytes: self.sys.used_memory(),
+            total_mem_bytes: self.sys.total_memory(),
             procs,
         }
     }
@@ -198,24 +210,21 @@ mod tests {
         assert_eq!(mem, 30);
     }
 
-    // Build SystemMetrics from a synthetic map via the same roll-up the sampler
-    // uses, asserting per-subtree rows + the memory total over ALL processes.
+    // Build the per-subtree rows from a synthetic map via the same roll-up the
+    // sampler uses. (Machine totals — used/total RAM, global cpu — come straight
+    // from `sysinfo` and aren't derived from this map, so they're not asserted here.)
     #[test]
-    fn builds_per_subtree_rows_and_totals() {
+    fn builds_per_subtree_rows() {
         let m = fixture();
         let app = subtree_metric("app".into(), "katrix".into(), 1, &m);
         let agent_id = Uuid::new_v4();
 
-        // a contrived disjoint agent root (28 = node 10 minus its own contribution
-        // is awkward; instead point the agent at node 10's branch directly).
+        // point the agent row at node 10's branch directly.
         let agent = subtree_metric(agent_id.to_string(), "nova".into(), 10, &m);
 
         assert_eq!(app.id, "app");
         assert_eq!(app.label, "katrix");
         assert_eq!(agent.cpu, 10.0 + 11.0);
         assert_eq!(agent.mem_bytes, 1000 + 1100);
-
-        let total_mem: u64 = m.values().map(|p| p.mem_bytes).sum();
-        assert_eq!(total_mem, 100 + 200 + 300 + 400 + 1000 + 1100 + 9900);
     }
 }

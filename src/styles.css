@@ -171,7 +171,7 @@ app-root {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 0;
+  z-index: -1;
   background-image:
     linear-gradient(var(--bg-grid) 1px, transparent 1px),
     linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
@@ -181,7 +181,7 @@ app-root {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 0;
+  z-index: -1;
   background:
     radial-gradient(60% 50% at 18% 0%, rgba(var(--accent-rgb), 0.1), transparent 70%),
     radial-gradient(50% 50% at 100% 100%, rgba(var(--accent-2-rgb), 0.07), transparent 70%);
@@ -189,8 +189,12 @@ app-root {
 
 /* ---------- shell grid ---------- */
 .shell {
+  /* position:relative WITHOUT z-index: stays the containing block for absolute
+     descendants but does NOT create a stacking context. A z-index here would trap
+     in-shell popovers (e.g. the status-bar resources popover, the workspace
+     dropdown) below the root-level fixed FABs (tweaks/dev, z-index 70). The bg
+     layers sit at z-index:-1 so the shell still paints above them. */
   position: relative;
-  z-index: 1;
   height: 100vh;
   display: grid;
   /* minmax(0, 1fr) lets the middle row shrink to the viewport so the footer
