@@ -129,8 +129,9 @@ pub fn agent_diff(
     svc: State<'_, AgentService>,
     id: Uuid,
     path: String,
+    old_path: Option<String>,
 ) -> AppResult<crate::git::service::FileDiff> {
-    svc.file_diff(id, &path)
+    svc.file_diff(id, &path, old_path.as_deref())
 }
 
 /// Launch the agent's tool in its worktree (PTY-streamed) and mark it running.

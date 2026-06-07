@@ -262,9 +262,16 @@ impl AgentService {
     }
 
     /// Old/new content of a file in the agent's worktree, for the diff view.
-    pub fn file_diff(&self, id: Uuid, path: &str) -> AppResult<crate::git::service::FileDiff> {
+    /// `old_path` (the pre-move path) is passed through for renamed/moved files so
+    /// the diff compares the right OLD content.
+    pub fn file_diff(
+        &self,
+        id: Uuid,
+        path: &str,
+        old_path: Option<&str>,
+    ) -> AppResult<crate::git::service::FileDiff> {
         let rec = self.record(id)?;
-        Ok(self.git.file_diff(Path::new(&rec.worktree), path))
+        Ok(self.git.file_diff(Path::new(&rec.worktree), path, old_path))
     }
 
     pub fn remove(&self, id: Uuid, project_path: Option<&Path>) -> AppResult<()> {

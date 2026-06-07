@@ -21,7 +21,10 @@ pub struct FileChange {
     pub path: String,
     pub add: i64,
     pub del: i64,
-    pub state: String, // "A" | "M" | "D"
+    pub state: String, // "A" | "M" | "D" | "R" (renamed/moved)
+    /// For "R" (renamed/moved): the pre-move path. None otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
 }
 
 /// Old (HEAD) vs new (working-tree) content of a file, for a diff view.
@@ -333,12 +336,16 @@ impl GitService {
     }
 
     /// Old (HEAD) vs new (working tree) content for a single file, for the diff view.
-    pub fn file_diff(&self, worktree: &Path, rel: &str) -> FileDiff {
+    /// Old (HEAD) vs new (working-tree) content of a file. For a renamed/moved
+    /// file, pass `old_rel` = the pre-move path so the OLD side reads from where
+    /// the content used to live (otherwise a rename looks like a fresh add).
+    pub fn file_diff(&self, worktree: &Path, rel: &str, old_rel: Option<&str>) -> FileDiff {
+        let old_path = old_rel.unwrap_or(rel);
         let old = Repository::open(worktree)
             .ok()
             .and_then(|repo| {
                 let tree = repo.head().ok()?.peel_to_tree().ok()?;
-                let entry = tree.get_path(Path::new(rel)).ok()?;
+                let entry = tree.get_path(Path::new(old_path)).ok()?;
                 let blob = repo.find_blob(entry.id()).ok()?;
                 Some(String::from_utf8_lossy(blob.content()).to_string())
             })
@@ -363,35 +370,47 @@ impl GitService {
         opts.include_untracked(true)
             .recurse_untracked_dirs(true)
             .show_untracked_content(true);
-        let diff = match repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts)) {
+        let mut diff = match repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts)) {
             Ok(d) => d,
             Err(_) => return Vec::new(),
         };
+        // Coalesce a delete + add of similar content into ONE "renamed" delta
+        // (incl. untracked new files), so a move shows as a single R entry — not
+        // a separate Deleted + Added pair.
+        let mut find = git2::DiffFindOptions::new();
+        find.renames(true).for_untracked(true);
+        let _ = diff.find_similar(Some(&mut find));
 
-        let path_of = |d: &git2::DiffDelta| {
+        let new_path_of = |d: &git2::DiffDelta| {
             d.new_file()
                 .path()
                 .or_else(|| d.old_file().path())
                 .map(|p| p.to_string_lossy().replace('\\', "/"))
                 .unwrap_or_default()
         };
-        // (add, del, state) per path; RefCell so both diff callbacks can mutate it
-        let acc: RefCell<BTreeMap<String, (i64, i64, char)>> = RefCell::new(BTreeMap::new());
+        // (add, del, state, old_path) per NEW path; RefCell so both callbacks can mutate it
+        let acc: RefCell<BTreeMap<String, (i64, i64, char, Option<String>)>> = RefCell::new(BTreeMap::new());
         let _ = diff.foreach(
             &mut |delta, _| {
                 let st = match delta.status() {
                     git2::Delta::Added | git2::Delta::Untracked | git2::Delta::Copied => 'A',
                     git2::Delta::Deleted => 'D',
+                    git2::Delta::Renamed => 'R',
                     _ => 'M',
                 };
-                acc.borrow_mut().entry(path_of(&delta)).or_insert((0, 0, st)).2 = st;
+                let mut m = acc.borrow_mut();
+                let e = m.entry(new_path_of(&delta)).or_insert((0, 0, st, None));
+                e.2 = st;
+                if st == 'R' {
+                    e.3 = delta.old_file().path().map(|p| p.to_string_lossy().replace('\\', "/"));
+                }
                 true
             },
             None,
             None,
             Some(&mut |delta, _hunk, line| {
                 let mut m = acc.borrow_mut();
-                let e = m.entry(path_of(&delta)).or_insert((0, 0, 'M'));
+                let e = m.entry(new_path_of(&delta)).or_insert((0, 0, 'M', None));
                 match line.origin() {
                     '+' => e.0 += 1,
                     '-' => e.1 += 1,
@@ -403,7 +422,13 @@ impl GitService {
 
         acc.into_inner()
             .into_iter()
-            .map(|(path, (add, del, state))| FileChange { path, add, del, state: state.to_string() })
+            .map(|(path, (add, del, state, old_path))| FileChange {
+                path,
+                add,
+                del,
+                state: state.to_string(),
+                old_path,
+            })
             .collect()
     }
 
@@ -599,10 +624,29 @@ mod tests {
         svc.init(dir.path()).unwrap();
         commit_file(dir.path(), "a.ts", "first"); // committed content = "x"
         std::fs::write(dir.path().join("a.ts"), "const y = 2;\n").unwrap();
-        let d = svc.file_diff(dir.path(), "a.ts");
+        let d = svc.file_diff(dir.path(), "a.ts", None);
         assert_eq!(d.old, "x");
         assert_eq!(d.new, "const y = 2;\n");
         assert_eq!(d.lang, "javascript");
+    }
+
+    #[test]
+    fn status_detects_a_move_as_one_renamed_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_file(dir.path(), "a.txt", "hello world\nsecond line\nthird line\n");
+        // move a.txt -> sub/b.txt (unstaged, like dragging it in a file explorer)
+        std::fs::create_dir_all(dir.path().join("sub")).unwrap();
+        std::fs::rename(dir.path().join("a.txt"), dir.path().join("sub/b.txt")).unwrap();
+
+        let st = svc.status(dir.path());
+        let renamed: Vec<_> = st.iter().filter(|f| f.state == "R").collect();
+        assert_eq!(renamed.len(), 1, "the move is ONE renamed entry, got: {st:?}");
+        assert_eq!(renamed[0].path, "sub/b.txt", "new path");
+        assert_eq!(renamed[0].old_path.as_deref(), Some("a.txt"), "carries the old path");
+        assert!(!st.iter().any(|f| f.state == "A"), "no separate Added entry: {st:?}");
+        assert!(!st.iter().any(|f| f.state == "D"), "no separate Deleted entry: {st:?}");
     }
 
     #[test]
