@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  ElementRef,
+  HostListener,
+  inject,
+  input,
+  signal,
+  viewChild,
+} from "@angular/core";
 import { Agent, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { UiStore } from "../ui/ui.store";
@@ -80,9 +90,40 @@ import { MiniTermComponent } from "./mini-term.component";
             <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, 'start')"><app-icon name="play" size="sm" />Start now</button>
           }
           @default {
-            <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, ag.status === 'running' ? 'pause' : ag.started ? 'resume' : 'start')">
-              <app-icon [name]="ag.status === 'running' ? 'pause' : 'play'" size="sm" />{{ ag.status === 'running' ? 'Pause' : ag.started ? 'Resume' : 'Start' }}
-            </button>
+            @if (ag.status === 'running') {
+              <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, 'pause')">
+                <app-icon name="pause" size="sm" />Pause
+              </button>
+            } @else {
+              <!-- Start/Resume + a session-continuation dropdown (claude --resume), opening upward -->
+              <div style="position:relative;display:flex;gap:1px;flex:1">
+                <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, ag.started ? 'resume' : 'start')">
+                  <app-icon name="play" size="sm" />{{ ag.started ? 'Resume' : 'Start' }}
+                </button>
+                <button class="btn ghost-hair" (click)="toggleResumeMenu($event)" title="Session options" style="padding-left:5px;padding-right:5px">
+                  <app-icon name="chevronD" size="sm" />
+                </button>
+                @if (resumeMenuOpen()) {
+                  <div
+                    #resumeMenu
+                    class="rise"
+                    style="position:absolute;bottom:calc(100% + 4px);right:0;z-index:80;min-width:184px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:5px"
+                  >
+                    <button
+                      [disabled]="!ag.sessionId"
+                      (click)="continueSession(ag.id)"
+                      [style.color]="!ag.sessionId ? 'var(--ink-4)' : 'var(--ink-2)'"
+                      [style.cursor]="!ag.sessionId ? 'default' : 'pointer'"
+                      [title]="ag.sessionId ? ('claude --resume ' + ag.sessionId) : 'no captured session yet'"
+                      style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:6px 9px;border-radius:6px;border:none;background:transparent;font-family:var(--font-mono);font-size:12px"
+                    >
+                      <app-icon name="refresh" size="sm" [color]="!ag.sessionId ? 'var(--ink-4)' : 'var(--ink-3)'" style="flex:none" />
+                      <span style="flex:1">Continue session</span>
+                    </button>
+                  </div>
+                }
+              </div>
+            }
           }
         }
         <button class="btn ghost-hair" (click)="ui.openAgent(ag.id)" style="padding:5px 9px"><app-icon name="terminal" size="sm" />Open</button>
@@ -153,4 +194,33 @@ export class AgentCardComponent {
   });
   readonly totAdd = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.add, 0));
   readonly totDel = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.del, 0));
+
+  // Start/Resume arrow dropdown (Continue session → claude --resume <id>)
+  readonly resumeMenuOpen = signal(false);
+  private resumeMenu = viewChild<ElementRef<HTMLDivElement>>("resumeMenu");
+
+  toggleResumeMenu(e: MouseEvent) {
+    e.stopPropagation(); // don't open the agent (card click) or bubble to the row
+    this.resumeMenuOpen.update((v) => !v);
+  }
+  continueSession(id: string) {
+    this.resumeMenuOpen.set(false);
+    this.agentActions.act(id, "continueSession");
+  }
+
+  @HostListener("document:mousedown", ["$event"])
+  onDocDown(e: MouseEvent) {
+    if (!this.resumeMenuOpen()) return;
+    const el = this.resumeMenu()?.nativeElement;
+    // the chevron trigger lives outside #resumeMenu; close only when the click is
+    // outside both the menu and its trigger (its parent flex wrapper).
+    const target = e.target as Node;
+    if (el && !el.contains(target) && !el.parentElement?.contains(target)) {
+      this.resumeMenuOpen.set(false);
+    }
+  }
+  @HostListener("document:keydown.escape")
+  onEsc() {
+    this.resumeMenuOpen.set(false);
+  }
 }
