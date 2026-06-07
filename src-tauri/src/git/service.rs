@@ -429,6 +429,26 @@ impl GitService {
         let short = head.target()?.to_string().chars().take(7).collect::<String>();
         Some((branch, short))
     }
+
+    /// Push `branch` to `remote` using the system `git` CLI (so the OS credential
+    /// helper handles auth — the one place we shell out instead of using git2,
+    /// because libgit2 push needs manual credential callbacks). Errors carry git's
+    /// stderr.
+    pub fn push(&self, worktree: &Path, remote: &str, branch: &str) -> AppResult<()> {
+        let out = std::process::Command::new("git")
+            .current_dir(worktree)
+            .args(["push", "-u", remote, branch])
+            .output()
+            .map_err(|e| AppError::Other(format!("git push: {e}")))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(AppError::Other(format!(
+                "git push failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            )))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -545,6 +565,31 @@ mod tests {
         let tip = Repository::open(dir.path()).unwrap().head().unwrap().peel_to_commit().unwrap().id();
         assert_eq!(tip, feat_tip, "main fast-forwarded to feature");
         assert!(dir.path().join("b.txt").exists());
+    }
+
+    #[test]
+    fn push_sends_branch_to_a_local_origin() {
+        let origin = tempfile::tempdir().unwrap();
+        Repository::init_bare(origin.path()).unwrap();
+
+        let work = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(work.path()).unwrap();
+        commit_file(work.path(), "a.txt", "hi");
+
+        let repo = Repository::open(work.path()).unwrap();
+        // forward-slash the path so the git CLI accepts it as a local remote on Windows
+        let url = origin.path().to_str().unwrap().replace('\\', "/");
+        repo.remote("origin", &url).unwrap();
+        let branch = repo.head().unwrap().shorthand().unwrap().to_string();
+
+        svc.push(work.path(), "origin", &branch).unwrap();
+
+        let bare = Repository::open(origin.path()).unwrap();
+        assert!(
+            bare.find_reference(&format!("refs/heads/{branch}")).is_ok(),
+            "origin should now have the pushed branch"
+        );
     }
 
     #[test]
