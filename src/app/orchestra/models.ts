@@ -88,6 +88,8 @@ export interface Agent {
   base: string;
   /** True once launched at least once — drives Start (first run) vs Resume. */
   started?: boolean;
+  /** The tool's CLI session id (captured from a hook), for `--resume <id>`. */
+  sessionId?: string;
   commits: number;
   elapsed: number;
   progress: number;

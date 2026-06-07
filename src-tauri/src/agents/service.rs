@@ -76,6 +76,8 @@ impl AgentService {
         .unwrap();
         // migrate DBs created before the `started` column existed (ignored if present)
         let _ = c.execute("ALTER TABLE agents ADD COLUMN started INTEGER NOT NULL DEFAULT 0", []);
+        // migrate DBs created before the `session_id` column existed (ignored if present)
+        let _ = c.execute("ALTER TABLE agents ADD COLUMN session_id TEXT", []);
     }
 
     /// Record → view model. Runtime fields are defaulted (no disk/process access yet).
@@ -93,6 +95,7 @@ impl AgentService {
             worktree: rec.worktree,
             base: rec.base,
             started: rec.started,
+            session_id: rec.session_id,
             commits: 0,
             elapsed: 0,
             progress: 0.0,
@@ -154,6 +157,7 @@ impl AgentService {
             worktree: wt_path.to_string_lossy().to_string(),
             base: req.base,
             started: false,
+            session_id: None,
         };
         {
             let c = self.db.lock().unwrap();
@@ -295,6 +299,18 @@ impl AgentService {
         Ok(())
     }
 
+    /// Persist the tool's CLI session id (captured from a hook), so a later
+    /// "Continue session" can relaunch with `claude --resume <session_id>`.
+    pub fn set_session(&self, id: Uuid, session_id: &str) -> AppResult<()> {
+        let c = self.db.lock().unwrap();
+        c.execute(
+            "UPDATE agents SET session_id = ?2 WHERE id = ?1",
+            rusqlite::params![id.to_string(), session_id],
+        )
+        .map_err(DbError::Sqlite)?;
+        Ok(())
+    }
+
     /// Reconcile stale state after a crash/restart: no PTY process can be alive
     /// right after launch, so any agent left mid-flight drops back to idle.
     pub fn reset_running(&self) -> AppResult<usize> {
@@ -309,18 +325,18 @@ impl AgentService {
     }
 
     fn records(&self) -> AppResult<Vec<AgentRecord>> {
-        let raw: Vec<(String, String, String, String, Option<String>, String, String, String, String, String, String, bool)> = {
+        let raw: Vec<(String, String, String, String, Option<String>, String, String, String, String, String, String, bool, Option<String>)> = {
             let c = self.db.lock().unwrap();
             let mut stmt = c
                 .prepare(
-                    "SELECT id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started FROM agents",
+                    "SELECT id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id FROM agents",
                 )
                 .map_err(DbError::Sqlite)?;
             let rows = stmt
                 .query_map([], |r| {
                     Ok((
                         r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?,
-                        r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?,
+                        r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?, r.get(12)?,
                     ))
                 })
                 .map_err(DbError::Sqlite)?;
@@ -328,32 +344,32 @@ impl AgentService {
         };
 
         raw.into_iter()
-            .map(|(id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started)| {
+            .map(|(id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id)| {
                 Ok(AgentRecord {
                     id: Uuid::parse_str(&id).map_err(|e| AppError::Other(e.to_string()))?,
                     project_id: Uuid::parse_str(&project_id).map_err(|e| AppError::Other(e.to_string()))?,
-                    tool, model, effort, name, task, status, branch, worktree, base, started,
+                    tool, model, effort, name, task, status, branch, worktree, base, started, session_id,
                 })
             })
             .collect()
     }
 
     fn record(&self, id: Uuid) -> AppResult<AgentRecord> {
-        let row: Option<(String, String, String, Option<String>, String, String, String, String, String, String, bool)> = {
+        let row: Option<(String, String, String, Option<String>, String, String, String, String, String, String, bool, Option<String>)> = {
             let c = self.db.lock().unwrap();
             c.query_row(
-                "SELECT project_id, tool, model, effort, name, task, status, branch, worktree, base, started FROM agents WHERE id = ?1",
+                "SELECT project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id FROM agents WHERE id = ?1",
                 [id.to_string()],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?)),
             )
             .optional()
             .map_err(DbError::Sqlite)?
         };
         match row {
-            Some((project_id, tool, model, effort, name, task, status, branch, worktree, base, started)) => Ok(AgentRecord {
+            Some((project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id)) => Ok(AgentRecord {
                 id,
                 project_id: Uuid::parse_str(&project_id).map_err(|e| AppError::Other(e.to_string()))?,
-                tool, model, effort, name, task, status, branch, worktree, base, started,
+                tool, model, effort, name, task, status, branch, worktree, base, started, session_id,
             }),
             None => Err(AgentError::NotFound(id.to_string()).into()),
         }
@@ -453,6 +469,19 @@ mod tests {
         assert!(!a.started, "new agent has not been started");
         s.mark_started(a.id).unwrap();
         assert!(s.get(a.id).unwrap().started, "mark_started persists");
+    }
+
+    #[test]
+    fn set_session_round_trips_and_defaults_none() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "sess"), &nogit()).unwrap();
+        assert_eq!(a.session_id, None, "a fresh agent has no session id (migration default NULL)");
+        s.set_session(a.id, "abc-123").unwrap();
+        assert_eq!(
+            s.get(a.id).unwrap().session_id.as_deref(),
+            Some("abc-123"),
+            "set_session persists + reads back"
+        );
     }
 
     #[test]

@@ -36,6 +36,16 @@ impl AgentAdapter for ClaudeAdapter {
         v
     }
 
+    // Resume a prior Claude Code session by its id: `claude --resume <id>` opens
+    // that session restored (no prompt — the conversation continues).
+    fn resume_argv(&self, session_id: &str) -> Option<Vec<String>> {
+        Some(vec![
+            "claude".to_string(),
+            "--resume".to_string(),
+            session_id.to_string(),
+        ])
+    }
+
     // Claude Code's permission prompt is a numbered/arrow SELECT list, not a
     // literal y/n: "1. Yes  2. Yes, don't ask again  3. No" (verified via the
     // docs — option count varies, e.g. some prompts show "2. Yes, and allow …").
@@ -93,6 +103,14 @@ mod tests {
 
     fn hook_bin() -> PathBuf {
         PathBuf::from("/opt/katrix/katrix")
+    }
+
+    #[test]
+    fn resume_argv_is_claude_resume_session_id() {
+        assert_eq!(
+            ClaudeAdapter.resume_argv("abc"),
+            Some(vec!["claude".into(), "--resume".into(), "abc".into()])
+        );
     }
 
     #[test]

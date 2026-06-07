@@ -37,6 +37,7 @@ export const Commands = {
   AgentDiff: 'agent_diff',
   AgentWatch: 'agent_watch',
   AgentStart: 'agent_start',
+  AgentSetSession: 'agent_set_session',
   AgentStop: 'agent_stop',
   AgentInput: 'agent_input',
   AgentAllow: 'agent_allow',
@@ -63,6 +64,8 @@ export const Events = {
   AgentStatus: 'agent://status',
   /** Action-carrying activity from a pre-tool hook (e.g. "Bash: npm test"). */
   AgentActivity: 'agent://activity',
+  /** A hook reported the tool's CLI session id (for `claude --resume <id>`). */
+  AgentSession: 'agent://session',
 } as const;
 
 export const BRIDGE = new InjectionToken<Bridge>('BRIDGE');
