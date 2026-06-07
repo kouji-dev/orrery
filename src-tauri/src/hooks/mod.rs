@@ -19,7 +19,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use protocol::{parse, read_request, AgentEvent, HookEnvelope};
 use transcript::latest_content;
@@ -43,6 +43,17 @@ type LastActivity = Arc<Mutex<HashMap<String, String>>>;
 /// deduping is safe. Keeps status emissions low-volume to match agent://activity.
 type LastStatus = Arc<Mutex<HashMap<String, String>>>;
 
+/// Sink for persisting a captured CLI session id — `(agent_id, session_id)`. In
+/// production (`start`) this writes the DB and re-emits the agent as
+/// `agent://updated`; tests pass a probe. Lets the bridge OWN session capture
+/// without hard-wiring Tauri state into the testable `handle`.
+type OnSession = Arc<dyn Fn(&str, &str) + Send + Sync>;
+
+/// Per-agent last-seen CLI session id. A session id is stable for a whole run but
+/// rides on EVERY hook, so we dedup on change: the hundreds of hooks in a session
+/// collapse to a SINGLE persist + `agent://updated` emit. Keyed by agentId.
+type LastSession = Arc<Mutex<HashMap<String, String>>>;
+
 /// Managed Tauri state: the running loopback server. Holds the chosen port + the
 /// shared token so the agent's hook can call back and be authenticated.
 pub struct HookBridge {
@@ -54,32 +65,75 @@ impl HookBridge {
     /// Bind a loopback server on an ephemeral port and start accepting hook
     /// callbacks. Each connection is handled on its own thread.
     pub fn start<R: Runtime>(app: AppHandle<R>) -> std::io::Result<Self> {
-        Self::serve(Arc::new(move |name: &str, payload: serde_json::Value| {
-            let _ = app.emit(name, payload);
-        }))
+        let emit_app = app.clone();
+        let emit: Emit = Arc::new(move |name: &str, payload: serde_json::Value| {
+            let _ = emit_app.emit(name, payload);
+        });
+        // Persist a captured CLI session id DIRECTLY (the bridge owns this — no
+        // frontend round-trip). After storing, re-emit the refreshed agent as
+        // `agent://updated` so the UI learns a session exists (enabling "Continue
+        // session") through the same channel as every other agent mutation.
+        // Best-effort: a missing service / unparsable id / db error is ignored.
+        let session_app = app.clone();
+        let on_session: OnSession = Arc::new(move |agent_id: &str, session_id: &str| {
+            use crate::agents::service::AgentService;
+            use crate::core::events::{emit_entity, Change};
+            let Ok(id) = uuid::Uuid::parse_str(agent_id) else {
+                return;
+            };
+            let Some(svc) = session_app.try_state::<AgentService>() else {
+                return;
+            };
+            if svc.set_session(id, session_id).is_err() {
+                return;
+            }
+            if let Ok(agent) = svc.get(id) {
+                emit_entity(&session_app, "agent", Change::Updated, agent);
+            }
+        });
+        Self::serve_with_session(emit, on_session)
     }
 
-    /// Bind + serve with an arbitrary event sink (production passes `app.emit`).
+    /// Bind + serve with an event sink only — session capture is a no-op. Kept for
+    /// the tests that don't exercise session persistence.
     fn serve(emit: Emit) -> std::io::Result<Self> {
+        Self::serve_with_session(emit, Arc::new(|_, _| {}))
+    }
+
+    /// Bind + serve with an event sink + a session-persist sink (production passes
+    /// `app.emit` + the DB-writing closure built in `start`).
+    fn serve_with_session(emit: Emit, on_session: OnSession) -> std::io::Result<Self> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
         let port = listener.local_addr()?.port();
         let token = uuid::Uuid::new_v4().to_string();
 
         // Shared dedup state, threaded into every connection (cloned per-conn like
-        // `emit`/`token`) so repeated identical activity collapses to one emit, and
-        // so consecutive same-state status pings collapse to a single emit.
+        // `emit`/`token`) so repeated identical activity collapses to one emit,
+        // consecutive same-state status pings collapse to a single emit, and a
+        // session id (which rides every hook) persists + emits only once per change.
         let last_activity: LastActivity = Arc::new(Mutex::new(HashMap::new()));
         let last_status: LastStatus = Arc::new(Mutex::new(HashMap::new()));
+        let last_session: LastSession = Arc::new(Mutex::new(HashMap::new()));
 
         let token_l = token.clone();
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
                 let emit = emit.clone();
+                let on_session = on_session.clone();
                 let token = token_l.clone();
                 let last_activity = last_activity.clone();
                 let last_status = last_status.clone();
+                let last_session = last_session.clone();
                 std::thread::spawn(move || {
-                    handle(stream, &emit, &token, &last_activity, &last_status)
+                    handle(
+                        stream,
+                        &emit,
+                        &on_session,
+                        &token,
+                        &last_activity,
+                        &last_status,
+                        &last_session,
+                    )
                 });
             }
         });
@@ -108,9 +162,11 @@ pub fn hook_binary() -> Option<PathBuf> {
 fn handle(
     stream: TcpStream,
     emit: &Emit,
+    on_session: &OnSession,
     token: &str,
     last_activity: &LastActivity,
     last_status: &LastStatus,
+    last_session: &LastSession,
 ) {
     let mut reader = BufReader::new(match stream.try_clone() {
         Ok(s) => s,
@@ -138,15 +194,18 @@ fn handle(
     // decision below branches on the `AgentEvent` variant, not the raw hook name.
     let event = parse(&env);
 
-    // Capture the agent's CLI session id when the hook payload carries one
-    // (claude includes `session_id` on every hook). EMIT-only — the bridge stays
-    // fire-and-forget and never touches the DB; a frontend listener persists it
-    // via `agent_set_session` so a later "Continue session" can `--resume <id>`.
+    // Capture the agent's CLI session id when the hook payload carries one (claude
+    // includes `session_id` on every hook). The bridge persists it DIRECTLY via
+    // `on_session` (which stores it + re-emits `agent://updated`) — no frontend
+    // round-trip. Deduped on change: the session id is stable for a whole run but
+    // rides every hook, so this collapses to ONE persist + emit per agent/session.
     if let Some(session_id) = env.payload.get("session_id").and_then(serde_json::Value::as_str) {
-        emit(
-            "agent://session",
-            serde_json::json!({ "agentId": env.agent_id, "sessionId": session_id }),
-        );
+        let mut map = last_session.lock().unwrap();
+        if map.get(&env.agent_id).map(String::as_str) != Some(session_id) {
+            map.insert(env.agent_id.clone(), session_id.to_string());
+            drop(map);
+            on_session(&env.agent_id, session_id);
+        }
     }
 
     // Verification log: for the two events the user can't otherwise inspect — the
@@ -1064,21 +1123,16 @@ mod tests {
         assert_eq!(detail, "Edit ✓");
     }
 
-    // A hook payload carrying a `session_id` emits agent://session with the
-    // agentId + sessionId (so the frontend can persist it for `--resume`) and acks
-    // immediately. The bridge stays fire-and-forget — no DB access here.
+    // A hook payload carrying a `session_id` is persisted via the `on_session`
+    // sink — the bridge OWNS capture now (no agent://session event, no frontend
+    // round-trip). The probe stands in for the DB-writing closure `start` builds.
     #[test]
-    fn session_id_in_payload_emits_session_event() {
+    fn session_id_in_payload_invokes_on_session() {
         let (tx, rx) = mpsc::channel::<(String, String)>();
-        let probe = Arc::new(move |name: &str, payload: serde_json::Value| {
-            if name == "agent://session" {
-                let _ = tx.send((
-                    payload["agentId"].as_str().unwrap().to_string(),
-                    payload["sessionId"].as_str().unwrap().to_string(),
-                ));
-            }
+        let on_session: OnSession = Arc::new(move |agent_id: &str, session_id: &str| {
+            let _ = tx.send((agent_id.to_string(), session_id.to_string()));
         });
-        let bridge = HookBridge::serve(probe).unwrap();
+        let bridge = HookBridge::serve_with_session(Arc::new(|_, _| {}), on_session).unwrap();
         let (status, _) = post(
             &bridge.endpoint(),
             bridge.token(),
@@ -1090,17 +1144,15 @@ mod tests {
         assert_eq!(session_id, "sess-abc-123");
     }
 
-    // A hook payload WITHOUT a session_id emits no agent://session event (the
-    // capture is gated on the field being present).
+    // A hook payload WITHOUT a session_id never invokes `on_session` (capture is
+    // gated on the field being present).
     #[test]
-    fn missing_session_id_emits_no_session_event() {
+    fn missing_session_id_does_not_invoke_on_session() {
         let (tx, rx) = mpsc::channel::<()>();
-        let probe = Arc::new(move |name: &str, _payload: serde_json::Value| {
-            if name == "agent://session" {
-                let _ = tx.send(());
-            }
+        let on_session: OnSession = Arc::new(move |_a: &str, _s: &str| {
+            let _ = tx.send(());
         });
-        let bridge = HookBridge::serve(probe).unwrap();
+        let bridge = HookBridge::serve_with_session(Arc::new(|_, _| {}), on_session).unwrap();
         let (status, _) = post(
             &bridge.endpoint(),
             bridge.token(),
@@ -1109,7 +1161,28 @@ mod tests {
         assert!(status.contains("204"), "status: {status}");
         assert!(
             rx.recv_timeout(Duration::from_millis(300)).is_err(),
-            "no session_id in payload must not emit agent://session"
+            "no session_id in payload must not invoke on_session"
+        );
+    }
+
+    // The SAME session id riding two consecutive hooks persists ONCE — the second
+    // is collapsed by the per-agent dedup, so we don't write the DB + re-emit
+    // agent://updated on every one of a session's hundreds of hooks.
+    #[test]
+    fn duplicate_session_id_invokes_on_session_once() {
+        let (tx, rx) = mpsc::channel::<String>();
+        let on_session: OnSession = Arc::new(move |_a: &str, session_id: &str| {
+            let _ = tx.send(session_id.to_string());
+        });
+        let bridge = HookBridge::serve_with_session(Arc::new(|_, _| {}), on_session).unwrap();
+        let body = r#"{"agentId":"a1","tool":"claude","event":"SessionStart","payload":{"session_id":"sess-dup"}}"#;
+        let (s1, _) = post(&bridge.endpoint(), bridge.token(), body);
+        let (s2, _) = post(&bridge.endpoint(), bridge.token(), body);
+        assert!(s1.contains("204") && s2.contains("204"));
+        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), "sess-dup");
+        assert!(
+            rx.recv_timeout(Duration::from_millis(300)).is_err(),
+            "duplicate session id must not persist twice"
         );
     }
 

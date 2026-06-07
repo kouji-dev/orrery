@@ -157,18 +157,6 @@ pub fn agent_start<R: Runtime>(
     Ok(())
 }
 
-/// Persist the agent's CLI session id (captured from a hook's `session_id`), so a
-/// later "Continue session" can relaunch with `claude --resume <session_id>`. The
-/// frontend calls this in response to the `agent://session` event the bridge emits.
-#[tauri::command]
-pub fn agent_set_session(
-    svc: State<'_, AgentService>,
-    id: Uuid,
-    session_id: String,
-) -> AppResult<()> {
-    svc.set_session(id, &session_id)
-}
-
 /// Stop the agent's running process and mark it idle.
 #[tauri::command]
 pub fn agent_stop<R: Runtime>(

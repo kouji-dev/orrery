@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { Injector, runInInjectionContext } from "@angular/core";
 import { AgentsStore } from "./agents.store";
-import { BRIDGE, Bridge, Commands, Events } from "../data-source/bridge";
+import { BRIDGE, Bridge, Commands } from "../data-source/bridge";
 
 // A fake Bridge that records invoke calls and lets a test fire `on` handlers.
 function fakeBridge() {
@@ -43,24 +43,5 @@ describe("AgentsStore session continuation", () => {
     store.start("a1");
     const call = invokes.find((c) => c.command === Commands.AgentStart);
     expect(call?.payload).toEqual({ id: "a1", rows: 0, cols: 0, resume: false });
-  });
-
-  it("setSession invokes agent_set_session with id + sessionId", () => {
-    const { bridge, invokes } = fakeBridge();
-    const store = makeStore(bridge);
-
-    store.setSession("a1", "sess-abc");
-    const call = invokes.find((c) => c.command === Commands.AgentSetSession);
-    expect(call?.payload).toEqual({ id: "a1", sessionId: "sess-abc" });
-  });
-
-  it("onSession maps the agent://session payload to (id, sessionId)", async () => {
-    const { bridge, handlers } = fakeBridge();
-    const store = makeStore(bridge);
-
-    const seen: { id: string; sid: string }[] = [];
-    await store.onSession((id, sid) => seen.push({ id, sid }));
-    handlers[Events.AgentSession]({ agentId: "a1", sessionId: "sess-xyz" });
-    expect(seen).toEqual([{ id: "a1", sid: "sess-xyz" }]);
   });
 });

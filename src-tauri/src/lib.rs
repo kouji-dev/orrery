@@ -117,7 +117,6 @@ pub fn run() {
             agents::commands::agent_diff,
             agents::commands::agent_watch,
             agents::commands::agent_start,
-            agents::commands::agent_set_session,
             agents::commands::agent_stop,
             agents::commands::agent_input,
             agents::commands::agent_allow,

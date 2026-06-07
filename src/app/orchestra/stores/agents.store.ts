@@ -113,16 +113,6 @@ export class AgentsStore {
   start(id: string, rows = 0, cols = 0, resume = false): Promise<void> {
     return this.bridge.invoke(Commands.AgentStart, { id, rows, cols, resume });
   }
-  /** Persist the agent's captured CLI session id (for `claude --resume <id>`). */
-  setSession(id: string, sessionId: string): Promise<void> {
-    return this.bridge.invoke(Commands.AgentSetSession, { id, sessionId });
-  }
-  /** Subscribe to hook-reported CLI session ids (the agent's `--resume` handle). */
-  onSession(cb: (id: string, sessionId: string) => void): Promise<() => void> {
-    return this.bridge.on<{ agentId: string; sessionId: string }>(Events.AgentSession, (p) =>
-      cb(p.agentId, p.sessionId),
-    );
-  }
   /** Stop the agent's running process. */
   stop(id: string): Promise<void> {
     return this.bridge.invoke(Commands.AgentStop, { id });

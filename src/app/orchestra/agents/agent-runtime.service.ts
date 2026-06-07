@@ -131,13 +131,9 @@ export class AgentRuntimeService {
         this.hookState[id] = state;
       })
       .catch(() => {});
-    // capture each agent's CLI session id (reported by a hook) → persist it so a
-    // later "Continue session" can relaunch with `claude --resume <id>`.
-    void this.agentsStore
-      .onSession((id, sessionId) => {
-        void this.agentsStore.setSession(id, sessionId).catch(() => {});
-      })
-      .catch(() => {});
+    // (the agent's CLI session id is captured + persisted entirely in the backend
+    // hook bridge, which re-emits agent://updated — so it arrives via the store's
+    // normal entity-update path; no separate subscription needed here.)
     // activity feed: append each {detail, event, kind} entry, dedupe consecutive
     // duplicates, cap at the last 10 — drives the overview mini-term preview.
     void this.agentsStore
