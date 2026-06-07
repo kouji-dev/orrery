@@ -17,15 +17,14 @@ pub struct ProcMetric {
     pub mem_bytes: u64,
 }
 
-/// The whole snapshot pushed to the UI every tick: machine totals + per-subtree
-/// rows. `total_cpu` is the global cpu%; `used_mem_bytes`/`total_mem_bytes` are the
-/// machine's RAM in use / installed (NOT a sum of process RSS — that double-counts
-/// shared pages and never matches the real installed RAM).
+/// The whole snapshot pushed to the UI every tick. Totals are the SUM of the
+/// per-subtree rows — i.e. the cpu% and memory used by katrix + its agents ONLY
+/// (NOT machine-wide). `total_cpu` is machine-relative (a share of ALL logical
+/// cores, like Task Manager), so it never exceeds 100.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemMetrics {
     pub total_cpu: f32,
-    pub used_mem_bytes: u64,
     pub total_mem_bytes: u64,
     pub procs: Vec<ProcMetric>,
 }
@@ -42,6 +41,10 @@ pub struct ProcSample {
 /// Owns a `sysinfo::System`, refreshed in place each tick.
 pub struct MetricsSampler {
     sys: System,
+    /// Logical core count — sysinfo reports per-process cpu% as one-core-relative
+    /// (100% = one full core), so we divide the subtree sum by this to get a
+    /// machine-relative % that matches Task Manager.
+    cpu_count: usize,
 }
 
 impl Default for MetricsSampler {
@@ -52,18 +55,14 @@ impl Default for MetricsSampler {
 
 impl MetricsSampler {
     pub fn new() -> Self {
-        Self { sys: System::new() }
+        let cpu_count = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+        Self { sys: System::new(), cpu_count }
     }
 
-    /// Refresh system RAM, global cpu, and per-process cpu + memory. sysinfo
-    /// derives cpu% (global AND per-process) from the delta between two refreshes,
-    /// so the first call after construction yields 0% cpu — callers do one warm-up
-    /// refresh before the first real sample.
+    /// Refresh per-process cpu + memory. sysinfo derives cpu% from the delta
+    /// between two refreshes, so the first call after construction yields 0% cpu —
+    /// callers do one warm-up refresh before the first real sample.
     pub fn refresh(&mut self) {
-        // machine RAM (total/used) + global cpu% — these back the gauge headline,
-        // and are distinct from the per-process roll-up below.
-        self.sys.refresh_memory();
-        self.sys.refresh_cpu_usage();
         self.sys.refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
@@ -74,21 +73,22 @@ impl MetricsSampler {
     /// Sample the app subtree (pid `app_pid`, labelled "katrix") plus one subtree
     /// per agent. Each row aggregates the pid AND all its descendants — so the
     /// "katrix" row rolls up the Rust core PLUS its WebView2 child processes (the UI
-    /// renderer/GPU procs), which hold the bulk of the app's memory. Totals are the
-    /// machine's global cpu% and RAM used/installed.
+    /// renderer/GPU procs), which hold the bulk of the app's memory. Per-row cpu% is
+    /// normalized by the logical core count (machine-relative, like Task Manager).
+    /// Totals are the SUM of the rows — the cpu/memory used by katrix + its agents.
     pub fn sample(&self, app_pid: u32, agents: &[(Uuid, u32)]) -> SystemMetrics {
         let map = self.process_map();
+        let cores = self.cpu_count.max(1) as f32;
 
         let mut procs = Vec::with_capacity(agents.len() + 1);
-        procs.push(subtree_metric("app".into(), "katrix".into(), app_pid, &map));
+        procs.push(subtree_metric("app".into(), "katrix".into(), app_pid, &map, cores));
         for (id, pid) in agents {
-            procs.push(subtree_metric(id.to_string(), id.to_string(), *pid, &map));
+            procs.push(subtree_metric(id.to_string(), id.to_string(), *pid, &map, cores));
         }
 
         SystemMetrics {
-            total_cpu: self.sys.global_cpu_usage(),
-            used_mem_bytes: self.sys.used_memory(),
-            total_mem_bytes: self.sys.total_memory(),
+            total_cpu: procs.iter().map(|p| p.cpu).sum(),
+            total_mem_bytes: procs.iter().map(|p| p.mem_bytes).sum(),
             procs,
         }
     }
@@ -112,9 +112,16 @@ impl MetricsSampler {
 }
 
 /// Build one `ProcMetric` by rolling up `root`'s whole subtree (root + descendants).
-fn subtree_metric(id: String, label: String, root: u32, map: &HashMap<u32, ProcSample>) -> ProcMetric {
+/// `cores` divides the summed (one-core-relative) cpu into a machine-relative %.
+fn subtree_metric(
+    id: String,
+    label: String,
+    root: u32,
+    map: &HashMap<u32, ProcSample>,
+    cores: f32,
+) -> ProcMetric {
     let (cpu, mem_bytes) = aggregate_subtree(root, map);
-    ProcMetric { id, label, cpu, mem_bytes }
+    ProcMetric { id, label, cpu: cpu / cores, mem_bytes }
 }
 
 /// Pure roll-up: sum cpu% and memory over `root` and every process whose ancestry
@@ -216,15 +223,30 @@ mod tests {
     #[test]
     fn builds_per_subtree_rows() {
         let m = fixture();
-        let app = subtree_metric("app".into(), "katrix".into(), 1, &m);
+        // cores = 1.0 → cpu stays the raw subtree sum (the /cores normalization is a
+        // no-op here, so the roll-up math is asserted directly).
+        let app = subtree_metric("app".into(), "katrix".into(), 1, &m, 1.0);
         let agent_id = Uuid::new_v4();
 
         // point the agent row at node 10's branch directly.
-        let agent = subtree_metric(agent_id.to_string(), "nova".into(), 10, &m);
+        let agent = subtree_metric(agent_id.to_string(), "nova".into(), 10, &m, 1.0);
 
         assert_eq!(app.id, "app");
         assert_eq!(app.label, "katrix");
         assert_eq!(agent.cpu, 10.0 + 11.0);
         assert_eq!(agent.mem_bytes, 1000 + 1100);
+    }
+
+    // cpu% is normalized by the logical core count → a subtree summing to 20%
+    // one-core-relative reports 1% on a 20-core machine (machine-relative, like
+    // Task Manager).
+    #[test]
+    fn cpu_is_normalized_by_core_count() {
+        let m = fixture();
+        // node 10 + child 11 = 10.0 + 11.0 = 21.0 raw; /20 cores = 1.05.
+        let row = subtree_metric("a".into(), "nova".into(), 10, &m, 20.0);
+        assert!((row.cpu - (21.0 / 20.0)).abs() < f32::EPSILON);
+        // memory is NOT divided by cores.
+        assert_eq!(row.mem_bytes, 1000 + 1100);
     }
 }

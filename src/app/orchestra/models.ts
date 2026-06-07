@@ -244,12 +244,11 @@ export interface ProcMetric {
   memBytes: number;
 }
 
-// A whole snapshot pushed on `system://metrics` every 3s: machine totals + rows.
-// usedMemBytes/totalMemBytes are the machine's RAM in use / installed (NOT a sum
-// of process RSS); totalCpu is the global cpu%.
+// A whole snapshot pushed on `system://metrics` every 3s. Totals are the SUM of
+// the rows — cpu%/memory used by katrix + its agents ONLY (not machine-wide).
+// totalCpu is machine-relative (a share of all logical cores, like Task Manager).
 export interface SystemMetrics {
   totalCpu: number;
-  usedMemBytes: number;
   totalMemBytes: number;
   procs: ProcMetric[];
 }
