@@ -155,7 +155,7 @@ interface Presentation {
                 <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="notifications.dismiss(n)">Dismiss</button>
               }
               @case ('done') {
-                <button class="btn primary" style="padding:4px 9px;font-size:11px" (click)="notifications.merge(n)"><app-icon name="merge" size="sm" />Merge</button>
+                <button class="btn primary" style="padding:4px 9px;font-size:11px" (click)="notifications.push(n)"><app-icon name="push" size="sm" />Push</button>
                 <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="navigate.emit(); notifications.review(n)"><app-icon name="diff" size="sm" />Review diff</button>
                 <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="notifications.dismiss(n)">Dismiss</button>
               }

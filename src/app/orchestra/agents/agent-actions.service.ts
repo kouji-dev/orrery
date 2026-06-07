@@ -53,20 +53,18 @@ export class AgentActionsService {
         this.runtime.startProcess(id, { resume: true });
         this.ui.flash("continuing session for " + nm);
         break;
-      case "commit": // all changes (the git-tab uses commitAgent with a selection)
+      case "commit": // backend commit-all (the git-tab uses commitAgent with a selection)
         this.commitAgent(id, [], "wip: " + nm);
         break;
       case "discard":
         this.discardAgent(id, []);
         break;
+      case "push": // deterministic backend push
+        this.pushAgent(id);
+        break;
+      case "rebase":
       case "merge":
-        this.mergeAgent(id);
-        break;
-      case "push": // remote ops need auth — not wired yet
-        this.ui.flash("push not configured yet");
-        break;
-      case "pr":
-        this.ui.flash("PR not configured yet");
+        this.aiAction(id, action as "rebase" | "merge");
         break;
     }
   }
@@ -96,21 +94,28 @@ export class AgentActionsService {
       .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "discard failed"));
   }
 
-  /** Merge the agent's branch into its source project's branch. */
-  mergeAgent(id: string) {
+  /** Deterministic backend push of the agent's branch to origin. */
+  pushAgent(id: string) {
     const ag = this.agents().find((a) => a.id === id);
-    const proj = ag ? this.projects.all().find((p) => p.id === ag.projectId) : null;
     void this.agentsStore
-      .merge(id)
-      .then(() => {
-        this.ui.flash("merged " + (ag?.name ?? id) + " → " + (proj?.branch ?? "main"));
-        void this.agentsStore.update(id, { status: "done" }).catch(() => {});
-        this.runtime.patchRuntime(id, { progress: 1 });
-        this.runtime.loadChanges(id);
-        this.runtime.loadCommits(id);
-        void this.projects.refreshCommits(this.projects.all().map((p) => p.id));
-      })
-      .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "merge failed"));
+      .push(id)
+      .then(() => this.ui.flash("pushed " + (ag?.name ?? id)))
+      .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "push failed"));
+  }
+
+  /** AI-driven completion action: type the predefined prompt into the agent's PTY.
+   *  Only valid while running (the tool must be at its prompt to receive input);
+   *  switches to the terminal so the user watches it run. */
+  aiAction(id: string, kind: "commit" | "push" | "rebase" | "merge") {
+    const ag = this.agents().find((a) => a.id === id);
+    if (!ag || ag.status !== "running") {
+      this.ui.flash("start the agent first");
+      return;
+    }
+    this.ui.openAgent(id, "terminal");
+    void this.agentsStore
+      .action(id, kind)
+      .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "action failed"));
   }
 
   // ---- spawn / duplicate / remove ----
@@ -198,12 +203,17 @@ export class AgentActionsService {
         onClick: () => this.act(id, "commit"),
       },
       { label: "Push to origin", icon: "push", disabled: !ag.commits, onClick: () => this.act(id, "push") },
-      { label: "Open pull request", icon: "pr", disabled: !ag.commits, onClick: () => this.act(id, "pr") },
       {
-        label: "Merge → " + branchTarget,
-        icon: "merge",
+        label: "Rebase onto " + branchTarget,
+        icon: "sparkles",
+        disabled: ag.status !== "running",
+        onClick: () => this.act(id, "rebase"),
+      },
+      {
+        label: "Merge " + branchTarget + " → " + ag.branch.replace("agent/", ""),
+        icon: "sparkles",
         accent: "var(--st-done)",
-        disabled: !ag.commits,
+        disabled: ag.status !== "running",
         onClick: () => this.act(id, "merge"),
       },
       { sep: true },

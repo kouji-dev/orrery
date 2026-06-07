@@ -95,9 +95,14 @@ export class AgentsStore {
   discard(id: string, paths: string[]): Promise<void> {
     return this.bridge.invoke(Commands.AgentDiscard, { id, paths });
   }
-  /** Merge the agent's branch into the source project's branch. */
-  merge(id: string): Promise<void> {
-    return this.bridge.invoke(Commands.AgentMerge, { id });
+  /** Deterministic backend push of the agent's branch to origin. */
+  push(id: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentPush, { id });
+  }
+  /** AI-driven completion action: type the predefined prompt for `kind`
+   *  (commit/push/rebase/merge) into the agent's running PTY. */
+  action(id: string, kind: "commit" | "push" | "rebase" | "merge"): Promise<void> {
+    return this.bridge.invoke(Commands.AgentAction, { id, kind });
   }
   /** Old/new content of a file for the diff view. */
   diff(id: string, path: string): Promise<FileDiff> {

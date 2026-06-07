@@ -87,19 +87,41 @@ import { CommitFeedComponent } from "./commit-feed.component";
               style="background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:8px 10px;color:var(--ink);font-family:var(--font-mono);font-size:11.5px;outline:none"
             />
           }
-          <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="commit(ag.id)" style="justify-content:flex-start">
-            <app-icon name="commit" size="sm" />Commit {{ selected().size ? selected().size + ' selected' : 'all' }}
+          <!-- Commit: primary = backend, attached ✨ = AI -->
+          <div style="display:flex;gap:4px">
+            <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="commit(ag.id)" style="flex:1;min-width:0;justify-content:flex-start">
+              <app-icon name="commit" size="sm" />Commit {{ selected().size ? selected().size + ' selected' : 'all' }}
+            </button>
+            <button class="btn ghost-hair" [disabled]="ag.status !== 'running'" [title]="ag.status === 'running' ? 'Let the agent commit' : 'Start the agent first'" (click)="agentActions.aiAction(ag.id, 'commit')" style="flex:none;padding:0 9px">
+              <app-icon name="sparkles" size="sm" color="var(--accent)" />
+            </button>
+          </div>
+
+          <!-- Push: primary = backend, attached ✨ = AI -->
+          <div style="display:flex;gap:4px">
+            <button class="btn ghost-hair" [disabled]="ag.commits === 0" (click)="agentActions.pushAgent(ag.id)" style="flex:1;min-width:0;justify-content:flex-start">
+              <app-icon name="push" size="sm" />Push to origin
+            </button>
+            <button class="btn ghost-hair" [disabled]="ag.status !== 'running'" [title]="ag.status === 'running' ? 'Let the agent push' : 'Start the agent first'" (click)="agentActions.aiAction(ag.id, 'push')" style="flex:none;padding:0 9px">
+              <app-icon name="sparkles" size="sm" color="var(--accent)" />
+            </button>
+          </div>
+
+          <!-- Rebase (AI only) -->
+          <button class="btn ghost-hair" [disabled]="ag.status !== 'running'" [title]="ag.status === 'running' ? '' : 'Start the agent first'" (click)="agentActions.aiAction(ag.id, 'rebase')" style="justify-content:flex-start;min-width:0">
+            <app-icon name="sparkles" size="sm" color="var(--accent)" />
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Rebase onto {{ project() ? project()!.branch : 'main' }}</span>
           </button>
-          <button class="btn ghost-hair" [disabled]="ag.commits === 0" (click)="agentActions.act(ag.id, 'push')" style="justify-content:flex-start">
-            <app-icon name="push" size="sm" />Push to origin
-          </button>
-          <button class="btn primary" [disabled]="ag.commits === 0" (click)="agentActions.act(ag.id, 'merge')" style="justify-content:center;min-width:0">
-            <app-icon name="merge" size="sm" />
+
+          <!-- Merge (AI only): base → branch -->
+          <button class="btn primary" [disabled]="ag.status !== 'running'" [title]="ag.status === 'running' ? '' : 'Start the agent first'" (click)="agentActions.aiAction(ag.id, 'merge')" style="justify-content:center;min-width:0">
+            <app-icon name="sparkles" size="sm" />
             <span
-              [title]="'Merge ' + ag.branch.replace('agent/', '') + ' → ' + (project() ? project()!.branch : 'main')"
+              [title]="'Merge ' + (project() ? project()!.branch : 'main') + ' → ' + ag.branch.replace('agent/', '')"
               style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-            >Merge {{ ag.branch.replace('agent/', '') }} → {{ project() ? project()!.branch : 'main' }}</span>
+            >Merge {{ project() ? project()!.branch : 'main' }} → {{ ag.branch.replace('agent/', '') }}</span>
           </button>
+
           <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="discard(ag.id)" style="justify-content:flex-start;color:var(--st-blocked)">
             <app-icon name="discard" size="sm" />Discard {{ selected().size ? selected().size + ' selected' : 'all' }}
           </button>

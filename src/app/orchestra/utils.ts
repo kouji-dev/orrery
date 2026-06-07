@@ -5,6 +5,7 @@ import { AgentStatus, LogKind } from "./models";
 // ---- icon set (stroke, currentColor) ----
 export const ICONS: Record<string, string> = {
   agent: "M12 3l7 4v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V7l7-4z",
+  sparkles: "M12 3l1.6 4.4 4.4 1.6-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3zM18.5 14l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6.6-1.7z",
   branch: "M6 4v9M6 13a3 3 0 003 3h3a3 3 0 003-3V9M6 4a2 2 0 100-.01M15 9a2 2 0 100-.01M9 19a2 2 0 100-.01",
   terminal: "M5 6l5 4-5 4M12 16h7",
   diff: "M9 4v12M9 8H4m5 4H4M15 20V8m0 8h5m-5-4h5",
