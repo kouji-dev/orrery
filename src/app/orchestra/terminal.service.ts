@@ -1,4 +1,5 @@
 import { inject, Injectable, OnDestroy, signal } from "@angular/core";
+import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { ISearchOptions, SearchAddon } from "@xterm/addon-search";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
@@ -31,6 +32,14 @@ export class TerminalService implements OnDestroy {
   private handles = new Map<string, TermHandle>();
   private titleCb?: (id: string, title: string) => void;
 
+  /** Re-apply the current app theme to every live terminal. Called by the terminal
+   *  component when the theme toggles — xterm only reads its theme at attach time,
+   *  so without this an already-open terminal keeps the old theme until re-mounted. */
+  retheme() {
+    const theme = this.theme();
+    for (const h of this.handles.values()) h.term.options.theme = theme;
+  }
+
   // Per-agent revision counter, bumped AFTER xterm finishes parsing each write so
   // the buffer is current when read. Lets signal consumers (e.g. the overview
   // mini-term reading `tail()`) react to live terminal output.
@@ -47,7 +56,9 @@ export class TerminalService implements OnDestroy {
 
   // Per-agent live search result { index (0-based, -1 = none), count } — bumped by
   // the SearchAddon's onDidChangeResults so the search box can show "n / total".
-  private searchRes = signal<Record<string, { index: number; count: number }>>({});
+  private searchRes = signal<Record<string, { index: number; count: number }>>(
+    {},
+  );
   readonly searchResults = this.searchRes.asReadonly();
 
   /** Subscribe to OSC window-title changes from any agent's terminal. */
@@ -85,42 +96,57 @@ export class TerminalService implements OnDestroy {
       term.loadAddon(new Unicode11Addon());
       term.unicode.activeVersion = "11";
 
+      // OSC 52 clipboard: lets programs running in the terminal (agent CLIs, vim,
+      // tmux…) read/write the system clipboard via escape sequences. Complements
+      // the Ctrl/Cmd+Shift+C/V user copy/paste keybindings below.
+      term.loadAddon(new ClipboardAddon());
+
       // In-buffer search; the component drives it via findNext/findPrevious/clearSearch.
       const search = new SearchAddon();
       term.loadAddon(search);
       // surface match position/count so the search box can show "n / total"
       search.onDidChangeResults((r) =>
-        this.searchRes.update((m) => ({ ...m, [id]: { index: r.resultIndex, count: r.resultCount } })),
+        this.searchRes.update((m) => ({
+          ...m,
+          [id]: { index: r.resultIndex, count: r.resultCount },
+        })),
       );
 
-      // Clipboard: Ctrl/Cmd+Shift+C copies the selection, Ctrl/Cmd+Shift+V pastes
-      // (plain Ctrl+C must still reach the program as an interrupt). Returning
-      // false tells xterm we handled the key — don't forward it to the PTY.
+      // Clipboard. xterm renders to a canvas, so the native browser copy can't see
+      // the selection — we do it ourselves and preventDefault so the webview's own
+      // Ctrl+C/V handling doesn't also fire.
+      //  • Copy:  Ctrl/Cmd+Shift+C, or Ctrl/Cmd+C WHEN there's a selection
+      //           (a bare Ctrl+C with no selection still passes ^C through to interrupt).
+      //  • Paste: Ctrl/Cmd+V or Ctrl/Cmd+Shift+V.
       term.attachCustomKeyEventHandler((e) => {
         if (e.type !== "keydown") return true;
         const mod = e.ctrlKey || e.metaKey;
-        if (mod && e.shiftKey && (e.key === "C" || e.key === "c")) {
+        if (!mod) return true;
+        const k = e.key.toLowerCase();
+        if (k === "c" && (e.shiftKey || term.hasSelection())) {
           const sel = term.getSelection();
-          if (sel) {
-            void navigator.clipboard.writeText(sel).catch(() => {});
-            return false;
-          }
-          return true;
+          if (sel) void navigator.clipboard.writeText(sel).catch(() => {});
+          e.preventDefault();
+          return false;
         }
-        if (mod && e.shiftKey && (e.key === "V" || e.key === "v")) {
+        if (k === "v") {
           void navigator.clipboard
             .readText()
             .then((t) => {
               if (t) term.paste(t);
             })
             .catch(() => {});
+          e.preventDefault();
           return false;
         }
         return true;
       });
 
       term.onData((data) => void this.agents.input(id, data).catch(() => {}));
-      term.onResize(({ cols, rows }) => void this.agents.resize(id, rows, cols).catch(() => {}));
+      term.onResize(
+        ({ cols, rows }) =>
+          void this.agents.resize(id, rows, cols).catch(() => {}),
+      );
       term.onTitleChange((title) => this.titleCb?.(id, title)); // live agent state
       h = { term, fit, search };
       this.handles.set(id, h);
@@ -198,14 +224,20 @@ export class TerminalService implements OnDestroy {
   findNext(id: string, query: string, opts?: ISearchOptions): boolean {
     const h = this.handles.get(id);
     if (!h) return false;
-    return h.search.findNext(query, { decorations: this.searchDecorations(), ...opts });
+    return h.search.findNext(query, {
+      decorations: this.searchDecorations(),
+      ...opts,
+    });
   }
 
   /** Find the previous match for `query` (no-op if the terminal doesn't exist). */
   findPrevious(id: string, query: string, opts?: ISearchOptions): boolean {
     const h = this.handles.get(id);
     if (!h) return false;
-    return h.search.findPrevious(query, { decorations: this.searchDecorations(), ...opts });
+    return h.search.findPrevious(query, {
+      decorations: this.searchDecorations(),
+      ...opts,
+    });
   }
 
   /** Clear search highlight decorations (no-op if the terminal doesn't exist). */
@@ -279,7 +311,8 @@ export class TerminalService implements OnDestroy {
 
   private theme(): ITheme {
     const cs = getComputedStyle(document.documentElement);
-    const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+    const v = (name: string, fallback: string) =>
+      cs.getPropertyValue(name).trim() || fallback;
     return {
       background: v("--bg", "#0b0d10"),
       foreground: v("--ink-2", "#c8ccd4"),

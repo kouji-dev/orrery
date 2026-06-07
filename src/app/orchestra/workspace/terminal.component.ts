@@ -5,6 +5,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   ElementRef,
   inject,
   input,
@@ -13,6 +14,7 @@ import {
 } from "@angular/core";
 import { Agent } from "../models";
 import { TerminalService } from "../terminal.service";
+import { UiStore } from "../ui/ui.store";
 
 /**
  * Hosts the agent's persistent xterm terminal. The Terminal instance lives in
@@ -26,10 +28,7 @@ import { TerminalService } from "../terminal.service";
   selector: "app-terminal",
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div
-      style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--bg)"
-      (keydown)="onAreaKeydown($event)"
-    >
+    <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--bg)">
       <div style="color:var(--ink-4);padding:8px 14px 4px;font-size:10.5px">── session: {{ agent().worktree }} · {{ agent().branch }} ──</div>
       <div style="flex:1;min-height:0;position:relative">
         <div #host style="position:absolute;inset:0;padding:2px 10px 8px"></div>
@@ -66,6 +65,7 @@ import { TerminalService } from "../terminal.service";
 })
 export class TerminalComponent {
   private terminals = inject(TerminalService);
+  private ui = inject(UiStore);
   private cdr = inject(ChangeDetectorRef);
   readonly agent = input.required<Agent>();
 
@@ -90,7 +90,21 @@ export class TerminalComponent {
     "background:transparent;border:0;border-radius:4px;color:var(--ink-3);cursor:pointer;font-size:11px;line-height:1";
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.detach?.());
+    const destroyRef = inject(DestroyRef);
+    // Ctrl/Cmd+F opens OUR search box. Capture phase + preventDefault stops the
+    // webview's native find-in-page bar (which a bubble-phase / xterm handler is
+    // too late to cancel); window-level so it works regardless of focus.
+    window.addEventListener("keydown", this.onWindowKeydown, true);
+    destroyRef.onDestroy(() => {
+      this.detach?.();
+      window.removeEventListener("keydown", this.onWindowKeydown, true);
+    });
+    // re-theme live terminals when the app theme/palette toggles (microtask so
+    // UiStore has set [data-theme] / the --accent vars before xterm reads them)
+    effect(() => {
+      void this.ui.tweaks();
+      queueMicrotask(() => this.terminals.retheme());
+    });
     // (re)attach the persistent terminal after render, whenever the agent changes
     afterRenderEffect(() => {
       const el = this.host().nativeElement;
@@ -107,14 +121,15 @@ export class TerminalComponent {
     });
   }
 
-  /** Ctrl+F anywhere in the terminal area toggles the search box. */
-  onAreaKeydown(e: KeyboardEvent) {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+  /** Ctrl/Cmd+F → open our search box + suppress the webview's native find bar. */
+  private onWindowKeydown = (e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === "f" || e.key === "F")) {
       e.preventDefault();
       e.stopPropagation();
-      this.searchOpen() ? this.close() : this.open();
+      this.open();
+      queueMicrotask(() => this.searchInput()?.nativeElement.focus());
     }
-  }
+  };
 
   /** Keys handled inside the search box itself. */
   onBoxKeydown(e: KeyboardEvent) {

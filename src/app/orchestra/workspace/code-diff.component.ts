@@ -3,15 +3,16 @@ import {
   Component,
   effect,
   ElementRef,
+  inject,
   input,
   OnDestroy,
   viewChild,
 } from "@angular/core";
 import { MergeView } from "@codemirror/merge";
 import { EditorState, Extension } from "@codemirror/state";
-import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView, lineNumbers } from "@codemirror/view";
-import { langExt } from "./code-lang";
+import { UiStore } from "../ui/ui.store";
+import { editorTheme, langExt } from "./code-lang";
 
 @Component({
   selector: "app-code-diff",
@@ -93,23 +94,25 @@ export class CodeDiffComponent implements OnDestroy {
   readonly newText = input<string>("");
   readonly lang = input<string>("");
 
+  private ui = inject(UiStore);
   private host = viewChild.required<ElementRef<HTMLElement>>("host");
   private view?: MergeView;
 
   constructor() {
-    effect(() => this.render(this.oldText(), this.newText(), this.lang()));
+    // re-renders on content OR theme change (light/dark need different highlights)
+    effect(() => this.render(this.oldText(), this.newText(), this.lang(), this.ui.tweaks().theme));
   }
   ngOnDestroy() {
     this.view?.destroy();
   }
 
-  private render(oldText: string, newText: string, lang: string) {
+  private render(oldText: string, newText: string, lang: string, theme: "dark" | "light") {
     const el = this.host().nativeElement;
     this.view?.destroy();
     el.innerHTML = "";
     const exts: Extension[] = [
       lineNumbers(),
-      oneDark,
+      editorTheme(theme),
       EditorView.editable.of(false),
       EditorState.readOnly.of(true),
       EditorView.lineWrapping,

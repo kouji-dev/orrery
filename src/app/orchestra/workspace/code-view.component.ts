@@ -3,14 +3,15 @@ import {
   Component,
   effect,
   ElementRef,
+  inject,
   input,
   OnDestroy,
   viewChild,
 } from "@angular/core";
 import { EditorState, Extension } from "@codemirror/state";
-import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView, lineNumbers } from "@codemirror/view";
-import { langExt } from "./code-lang";
+import { UiStore } from "../ui/ui.store";
+import { editorTheme, langExt } from "./code-lang";
 
 /**
  * Read-only, syntax-highlighted view of a single document — used by the file
@@ -50,23 +51,25 @@ export class CodeViewComponent implements OnDestroy {
   /** A `FileDiff.lang` tag (e.g. "javascript", "json", "markdown"). */
   readonly lang = input<string>("");
 
+  private ui = inject(UiStore);
   private host = viewChild.required<ElementRef<HTMLElement>>("host");
   private view?: EditorView;
 
   constructor() {
-    effect(() => this.render(this.text(), this.lang()));
+    // re-renders on content OR theme change (light/dark need different highlights)
+    effect(() => this.render(this.text(), this.lang(), this.ui.tweaks().theme));
   }
   ngOnDestroy() {
     this.view?.destroy();
   }
 
-  private render(text: string, lang: string) {
+  private render(text: string, lang: string, theme: "dark" | "light") {
     const el = this.host().nativeElement;
     this.view?.destroy();
     el.innerHTML = "";
     const exts: Extension[] = [
       lineNumbers(),
-      oneDark,
+      editorTheme(theme),
       EditorView.editable.of(false),
       EditorState.readOnly.of(true),
       EditorView.lineWrapping,
