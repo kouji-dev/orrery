@@ -107,9 +107,21 @@ export class AgentsStore {
     return this.bridge.on<{ id: string }>(Events.AgentChanged, (p) => cb(p.id));
   }
 
-  /** Launch the agent's tool process (PTY-streamed), sized to the visible terminal. */
-  start(id: string, rows = 0, cols = 0): Promise<void> {
-    return this.bridge.invoke(Commands.AgentStart, { id, rows, cols });
+  /** Launch the agent's tool process (PTY-streamed), sized to the visible terminal.
+   *  `resume` requests a "Continue session" launch (`claude --resume <sessionId>`)
+   *  when the agent has a captured session id; defaults to a normal Start/Resume. */
+  start(id: string, rows = 0, cols = 0, resume = false): Promise<void> {
+    return this.bridge.invoke(Commands.AgentStart, { id, rows, cols, resume });
+  }
+  /** Persist the agent's captured CLI session id (for `claude --resume <id>`). */
+  setSession(id: string, sessionId: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentSetSession, { id, sessionId });
+  }
+  /** Subscribe to hook-reported CLI session ids (the agent's `--resume` handle). */
+  onSession(cb: (id: string, sessionId: string) => void): Promise<() => void> {
+    return this.bridge.on<{ agentId: string; sessionId: string }>(Events.AgentSession, (p) =>
+      cb(p.agentId, p.sessionId),
+    );
   }
   /** Stop the agent's running process. */
   stop(id: string): Promise<void> {

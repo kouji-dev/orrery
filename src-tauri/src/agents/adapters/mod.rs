@@ -58,15 +58,23 @@ pub trait AgentAdapter: Send + Sync {
     /// only when `task` is `Some` (first launch); resumes pass `None`.
     fn argv(&self, task: Option<&str>) -> Vec<String>;
 
+    /// Program + args to RESUME a prior CLI session by its captured session id —
+    /// e.g. claude's `claude --resume <id>`. `None` (the default) means the tool
+    /// has no resume-by-id flow, so the runtime falls back to a normal launch.
+    fn resume_argv(&self, _session_id: &str) -> Option<Vec<String>> {
+        None
+    }
+
     /// Build the PTY launch command (program + args from `argv`). The runtime
     /// adds cwd + env stamps; this stays pure so it is trivially testable.
     fn build_command(&self, task: Option<&str>) -> CommandBuilder {
-        let argv = self.argv(task);
-        let mut cmd = CommandBuilder::new(&argv[0]);
-        for a in &argv[1..] {
-            cmd.arg(a);
-        }
-        cmd
+        command_from(self.argv(task))
+    }
+
+    /// Build the PTY launch command to RESUME a session (program + args from
+    /// `resume_argv`). `None` when the tool has no resume-by-id flow.
+    fn build_resume_command(&self, session_id: &str) -> Option<CommandBuilder> {
+        self.resume_argv(session_id).map(command_from)
     }
 
     /// Extra env to set on the agent process so its (globally-installed) hook
@@ -248,6 +256,16 @@ fn group_is_katrix(group: &Value, hook_bin: &str) -> bool {
     }
 }
 
+/// Build a `CommandBuilder` from an argv vector (`[program, args…]`). Shared by
+/// the launch + resume command builders so both stay pure and identically shaped.
+fn command_from(argv: Vec<String>) -> CommandBuilder {
+    let mut cmd = CommandBuilder::new(&argv[0]);
+    for a in &argv[1..] {
+        cmd.arg(a);
+    }
+    cmd
+}
+
 /// Is `cmd` an executable on PATH? Pure filesystem check — never spawns.
 pub fn which(cmd: &str) -> bool {
     let Some(paths) = std::env::var_os("PATH") else {
@@ -360,6 +378,27 @@ mod tests {
         // decide_keys is the numbered-select default regardless of allow/deny.
         assert_eq!(Bare.decide_keys(1), "1\r");
         assert_eq!(Bare.decide_keys(4), "4\r");
+        // resume_argv defaults to None (no resume-by-id flow) → no resume command.
+        assert_eq!(Bare.resume_argv("abc"), None);
+        assert!(Bare.build_resume_command("abc").is_none());
+    }
+
+    #[test]
+    fn claude_resume_argv_builds_resume_command() {
+        // Claude resumes a prior session by id: `claude --resume <id>` (no prompt).
+        let claude = adapter_for("claude").unwrap();
+        assert_eq!(
+            claude.resume_argv("abc"),
+            Some(vec!["claude".to_string(), "--resume".to_string(), "abc".to_string()])
+        );
+        // Other tools have no resume-by-id flow → None (fall back to a normal launch).
+        for tool in ["codex", "cursor", "gemini"] {
+            assert_eq!(
+                adapter_for(tool).unwrap().resume_argv("abc"),
+                None,
+                "{tool} has no resume_argv"
+            );
+        }
     }
 
     #[test]

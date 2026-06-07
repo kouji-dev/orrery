@@ -138,6 +138,17 @@ fn handle(
     // decision below branches on the `AgentEvent` variant, not the raw hook name.
     let event = parse(&env);
 
+    // Capture the agent's CLI session id when the hook payload carries one
+    // (claude includes `session_id` on every hook). EMIT-only — the bridge stays
+    // fire-and-forget and never touches the DB; a frontend listener persists it
+    // via `agent_set_session` so a later "Continue session" can `--resume <id>`.
+    if let Some(session_id) = env.payload.get("session_id").and_then(serde_json::Value::as_str) {
+        emit(
+            "agent://session",
+            serde_json::json!({ "agentId": env.agent_id, "sessionId": session_id }),
+        );
+    }
+
     // Verification log: for the two events the user can't otherwise inspect — the
     // permission ask + the notification — dump the COMPACT raw payload (truncated)
     // so the katrix log shows EXACTLY what each agent sent. This is how we confirm
@@ -1051,6 +1062,55 @@ mod tests {
         assert_eq!(event, "PostToolUse");
         assert_eq!(kind, "success");
         assert_eq!(detail, "Edit ✓");
+    }
+
+    // A hook payload carrying a `session_id` emits agent://session with the
+    // agentId + sessionId (so the frontend can persist it for `--resume`) and acks
+    // immediately. The bridge stays fire-and-forget — no DB access here.
+    #[test]
+    fn session_id_in_payload_emits_session_event() {
+        let (tx, rx) = mpsc::channel::<(String, String)>();
+        let probe = Arc::new(move |name: &str, payload: serde_json::Value| {
+            if name == "agent://session" {
+                let _ = tx.send((
+                    payload["agentId"].as_str().unwrap().to_string(),
+                    payload["sessionId"].as_str().unwrap().to_string(),
+                ));
+            }
+        });
+        let bridge = HookBridge::serve(probe).unwrap();
+        let (status, _) = post(
+            &bridge.endpoint(),
+            bridge.token(),
+            r#"{"agentId":"a1","tool":"claude","event":"SessionStart","payload":{"source":"startup","session_id":"sess-abc-123"}}"#,
+        );
+        assert!(status.contains("204"), "status: {status}");
+        let (agent_id, session_id) = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(agent_id, "a1");
+        assert_eq!(session_id, "sess-abc-123");
+    }
+
+    // A hook payload WITHOUT a session_id emits no agent://session event (the
+    // capture is gated on the field being present).
+    #[test]
+    fn missing_session_id_emits_no_session_event() {
+        let (tx, rx) = mpsc::channel::<()>();
+        let probe = Arc::new(move |name: &str, _payload: serde_json::Value| {
+            if name == "agent://session" {
+                let _ = tx.send(());
+            }
+        });
+        let bridge = HookBridge::serve(probe).unwrap();
+        let (status, _) = post(
+            &bridge.endpoint(),
+            bridge.token(),
+            r#"{"agentId":"a1","tool":"claude","event":"PreToolUse","payload":{"tool_name":"Bash","tool_input":{"command":"ls"}}}"#,
+        );
+        assert!(status.contains("204"), "status: {status}");
+        assert!(
+            rx.recv_timeout(Duration::from_millis(300)).is_err(),
+            "no session_id in payload must not emit agent://session"
+        );
     }
 
     // A wrong token is rejected (the server only honours our own hooks).

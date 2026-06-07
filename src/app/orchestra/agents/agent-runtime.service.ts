@@ -131,6 +131,13 @@ export class AgentRuntimeService {
         this.hookState[id] = state;
       })
       .catch(() => {});
+    // capture each agent's CLI session id (reported by a hook) → persist it so a
+    // later "Continue session" can relaunch with `claude --resume <id>`.
+    void this.agentsStore
+      .onSession((id, sessionId) => {
+        void this.agentsStore.setSession(id, sessionId).catch(() => {});
+      })
+      .catch(() => {});
     // activity feed: append each {detail, event, kind} entry, dedupe consecutive
     // duplicates, cap at the last 10 — drives the overview mini-term preview.
     void this.agentsStore
@@ -267,7 +274,9 @@ export class AgentRuntimeService {
   }
 
   // ---- process lifecycle ----
-  startProcess(id: string) {
+  /** Launch (or, with `{resume:true}`, continue the captured CLI session via
+   *  `claude --resume <sessionId>`) the agent's tool process. */
+  startProcess(id: string, opts?: { resume?: boolean }) {
     const sz = this.terminals.size(id); // open the PTY at the visible terminal's size
     this.startedAt[id] = Date.now();
     delete this.titleStatus[id];
@@ -277,7 +286,7 @@ export class AgentRuntimeService {
     this.clearActivity(id); // a fresh run starts with an empty feed
     this.patchRuntime(id, { elapsed: 0, working: true, needsInput: false });
     void this.agentsStore
-      .start(id, sz?.rows ?? 0, sz?.cols ?? 0)
+      .start(id, sz?.rows ?? 0, sz?.cols ?? 0, opts?.resume ?? false)
       .then(() => this.terminals.syncSize(id))
       .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "start failed"));
   }

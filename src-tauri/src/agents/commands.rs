@@ -111,6 +111,12 @@ pub fn agent_diff(
 }
 
 /// Launch the agent's tool in its worktree (PTY-streamed) and mark it running.
+///
+/// `resume` (default false) requests a "Continue session" launch: when the agent
+/// has a captured `session_id`, the tool is relaunched into that CLI session
+/// (e.g. `claude --resume <id>`) instead of a fresh/bare run. Falls back to the
+/// normal launch when there's no session id (or the tool has no resume flow), so
+/// the existing Start/Resume button (resume=false) is unchanged.
 #[tauri::command]
 pub fn agent_start<R: Runtime>(
     app: AppHandle<R>,
@@ -120,10 +126,14 @@ pub fn agent_start<R: Runtime>(
     id: Uuid,
     rows: u16,
     cols: u16,
+    resume: Option<bool>,
 ) -> AppResult<()> {
     let agent = svc.get(id)?;
-    // deliver the initial task prompt only on the very first launch
-    let send_prompt = !agent.started;
+    // resume-into-session only when asked AND a session id was captured
+    let resume_session = if resume.unwrap_or(false) { agent.session_id.clone() } else { None };
+    // deliver the initial task prompt only on the very first launch (never on a
+    // resume-into-session, which continues an existing conversation)
+    let send_prompt = !agent.started && resume_session.is_none();
     // Hooks are installed globally at startup; here we only stamp the KATRIX_*
     // env so this katrix-launched agent's hook brokers with the bridge. Gated on
     // the hook binary resolving (current_exe) — without it the hook can't run, so
@@ -134,7 +144,7 @@ pub fn agent_start<R: Runtime>(
         endpoint: bridge.endpoint(),
         token: bridge.token().to_string(),
     });
-    rt.start(app.clone(), &agent, rows, cols, send_prompt, hook_env.as_ref())
+    rt.start(app.clone(), &agent, rows, cols, send_prompt, hook_env.as_ref(), resume_session.as_deref())
         .map_err(AppError::Other)?;
     if send_prompt {
         svc.mark_started(id)?;
@@ -145,6 +155,18 @@ pub fn agent_start<R: Runtime>(
     )?;
     emit_entity(&app, "agent", Change::Updated, updated);
     Ok(())
+}
+
+/// Persist the agent's CLI session id (captured from a hook's `session_id`), so a
+/// later "Continue session" can relaunch with `claude --resume <session_id>`. The
+/// frontend calls this in response to the `agent://session` event the bridge emits.
+#[tauri::command]
+pub fn agent_set_session(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    session_id: String,
+) -> AppResult<()> {
+    svc.set_session(id, &session_id)
 }
 
 /// Stop the agent's running process and mark it idle.

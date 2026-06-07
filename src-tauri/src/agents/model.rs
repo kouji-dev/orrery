@@ -19,6 +19,9 @@ pub struct AgentRecord {
     /// True once the agent has been launched at least once — gates the one-time
     /// delivery of the initial task prompt (a restart/resume must not re-run it).
     pub started: bool,
+    /// The tool's own CLI session id (captured from a hook's `session_id`), used to
+    /// relaunch with `claude --resume <id>`. `None` until a hook reports it.
+    pub session_id: Option<String>,
 }
 
 /// View model sent to the frontend: persisted record + transient runtime fields.
@@ -39,6 +42,7 @@ pub struct Agent {
     pub worktree: String,
     pub base: String,
     pub started: bool,
+    pub session_id: Option<String>,
     // --- transient runtime (defaulted; owned by the runtime layer later) ---
     pub commits: i64,
     pub elapsed: i64,

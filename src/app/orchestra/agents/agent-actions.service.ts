@@ -49,6 +49,10 @@ export class AgentActionsService {
         this.runtime.startProcess(id);
         this.ui.flash((action === "start" ? "started " : "resumed ") + nm);
         break;
+      case "continueSession":
+        this.runtime.startProcess(id, { resume: true });
+        this.ui.flash("continuing session for " + nm);
+        break;
       case "commit": // all changes (the git-tab uses commitAgent with a selection)
         this.commitAgent(id, [], "wip: " + nm);
         break;

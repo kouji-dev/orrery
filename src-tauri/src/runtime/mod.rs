@@ -68,6 +68,11 @@ impl RuntimeService {
     /// Launch the agent's tool in its worktree over a PTY, streaming output as
     /// `agent://output` events. The initial task prompt is passed only on the
     /// first launch (`send_prompt`); resumes start a bare interactive session.
+    ///
+    /// When `resume_session` is `Some(id)` AND the tool has a resume-by-id flow
+    /// (`AgentAdapter::resume_argv`), the tool is relaunched into that CLI session
+    /// (e.g. `claude --resume <id>`) and the prompt is never re-sent. Otherwise it
+    /// falls back to the normal launch (honoring `send_prompt`).
     pub fn start<R: Runtime>(
         &self,
         app: AppHandle<R>,
@@ -76,6 +81,7 @@ impl RuntimeService {
         cols: u16,
         send_prompt: bool,
         hooks: Option<&HookEnv>,
+        resume_session: Option<&str>,
     ) -> Result<(), String> {
         let id = agent.id;
         if self.is_running(id) {
@@ -98,7 +104,7 @@ impl RuntimeService {
             })
             .map_err(|e| e.to_string())?;
 
-        let mut cmd = tool_command(&agent.tool, &agent.task, send_prompt);
+        let mut cmd = tool_command(&agent.tool, &agent.task, send_prompt, resume_session);
         cmd.cwd(worktree);
 
         // Hooks are installed GLOBALLY at app startup (merged into the user's real
@@ -248,12 +254,31 @@ fn kill_proc(p: &mut Proc) {
     let _ = p.killer.kill();
 }
 
-/// Map a tool id → its CLI invocation via its adapter. The task prompt is passed
-/// only on the first launch; resumes open the tool bare. Unknown tools fall back
-/// to invoking the id verbatim.
-fn tool_command(tool: &str, task: &str, send_prompt: bool) -> CommandBuilder {
+/// Map a tool id → its CLI invocation via its adapter.
+///
+/// When `resume_session` is `Some(id)` and the tool's adapter offers a
+/// resume-by-id flow, the relaunch command (e.g. `claude --resume <id>`) is built
+/// and the prompt is never sent. Otherwise the normal launch is built: the task
+/// prompt is passed only on the first launch (`send_prompt`); resumes open the
+/// tool bare. Unknown tools fall back to invoking the id verbatim.
+fn tool_command(
+    tool: &str,
+    task: &str,
+    send_prompt: bool,
+    resume_session: Option<&str>,
+) -> CommandBuilder {
+    let adapter = crate::agents::adapters::adapter_for(tool);
+
+    // Prefer a resume-by-id launch when a session id is present AND the adapter
+    // supports it (no prompt — the session continues from where it left off).
+    if let (Some(id), Some(adapter)) = (resume_session, adapter.as_ref()) {
+        if let Some(cmd) = adapter.build_resume_command(id) {
+            return cmd;
+        }
+    }
+
     let prompt = if send_prompt && !task.is_empty() { Some(task) } else { None };
-    match crate::agents::adapters::adapter_for(tool) {
+    match adapter {
         Some(adapter) => adapter.build_command(prompt),
         None => {
             let mut c = CommandBuilder::new(tool);
@@ -274,6 +299,47 @@ mod tests {
     // contract directly: `is_running()` tracks map membership, and `stop()` on an
     // id removes the entry so the agent becomes restartable. This mirrors what the
     // WAIT thread does on natural exit (remove → is_running() false).
+
+    // The pure command builder: a resume session id + a resume-capable adapter
+    // (claude) builds `claude --resume <id>` and NEVER appends the task prompt,
+    // even when send_prompt is true. We assert the argv straight off CommandBuilder
+    // (no PTY spawned).
+    #[test]
+    fn tool_command_resume_builds_claude_resume_without_prompt() {
+        let cmd = tool_command("claude", "fix the bug", true, Some("sess-123"));
+        let argv: Vec<String> = cmd
+            .get_argv()
+            .iter()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+        assert_eq!(argv, vec!["claude", "--resume", "sess-123"]);
+    }
+
+    // Without a resume session id, the normal launch is built: claude + the task
+    // prompt on the first launch (send_prompt true).
+    #[test]
+    fn tool_command_normal_launch_sends_prompt_on_first_run() {
+        let cmd = tool_command("claude", "fix the bug", true, None);
+        let argv: Vec<String> = cmd
+            .get_argv()
+            .iter()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+        assert_eq!(argv, vec!["claude", "fix the bug"]);
+    }
+
+    // A resume session id for a tool WITHOUT a resume-by-id flow (gemini) falls
+    // back to the normal launch (no prompt on a resume — send_prompt false).
+    #[test]
+    fn tool_command_resume_falls_back_when_adapter_has_no_resume() {
+        let cmd = tool_command("gemini", "fix the bug", false, Some("sess-123"));
+        let argv: Vec<String> = cmd
+            .get_argv()
+            .iter()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+        assert_eq!(argv, vec!["gemini"], "no resume_argv → bare launch");
+    }
 
     #[test]
     fn stop_removes_entry_and_clears_is_running() {
