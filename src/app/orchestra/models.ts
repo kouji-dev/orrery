@@ -204,6 +204,9 @@ export interface Commit {
 
 export interface Tab {
   id: string;
+  // "orchestrator" = the fixed overview tab; "agent" = a workspace tab holding a
+  // pane tree (one agent, or several tiled together). Defaults to "agent".
+  kind?: "orchestrator" | "agent";
 }
 
 export interface Tweaks {

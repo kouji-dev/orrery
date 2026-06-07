@@ -10,7 +10,7 @@ import {
 import { Agent, AgentFile, FileDiff } from "../models";
 import { IconComponent } from "../shared/icon.component";
 import { AgentsStore } from "../stores/agents.store";
-import { fileDir, fileName, fileStateLabel, hunkHeader, langTag, mix } from "../utils";
+import { fileDir, fileName, fileStateLabel, hunkHeader, langId, langTag, mix } from "../utils";
 import { CodeDiffComponent } from "./code-diff.component";
 
 const LIST_MIN = 160; // px — narrowest the file-list panel may get
@@ -152,7 +152,11 @@ const LIST_DEFAULT = 236;
         </div>
 
         @if (current() && diff(); as d) {
-          <app-code-diff style="flex:1;min-height:0" [oldText]="d.old" [newText]="d.new" [lang]="d.lang" />
+          @defer (on immediate) {
+            <app-code-diff style="flex:1;min-height:0" [oldText]="d.old" [newText]="d.new" [lang]="langId()" />
+          } @placeholder {
+            <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:12px">loading diff…</div>
+          }
         } @else if (!current()) {
           <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:12px">no changed files</div>
         } @else if (!loading()) {
@@ -323,6 +327,11 @@ export class DiffViewComponent {
   readonly langLabel = computed(() => {
     const f = this.current();
     return f ? langTag(f.path) : "";
+  });
+  // the CodeMirror grammar tag for the selected file (drives syntax highlighting)
+  readonly langId = computed(() => {
+    const f = this.current();
+    return f ? langId(f.path) : "";
   });
   // hunk header from the loaded diff content (falls back to file state pre-load)
   readonly headerHunk = computed(() => {

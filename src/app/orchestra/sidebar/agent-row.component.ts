@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Agent } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { DragService } from "../shared/drag.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
@@ -16,8 +17,12 @@ import { fmtDur } from "../utils";
     <div
       class="agent-row"
       [class.active]="active()"
+      draggable="true"
+      (dragstart)="drag.start({ kind: 'agent', agentId: ag.id }); $event.dataTransfer!.effectAllowed = 'copy'"
+      (dragend)="drag.end()"
       (click)="ui.openAgent(ag.id)"
       (contextmenu)="ui.openMenu($event, agentActions.agentMenu(ag.id))"
+      title="drag onto a pane or tab to add its terminal"
       style="display:flex;flex-direction:column;gap:3px;padding:6px 10px 7px;cursor:pointer;position:relative;border-radius:var(--r-md);margin:1px 8px 1px 14px"
     >
       @if (active()) {
@@ -65,6 +70,7 @@ import { fmtDur } from "../utils";
 export class AgentRowComponent {
   readonly ui = inject(UiStore);
   readonly agentActions = inject(AgentActionsService);
+  readonly drag = inject(DragService);
   readonly agent = input.required<Agent>();
   readonly active = input<boolean>(false);
 

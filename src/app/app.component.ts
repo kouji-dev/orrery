@@ -1,18 +1,17 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
+import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { ContextMenuComponent } from "./orchestra/context-menu/context-menu.component";
 import { AddProjectModalComponent } from "./orchestra/modals/add-project-modal.component";
 import { SpawnModalComponent } from "./orchestra/modals/spawn-modal.component";
-import { AgentRuntimeService } from "./orchestra/agents/agent-runtime.service";
-import { ProjectActionsService } from "./orchestra/projects/project-actions.service";
 import { UiStore } from "./orchestra/ui/ui.store";
 import { OverviewComponent } from "./orchestra/overview/overview.component";
 import { RightPanelComponent } from "./orchestra/right-panel/right-panel.component";
 import { SidebarComponent } from "./orchestra/sidebar/sidebar.component";
+import { CompactRailComponent } from "./orchestra/sidebar/compact-rail.component";
 import { StatusBarComponent } from "./orchestra/status-bar/status-bar.component";
 import { TopBarComponent } from "./orchestra/top-bar/top-bar.component";
 import { TweaksPanelComponent } from "./orchestra/tweaks/tweaks-panel.component";
 import { DevPanelComponent } from "./orchestra/dev-tools/dev-panel.component";
-import { WorkspaceComponent } from "./orchestra/workspace/workspace.component";
+import { PaneManagerComponent } from "./orchestra/workspace/pane-manager.component";
 
 @Component({
   selector: "app-root",
@@ -20,8 +19,9 @@ import { WorkspaceComponent } from "./orchestra/workspace/workspace.component";
   imports: [
     TopBarComponent,
     SidebarComponent,
+    CompactRailComponent,
     OverviewComponent,
-    WorkspaceComponent,
+    PaneManagerComponent,
     RightPanelComponent,
     StatusBarComponent,
     SpawnModalComponent,
@@ -36,15 +36,17 @@ import { WorkspaceComponent } from "./orchestra/workspace/workspace.component";
     <div class="shell">
       <app-top-bar />
 
-      <div class="workspace" [class.no-right]="!ui.tweaks().rightPanel">
-        <app-sidebar />
+      <div class="workspace" [class.no-right]="!ui.tweaks().rightPanel" [class.compact]="ui.sidebarCompact()">
+        @if (ui.sidebarCompact()) {
+          <app-compact-rail />
+        } @else {
+          <app-sidebar />
+        }
 
         @if (ui.activeTab() === 'orchestrator') {
           <app-overview />
-        } @else if (runtime.activeAgent(); as ag) {
-          <app-workspace [agent]="ag" [project]="projects.projectOf(ag.projectId)" />
         } @else {
-          <div style="display:grid;place-items:center;color:var(--ink-4)">agent not found</div>
+          <app-pane-manager [tabId]="ui.activeTab()" />
         }
 
         @if (ui.tweaks().rightPanel) {
@@ -64,8 +66,4 @@ import { WorkspaceComponent } from "./orchestra/workspace/workspace.component";
 })
 export class AppComponent {
   readonly ui = inject(UiStore);
-  readonly runtime = inject(AgentRuntimeService);
-  readonly projects = inject(ProjectActionsService);
-  // keep a stable reference for templates
-  readonly activeAgent = computed(() => this.runtime.activeAgent());
 }

@@ -8,11 +8,10 @@ import {
   OnDestroy,
   viewChild,
 } from "@angular/core";
-import { MergeView } from "@codemirror/merge";
-import { EditorState, Extension } from "@codemirror/state";
-import { EditorView, lineNumbers } from "@codemirror/view";
+import type { MergeView } from "@codemirror/merge";
+import type { Extension } from "@codemirror/state";
 import { UiStore } from "../ui/ui.store";
-import { editorTheme, langExt } from "./code-lang";
+import { buildTheme, CMCore, loadCMCore, loadLangExt } from "./code-lang";
 
 @Component({
   selector: "app-code-diff",
@@ -97,6 +96,9 @@ export class CodeDiffComponent implements OnDestroy {
   private ui = inject(UiStore);
   private host = viewChild.required<ElementRef<HTMLElement>>("host");
   private view?: MergeView;
+  // bumped on every render so a late-arriving lazy parser chunk is ignored if the
+  // view has since been rebuilt (content / theme / lang changed underneath it).
+  private renderToken = 0;
 
   constructor() {
     // re-renders on content OR theme change (light/dark need different highlights)
@@ -106,25 +108,59 @@ export class CodeDiffComponent implements OnDestroy {
     this.view?.destroy();
   }
 
-  private render(oldText: string, newText: string, lang: string, theme: "dark" | "light") {
+  private async render(oldText: string, newText: string, lang: string, theme: "dark" | "light") {
+    const token = ++this.renderToken;
     const el = this.host().nativeElement;
     this.view?.destroy();
+    this.view = undefined;
     el.innerHTML = "";
-    const exts: Extension[] = [
-      lineNumbers(),
-      editorTheme(theme),
-      EditorView.editable.of(false),
-      EditorState.readOnly.of(true),
-      EditorView.lineWrapping,
-      langExt(lang),
-    ];
-    this.view = new MergeView({
-      a: { doc: oldText, extensions: exts },
-      b: { doc: newText, extensions: exts },
-      parent: el,
-      collapseUnchanged: { margin: 3, minSize: 4 },
-      gutter: true,
-      highlightChanges: true, // mark the changed run within a line (.cm-changedText)
-    });
+
+    // core editor is fetched from esm.sh (cached after first diff). Until it lands,
+    // show a hint; if it can't load (offline / CDN down), fall back to plain text.
+    el.textContent = "loading…";
+    let cm: CMCore;
+    try {
+      cm = await loadCMCore();
+    } catch {
+      if (token === this.renderToken) el.textContent = newText;
+      return;
+    }
+    if (token !== this.renderToken) return; // a newer render superseded this one
+    el.textContent = "";
+
+    try {
+      const { EditorState, Compartment } = cm.state;
+      const { EditorView, lineNumbers } = cm.view;
+      const { MergeView } = cm.merge;
+      // language parser is injected lazily via this compartment once it loads
+      const langComp = new Compartment();
+      const exts: Extension[] = [
+        lineNumbers(),
+        buildTheme(cm, theme),
+        EditorView.editable.of(false),
+        EditorState.readOnly.of(true),
+        EditorView.lineWrapping,
+        langComp.of([]),
+      ];
+      const mv = new MergeView({
+        a: { doc: oldText, extensions: exts },
+        b: { doc: newText, extensions: exts },
+        parent: el,
+        collapseUnchanged: { margin: 3, minSize: 4 },
+        gutter: true,
+        highlightChanges: true, // mark the changed run within a line (.cm-changedText)
+      });
+      this.view = mv;
+      if (lang) {
+        void loadLangExt(lang).then((ext) => {
+          if (token !== this.renderToken || this.view !== mv) return; // stale
+          mv.a.dispatch({ effects: langComp.reconfigure(ext) });
+          mv.b.dispatch({ effects: langComp.reconfigure(ext) });
+        });
+      }
+    } catch (e) {
+      console.warn("[code-diff] editor build failed, showing plain text", e);
+      el.textContent = newText;
+    }
   }
 }

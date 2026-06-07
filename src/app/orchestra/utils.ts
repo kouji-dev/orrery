@@ -62,6 +62,14 @@ export const ICONS: Record<string, string> = {
   question: "M12 3a9 9 0 100 18 9 9 0 000-18zM9.2 9.2a2.8 2.8 0 015.5.8c0 1.9-2.8 2.5-2.8 4M12 17h.01",
   // shield: a guarded action — for command/permission notifications
   shield: "M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6l7-3z",
+  // split-right: frame with a vertical divider (new pane to the right)
+  splitCol: "M4 5h16v14H4zM12 5v14",
+  // split-down: frame with a horizontal divider (new pane below)
+  splitRow: "M4 5h16v14H4zM4 12h16",
+  // left panel: frame with a narrow left column highlighted (sidebar toggle)
+  panelLeft: "M4 5h16v14H4zM9 5v14",
+  // swap: two arrows trading places (swap pane content)
+  swap: "M7 4L4 7l3 3M4 7h13M17 20l3-3-3-3M20 17H7",
 };
 
 export interface StatusMeta {
@@ -398,6 +406,40 @@ export function langTag(path: string): string {
   if (dot < 0) return ""; // no extension
   const ext = name.slice(dot + 1).toLowerCase();
   return LANG_LABELS[ext] ?? ext.toUpperCase();
+}
+
+// extension → the canonical grammar tag understood by code-lang's `loadLangExt`
+// (a key in its LANGS map). Distinct from LANG_LABELS, which is display-only.
+const LANG_ID: Record<string, string> = {
+  ts: "javascript", mts: "javascript", cts: "javascript", tsx: "javascript",
+  js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript",
+  json: "json", jsonc: "json", json5: "json",
+  css: "css", scss: "sass", sass: "sass", less: "less",
+  html: "html", htm: "html", xhtml: "html",
+  xml: "xml", svg: "xml", xsd: "xml", xsl: "xml", plist: "xml", wsdl: "xml",
+  md: "markdown", markdown: "markdown", mdx: "markdown",
+  rs: "rust", py: "python", pyw: "python", pyi: "python",
+  java: "java", yaml: "yaml", yml: "yaml", toml: "toml", sql: "sql",
+  c: "cpp", h: "cpp", cpp: "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp", hh: "cpp", hxx: "cpp",
+  php: "php", go: "go", vue: "vue", wat: "wast", wast: "wast",
+  rb: "ruby", gemspec: "ruby", rake: "ruby",
+  cs: "csharp", kt: "kotlin", kts: "kotlin", scala: "scala", sc: "scala",
+  dart: "dart", swift: "swift", lua: "lua", pl: "perl", pm: "perl",
+  r: "r", clj: "clojure", cljs: "clojure", cljc: "clojure", edn: "clojure",
+  hs: "haskell", jl: "julia", erl: "erlang", hrl: "erlang",
+  ps1: "powershell", psm1: "powershell", groovy: "groovy", gradle: "groovy",
+  diff: "diff", patch: "diff",
+  properties: "properties", ini: "properties", env: "properties", cfg: "properties", conf: "properties",
+  sh: "shell", bash: "shell", zsh: "shell",
+};
+
+/** Canonical CodeMirror grammar tag for a path (""=no grammar / plain text). */
+export function langId(path: string): string {
+  const name = path.replace(/\/$/, "").split("/").pop() ?? "";
+  if (/^dockerfile$/i.test(name) || /\.dockerfile$/i.test(name)) return "dockerfile";
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return "";
+  return LANG_ID[name.slice(dot + 1).toLowerCase()] ?? "";
 }
 
 // ---- file-status label (diff header) ----

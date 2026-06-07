@@ -163,6 +163,35 @@ export class AgentActionsService {
     this.act(id, "start");
   }
 
+  /** One-button run toggle for a single agent (pane header / overview).
+   *  running → pause; otherwise resume (if it ever ran) or start fresh. */
+  toggleRun(ag: Agent) {
+    if (ag.status === "running") this.act(ag.id, "pause");
+    else this.act(ag.id, ag.started ? "resume" : "start");
+  }
+
+  /** Is any agent currently running? (drives the global Pause-all / Run-all label) */
+  anyRunning(): boolean {
+    return this.agents().some((a) => a.status === "running");
+  }
+  /** Stop every running agent's process. */
+  pauseAll() {
+    const running = this.agents().filter((a) => a.status === "running");
+    running.forEach((a) => this.runtime.stopProcess(a.id));
+    this.ui.flash(`paused ${running.length} agent${running.length === 1 ? "" : "s"}`);
+  }
+  /** Start/resume every agent that isn't running and isn't already done. */
+  startAll() {
+    const startable = this.agents().filter((a) => a.status !== "running" && a.status !== "done");
+    startable.forEach((a) => this.runtime.startProcess(a.id, { resume: a.started }));
+    this.ui.flash(`started ${startable.length} agent${startable.length === 1 ? "" : "s"}`);
+  }
+  /** Global toggle: pause all if anything is running, else start all idle agents. */
+  toggleRunAll() {
+    if (this.anyRunning()) this.pauseAll();
+    else this.startAll();
+  }
+
   duplicateAgent(src: Agent) {
     void this.spawn({
       projectId: src.projectId,

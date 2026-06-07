@@ -12,6 +12,7 @@ import { NotificationStore } from "../stores/notifications.store";
 import { AgentsStore } from "../stores/agents.store";
 import { TerminalService } from "../terminal.service";
 import { UiStore } from "../ui/ui.store";
+import { treeAgentIds } from "../workspace/pane-model";
 import {
   appendPtyTail,
   detectTitleStatus,
@@ -58,9 +59,18 @@ export class AgentRuntimeService {
     Record<string, { detail: string; event: string; kind: ActivityKind }[]>
   >({});
 
+  // The agent the rest of the shell is "scoped" to: the focused pane's agent
+  // within the active tab (a tab may tile several agents). Drives the sidebar
+  // highlight and the right panel. Falls back to the tab's first agent.
   readonly activeAgent = computed<Agent | null>(() => {
-    const id = this.ui.activeTab();
-    if (id === "orchestrator") return null;
+    const tab = this.ui.activeTab();
+    if (tab === "orchestrator") return null;
+    const root = this.ui.paneRoots()[tab];
+    if (!root) return null;
+    const ids = treeAgentIds(root);
+    if (!ids.length) return null;
+    const scope = this.ui.scopeAgentId();
+    const id = scope && ids.includes(scope) ? scope : ids[0];
     return this.agents().find((a) => a.id === id) ?? null;
   });
 

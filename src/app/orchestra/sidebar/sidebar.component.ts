@@ -20,6 +20,9 @@ import { ProjectGroupComponent } from "./project-group.component";
           <span class="chip tnum" style="margin-left:auto;font-size:9px;padding:1px 6px">
             <span class="dot running" style="background:var(--st-running);width:6px;height:6px"></span>{{ totalRunning() }}/5
           </span>
+          <button class="pane-btn" (click)="ui.toggleSidebarCompact()" title="Collapse sidebar">
+            <app-icon name="panelLeft" size="sm" [px]="14" />
+          </button>
         </div>
         <div style="display:flex;align-items:center;gap:7px;padding:5px 8px;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
           <app-icon name="search" size="sm" color="var(--ink-4)" />
@@ -67,9 +70,7 @@ export class SidebarComponent {
   readonly runtime = inject(AgentRuntimeService);
   readonly collapsed = signal<Record<string, boolean>>({});
 
-  readonly activeAgent = computed(() =>
-    this.ui.activeTab() === "orchestrator" ? null : this.ui.activeTab(),
-  );
+  readonly activeAgent = computed(() => this.runtime.activeAgent()?.id ?? null);
   readonly totalRunning = computed(
     () => this.runtime.agents().filter((a) => a.status === "running").length,
   );

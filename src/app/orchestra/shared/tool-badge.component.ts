@@ -1,12 +1,23 @@
 import { ChangeDetectionStrategy, Component, computed, input } from "@angular/core";
 import { mix, TOOL_GLYPH, toolMeta } from "../utils";
+import { TOOL_ICON } from "./tool-icons";
 
-/** Square monogram glyph for an agent tool (claude/codex/cursor/gemini). */
+/** Square brand badge for an agent tool (claude / codex / cursor / gemini).
+ *  Shows the real brand logo in the tool's accent color; falls back to a
+ *  monogram glyph for unknown tools. */
 @Component({
   selector: "app-tool-badge",
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <span [title]="meta().name" [style]="boxStyle()">{{ glyph() }}</span>
+    <span [title]="meta().name" [style]="boxStyle()">
+      @if (iconPath(); as d) {
+        <svg [attr.width]="size() * 0.7" [attr.height]="size() * 0.7" viewBox="0 0 24 24" fill="currentColor" style="display:block">
+          <path [attr.d]="d" />
+        </svg>
+      } @else {
+        {{ glyph() }}
+      }
+    </span>
   `,
 })
 export class ToolBadgeComponent {
@@ -14,9 +25,8 @@ export class ToolBadgeComponent {
   readonly size = input<number>(16);
 
   readonly meta = computed(() => toolMeta(this.tool()));
-  readonly glyph = computed(
-    () => TOOL_GLYPH[this.tool()] ?? this.meta().short[0].toUpperCase(),
-  );
+  readonly iconPath = computed(() => TOOL_ICON[this.tool()] ?? null);
+  readonly glyph = computed(() => TOOL_GLYPH[this.tool()] ?? this.meta().short[0].toUpperCase());
   readonly boxStyle = computed(() => {
     const s = this.size();
     const accent = this.meta().accent;

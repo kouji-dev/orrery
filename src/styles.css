@@ -213,6 +213,12 @@ app-root {
 .workspace.no-right {
   grid-template-columns: var(--sidebar-w, 252px) minmax(0, 1fr);
 }
+.workspace.compact {
+  grid-template-columns: 54px minmax(0, 1fr) var(--right-w, 312px);
+}
+.workspace.compact.no-right {
+  grid-template-columns: 54px minmax(0, 1fr);
+}
 
 /* Component-host wrappers must not break the flex/grid height chain. Collapsing
    them with display:contents promotes their single root element to be the real
@@ -220,11 +226,12 @@ app-root {
 app-top-bar,
 app-status-bar,
 app-sidebar,
+app-compact-rail,
 app-right-panel,
 app-overview,
-app-workspace,
+app-pane-manager,
+app-pane-node,
 app-diff-view,
-app-file-viewer,
 app-terminal,
 app-files-tab,
 app-inbox-tab,
@@ -523,6 +530,47 @@ app-timeline-view {
 }
 .proj-row:hover {
   background: var(--panel-2);
+}
+
+/* compact sidebar rail */
+.rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rail-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: all 0.13s;
+  position: relative;
+}
+.rail-btn:hover {
+  background: var(--panel-2);
+}
+
+/* small square icon button shared by pane headers + sidebar header/popover */
+.pane-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink-3);
+  flex: none;
+}
+.pane-btn:hover {
+  background: var(--panel-3);
+  color: var(--ink);
 }
 
 /* native select styling */
