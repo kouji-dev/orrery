@@ -5,6 +5,7 @@ use crate::projects::service::ProjectService;
 mod agents;
 pub mod cli;
 mod core;
+mod cost;
 mod fs;
 mod git;
 mod hooks;
@@ -90,6 +91,20 @@ pub fn run() {
                 }
             });
 
+            // Cost push loop: every 60s shell out to `ccusage` and emit the global
+            // total on `system://cost`. Slow-moving, so 60s (vs metrics' 3s) keeps
+            // node-spawn cost negligible. `available:false` is emitted when ccusage
+            // can't run — the UI hides the readout.
+            let cost_app = app.handle().clone();
+            std::thread::spawn(move || {
+                use tauri::Emitter;
+                loop {
+                    let snap = cost::snapshot();
+                    let _ = cost_app.emit("system://cost", snap);
+                    std::thread::sleep(std::time::Duration::from_secs(60));
+                }
+            });
+
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
@@ -127,6 +142,7 @@ pub fn run() {
             agents::commands::agent_resize,
             agents::commands::detect_tools,
             metrics::commands::system_metrics,
+            cost::commands::system_cost,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
