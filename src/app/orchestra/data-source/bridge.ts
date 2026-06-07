@@ -47,6 +47,7 @@ export const Commands = {
   AgentResize: 'agent_resize',
   DetectTools: 'detect_tools',
   SystemMetrics: 'system_metrics',
+  SystemCost: 'system_cost',
 } as const;
 
 export const Events = {
@@ -68,6 +69,8 @@ export const Events = {
   AgentActivity: 'agent://activity',
   /** Fresh cpu/memory snapshot for the app + every running agent (pushed every 3s). */
   SystemMetrics: 'system://metrics',
+  /** Global Claude cost total from ccusage (pushed every 60s). */
+  SystemCost: 'system://cost',
 } as const;
 
 export const BRIDGE = new InjectionToken<Bridge>('BRIDGE');

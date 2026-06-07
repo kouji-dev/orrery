@@ -253,3 +253,11 @@ export interface SystemMetrics {
   totalMemBytes: number;
   procs: ProcMetric[];
 }
+
+// A cost snapshot pushed on `system://cost` (~every 60s). `available` is false
+// when ccusage could not run — the status bar then hides the readout.
+export interface CostSnapshot {
+  totalCost: number;
+  currency: string;
+  available: boolean;
+}
