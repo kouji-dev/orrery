@@ -123,6 +123,9 @@ importers:
       '@tauri-apps/cli':
         specifier: ^2
         version: 2.11.2
+      ccusage:
+        specifier: ^20.0.6
+        version: 20.0.6
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1
@@ -437,6 +440,36 @@ packages:
   '@bramus/specificity@2.4.2':
     resolution: {integrity: sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw==}
     hasBin: true
+
+  '@ccusage/ccusage-darwin-arm64@20.0.6':
+    resolution: {integrity: sha512-9CiPBzq5QpcSkeCcYgQctLq5YOuxAomUBQIBHLa60zzUWg+Bb5r+3KAJOUYFJu21qmyUNWFePKb4UtL4yX9Mig==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@ccusage/ccusage-darwin-x64@20.0.6':
+    resolution: {integrity: sha512-5fdUQiUBN+u4S5dfDYnHGV1uZr/2XJ/r24IeqTNdPGXL3zJHclq6YgVnM92Xh/3/LOwvJwtDz4axW6HnCCUUmw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@ccusage/ccusage-linux-arm64@20.0.6':
+    resolution: {integrity: sha512-msx6A5eBA7TN6H8YtYJ8CChdM9wHv6jZ1vR1b9kWIKIhSDcy2QBx7gjKUH7Da3kMRHfJ/nlc8+8q3cXJ7EwbrQ==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@ccusage/ccusage-linux-x64@20.0.6':
+    resolution: {integrity: sha512-9HZiRMYPa3gUb7ae1R0vXQyhkrLgfqeTwX5TJegunW5Zvsa2PK5i4ib7Wq1E8Hvr8VqRkT3FCZxfLTAx/9C3uA==}
+    cpu: [x64]
+    os: [linux]
+
+  '@ccusage/ccusage-win32-arm64@20.0.6':
+    resolution: {integrity: sha512-SXH1ODfMFwTq0J1EgQMCiu5Msz9CBob/ABKVRfUcQp+vIWQbEFCuqdktmwtoZONelqnO8/JFfEkyHUUsW/YNxw==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@ccusage/ccusage-win32-x64@20.0.6':
+    resolution: {integrity: sha512-lC3UGZskeQg8T2HaD7lirNBTqQb8biuVSSK/93OeIV4lROCKBRcVxlEecBZW0rGuUDdPNUMUwBty0qM9FUvEoA==}
+    cpu: [x64]
+    os: [win32]
 
   '@codemirror/autocomplete@6.20.3':
     resolution: {integrity: sha512-tlosUqb+3BbxCxZdu4tKeRghPFC+QM7q4X5YhKV2eCmPG+1r2F3f4AaSz5sCrFqUtX4Jh20VFTKecl16MgiV9g==}
@@ -1873,6 +1906,10 @@ packages:
 
   caniuse-lite@1.0.30001793:
     resolution: {integrity: sha512-iwSsYWaCOoh26cV8NwNRViHlrfUvYsHDfRVcbtmw0Kg6PJIZZXwMkj1442FYLBGkeUf1juAsU3DTfxW579mrPA==}
+
+  ccusage@20.0.6:
+    resolution: {integrity: sha512-Z3Aa5zQPkU2Y9+p6Pjh4iEf66O09PtTJCVTbzpQGL1oYdDXKR0nNLX+c4ASQHl6f/Gl9/T3R0hpEiZ5g1Po0dg==}
+    hasBin: true
 
   chai@6.2.2:
     resolution: {integrity: sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg==}
@@ -3603,6 +3640,24 @@ snapshots:
     dependencies:
       css-tree: 3.2.1
 
+  '@ccusage/ccusage-darwin-arm64@20.0.6':
+    optional: true
+
+  '@ccusage/ccusage-darwin-x64@20.0.6':
+    optional: true
+
+  '@ccusage/ccusage-linux-arm64@20.0.6':
+    optional: true
+
+  '@ccusage/ccusage-linux-x64@20.0.6':
+    optional: true
+
+  '@ccusage/ccusage-win32-arm64@20.0.6':
+    optional: true
+
+  '@ccusage/ccusage-win32-x64@20.0.6':
+    optional: true
+
   '@codemirror/autocomplete@6.20.3':
     dependencies:
       '@codemirror/language': 6.12.3
@@ -4823,6 +4878,15 @@ snapshots:
       get-intrinsic: 1.3.0
 
   caniuse-lite@1.0.30001793: {}
+
+  ccusage@20.0.6:
+    optionalDependencies:
+      '@ccusage/ccusage-darwin-arm64': 20.0.6
+      '@ccusage/ccusage-darwin-x64': 20.0.6
+      '@ccusage/ccusage-linux-arm64': 20.0.6
+      '@ccusage/ccusage-linux-x64': 20.0.6
+      '@ccusage/ccusage-win32-arm64': 20.0.6
+      '@ccusage/ccusage-win32-x64': 20.0.6
 
   chai@6.2.2: {}
 

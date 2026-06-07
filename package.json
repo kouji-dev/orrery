@@ -52,6 +52,7 @@
     "@angular/compiler-cli": "^20.1.4",
     "@tailwindcss/postcss": "^4.3.0",
     "@tauri-apps/cli": "^2",
+    "ccusage": "^20.0.6",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
