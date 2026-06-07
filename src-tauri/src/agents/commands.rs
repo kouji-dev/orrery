@@ -75,6 +75,17 @@ pub fn agent_changes(
     svc.changes(id)
 }
 
+/// Commits on the agent's branch — read from its worktree HEAD, tagged with the
+/// agent id (transient `git_commits`).
+#[tauri::command]
+pub fn agent_commits(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    limit: Option<usize>,
+) -> AppResult<Vec<crate::projects::model::CommitView>> {
+    svc.commits(id, limit.unwrap_or(50))
+}
+
 #[tauri::command]
 pub fn agent_commit(
     svc: State<'_, AgentService>,

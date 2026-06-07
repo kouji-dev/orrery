@@ -31,6 +31,7 @@ export const Commands = {
   AgentTree: 'agent_tree',
   AgentDir: 'agent_dir',
   AgentChanges: 'agent_changes',
+  AgentCommits: 'agent_commits',
   AgentCommit: 'agent_commit',
   AgentDiscard: 'agent_discard',
   AgentMerge: 'agent_merge',

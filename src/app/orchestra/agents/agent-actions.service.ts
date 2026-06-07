@@ -79,6 +79,7 @@ export class AgentActionsService {
       .then(() => {
         this.ui.flash("committed in " + (ag?.name ?? id));
         this.runtime.loadChanges(id);
+        this.runtime.loadCommits(id);
         void this.projects.refreshCommits(this.projects.all().map((p) => p.id));
         if (ag) this.runtime.patchRuntime(id, { commits: ag.commits + 1 });
       })
@@ -106,6 +107,7 @@ export class AgentActionsService {
         void this.agentsStore.update(id, { status: "done" }).catch(() => {});
         this.runtime.patchRuntime(id, { progress: 1 });
         this.runtime.loadChanges(id);
+        this.runtime.loadCommits(id);
         void this.projects.refreshCommits(this.projects.all().map((p) => p.id));
       })
       .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "merge failed"));

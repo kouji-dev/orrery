@@ -101,6 +101,7 @@ export class AgentRuntimeService {
         if (this.watched.has(a.id)) continue;
         this.watched.add(a.id);
         this.loadChanges(a.id);
+        this.loadCommits(a.id);
         this.loadFiles(a.id);
         void this.agentsStore.watch(a.id).catch(() => {});
       }
@@ -235,6 +236,24 @@ export class AgentRuntimeService {
       .catch(() => {
         if (this.changesGen[agentId] !== gen) return;
         this.patchRuntime(agentId, { git_changes: { loading: false, files: [] } });
+      });
+  }
+
+  private commitsGen: Record<string, number> = {};
+  loadCommits(agentId: string) {
+    const gen = (this.commitsGen[agentId] ?? 0) + 1;
+    this.commitsGen[agentId] = gen;
+    const prev = this.runtime()[agentId]?.git_commits?.commits ?? [];
+    this.patchRuntime(agentId, { git_commits: { loading: true, commits: prev } });
+    void this.agentsStore
+      .commits(agentId)
+      .then((commits) => {
+        if (this.commitsGen[agentId] !== gen) return; // superseded
+        this.patchRuntime(agentId, { git_commits: { loading: false, commits } });
+      })
+      .catch(() => {
+        if (this.commitsGen[agentId] !== gen) return;
+        this.patchRuntime(agentId, { git_commits: { loading: false, commits: [] } });
       });
   }
 

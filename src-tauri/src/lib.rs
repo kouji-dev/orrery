@@ -111,6 +111,7 @@ pub fn run() {
             agents::commands::agent_tree,
             agents::commands::agent_dir,
             agents::commands::agent_changes,
+            agents::commands::agent_commits,
             agents::commands::agent_commit,
             agents::commands::agent_discard,
             agents::commands::agent_merge,

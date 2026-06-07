@@ -12,7 +12,7 @@ use super::model::{
 };
 
 /// Format a unix timestamp as a short "Nm / Nh / Nd ago" style token (FE appends "ago").
-fn relative_time(then: i64) -> String {
+pub(crate) fn relative_time(then: i64) -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)

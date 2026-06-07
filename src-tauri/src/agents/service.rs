@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::core::database::DB;
 use crate::core::errors::{AgentError, AppError, AppResult, DbError};
 use crate::git::service::{FileChange, GitService};
+use crate::projects::model::CommitView;
 
 use super::model::{Agent, AgentRecord, AgentSpawnRequest, AgentUpdateRequest};
 
@@ -226,6 +227,28 @@ impl AgentService {
         self.git.commit(Path::new(&rec.worktree), message, paths)
     }
 
+    /// Commits on the agent's branch — read from its worktree (whose HEAD *is*
+    /// the agent branch), newest first, each tagged with the **agent id** (not the
+    /// commit author) so the UI can group commits by agent. Empty for a worktree
+    /// with no commits / no repo.
+    pub fn commits(&self, id: Uuid, limit: usize) -> AppResult<Vec<CommitView>> {
+        let rec = self.record(id)?;
+        Ok(self
+            .git
+            .log(Path::new(&rec.worktree), limit)
+            .into_iter()
+            .map(|e| CommitView {
+                agent: id.to_string(),
+                project_id: rec.project_id,
+                sha: e.sha,
+                msg: e.message,
+                when: crate::projects::service::relative_time(e.time),
+                ts: e.time,
+                files: e.files as i64,
+            })
+            .collect())
+    }
+
     /// Discard selected paths (or all when empty) in the agent's worktree.
     pub fn discard(&self, id: Uuid, paths: &[String]) -> AppResult<()> {
         let rec = self.record(id)?;
@@ -442,6 +465,27 @@ mod tests {
         GitService::new().init(proj.path()).unwrap(); // empty repo — spawn makes the initial commit
         let a = s.spawn(req(Uuid::new_v4(), "wt"), proj.path()).unwrap();
         assert!(Path::new(&a.worktree).exists(), "real worktree at {}", a.worktree);
+    }
+
+    #[test]
+    fn commits_lists_worktree_commits_tagged_with_agent_id() {
+        let s = svc();
+        let proj = tempfile::tempdir().unwrap();
+        GitService::new().init(proj.path()).unwrap(); // empty repo — spawn makes the initial commit
+        let a = s.spawn(req(Uuid::new_v4(), "wt"), proj.path()).unwrap();
+        // a commit made in the agent's worktree, on its agent/* branch
+        std::fs::write(Path::new(&a.worktree).join("note.txt"), "hi").unwrap();
+        s.commit(a.id, "add note", &[]).unwrap();
+
+        let commits = s.commits(a.id, 50).unwrap();
+        assert!(!commits.is_empty(), "worktree commits must be listed");
+        assert_eq!(commits[0].msg, "add note", "newest commit first");
+        assert_eq!(
+            commits[0].agent,
+            a.id.to_string(),
+            "tagged with the agent id, not the commit author name"
+        );
+        assert_eq!(commits[0].project_id, a.project_id);
     }
 
     #[test]

@@ -93,8 +93,12 @@ import { CommitFeedComponent } from "./commit-feed.component";
           <button class="btn ghost-hair" [disabled]="ag.commits === 0" (click)="agentActions.act(ag.id, 'push')" style="justify-content:flex-start">
             <app-icon name="push" size="sm" />Push to origin
           </button>
-          <button class="btn primary" [disabled]="ag.commits === 0" (click)="agentActions.act(ag.id, 'merge')" style="justify-content:center">
-            <app-icon name="merge" size="sm" />Merge {{ ag.branch.replace('agent/', '') }} → {{ project() ? project()!.branch : 'main' }}
+          <button class="btn primary" [disabled]="ag.commits === 0" (click)="agentActions.act(ag.id, 'merge')" style="justify-content:center;min-width:0">
+            <app-icon name="merge" size="sm" />
+            <span
+              [title]="'Merge ' + ag.branch.replace('agent/', '') + ' → ' + (project() ? project()!.branch : 'main')"
+              style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+            >Merge {{ ag.branch.replace('agent/', '') }} → {{ project() ? project()!.branch : 'main' }}</span>
           </button>
           <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="discard(ag.id)" style="justify-content:flex-start;color:var(--st-blocked)">
             <app-icon name="discard" size="sm" />Discard {{ selected().size ? selected().size + ' selected' : 'all' }}
@@ -124,10 +128,9 @@ export class GitTabComponent {
   readonly changesLoading = computed(() => this.agent()?.git_changes?.loading ?? false);
   readonly totAdd = computed(() => this.changes().reduce((s, f) => s + f.add, 0));
   readonly totDel = computed(() => this.changes().reduce((s, f) => s + f.del, 0));
-  readonly agentCommits = computed<Commit[]>(() => {
-    const ag = this.agent();
-    return ag ? this.projects.commits().filter((c) => c.agent === ag.id) : [];
-  });
+  // this branch's commits, read from the agent's worktree (loaded as the
+  // `git_commits` runtime transient and tagged with the agent id by the backend).
+  readonly agentCommits = computed<Commit[]>(() => this.agent()?.git_commits?.commits ?? []);
 
   readonly selected = signal<Set<string>>(new Set());
   readonly commitMsg = signal("");
