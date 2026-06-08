@@ -28,9 +28,12 @@ describe('UpdaterService.run', () => {
 
   it('downloads, tracks progress, relaunches, returns updating', async () => {
     const relaunch = vi.fn(async () => {});
+    // status is transient (downloading → restarting), so capture it mid-download.
+    let statusDuringDownload = '';
     const handle: UpdateHandle = {
       version: '1.2.0',
       downloadAndInstall: async (onProgress) => {
+        statusDuringDownload = svc.status();
         onProgress(50, 100);
         onProgress(100, 100);
       },
@@ -39,7 +42,8 @@ describe('UpdaterService.run', () => {
     const outcome = await svc.run();
     expect(outcome).toBe('updating');
     expect(svc.progress()).toBe(1);
-    expect(svc.status()).toContain('1.2.0');
+    expect(statusDuringDownload).toContain('1.2.0');
+    expect(svc.status()).toBe('restarting');
     expect(relaunch).toHaveBeenCalledOnce();
   });
 
