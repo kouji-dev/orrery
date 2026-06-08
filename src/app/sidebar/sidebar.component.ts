@@ -58,7 +58,7 @@ import { ProjectGroupComponent } from "./project-group.component";
           <app-icon name="folder" size="sm" />Add project
         </button>
         <button class="btn primary" (click)="ui.openSpawn(null)" title="Spawn agent" style="padding:5px 11px">
-          <app-icon name="plus" size="sm" />Agent
+          <app-icon name="bolt" size="sm" />Agent
         </button>
       </div>
     </aside>

@@ -251,4 +251,30 @@ mod tests {
             .count();
         assert_eq!(orrery_count, 1, "exactly one orrery Notification group");
     }
+
+    // Re-installing from a DIFFERENT binary path (dev build → bundled app, or a
+    // moved exe) must REPLACE the prior orrery group, not pile up a second one:
+    // detection keys on the binary STEM ("orrery") + "hook --event", not the full
+    // path. This is the duplicate-on-reinstall bug.
+    #[test]
+    fn reinstall_from_different_path_replaces_not_duplicates() {
+        let home = tempfile::tempdir().unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &PathBuf::from("/old/place/orrery"))
+            .unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &PathBuf::from("/new/place/orrery"))
+            .unwrap();
+
+        let v = read_settings(home.path());
+        let groups = v["hooks"]["MessageDisplay"].as_array().unwrap();
+        let orrery: Vec<&str> = groups
+            .iter()
+            .filter_map(|g| g["hooks"][0]["command"].as_str())
+            .filter(|c| c.contains("orrery") && c.contains("hook --event"))
+            .collect();
+        assert_eq!(orrery.len(), 1, "one orrery group after cross-path reinstall: {orrery:?}");
+        assert!(orrery[0].contains("/new/place/orrery"), "kept current path: {orrery:?}");
+        assert!(!orrery[0].contains("/old/place/orrery"), "dropped stale path: {orrery:?}");
+    }
 }

@@ -13,9 +13,11 @@
     "windows": [
       {
         "title": "Orrery",
-        "width": 800,
-        "height": 600,
-        "dragDropEnabled": false
+        "width": 1600,
+        "height": 800,
+        "center": true,
+        "dragDropEnabled": false,
+        "decorations": false
       }
     ],
     "security": {

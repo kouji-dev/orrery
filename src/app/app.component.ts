@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+} from "@angular/core";
 import { ContextMenuComponent } from "./context-menu/context-menu.component";
 import { AddProjectModalComponent } from "./modals/add-project-modal.component";
 import { SpawnModalComponent } from "./modals/spawn-modal.component";
@@ -12,6 +17,10 @@ import { TopBarComponent } from "./top-bar/top-bar.component";
 import { TweaksPanelComponent } from "./tweaks/tweaks-panel.component";
 import { DevPanelComponent } from "./dev-tools/dev-panel.component";
 import { PaneManagerComponent } from "./workspace/pane-manager.component";
+
+// `ngDevMode`: Angular's dev-mode global — truthy under `ng serve` (tauri dev),
+// folded to `false` by the production build (`ng build` → tauri build).
+declare const ngDevMode: boolean | undefined;
 
 @Component({
   selector: "app-root",
@@ -36,14 +45,18 @@ import { PaneManagerComponent } from "./workspace/pane-manager.component";
     <div class="shell">
       <app-top-bar />
 
-      <div class="workspace" [class.no-right]="!ui.tweaks().rightPanel" [class.compact]="ui.sidebarCompact()">
+      <div
+        class="workspace"
+        [class.no-right]="!ui.tweaks().rightPanel"
+        [class.compact]="ui.sidebarCompact()"
+      >
         @if (ui.sidebarCompact()) {
           <app-compact-rail />
         } @else {
           <app-sidebar />
         }
 
-        @if (ui.activeTab() === 'orchestrator') {
+        @if (ui.activeTab() === "orchestrator") {
           <app-overview />
         } @else {
           <app-pane-manager [tabId]="ui.activeTab()" />
@@ -57,13 +70,30 @@ import { PaneManagerComponent } from "./workspace/pane-manager.component";
       <app-status-bar />
     </div>
 
-    @if (ui.spawning()) { <app-spawn-modal /> }
-    @if (ui.addingProject()) { <app-add-project-modal /> }
+    @if (ui.spawning()) {
+      <app-spawn-modal />
+    }
+    @if (ui.addingProject()) {
+      <app-add-project-modal />
+    }
     <app-context-menu />
     <app-tweaks-panel />
-    <app-dev-panel />
+    @if (dev) {
+      <app-dev-panel />
+    }
   `,
 })
-export class AppComponent {
+export class AppComponent implements AfterViewInit {
   readonly ui = inject(UiStore);
+  /** Dev-only store inspector — gated on `ngDevMode`, so it shows under `tauri dev`
+   *  (`ng serve`) but is excluded from the production (release) build. */
+  readonly dev = typeof ngDevMode !== "undefined" && !!ngDevMode;
+
+  ngAfterViewInit() {
+    // Dismiss the boot splash (defined in index.html) once the shell has rendered;
+    // it fades out after both this signal and its own draw animation complete.
+    (
+      window as unknown as { __orreryAppReady?: () => void }
+    ).__orreryAppReady?.();
+  }
 }

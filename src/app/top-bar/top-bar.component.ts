@@ -1,4 +1,13 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  OnDestroy,
+  inject,
+  signal,
+  viewChild,
+} from "@angular/core";
 import { Agent, MenuItem, Tab } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
@@ -10,20 +19,26 @@ import { StatusDotComponent } from "../shared/status-dot.component";
 import { treeAgentIds } from "../workspace/pane-model";
 import { LogoComponent } from "./logo.component";
 import { NotificationCenterComponent } from "./notification-center.component";
+import { WindowControlsComponent } from "./window-controls.component";
 
 @Component({
   selector: "app-top-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LogoComponent, IconComponent, StatusDotComponent, NotificationCenterComponent],
+  imports: [LogoComponent, IconComponent, StatusDotComponent, NotificationCenterComponent, WindowControlsComponent],
   template: `
     <header
+      data-tauri-drag-region
       style="display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--hair);height:44px;position:relative;z-index:5"
     >
-      <!-- brand -->
-      <div style="display:flex;align-items:center;gap:10px;padding:0 14px;flex:none">
-        <app-logo />
-        <div style="display:flex;flex-direction:column;line-height:1.15">
-          <span class="disp" style="font-size:13px;font-weight:600;letter-spacing:0.02em">ORRERY</span>
+      <!-- brand (also a window drag handle). Pinned to the OPEN sidebar width
+           (--sidebar-w) so it lines up with the sidebar column and keeps that
+           width even when the sidebar is collapsed to the compact rail. -->
+      <div data-tauri-drag-region style="display:flex;align-items:center;gap:11px;padding:0 14px;flex:none;width:var(--sidebar-w, 252px);box-sizing:border-box">
+        <app-logo style="pointer-events:none" />
+        <div style="display:flex;flex-direction:column;line-height:1.12;pointer-events:none">
+          <span class="disp" style="font-size:15px;font-weight:600;letter-spacing:0.005em">
+            <span style="color:var(--accent)">O</span>rrery
+          </span>
           <span style="font-size:9.5px;color:var(--ink-3);letter-spacing:0.04em">
             {{ projects.all().length }} projects · {{ runtime.agents().length }} agents
           </span>
@@ -32,8 +47,8 @@ import { NotificationCenterComponent } from "./notification-center.component";
 
       <div class="vdiv"></div>
 
-      <!-- tabs -->
-      <div style="display:flex;align-items:stretch;flex:1;min-width:0;overflow-x:auto">
+      <!-- tabs (empty area drags the window) -->
+      <div data-tauri-drag-region style="display:flex;align-items:stretch;flex:1;min-width:0;overflow-x:auto">
         @for (tab of ui.tabs(); track tab.id) {
           @let isOrch = tab.kind === 'orchestrator';
           @let active = ui.activeTab() === tab.id;
@@ -110,28 +125,36 @@ import { NotificationCenterComponent } from "./notification-center.component";
 
       <div class="vdiv"></div>
 
-      <!-- actions -->
-      <div style="display:flex;align-items:center;gap:8px;padding:0 12px;flex:none">
-        <app-notification-center />
-        @let running = agentActions.anyRunning();
-        <button
-          [class]="'btn ' + (running ? 'ghost-hair' : 'primary')"
-          (click)="agentActions.toggleRunAll()"
-          title="Pause / start every agent"
-          style="height:25px;padding:0 10px"
-        >
-          <app-icon [name]="running ? 'pause' : 'play'" size="sm" />
-          {{ running ? 'Pause all' : 'Run all' }}
-        </button>
-        <button class="btn ghost-hair" (click)="ui.toggleTheme()" title="Toggle theme" style="padding:5px 8px">
-          <app-icon [name]="ui.tweaks().theme === 'dark' ? 'sun' : 'moon'" size="sm" />
-        </button>
+      <!-- right group: its measured width is mirrored into --right-w (see below) so
+           the right panel column lines up exactly under this cluster -->
+      <div #rightGroup style="display:flex;align-items:stretch;flex:none">
+        <!-- actions: Run all/Pause all (left), then notification + theme buttons -->
+        <div style="display:flex;align-items:center;gap:8px;padding:0 12px;flex:none">
+          @let running = agentActions.anyRunning();
+          <button
+            [class]="'btn ' + (running ? 'ghost-hair' : 'primary')"
+            (click)="agentActions.toggleRunAll()"
+            title="Pause / start every agent"
+            style="height:25px;padding:0 10px;min-width:96px;justify-content:center"
+          >
+            <app-icon [name]="running ? 'pause' : 'play'" size="sm" />
+            {{ running ? 'Pause all' : 'Run all' }}
+          </button>
+          <app-notification-center />
+          <button class="btn ghost-hair" (click)="ui.toggleTheme()" title="Toggle theme" style="padding:5px 8px">
+            <app-icon [name]="ui.tweaks().theme === 'dark' ? 'sun' : 'moon'" size="sm" />
+          </button>
+        </div>
+
+        <!-- window controls (borderless titlebar) -->
+        <div class="vdiv"></div>
+        <app-window-controls />
       </div>
     </header>
   `,
   styles: [`.tab-x:hover { color: var(--ink) !important; }`],
 })
-export class TopBarComponent {
+export class TopBarComponent implements AfterViewInit, OnDestroy {
   readonly ui = inject(UiStore);
   readonly runtime = inject(AgentRuntimeService);
   readonly projects = inject(ProjectActionsService);
@@ -141,6 +164,29 @@ export class TopBarComponent {
   // tab drag state: which tab is being dragged + the live drop zone on a target.
   readonly dragId = signal<string | null>(null);
   readonly drop = signal<{ id: string; zone: "merge" | "before" | "after" } | null>(null);
+
+  // The right-side action cluster (Run all + notification + theme + window
+  // controls). Its live width is mirrored into the global --right-w so the right
+  // panel column is always exactly as wide as this cluster — they read as one
+  // column. A ResizeObserver keeps it correct across font swaps / label changes.
+  private readonly rightGroup = viewChild<ElementRef<HTMLElement>>("rightGroup");
+  private ro?: ResizeObserver;
+
+  ngAfterViewInit() {
+    const el = this.rightGroup()?.nativeElement;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const apply = () => {
+      const w = Math.round(el.getBoundingClientRect().width);
+      if (w > 0) document.documentElement.style.setProperty("--right-w", `${w}px`);
+    };
+    apply();
+    this.ro = new ResizeObserver(apply);
+    this.ro.observe(el);
+  }
+
+  ngOnDestroy() {
+    this.ro?.disconnect();
+  }
 
   tabAgentIds(tab: Tab): string[] {
     if (tab.kind === "orchestrator") return [];

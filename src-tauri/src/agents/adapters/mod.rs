@@ -190,15 +190,20 @@ pub fn installed() -> Vec<ToolStatus> {
 /// * Preserve every existing top-level key untouched.
 /// * Insert each `(key, value)` from `defaults` only if that top-level key is
 ///   absent (e.g. cursor's `"version": 1`) — never overwrite a user's value.
-/// * For every event in `events`: keep the user's own groups, drop only our
-///   prior orrery groups (idempotency), then append one fresh group built by
+/// * For every event in `events`: keep the user's own groups, drop EVERY prior
+///   orrery group (idempotency — see below), then append one fresh group built by
 ///   `make_group`. The per-event lists live under the top-level `"hooks"` object.
 /// * Write pretty JSON back.
 ///
 /// A group is "ours" if, scanned recursively, any string value contains both the
-/// `hook_bin` path AND `"hook --event"`. That shape-agnostic test works whether
-/// the command sits at `group.hooks[].command` (claude) or `group.command`
-/// (cursor), so the helper never assumes a particular group layout.
+/// hook binary's file STEM (e.g. `orrery`) AND `"hook --event"`. Keying on the
+/// stem — not the full `hook_bin` path — is deliberate: a prior install from a
+/// DIFFERENT location (the dev `target\debug\orrery.exe` vs the bundled
+/// `…\orrery.exe`, or a moved app) would otherwise go undetected and pile up a
+/// duplicate group on every re-install. The stem catches every past orrery group
+/// regardless of where its binary lived, so a re-install REPLACES rather than
+/// appends. The test is shape-agnostic (recursive), so it works whether the command
+/// sits at `group.hooks[].command` (claude) or `group.command` (cursor).
 pub fn merge_json_hooks(
     path: &Path,
     events: &[&str],
@@ -227,8 +232,15 @@ pub fn merge_json_hooks(
         _ => Map::new(),
     };
 
-    let hook_bin = hook_bin.display().to_string();
-    let is_orrery = |group: &Value| -> bool { group_is_orrery(group, &hook_bin) };
+    // Detect OUR groups by a PATH-INDEPENDENT marker — the binary's file stem (e.g.
+    // "orrery") — so groups installed from any prior location are all collapsed (no
+    // duplicate on a re-install from a different path). Falls back to the full path
+    // only if the binary somehow has no file stem.
+    let marker = hook_bin
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| hook_bin.display().to_string());
+    let is_orrery = |group: &Value| -> bool { group_is_orrery(group, &marker) };
 
     for event in events {
         // Keep every existing non-orrery group; treat a non-array as empty.
@@ -244,14 +256,15 @@ pub fn merge_json_hooks(
     std::fs::write(path, serde_json::to_vec_pretty(&Value::Object(root))?)
 }
 
-/// True if any string value anywhere in `group` contains both the hook_bin path
-/// and `"hook --event"` — i.e. this group was installed by orrery. Recursive so
-/// it is agnostic to the group's shape.
-fn group_is_orrery(group: &Value, hook_bin: &str) -> bool {
+/// True if any string value anywhere in `group` contains both the binary `marker`
+/// (its file stem, e.g. "orrery") and `"hook --event"` — i.e. this group was
+/// installed by orrery, from any path. Recursive so it is agnostic to the group's
+/// shape.
+fn group_is_orrery(group: &Value, marker: &str) -> bool {
     match group {
-        Value::String(s) => s.contains(hook_bin) && s.contains("hook --event"),
-        Value::Array(a) => a.iter().any(|v| group_is_orrery(v, hook_bin)),
-        Value::Object(m) => m.values().any(|v| group_is_orrery(v, hook_bin)),
+        Value::String(s) => s.contains(marker) && s.contains("hook --event"),
+        Value::Array(a) => a.iter().any(|v| group_is_orrery(v, marker)),
+        Value::Object(m) => m.values().any(|v| group_is_orrery(v, marker)),
         _ => false,
     }
 }

@@ -38,10 +38,28 @@ pub struct HookArgs {
 }
 
 /// The shell command an agent runs for one hook event: the app exe re-invoked as
-/// `orrery hook --event <EVENT>`. Connection + identity flow via the ORRERY_* env
-/// we stamp on the agent process. Quoted so a path with spaces is safe.
+/// `orrery hook --event <EVENT>`, GUARDED by an existence check so a stale/missing
+/// binary path (the user deleted the dev build, moved the app, or uninstalled it)
+/// makes the hook a clean NO-OP instead of erroring on every event of every CLI
+/// session — these hooks are installed GLOBALLY, so they also fire on the user's
+/// own non-orrery runs. Connection + identity flow via the ORRERY_* env stamped on
+/// the agent process. Quoted so a path with spaces is safe.
+///
+/// The guard is POSIX `sh` syntax on EVERY platform — agent CLIs run hook commands
+/// through a POSIX shell even on Windows (Claude Code executes them via Git Bash,
+/// `/usr/bin/bash`, NOT cmd.exe), so a cmd `if exist` would be a bash syntax error
+/// that exits non-zero and BLOCKS the tool. The form is
+/// `[ -e "<exe>" ] && "<exe>" hook --event <E> || true`:
+/// * `[ -e "<exe>" ]` — run the hook only when the binary still exists.
+/// * trailing `|| true` — forces exit status 0 when the binary is absent, so the
+///   agent never sees a "hook failed" non-zero exit (Claude treats that as a block).
+///
+/// Backslashes are swapped for forward slashes so a Windows path (`C:\…\orrery.exe`)
+/// is handled cleanly by Git Bash's `test`/exec; a no-op on native Unix paths.
 pub fn hook_command(exe: &Path, event: &str) -> String {
-    format!("\"{}\" {} --event {}", exe.display(), super::SUBCOMMANDS[0], event)
+    let exe = exe.display().to_string().replace('\\', "/");
+    let sub = super::SUBCOMMANDS[0];
+    format!("[ -e \"{exe}\" ] && \"{exe}\" {sub} --event {event} || true")
 }
 
 /// The registration gate: a globally-installed hook only brokers with the bridge
@@ -147,9 +165,26 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn hook_command_quotes_exe_and_carries_event() {
+    fn hook_command_guards_existence_and_carries_event() {
         let cmd = hook_command(&PathBuf::from("/opt/my app/orrery"), "PreToolUse");
-        assert_eq!(cmd, "\"/opt/my app/orrery\" hook --event PreToolUse");
+        // POSIX `sh` guard on every platform (agent CLIs run hooks via sh / Git Bash):
+        // existence check → invoke quoted exe → `|| true` keeps exit status 0.
+        assert_eq!(
+            cmd,
+            "[ -e \"/opt/my app/orrery\" ] && \"/opt/my app/orrery\" hook --event PreToolUse || true"
+        );
+    }
+
+    // Windows paths are emitted with forward slashes so Git Bash handles the guard
+    // and the invocation cleanly (a no-op on already-POSIX paths).
+    #[test]
+    fn hook_command_uses_forward_slashes_for_git_bash() {
+        let cmd = hook_command(&PathBuf::from(r"C:\apps\orrery.exe"), "Stop");
+        assert!(!cmd.contains('\\'), "no backslashes (Git Bash safe): {cmd}");
+        assert!(
+            cmd.contains("\"C:/apps/orrery.exe\" hook --event Stop"),
+            "forward-slash invocation: {cmd}"
+        );
     }
 
     #[test]

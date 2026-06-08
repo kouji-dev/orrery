@@ -53,7 +53,7 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
           (click)="spawnHere($event)"
           style="background:transparent;border:none;color:var(--ink-3);cursor:pointer;display:flex;padding:2px;border-radius:4px;flex:none"
         >
-          <app-icon name="plus" size="sm" />
+          <app-icon name="bolt" size="sm" />
         </button>
       </div>
       @if (!collapsed()) {

@@ -1,25 +1,142 @@
 import { ChangeDetectionStrategy, Component, computed, input } from "@angular/core";
-import { ICONS } from "../utils";
+import {
+  LucideAngularModule,
+  type LucideIconData,
+  Archive,
+  ArrowDownToLine,
+  ArrowLeftRight,
+  ArrowUpFromLine,
+  Bell,
+  Bot,
+  Box,
+  ChartGantt,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleQuestionMark,
+  Clock,
+  Columns2,
+  Columns3,
+  Copy,
+  CornerDownLeft,
+  Cpu,
+  Database,
+  Ellipsis,
+  EllipsisVertical,
+  ExternalLink,
+  File,
+  FileDiff,
+  Flag,
+  Folder,
+  FolderOpen,
+  GitBranch,
+  GitCommitHorizontal,
+  GitGraph,
+  GitMerge,
+  GitPullRequest,
+  Globe,
+  Layers,
+  LayoutGrid,
+  Link,
+  MessageSquare,
+  Moon,
+  Network,
+  PanelLeft,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  RefreshCw,
+  Rocket,
+  RotateCcw,
+  Rows2,
+  Search,
+  Server,
+  Shield,
+  Sparkle,
+  Sparkles,
+  Square,
+  Sun,
+  Terminal,
+  Trash2,
+  X,
+  Zap,
+} from "lucide-angular";
+
+// Maps the app's icon names → Lucide icon data. The `<app-icon name="…">` API is
+// unchanged, so every call site keeps working; only the rendered glyph set swaps
+// to Lucide. AI/tool brand marks (claude/codex/cursor/gemini) live in
+// tool-icons.ts and are intentionally NOT part of this set.
+const LUCIDE: Record<string, LucideIconData> = {
+  agent: Bot,
+  sparkles: Sparkles,
+  branch: GitBranch,
+  terminal: Terminal,
+  diff: FileDiff,
+  chat: MessageSquare,
+  git: GitGraph,
+  commit: GitCommitHorizontal,
+  bell: Bell,
+  play: Play,
+  pause: Pause,
+  plus: Plus,
+  check: Check,
+  x: X,
+  chevron: ChevronRight,
+  chevronD: ChevronDown,
+  folder: Folder,
+  file: File,
+  clock: Clock,
+  bolt: Zap,
+  search: Search,
+  sun: Sun,
+  moon: Moon,
+  merge: GitMerge,
+  layers: Layers,
+  grid: LayoutGrid,
+  columns: Columns3,
+  timeline: ChartGantt,
+  graph: Network,
+  dots: Ellipsis,
+  stop: Square,
+  refresh: RefreshCw,
+  cpu: Cpu,
+  link: Link,
+  flag: Flag,
+  spark: Sparkle,
+  box: Box,
+  globe: Globe,
+  server: Server,
+  database: Database,
+  cube: Box,
+  rocket: Rocket,
+  archive: Archive,
+  trash: Trash2,
+  rename: Pencil,
+  dup: Copy,
+  ext: ExternalLink,
+  push: ArrowUpFromLine,
+  pr: GitPullRequest,
+  stage: ArrowDownToLine,
+  discard: RotateCcw,
+  dotsV: EllipsisVertical,
+  folderOpen: FolderOpen,
+  enter: CornerDownLeft,
+  question: CircleQuestionMark,
+  shield: Shield,
+  splitCol: Columns2,
+  splitRow: Rows2,
+  panelLeft: PanelLeft,
+  swap: ArrowLeftRight,
+};
 
 @Component({
   selector: "app-icon",
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [LucideAngularModule],
   host: { style: "display:inline-flex;line-height:0", "[style.color]": "color() || null" },
   template: `
-    <svg
-      [attr.width]="dim()"
-      [attr.height]="dim()"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.7"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-      style="display:block;flex:none"
-    >
-      <path [attr.d]="path()" />
-    </svg>
+    <lucide-angular [img]="icon()" [size]="dim()" [strokeWidth]="1.8" style="display:block" />
   `,
 })
 export class IconComponent {
@@ -29,7 +146,8 @@ export class IconComponent {
   readonly px = input<number | null>(null);
   readonly color = input<string | null>(null);
 
-  readonly path = computed(() => ICONS[this.name()] ?? ICONS["dots"]);
+  // Unknown names fall back to the ellipsis glyph (the old map fell back to "dots").
+  readonly icon = computed<LucideIconData>(() => LUCIDE[this.name()] ?? Ellipsis);
   readonly dim = computed(() => {
     const p = this.px();
     if (p != null) return p;

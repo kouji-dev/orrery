@@ -99,11 +99,10 @@ import { TerminalComponent } from "./terminal.component";
           <div style="flex:1"></div>
           @if (ag) {
             <button
-              class="pane-btn"
+              class="pane-btn primary"
               (click)="$event.stopPropagation(); toggleRun(ag)"
               [disabled]="ag.status === 'done'"
               [title]="runTitle(ag)"
-              [style.color]="ag.status === 'running' ? 'var(--st-running)' : 'var(--accent)'"
             ><app-icon [name]="ag.status === 'running' ? 'pause' : 'play'" size="sm" [px]="13" /></button>
           }
           <button class="pane-btn" (click)="$event.stopPropagation(); ctx().onSplit(lf.id, 'v')" title="Split right"><app-icon name="splitCol" size="sm" [px]="13" /></button>
@@ -198,6 +197,21 @@ import { TerminalComponent } from "./terminal.component";
       .pane-btn:disabled {
         opacity: 0.4;
         cursor: default;
+      }
+      /* play/pause adopts the merge button's primary look so it's more visible */
+      .pane-btn.primary {
+        background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
+        color: #06070b;
+        padding: 3px 8px;
+        box-shadow: 0 0 16px -5px rgba(var(--accent-rgb), 0.85);
+      }
+      .pane-btn.primary:hover:not(:disabled) {
+        filter: brightness(1.08);
+        background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
+        color: #06070b;
+      }
+      [data-theme="light"] .pane-btn.primary {
+        color: #fff;
       }
       .pane-divider {
         position: relative;

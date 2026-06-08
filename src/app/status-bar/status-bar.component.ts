@@ -19,36 +19,68 @@ import { CostStore } from "../metrics/cost.store";
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent],
   template: `
-    <footer style="display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--panel);border-top:1px solid var(--hair);font-size:10.5px;color:var(--ink-3)">
+    <footer
+      style="display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--panel);border-top:1px solid var(--hair);font-size:10.5px;color:var(--ink-3)"
+    >
       <span style="display:flex;gap:6px;align-items:center">
-        <span class="dot running" style="background:var(--st-running)"></span>{{ running() }} running
+        <span class="dot running" style="background:var(--st-running)"></span
+        >{{ running() }} running
       </span>
       @if (blocked() > 0) {
-        <span style="display:flex;gap:6px;align-items:center;color:var(--st-blocked)">
-          <span class="dot" style="background:var(--st-blocked)"></span>{{ blocked() }} need attention
+        <span
+          style="display:flex;gap:6px;align-items:center;color:var(--st-blocked)"
+        >
+          <span class="dot" style="background:var(--st-blocked)"></span
+          >{{ blocked() }} need attention
         </span>
       }
-      <span class="tnum">{{ projects.all().length }} projects · {{ runtime.agents().length }} agents</span>
-      <span style="display:flex;gap:5px"><app-icon name="folder" size="sm" [px]="11" />{{ ui.worktreeRoot }}</span>
-      <span class="tnum" style="margin-left:auto;display:flex;gap:5px;align-items:center">
+      <span class="tnum"
+        >{{ projects.all().length }} projects ·
+        {{ runtime.agents().length }} agents</span
+      >
+      <span style="display:flex;gap:5px"
+        ><app-icon name="folder" size="sm" [px]="11" />{{
+          ui.worktreeRoot
+        }}</span
+      >
+      <span
+        class="tnum"
+        style="margin-left:auto;display:flex;gap:5px;align-items:center"
+      >
         @if (ui.toast()) {
           <span class="grad-ink" style="font-weight:600">{{ ui.toast() }}</span>
           <span style="color:var(--ink-4)">·</span>
         }
-        <app-icon name="link" size="sm" [px]="11" />orchestrator: healthy
       </span>
 
       <!-- total Claude cost (ccusage); hover → bigger tooltip. hidden when unavailable -->
       @if (cost.cost()?.available) {
-        <span class="cost-readout tnum" style="position:relative;display:flex;gap:5px;align-items:center;cursor:default">
-          <app-icon name="sparkles" size="sm" [px]="11" [color]="'var(--accent)'" />\${{ cost.cost()!.totalCost.toFixed(2) }}
+        <span
+          class="cost-readout tnum"
+          style="position:relative;display:flex;gap:5px;align-items:center;cursor:default"
+        >
+          <app-icon
+            name="sparkles"
+            size="sm"
+            [px]="11"
+            [color]="'var(--accent)'"
+          />\${{ cost.cost()!.totalCost.toFixed(2) }}
           <span
             class="cost-tip"
             style="position:absolute;bottom:calc(100% + 8px);right:0;z-index:90;width:max-content;background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));padding:9px 12px;text-align:right"
           >
-            <span style="display:block;font-size:9.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em">Total Claude cost</span>
-            <span class="tnum" style="display:block;font-size:19px;font-weight:600;color:var(--ink);line-height:1.35">\${{ cost.cost()!.totalCost.toFixed(2) }}</span>
-            <span style="display:block;font-size:9.5px;color:var(--ink-3)">all usage · via ccusage</span>
+            <span
+              style="display:block;font-size:9.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em"
+              >Total Claude cost</span
+            >
+            <span
+              class="tnum"
+              style="display:block;font-size:19px;font-weight:600;color:var(--ink);line-height:1.35"
+              >\${{ cost.cost()!.totalCost.toFixed(2) }}</span
+            >
+            <span style="display:block;font-size:9.5px;color:var(--ink-3)"
+              >all usage · via ccusage</span
+            >
           </span>
         </span>
       }
@@ -65,7 +97,9 @@ import { CostStore } from "../metrics/cost.store";
           <app-icon name="cpu" size="sm" [px]="11" [color]="'var(--accent)'" />
           <span class="tnum">CPU {{ cpuPct() }}% · MEM {{ totalMem() }}</span>
           <!-- mini bar reflecting total cpu (clamped 0–100) -->
-          <span style="position:relative;width:30px;height:4px;border-radius:2px;background:var(--panel-2);overflow:hidden">
+          <span
+            style="position:relative;width:30px;height:4px;border-radius:2px;background:var(--panel-2);overflow:hidden"
+          >
             <span
               [style.width.%]="cpuBar()"
               style="position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:2px"
@@ -78,25 +112,53 @@ import { CostStore } from "../metrics/cost.store";
             class="rise"
             style="position:absolute;bottom:100%;right:0;margin-bottom:8px;z-index:90;width:max-content;min-width:268px;max-width:min(92vw,420px);background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));overflow:hidden"
           >
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 11px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--ink-2)">
+            <div
+              style="display:flex;justify-content:space-between;align-items:center;padding:9px 11px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--ink-2)"
+            >
               <span style="display:flex;gap:6px;align-items:center">
-                <app-icon name="cpu" size="sm" [px]="12" [color]="'var(--accent)'" />resources
+                <app-icon
+                  name="cpu"
+                  size="sm"
+                  [px]="12"
+                  [color]="'var(--accent)'"
+                />resources
               </span>
-              <span class="tnum" style="color:var(--ink-3)">{{ cpuPct() }}% · {{ totalMem() }}</span>
+              <span class="tnum" style="color:var(--ink-3)"
+                >{{ cpuPct() }}% · {{ totalMem() }}</span
+              >
             </div>
-            <div style="max-height:228px;overflow:auto;padding:5px">
+            <div style="max-height:min(40vh,224px);overflow-y:auto;padding:5px">
               @for (p of procs(); track p.id) {
-                <div style="display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:6px">
+                <div
+                  style="display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:6px"
+                >
                   <span
                     class="dot"
-                    [style.background]="p.id === 'app' ? 'var(--accent-2,var(--accent))' : 'var(--st-running)'"
+                    [style.background]="
+                      p.id === 'app'
+                        ? 'var(--accent-2,var(--accent))'
+                        : 'var(--st-running)'
+                    "
                   ></span>
-                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--ink-2)">{{ p.label }}</span>
-                  <span class="tnum" style="color:var(--ink-3);font-size:10.5px;min-width:42px;text-align:right;white-space:nowrap">{{ fmtCpu(p.cpu) }}%</span>
-                  <span class="tnum" style="color:var(--ink-4);font-size:10.5px;min-width:64px;text-align:right;white-space:nowrap">{{ fmtMem(p.memBytes) }}</span>
+                  <span
+                    style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--ink-2)"
+                    >{{ p.label }}</span
+                  >
+                  <span
+                    class="tnum"
+                    style="color:var(--ink-3);font-size:10.5px;min-width:42px;text-align:right;white-space:nowrap"
+                    >{{ fmtCpu(p.cpu) }}%</span
+                  >
+                  <span
+                    class="tnum"
+                    style="color:var(--ink-4);font-size:10.5px;min-width:64px;text-align:right;white-space:nowrap"
+                    >{{ fmtMem(p.memBytes) }}</span
+                  >
                 </div>
               } @empty {
-                <div style="padding:10px 8px;font-size:11px;color:var(--ink-4)">no metrics yet</div>
+                <div style="padding:10px 8px;font-size:11px;color:var(--ink-4)">
+                  no metrics yet
+                </div>
               }
             </div>
           </div>
@@ -113,7 +175,9 @@ import { CostStore } from "../metrics/cost.store";
         opacity: 0;
         visibility: hidden;
         transform: translateY(4px);
-        transition: opacity 0.12s ease, transform 0.12s ease;
+        transition:
+          opacity 0.12s ease,
+          transform 0.12s ease;
         pointer-events: none;
       }
       .cost-readout:hover .cost-tip {
@@ -132,17 +196,25 @@ export class StatusBarComponent {
   readonly cost = inject(CostStore);
   private host = inject(ElementRef<HTMLElement>);
 
-  readonly running = computed(() => this.runtime.agents().filter((a) => a.status === "running").length);
-  readonly blocked = computed(() => this.runtime.agents().filter((a) => a.status === "blocked").length);
+  readonly running = computed(
+    () => this.runtime.agents().filter((a) => a.status === "running").length,
+  );
+  readonly blocked = computed(
+    () => this.runtime.agents().filter((a) => a.status === "blocked").length,
+  );
 
   readonly open = signal(false);
 
   // ---- gauge readouts ----
   // total cpu% used by orrery + agents (machine-relative), to one decimal
-  readonly cpuPct = computed(() => Math.round((this.metrics.metrics()?.totalCpu ?? 0) * 10) / 10);
+  readonly cpuPct = computed(
+    () => Math.round((this.metrics.metrics()?.totalCpu ?? 0) * 10) / 10,
+  );
   readonly cpuBar = computed(() => Math.min(100, Math.max(0, this.cpuPct())));
   // total memory used by orrery + agents (e.g. "432.3 MB")
-  readonly totalMem = computed(() => this.fmtMem(this.metrics.metrics()?.totalMemBytes ?? 0));
+  readonly totalMem = computed(() =>
+    this.fmtMem(this.metrics.metrics()?.totalMemBytes ?? 0),
+  );
   // app subtree first, then agents, both already in backend order
   readonly procs = computed(() => this.metrics.metrics()?.procs ?? []);
 
@@ -169,7 +241,8 @@ export class StatusBarComponent {
   @HostListener("document:mousedown", ["$event"])
   onDown(e: MouseEvent) {
     if (!this.open()) return;
-    if (!this.host.nativeElement.contains(e.target as Node)) this.open.set(false);
+    if (!this.host.nativeElement.contains(e.target as Node))
+      this.open.set(false);
   }
 
   @HostListener("document:keydown.escape")

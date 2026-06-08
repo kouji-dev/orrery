@@ -19,8 +19,9 @@ interface FlatRow {
     <div style="display:flex;flex-direction:column;min-height:0;flex:1">
       <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;border-bottom:1px solid var(--hair)">
         <app-icon name="folder" size="sm" [color]="project() ? project()!.color : 'var(--accent)'" />
-        <span style="font-size:11.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="ag.worktree">{{ wtName(ag.worktree) }}</span>
-        @if (loading()) { <span class="tnum" style="margin-left:auto;font-size:9px;color:var(--ink-4)">scanning…</span> }
+        <span style="flex:1;min-width:0;font-size:11.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="ag.worktree">{{ wtName(ag.worktree) }}</span>
+        @if (loading()) { <span class="tnum" style="font-size:9px;color:var(--ink-4);flex:none">scanning…</span> }
+        <button class="btn" (click)="refresh()" [disabled]="loading()" title="Rescan worktree" style="padding:3px;border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
       </div>
 
       @if (loading()) {
@@ -126,5 +127,9 @@ export class FileTreeComponent {
 
   wtName(path: string): string {
     return path.replace(/\\/g, "/").split("/").pop() || path;
+  }
+  /** Manual fallback: re-scan this agent's worktree file tree. */
+  refresh() {
+    this.runtime.loadFiles(this.agent().id);
   }
 }

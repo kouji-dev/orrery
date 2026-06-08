@@ -8,6 +8,10 @@
     "opener:default",
     "log:default",
     "dialog:allow-open",
-    "notification:default"
+    "notification:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
   ]
 }

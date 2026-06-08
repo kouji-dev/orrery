@@ -47,6 +47,10 @@
   --accent-2: #22d3ee;
   --accent-rgb: 168, 85, 247;
   --accent-2-rgb: 34, 211, 238;
+  /* brand mark accent (Rose Pulse) — fixed across accent-palette tweaks; the
+     Orrery logo gradient sweeps rose → violet → cyan */
+  --accent-3: #ff5d9e;
+  --accent-3-rgb: 255, 93, 158;
 
   /* status colors */
   --st-running: #22d3ee;
@@ -407,6 +411,27 @@ app-timeline-view {
   width: 1px;
   background: var(--hair);
   align-self: stretch;
+}
+
+/* window-control buttons (borderless titlebar — minimize / maximize / close) */
+.winbtn {
+  height: 100%;
+  width: 44px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.winbtn:hover {
+  background: var(--panel-3);
+  color: var(--ink);
+}
+.winbtn.danger:hover {
+  background: #e5484d;
+  color: #fff;
 }
 
 .icon {

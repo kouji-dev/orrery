@@ -16,6 +16,9 @@ export interface SpawnRequest {
   effort: string | null;
   name: string;
   prompt: string;
+  /** When true, launch the agent's process right after creating it (Spawn);
+   *  otherwise it's created idle until the user Starts it (Create). */
+  start?: boolean;
 }
 
 /**
@@ -149,14 +152,22 @@ export class AgentActionsService {
     }
 
     const id = ag.id;
-    // lazy lifecycle: the agent stays idle until the user Starts it. The real PTY
-    // fills the terminal on Start — here we only show an idle hint.
-    this.terminals.hint(
-      id,
-      `idle — press Start to launch ${toolMeta(req.toolId).name} in this worktree.`,
-    );
-    this.ui.openAgent(id, "terminal");
-    this.ui.flash("spawned " + name + (proj ? " in " + proj.name : ""));
+    const where = proj ? " in " + proj.name : "";
+    if (req.start) {
+      // Spawn: open the agent's terminal and launch its process now — its initial
+      // prompt drives the run.
+      this.ui.openAgent(id, "terminal");
+      this.runtime.startProcess(id);
+      this.ui.flash("spawned " + name + where);
+    } else {
+      // Create: lazy lifecycle — the agent stays idle until the user Starts it. The
+      // real PTY fills the terminal on Start; here we only show an idle hint.
+      this.terminals.hint(
+        id,
+        `idle — press Start to launch ${toolMeta(req.toolId).name} in this worktree.`,
+      );
+      this.ui.flash("created " + name + where);
+    }
   }
 
   startAgent(id: string) {

@@ -78,10 +78,9 @@ import { mix } from "../utils";
         class="rail-btn"
         (click)="ui.openSpawn(null)"
         title="Spawn agent"
-        [style.background]="mix('var(--accent)', 84)"
-        [style.border]="'1px solid ' + mix('var(--accent)', 60)"
+        style="background:linear-gradient(180deg,var(--accent),color-mix(in oklch,var(--accent),#000 14%));border:none;box-shadow:0 0 14px -5px rgba(var(--accent-rgb),.8)"
       >
-        <app-icon name="plus" size="sm" color="var(--accent)" />
+        <app-icon name="bolt" size="sm" color="#06070b" />
       </button>
 
       @if (hoverProj(); as hp) {
@@ -103,7 +102,7 @@ import { mix } from "../utils";
             <span style="font-size:12px;font-weight:600">{{ hp.name }}</span>
             <span class="tnum" style="margin-left:auto;font-size:9.5px;color:var(--ink-4)">{{ hoverAgents().length }}</span>
             <button class="pane-btn" (click)="ui.openSpawn(hp.id)" title="Spawn agent">
-              <app-icon name="plus" size="sm" [px]="13" />
+              <app-icon name="bolt" size="sm" [px]="13" />
             </button>
           </div>
           <div style="padding:5px;max-height:280px;overflow-y:auto">

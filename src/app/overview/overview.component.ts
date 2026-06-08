@@ -57,7 +57,7 @@ interface VizDef {
               </button>
             }
           </div>
-          <button class="btn primary" (click)="ui.openSpawn(null)"><app-icon name="plus" size="sm" />Spawn</button>
+          <button class="btn primary" (click)="ui.openSpawn(null)"><app-icon name="bolt" size="sm" />Spawn</button>
         </div>
       </div>
 

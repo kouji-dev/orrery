@@ -10,6 +10,7 @@ import {
 import { Agent, AgentFile, FileDiff } from "../models";
 import { IconComponent } from "../shared/icon.component";
 import { AgentsStore } from "../stores/agents.store";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { fileDir, fileName, fileStateLabel, hunkHeader, langId, langTag, mix } from "../utils";
 import { CodeDiffComponent } from "./code-diff.component";
 
@@ -52,6 +53,7 @@ const LIST_DEFAULT = 236;
               style="padding:3px 7px;border-radius:4px;gap:5px;font-size:10px"
             ><app-icon name="dots" size="sm" [px]="12" [color]="!treeMode() ? 'var(--accent)' : null" />Flat</button>
           </div>
+          <button class="btn" (click)="refresh()" title="Rescan changes" style="padding:3px;border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
         </div>
 
         @if (!changes().length) {
@@ -147,7 +149,7 @@ const LIST_DEFAULT = 236;
             }
           </div>
           @if (current() && langLabel()) {
-            <span class="lang-tag tnum">{{ langLabel() }}</span>
+            <span class="chip tnum" style="align-self:flex-start;font-size:9.5px">{{ langLabel() }}</span>
           }
         </div>
 
@@ -259,27 +261,12 @@ const LIST_DEFAULT = 236;
         color: var(--ink-2);
         min-width: 0;
       }
-      .lang-tag {
-        flex: none;
-        align-self: flex-start;
-        font-size: 9.5px;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: #06070b;
-        background: linear-gradient(120deg, var(--accent), var(--accent-2));
-        border-radius: 999px;
-        padding: 3px 10px;
-        font-weight: 600;
-        white-space: nowrap;
-      }
-      [data-theme="light"] .lang-tag {
-        color: #fff;
-      }
     `,
   ],
 })
 export class DiffViewComponent {
   private agents = inject(AgentsStore);
+  private runtime = inject(AgentRuntimeService);
   readonly agent = input.required<Agent>();
   // selection by PATH (works across both flat + tree views); treeMode toggles them
   readonly selPath = signal<string | null>(null);
@@ -317,6 +304,11 @@ export class DiffViewComponent {
   }
   toggleDir(path: string) {
     this.dirOpen.update((m) => ({ ...m, [path]: !(m[path] !== false) }));
+  }
+  /** Manual fallback: re-fetch this agent's changed files — the diff effect then
+   *  reloads the selected file's content. */
+  refresh() {
+    this.runtime.loadChanges(this.agent().id);
   }
   readonly diff = signal<FileDiff | null>(null);
   readonly loading = signal(false);

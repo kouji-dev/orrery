@@ -147,7 +147,8 @@ import { mix } from "../utils";
           <span style="font-size:10px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ {{ ui.worktreeRoot }}/{{ proj.id }}-…</span>
           <div style="margin-left:auto;display:flex;gap:8px;flex:none">
             <button class="btn ghost-hair" (click)="ui.closeSpawn()">Cancel</button>
-            <button class="btn primary" [disabled]="!name().trim() || !branch()" (click)="submit()"><app-icon name="bolt" size="sm" />Spawn agent</button>
+            <button class="btn ghost-hair" [disabled]="!name().trim() || !branch()" (click)="submit(false)"><app-icon name="plus" size="sm" />Create</button>
+            <button class="btn primary" [disabled]="!name().trim() || !branch()" (click)="submit(true)"><app-icon name="bolt" size="sm" />Spawn</button>
           </div>
         </div>
       </div>
@@ -200,7 +201,7 @@ export class SpawnModalComponent implements AfterViewInit {
     this.model.set(tool.models[0]);
     this.effort.set(tool.effort ? "high" : null);
   }
-  submit() {
+  submit(start: boolean) {
     if (!this.name().trim() || !this.branch()) return;
     this.agentActions.spawn({
       projectId: this.projectId(),
@@ -209,7 +210,8 @@ export class SpawnModalComponent implements AfterViewInit {
       model: this.model(),
       effort: this.effort(),
       name: this.name().trim(),
-      prompt: this.prompt().trim() || "Explore and improve the codebase",
+      prompt: this.prompt().trim(),
+      start,
     });
   }
 }

@@ -11,8 +11,172 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <style id="orrery-boot-style">
+      /* Boot splash — the Epicycle mark draws itself, then fades into the app.
+         Inline so it paints on the first frame (covers Angular bootstrap). */
+      #orrery-boot {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #07080d;
+        color: #e8ebf2;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        background-image: linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+          radial-gradient(46% 38% at 50% 43%, rgba(168, 85, 247, 0.16), transparent 72%);
+        background-size: 34px 34px, 34px 34px, 100% 100%, 100% 100%;
+        transition: opacity 0.5s ease;
+      }
+      #orrery-boot.done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #orrery-boot .ob-mark {
+        filter: drop-shadow(0 0 26px rgba(168, 85, 247, 0.4));
+      }
+      #orrery-boot .ob-core {
+        transform-box: fill-box;
+        transform-origin: 50% 50%;
+        animation: ob-pulse 2.4s ease-in-out infinite;
+      }
+      @keyframes ob-pulse {
+        0%, 100% { opacity: 0.9; }
+        50% { opacity: 0.55; }
+      }
+      #orrery-boot .ob-word {
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 600;
+        font-size: 36px;
+        letter-spacing: 0.01em;
+        margin-top: 28px;
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 0.7s ease, transform 0.7s ease;
+      }
+      #orrery-boot .ob-word.in { opacity: 1; transform: none; }
+      #orrery-boot .ob-word .o { color: #a855f7; }
+      #orrery-boot .ob-status {
+        font-size: 10.5px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #6b7488;
+        margin-top: 15px;
+        height: 13px;
+        opacity: 0;
+        transition: opacity 0.5s;
+      }
+      #orrery-boot .ob-status.in { opacity: 1; }
+      #orrery-boot .ob-bar {
+        margin-top: 20px;
+        width: 188px;
+        height: 2px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+      #orrery-boot .ob-bar > i {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: 2px;
+        background: linear-gradient(90deg, #ff5d9e, #a855f7, #22d3ee);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #orrery-boot .ob-core { animation: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="orrery-boot">
+      <div class="ob-mark"><svg id="orrery-boot-svg" width="168" height="168" viewBox="0 0 100 100" fill="none"></svg></div>
+      <div class="ob-word" id="orrery-boot-word"><span class="o">O</span>rrery</div>
+      <div class="ob-status" id="orrery-boot-status">initializing orchestrator</div>
+      <div class="ob-bar"><i id="orrery-boot-bar"></i></div>
+    </div>
+    <script>
+      (function () {
+        var A = 22, B = 13, K = -4, TAU = Math.PI * 2;
+        function epi(t) { return [50 + A * Math.cos(t) + B * Math.cos(K * t), 50 + A * Math.sin(t) + B * Math.sin(K * t)]; }
+        var N = 260, d = "";
+        for (var i = 0; i <= N; i++) { var t = (i / N) * TAU, p = epi(t); d += (i ? "L" : "M") + p[0].toFixed(2) + " " + p[1].toFixed(2) + " "; }
+        d += "Z";
+        var svg = document.getElementById("orrery-boot-svg");
+        var root = document.getElementById("orrery-boot");
+        if (!svg || !root) return;
+        svg.innerHTML =
+          '<defs>' +
+            '<linearGradient id="ob-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>' +
+            '<radialGradient id="ob-c"><stop offset="0" stop-color="#fff"/><stop offset=".42" stop-color="#a855f7"/><stop offset="1" stop-color="#a855f7" stop-opacity="0"/></radialGradient>' +
+          '</defs>' +
+          '<circle cx="50" cy="50" r="22" fill="none" stroke="#6b7488" stroke-width=".6" stroke-opacity=".3"/>' +
+          '<path id="ob-path" d="' + d + '" fill="none" stroke="url(#ob-g)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>' +
+          '<circle id="ob-epc" r="13" fill="none" stroke="#6b7488" stroke-width=".6" stroke-opacity=".4"/>' +
+          '<line id="ob-arm" stroke="#22d3ee" stroke-width="1" stroke-opacity=".6"/>' +
+          '<circle class="ob-core" cx="50" cy="50" r="8.5" fill="url(#ob-c)"/>' +
+          '<circle id="ob-pen" r="4" fill="#22d3ee"/>';
+        var path = svg.querySelector("#ob-path"), L = path.getTotalLength();
+        var pen = svg.querySelector("#ob-pen"), epc = svg.querySelector("#ob-epc"), arm = svg.querySelector("#ob-arm");
+        var word = document.getElementById("orrery-boot-word"), status = document.getElementById("orrery-boot-status"), bar = document.getElementById("orrery-boot-bar");
+        var msgs = ["initializing orchestrator", "mounting worktrees", "linking agents", "warming terminals", "ready"];
+        var DUR = 2200;
+        var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+        function ease(x) { return 1 - Math.pow(1 - x, 3); }
+        var drawn = false, appReady = false, removed = false;
+        function finish() {
+          if (removed) return;
+          removed = true;
+          root.classList.add("done");
+          setTimeout(function () { if (root.parentNode) root.parentNode.removeChild(root); }, 560);
+        }
+        function maybeFinish() { if (drawn && appReady) finish(); }
+        // Angular calls this once the shell has rendered.
+        window.__orreryAppReady = function () { appReady = true; maybeFinish(); };
+        // Safety: never hang the splash if the ready signal never arrives.
+        setTimeout(function () { appReady = true; maybeFinish(); }, 8000);
+
+        path.style.strokeDasharray = L;
+        path.style.strokeDashoffset = L;
+        status.classList.add("in");
+        if (reduce) {
+          path.style.strokeDashoffset = 0;
+          bar.style.width = "100%";
+          word.classList.add("in");
+          status.textContent = "ready";
+          epc.style.opacity = 0;
+          arm.style.opacity = 0;
+          drawn = true;
+          maybeFinish();
+          return;
+        }
+        var start = null, wordIn = false, mi = -1;
+        function frame(now) {
+          if (start === null) start = now;
+          var p = Math.min(1, (now - start) / DUR), e = ease(p);
+          path.style.strokeDashoffset = L * (1 - e);
+          var t = e * TAU, def = [50 + A * Math.cos(t), 50 + A * Math.sin(t)], pp = epi(t);
+          epc.setAttribute("cx", def[0]); epc.setAttribute("cy", def[1]);
+          pen.setAttribute("cx", pp[0]); pen.setAttribute("cy", pp[1]);
+          arm.setAttribute("x1", def[0]); arm.setAttribute("y1", def[1]); arm.setAttribute("x2", pp[0]); arm.setAttribute("y2", pp[1]);
+          bar.style.width = (e * 100).toFixed(1) + "%";
+          var idx = Math.min(msgs.length - 1, Math.floor(p * msgs.length));
+          if (idx !== mi) { mi = idx; status.textContent = msgs[idx]; }
+          if (p >= 0.45 && !wordIn) { wordIn = true; word.classList.add("in"); }
+          if (p < 1) requestAnimationFrame(frame);
+          else {
+            epc.style.transition = arm.style.transition = "opacity .3s";
+            epc.style.opacity = 0;
+            arm.style.opacity = 0;
+            drawn = true;
+            maybeFinish();
+          }
+        }
+        requestAnimationFrame(frame);
+      })();
+    </script>
     <app-root></app-root>
   </body>
 </html>
