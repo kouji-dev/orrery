@@ -2,12 +2,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    // The same exe doubles as a CLI: a recognised subcommand (e.g. `katrix hook
+    // The same exe doubles as a CLI: a recognised subcommand (e.g. `orrery hook
     // --event PreToolUse`) runs it and exits before any Tauri init; a bare launch
     // starts the desktop app.
-    if katrix_lib::cli::invoked_as_cli() {
-        katrix_lib::cli::run();
+    if orrery_lib::cli::invoked_as_cli() {
+        orrery_lib::cli::run();
         return;
     }
-    katrix_lib::run()
+    orrery_lib::run()
 }

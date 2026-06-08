@@ -109,7 +109,7 @@ impl RuntimeService {
 
         // Hooks are installed GLOBALLY at app startup (merged into the user's real
         // config), so the runtime no longer installs them per-launch. It only
-        // stamps the KATRIX_* env so a katrix-launched agent's hook brokers with
+        // stamps the ORRERY_* env so a orrery-launched agent's hook brokers with
         // the bridge; absent that env the global hook is a harmless no-op.
         if let Some(env) = hooks {
             if let Some(adapter) = adapters::adapter_for(&agent.tool) {

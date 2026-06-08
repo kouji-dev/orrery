@@ -1,11 +1,11 @@
-//! The hook bridge — the loopback HTTP server that the per-agent `katrix hook`
+//! The hook bridge — the loopback HTTP server that the per-agent `orrery hook`
 //! CLI calls into. The agents' native hooks fire it on status changes (working /
 //! idle) and when the agent needs the user (permission / question); the bridge
 //! relays those to the UI as events. This is the legit, hook-driven rebirth of
 //! the removed `kat`/ipc. See docs/specs/2026-06-05-agent-hooks-permissions.md.
 //!
 //! Fire-and-forget (like stablyai/orca): every hook POST is acknowledged
-//! immediately (no body), so the agent NEVER blocks on katrix — it keeps using
+//! immediately (no body), so the agent NEVER blocks on orrery — it keeps using
 //! its own permission flow (you approve in its terminal). The remote allow/deny
 //! round-trip is intentionally deferred; if we add it later, this is where the
 //! held-request registry would live.
@@ -150,8 +150,8 @@ impl HookBridge {
     }
 }
 
-/// The executable agents invoke for their hooks — the katrix app itself, re-run
-/// as `katrix hook --event <EVENT>` (see cli::hook). Always co-located with the
+/// The executable agents invoke for their hooks — the orrery app itself, re-run
+/// as `orrery hook --event <EVENT>` (see cli::hook). Always co-located with the
 /// running app, so no separate sidecar to bundle. `None` only if the OS can't
 /// report our own path, in which case the agent launches without hooks (PTY
 /// parsing fallback).
@@ -210,7 +210,7 @@ fn handle(
 
     // Verification log: for the two events the user can't otherwise inspect — the
     // permission ask + the notification — dump the COMPACT raw payload (truncated)
-    // so the katrix log shows EXACTLY what each agent sent. This is how we confirm
+    // so the orrery log shows EXACTLY what each agent sent. This is how we confirm
     // which keys an agent really uses (e.g. AskUserQuestion's questions[]) without
     // guessing. Cheap: only fires for these two low-volume event variants.
     if matches!(
@@ -481,7 +481,7 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
-    /// Minimal `katrix hook`-style POST: returns (status_line, body).
+    /// Minimal `orrery hook`-style POST: returns (status_line, body).
     fn post(endpoint: &str, token: &str, body: &str) -> (String, String) {
         let addr = endpoint.trim_start_matches("http://");
         let mut s = TcpStream::connect(addr).unwrap();

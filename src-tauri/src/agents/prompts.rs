@@ -1,4 +1,4 @@
-//! Predefined natural-language prompts for AI-driven completion actions. katrix
+//! Predefined natural-language prompts for AI-driven completion actions. orrery
 //! types these into the agent's PTY; the agent runs the actual `git` with its own
 //! tools (so its permission flow / hooks apply). Tool-agnostic.
 

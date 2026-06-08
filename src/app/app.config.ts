@@ -6,8 +6,8 @@ import {
 import { provideRouter } from "@angular/router";
 
 import { routes } from "./app.routes";
-import { BRIDGE } from "./orchestra/data-source/bridge";
-import { TauriBridge } from "./orchestra/data-source/tauri-bridge";
+import { BRIDGE } from "./data-source/bridge";
+import { TauriBridge } from "./data-source/tauri-bridge";
 
 export const appConfig: ApplicationConfig = {
   providers: [

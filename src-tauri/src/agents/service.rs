@@ -415,7 +415,7 @@ mod tests {
     // a unique, persistent worktree root per service (tests don't clean it — temp dir)
     fn svc() -> AgentService {
         let db: DB = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
-        let wt_root = std::env::temp_dir().join(format!("katrix-wt-{}", Uuid::new_v4()));
+        let wt_root = std::env::temp_dir().join(format!("orrery-wt-{}", Uuid::new_v4()));
         AgentService::new(db, GitService::new(), wt_root)
     }
 

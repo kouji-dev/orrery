@@ -138,10 +138,10 @@ export class StatusBarComponent {
   readonly open = signal(false);
 
   // ---- gauge readouts ----
-  // total cpu% used by katrix + agents (machine-relative), to one decimal
+  // total cpu% used by orrery + agents (machine-relative), to one decimal
   readonly cpuPct = computed(() => Math.round((this.metrics.metrics()?.totalCpu ?? 0) * 10) / 10);
   readonly cpuBar = computed(() => Math.min(100, Math.max(0, this.cpuPct())));
-  // total memory used by katrix + agents (e.g. "432.3 MB")
+  // total memory used by orrery + agents (e.g. "432.3 MB")
   readonly totalMem = computed(() => this.fmtMem(this.metrics.metrics()?.totalMemBytes ?? 0));
   // app subtree first, then agents, both already in backend order
   readonly procs = computed(() => this.metrics.metrics()?.procs ?? []);

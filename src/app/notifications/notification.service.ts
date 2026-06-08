@@ -71,7 +71,7 @@ export class NotificationService {
   }
 
   // A finished agent's work is pushed to origin (deterministic) so the user can
-  // open the PR — katrix no longer auto-merges into the base branch.
+  // open the PR — orrery no longer auto-merges into the base branch.
   push(n: AgentNotification) {
     this.agents.pushAgent(n.agentId);
     this.store.decide(n.id, "accepted", "push");

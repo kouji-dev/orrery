@@ -414,7 +414,7 @@ mod tests {
     fn persists_to_a_real_file_across_connections() {
         // isolates "does my code actually write to a file db" from the dev environment
         let dbdir = tempfile::tempdir().unwrap();
-        let dbfile = dbdir.path().join("katrix_test.db");
+        let dbfile = dbdir.path().join("orrery_test.db");
         let pdir = tempfile::tempdir().unwrap();
         {
             let db: DB = Arc::new(Mutex::new(Connection::open(&dbfile).unwrap()));

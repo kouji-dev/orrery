@@ -1,4 +1,4 @@
-// ORCHESTRA shared helpers, icon paths, status metadata
+// Orrery shared helpers, icon paths, status metadata
 import { AGENT_TOOLS } from "./data";
 import { AgentStatus, LogKind } from "./models";
 

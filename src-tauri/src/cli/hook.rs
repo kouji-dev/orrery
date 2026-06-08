@@ -1,6 +1,6 @@
 //! The `hook` subcommand — the client half of the hook bridge. An installed agent
-//! hook runs `katrix hook --event <EVENT>`; this resolves the call (flags, then
-//! KATRIX_* env, then stdin for the payload), POSTs it to the loopback bridge,
+//! hook runs `orrery hook --event <EVENT>`; this resolves the call (flags, then
+//! ORRERY_* env, then stdin for the payload), POSTs it to the loopback bridge,
 //! waits, and prints the decision JSON the agent then obeys. std-only transport,
 //! so the hot hook path stays light.
 
@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use clap::Args;
 
-/// `katrix hook` flags. Only `--event` is required (it varies per hook entry);
-/// connection + identity default to the KATRIX_* env we stamp on the agent
+/// `orrery hook` flags. Only `--event` is required (it varies per hook entry);
+/// connection + identity default to the ORRERY_* env we stamp on the agent
 /// process, and the payload defaults to stdin (how agents deliver the request).
 /// The remaining flags exist so the CLI is fully self-contained for testing.
 #[derive(Args)]
@@ -20,16 +20,16 @@ pub struct HookArgs {
     /// Hook event (PreToolUse, UserPromptSubmit, Stop, beforeShellExecution, …).
     #[arg(long)]
     event: String,
-    /// Agent tool id (default: $KATRIX_TOOL).
+    /// Agent tool id (default: $ORRERY_TOOL).
     #[arg(long)]
     tool: Option<String>,
-    /// Agent id (default: $KATRIX_AGENT_ID).
+    /// Agent id (default: $ORRERY_AGENT_ID).
     #[arg(long = "agent-id")]
     agent_id: Option<String>,
-    /// Bridge endpoint, e.g. http://127.0.0.1:PORT (default: $KATRIX_ENDPOINT).
+    /// Bridge endpoint, e.g. http://127.0.0.1:PORT (default: $ORRERY_ENDPOINT).
     #[arg(long)]
     endpoint: Option<String>,
-    /// Auth token (default: $KATRIX_TOKEN).
+    /// Auth token (default: $ORRERY_TOKEN).
     #[arg(long)]
     token: Option<String>,
     /// Tool request JSON (default: read stdin — the agent's hook protocol).
@@ -38,7 +38,7 @@ pub struct HookArgs {
 }
 
 /// The shell command an agent runs for one hook event: the app exe re-invoked as
-/// `katrix hook --event <EVENT>`. Connection + identity flow via the KATRIX_* env
+/// `orrery hook --event <EVENT>`. Connection + identity flow via the ORRERY_* env
 /// we stamp on the agent process. Quoted so a path with spaces is safe.
 pub fn hook_command(exe: &Path, event: &str) -> String {
     format!("\"{}\" {} --event {}", exe.display(), super::SUBCOMMANDS[0], event)
@@ -46,7 +46,7 @@ pub fn hook_command(exe: &Path, event: &str) -> String {
 
 /// The registration gate: a globally-installed hook only brokers with the bridge
 /// when ALL of endpoint + token + agent-id are present (i.e. the process was
-/// launched by katrix, which stamps the KATRIX_* env). For any other run — the
+/// launched by orrery, which stamps the ORRERY_* env). For any other run — the
 /// user's own plain CLI session in an unregistered project — every field is
 /// empty and the hook is a harmless no-op. ("Mark as candidate" is future work.)
 pub fn should_broker(endpoint: &str, token: &str, agent_id: &str) -> bool {
@@ -55,24 +55,24 @@ pub fn should_broker(endpoint: &str, token: &str, agent_id: &str) -> bool {
 
 /// Run the `hook` subcommand: resolve inputs, broker with the bridge, print the
 /// decision. No bridge / no response = print nothing, so the agent proceeds with
-/// its own normal flow and never hangs on katrix.
+/// its own normal flow and never hangs on orrery.
 pub fn run(args: HookArgs) {
     let or_env = |v: Option<String>, key: &str| {
         v.or_else(|| std::env::var(key).ok()).unwrap_or_default()
     };
-    let tool = or_env(args.tool, "KATRIX_TOOL");
-    let agent_id = or_env(args.agent_id, "KATRIX_AGENT_ID");
-    let endpoint = or_env(args.endpoint, "KATRIX_ENDPOINT");
-    let token = or_env(args.token, "KATRIX_TOKEN");
+    let tool = or_env(args.tool, "ORRERY_TOOL");
+    let agent_id = or_env(args.agent_id, "ORRERY_AGENT_ID");
+    let endpoint = or_env(args.endpoint, "ORRERY_ENDPOINT");
+    let token = or_env(args.token, "ORRERY_TOKEN");
 
     // Registration gate: a globally-installed hook stays a no-op unless this run
-    // was launched by katrix (all KATRIX_* env present). This is what keeps the
+    // was launched by orrery (all ORRERY_* env present). This is what keeps the
     // global install harmless for the user's own CLI sessions.
     if !should_broker(&endpoint, &token, &agent_id) {
         return;
     }
 
-    // Best-effort diagnostic: confirms a katrix-launched hook actually brokered and
+    // Best-effort diagnostic: confirms a orrery-launched hook actually brokered and
     // to which bridge endpoint. Surfaces with verbose logging.
     log::debug!("hook broker: event={} endpoint={}", args.event, endpoint);
 
@@ -148,8 +148,8 @@ mod tests {
 
     #[test]
     fn hook_command_quotes_exe_and_carries_event() {
-        let cmd = hook_command(&PathBuf::from("/opt/my app/katrix"), "PreToolUse");
-        assert_eq!(cmd, "\"/opt/my app/katrix\" hook --event PreToolUse");
+        let cmd = hook_command(&PathBuf::from("/opt/my app/orrery"), "PreToolUse");
+        assert_eq!(cmd, "\"/opt/my app/orrery\" hook --event PreToolUse");
     }
 
     #[test]
@@ -159,9 +159,9 @@ mod tests {
 
     #[test]
     fn should_broker_only_when_all_three_present() {
-        // all present → katrix-launched → broker
+        // all present → orrery-launched → broker
         assert!(should_broker("http://127.0.0.1:5000", "tok", "a1"));
-        // any one missing → not katrix-launched → no-op
+        // any one missing → not orrery-launched → no-op
         assert!(!should_broker("", "tok", "a1"), "missing endpoint");
         assert!(!should_broker("http://127.0.0.1:5000", "", "a1"), "missing token");
         assert!(!should_broker("http://127.0.0.1:5000", "tok", ""), "missing agent-id");

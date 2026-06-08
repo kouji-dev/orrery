@@ -14,8 +14,8 @@ use super::AgentAdapter;
 /// activity/status only and never raise a notification. Hook names + payload shapes
 /// per Cursor's hooks docs (cursor.com/docs/hooks). Cursor has NO dedicated
 /// permission EVENT — its allow/deny decision is returned inline from the before*
-/// hooks, so katrix surfaces no permission card for cursor (PTY fallback). Harmless
-/// for non-katrix runs — `katrix hook` only brokers when KATRIX_* env is present.
+/// hooks, so orrery surfaces no permission card for cursor (PTY fallback). Harmless
+/// for non-orrery runs — `orrery hook` only brokers when ORRERY_* env is present.
 pub struct CursorAdapter;
 
 impl AgentAdapter for CursorAdapter {
@@ -86,7 +86,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn hook_bin() -> PathBuf {
-        PathBuf::from("/opt/katrix/katrix")
+        PathBuf::from("/opt/orrery/orrery")
     }
 
     #[test]
@@ -150,8 +150,8 @@ mod tests {
         serde_json::from_str(&body).unwrap()
     }
 
-    fn is_katrix(cmd: &str) -> bool {
-        cmd.contains("/opt/katrix/katrix") && cmd.contains("hook --event")
+    fn is_orrery(cmd: &str) -> bool {
+        cmd.contains("/opt/orrery/orrery") && cmd.contains("hook --event")
     }
 
     #[test]
@@ -203,23 +203,23 @@ mod tests {
             "user's own beforeShellExecution hook preserved: {commands:?}"
         );
         assert!(
-            commands.iter().any(|c| is_katrix(c)),
-            "katrix beforeShellExecution hook present: {commands:?}"
+            commands.iter().any(|c| is_orrery(c)),
+            "orrery beforeShellExecution hook present: {commands:?}"
         );
     }
 
     #[test]
-    fn install_is_idempotent_no_duplicate_katrix_groups() {
+    fn install_is_idempotent_no_duplicate_orrery_groups() {
         let home = tempfile::tempdir().unwrap();
         CursorAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
         CursorAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
 
         let v = read_hooks(home.path());
         let groups = v["hooks"]["beforeShellExecution"].as_array().unwrap();
-        let katrix_count = groups
+        let orrery_count = groups
             .iter()
-            .filter(|g| g["command"].as_str().map(is_katrix).unwrap_or(false))
+            .filter(|g| g["command"].as_str().map(is_orrery).unwrap_or(false))
             .count();
-        assert_eq!(katrix_count, 1, "exactly one katrix beforeShellExecution group");
+        assert_eq!(orrery_count, 1, "exactly one orrery beforeShellExecution group");
     }
 }

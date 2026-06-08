@@ -14,7 +14,7 @@ impl Database {
     pub fn get(app: &tauri::App) -> DB {
         let dir = app.path().app_data_dir().expect("no app data dir");
         fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("katrix.db");
+        let path = dir.join("orrery.db");
         Arc::new(Mutex::new(Connection::open(path).unwrap()))
     }
 }

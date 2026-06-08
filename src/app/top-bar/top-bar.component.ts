@@ -23,7 +23,7 @@ import { NotificationCenterComponent } from "./notification-center.component";
       <div style="display:flex;align-items:center;gap:10px;padding:0 14px;flex:none">
         <app-logo />
         <div style="display:flex;flex-direction:column;line-height:1.15">
-          <span class="disp" style="font-size:13px;font-weight:600;letter-spacing:0.02em">ORCHESTRA</span>
+          <span class="disp" style="font-size:13px;font-weight:600;letter-spacing:0.02em">ORRERY</span>
           <span style="font-size:9.5px;color:var(--ink-3);letter-spacing:0.04em">
             {{ projects.all().length }} projects · {{ runtime.agents().length }} agents
           </span>

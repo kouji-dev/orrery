@@ -5,15 +5,15 @@ use super::AgentAdapter;
 /// OpenAI Codex CLI. Codex has no per-directory hook file; it reads config from
 /// its real `~/.codex` (`$CODEX_HOME`). We MERGE fire-and-forget status hooks
 /// into the user's real `~/.codex/config.toml` non-destructively (preserving all
-/// other keys + comments via `toml_edit`). Harmless for non-katrix runs —
-/// `katrix hook` only brokers when the KATRIX_* env is present.
+/// other keys + comments via `toml_edit`). Harmless for non-orrery runs —
+/// `orrery hook` only brokers when the ORRERY_* env is present.
 ///
 /// SCHEMA CAUTION: codex's hook config format is the least stable of the three.
 /// The current docs (developers.openai.com/codex/hooks) document an array-table
 /// schema — `[[hooks.PostToolUse]]` with `[[hooks.PostToolUse.hooks]]` command
 /// groups, matching Claude's event names (PreToolUse / PostToolUse /
 /// PermissionRequest / SessionStart / Stop / …) + a `tool_response` stdin payload —
-/// but the established katrix install (and many in-the-wild configs) use the
+/// but the established orrery install (and many in-the-wild configs) use the
 /// simpler flat `[hooks] pre_tool_use = "…"` keys. We keep the flat keys to avoid
 /// churn / a breaking migration and add the Phase-2 events under the SAME flat
 /// convention: `permission_request` (the dedicated permission ask, a documented
@@ -96,7 +96,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn hook_bin() -> PathBuf {
-        PathBuf::from("/opt/katrix/katrix")
+        PathBuf::from("/opt/orrery/orrery")
     }
 
     fn read_config(home: &Path) -> toml_edit::DocumentMut {

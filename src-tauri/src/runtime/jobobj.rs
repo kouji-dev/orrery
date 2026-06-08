@@ -1,4 +1,4 @@
-//! Process-tree cleanup so no agent (or its grandchildren) outlives katrix.
+//! Process-tree cleanup so no agent (or its grandchildren) outlives orrery.
 //!
 //! The PTY child we spawn is typically a launcher (e.g. `node` for `claude`)
 //! that forks its own subprocess tree. `child.kill()` on graceful shutdown only

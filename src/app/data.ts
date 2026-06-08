@@ -1,8 +1,8 @@
-// ORCHESTRA mock data — multi-project, multi-agent git orchestration
+// Orrery mock data — multi-project, multi-agent git orchestration
 import { AgentTool, Commit, Diff, LogLine, Project } from "./models";
 
 export const ORG = "northwind";
-export const WORKTREE_ROOT = "~/.orchestra/worktrees";
+export const WORKTREE_ROOT = "~/.orrery/worktrees";
 
 // ---------- agent tools (CLI coding agents) ----------
 export const AGENT_TOOLS: AgentTool[] = [

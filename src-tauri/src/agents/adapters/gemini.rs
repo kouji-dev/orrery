@@ -12,10 +12,10 @@ use super::AgentAdapter;
 /// Gemini's JSON hook shape is identical to Claude's —
 /// `hooks.<Event> = [{ hooks: [{ name, type:"command", command }] }]` (an optional
 /// `matcher` defaults to "all") — so we reuse the shared `merge_json_hooks` helper.
-/// Gemini has NO permission "ask" event, so katrix raises no permission card for it
+/// Gemini has NO permission "ask" event, so orrery raises no permission card for it
 /// (a tool denial only surfaces as a result-derived "✗" via AfterTool); approving
-/// still happens in gemini's own TUI. Harmless for runs katrix didn't launch —
-/// `katrix hook` only brokers when the KATRIX_* env is present. Hook names + config
+/// still happens in gemini's own TUI. Harmless for runs orrery didn't launch —
+/// `orrery hook` only brokers when the ORRERY_* env is present. Hook names + config
 /// shape per the Gemini CLI hooks docs (geminicli.com/docs/hooks).
 pub struct GeminiAdapter;
 
@@ -89,7 +89,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn hook_bin() -> PathBuf {
-        PathBuf::from("/opt/katrix/katrix")
+        PathBuf::from("/opt/orrery/orrery")
     }
 
     fn read_settings(home: &Path) -> serde_json::Value {
@@ -97,8 +97,8 @@ mod tests {
         serde_json::from_str(&body).unwrap()
     }
 
-    fn is_katrix(cmd: &str) -> bool {
-        cmd.contains("/opt/katrix/katrix") && cmd.contains("hook --event")
+    fn is_orrery(cmd: &str) -> bool {
+        cmd.contains("/opt/orrery/orrery") && cmd.contains("hook --event")
     }
 
     #[test]
@@ -186,24 +186,24 @@ mod tests {
             "user's own BeforeTool hook preserved: {commands:?}"
         );
         assert!(
-            commands.iter().any(|c| is_katrix(c)),
-            "katrix BeforeTool hook present: {commands:?}"
+            commands.iter().any(|c| is_orrery(c)),
+            "orrery BeforeTool hook present: {commands:?}"
         );
     }
 
     // A re-run overwrites our prior groups rather than duplicating them.
     #[test]
-    fn install_is_idempotent_no_duplicate_katrix_groups() {
+    fn install_is_idempotent_no_duplicate_orrery_groups() {
         let home = tempfile::tempdir().unwrap();
         GeminiAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
         GeminiAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
 
         let v = read_settings(home.path());
         let groups = v["hooks"]["BeforeTool"].as_array().unwrap();
-        let katrix_count = groups
+        let orrery_count = groups
             .iter()
-            .filter(|g| g["hooks"][0]["command"].as_str().map(is_katrix).unwrap_or(false))
+            .filter(|g| g["hooks"][0]["command"].as_str().map(is_orrery).unwrap_or(false))
             .count();
-        assert_eq!(katrix_count, 1, "exactly one katrix BeforeTool group");
+        assert_eq!(orrery_count, 1, "exactly one orrery BeforeTool group");
     }
 }

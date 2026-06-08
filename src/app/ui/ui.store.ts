@@ -13,7 +13,7 @@ const TWEAK_DEFAULTS: Tweaks = {
   motion: true,
 };
 
-const TWEAKS_KEY = "katrix.tweaks";
+const TWEAKS_KEY = "orrery.tweaks";
 function loadTweaks(): Tweaks {
   try {
     const saved = JSON.parse(localStorage.getItem(TWEAKS_KEY) || "null");

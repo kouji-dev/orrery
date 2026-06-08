@@ -168,7 +168,7 @@ impl GitService {
         }
         let sig = repo
             .signature()
-            .or_else(|_| git2::Signature::now("katrix", "katrix@local"))
+            .or_else(|_| git2::Signature::now("orrery", "orrery@local"))
             .map_err(|e| AppError::Other(e.to_string()))?;
         let tree_oid = {
             let mut index = repo.index().map_err(|e| AppError::Other(e.to_string()))?;
@@ -235,7 +235,7 @@ impl GitService {
             .map_err(|e| AppError::Other(e.to_string()))?;
         let sig = repo
             .signature()
-            .or_else(|_| git2::Signature::now("katrix", "katrix@local"))
+            .or_else(|_| git2::Signature::now("orrery", "orrery@local"))
             .map_err(|e| AppError::Other(e.to_string()))?;
         let parent = repo
             .head()
@@ -316,7 +316,7 @@ impl GitService {
             .map_err(|e| AppError::Other(e.to_string()))?;
         let sig = repo
             .signature()
-            .or_else(|_| git2::Signature::now("katrix", "katrix@local"))
+            .or_else(|_| git2::Signature::now("orrery", "orrery@local"))
             .map_err(|e| AppError::Other(e.to_string()))?;
         let head_commit = repo
             .head()

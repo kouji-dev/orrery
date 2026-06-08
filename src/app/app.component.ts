@@ -1,17 +1,17 @@
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
-import { ContextMenuComponent } from "./orchestra/context-menu/context-menu.component";
-import { AddProjectModalComponent } from "./orchestra/modals/add-project-modal.component";
-import { SpawnModalComponent } from "./orchestra/modals/spawn-modal.component";
-import { UiStore } from "./orchestra/ui/ui.store";
-import { OverviewComponent } from "./orchestra/overview/overview.component";
-import { RightPanelComponent } from "./orchestra/right-panel/right-panel.component";
-import { SidebarComponent } from "./orchestra/sidebar/sidebar.component";
-import { CompactRailComponent } from "./orchestra/sidebar/compact-rail.component";
-import { StatusBarComponent } from "./orchestra/status-bar/status-bar.component";
-import { TopBarComponent } from "./orchestra/top-bar/top-bar.component";
-import { TweaksPanelComponent } from "./orchestra/tweaks/tweaks-panel.component";
-import { DevPanelComponent } from "./orchestra/dev-tools/dev-panel.component";
-import { PaneManagerComponent } from "./orchestra/workspace/pane-manager.component";
+import { ContextMenuComponent } from "./context-menu/context-menu.component";
+import { AddProjectModalComponent } from "./modals/add-project-modal.component";
+import { SpawnModalComponent } from "./modals/spawn-modal.component";
+import { UiStore } from "./ui/ui.store";
+import { OverviewComponent } from "./overview/overview.component";
+import { RightPanelComponent } from "./right-panel/right-panel.component";
+import { SidebarComponent } from "./sidebar/sidebar.component";
+import { CompactRailComponent } from "./sidebar/compact-rail.component";
+import { StatusBarComponent } from "./status-bar/status-bar.component";
+import { TopBarComponent } from "./top-bar/top-bar.component";
+import { TweaksPanelComponent } from "./tweaks/tweaks-panel.component";
+import { DevPanelComponent } from "./dev-tools/dev-panel.component";
+import { PaneManagerComponent } from "./workspace/pane-manager.component";
 
 @Component({
   selector: "app-root",

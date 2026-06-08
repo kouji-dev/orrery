@@ -21,7 +21,7 @@ import { IconComponent } from "../shared/icon.component";
  * delay so the TUI advances, then the next).
  *
  * ── RELIABILITY TIERS (honest; see HARD CONSTRAINT in the runtime) ───────────
- * Katrix drives the REAL claude CLI over a PTY (no Agent SDK). Answers go in as
+ * Orrery drives the REAL claude CLI over a PTY (no Agent SDK). Answers go in as
  * raw keystrokes the TUI interprets, so delivery is NOT guaranteed:
  *
  *   • single-select via digit  = RELIABLE. Typing the option's number instantly

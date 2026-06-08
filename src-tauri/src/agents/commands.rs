@@ -158,8 +158,8 @@ pub fn agent_start<R: Runtime>(
     // deliver the initial task prompt only on the very first launch (never on a
     // resume-into-session, which continues an existing conversation)
     let send_prompt = !agent.started && resume_session.is_none();
-    // Hooks are installed globally at startup; here we only stamp the KATRIX_*
-    // env so this katrix-launched agent's hook brokers with the bridge. Gated on
+    // Hooks are installed globally at startup; here we only stamp the ORRERY_*
+    // env so this orrery-launched agent's hook brokers with the bridge. Gated on
     // the hook binary resolving (current_exe) — without it the hook can't run, so
     // we launch bare and rely on the PTY-parsing fallback.
     let hook_env = hook_binary().map(|_hook_bin| HookEnv {

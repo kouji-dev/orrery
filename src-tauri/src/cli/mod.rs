@@ -1,4 +1,4 @@
-//! The katrix command-line interface. The same executable doubles as a CLI:
+//! The orrery command-line interface. The same executable doubles as a CLI:
 //! launched with a subcommand it runs that and exits; launched bare it starts
 //! the desktop app. Today the only subcommand is `hook`, which installed agent
 //! hooks invoke to broker a permission/status event with the running app.
@@ -12,7 +12,7 @@ use clap::{Parser, Subcommand};
 const SUBCOMMANDS: &[&str] = &["hook"];
 
 #[derive(Parser)]
-#[command(name = "katrix", bin_name = "katrix", version, about = "katrix — agent orchestration")]
+#[command(name = "orrery", bin_name = "orrery", version, about = "Orrery — agent orchestration")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

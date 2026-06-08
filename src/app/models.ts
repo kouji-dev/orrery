@@ -1,4 +1,4 @@
-// ORCHESTRA domain models
+// Orrery domain models
 
 export type AgentStatus =
   | "running"
@@ -238,7 +238,7 @@ export interface ContextMenuState {
 }
 
 // ---- system metrics (status-bar cpu/memory monitor) ----
-// One subtree's roll-up: the app's own tree ("app"/"katrix") or an agent's
+// One subtree's roll-up: the app's own tree ("app"/"orrery") or an agent's
 // (uuid string / agent name). cpu is a percent (may exceed 100 on multi-core);
 // memBytes is resident bytes.
 export interface ProcMetric {
@@ -249,7 +249,7 @@ export interface ProcMetric {
 }
 
 // A whole snapshot pushed on `system://metrics` every 3s. Totals are the SUM of
-// the rows — cpu%/memory used by katrix + its agents ONLY (not machine-wide).
+// the rows — cpu%/memory used by orrery + its agents ONLY (not machine-wide).
 // totalCpu is machine-relative (a share of all logical cores, like Task Manager).
 export interface SystemMetrics {
   totalCpu: number;

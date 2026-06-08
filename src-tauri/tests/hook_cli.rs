@@ -1,4 +1,4 @@
-//! End-to-end test of the real `katrix hook` CLI subprocess: it must connect to
+//! End-to-end test of the real `orrery hook` CLI subprocess: it must connect to
 //! the bridge endpoint, POST the request (payload from stdin), and print back the
 //! decision the bridge returns. Here a stand-in TCP server plays the bridge.
 
@@ -26,7 +26,7 @@ fn hook_cli_posts_request_and_prints_the_decision() {
         req // hand the captured request back to the test
     });
 
-    let exe = env!("CARGO_BIN_EXE_katrix");
+    let exe = env!("CARGO_BIN_EXE_orrery");
     let mut child = Command::new(exe)
         .args([
             "hook",
@@ -44,7 +44,7 @@ fn hook_cli_posts_request_and_prints_the_decision() {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
-        .expect("spawn katrix hook");
+        .expect("spawn orrery hook");
 
     // the agent delivers the tool request on stdin; close it so the CLI reads EOF
     let mut stdin = child.stdin.take().unwrap();

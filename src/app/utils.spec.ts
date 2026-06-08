@@ -134,7 +134,7 @@ describe("detectTitleStatus", () => {
   });
 
   it("returns null for a plain title with no signal", () => {
-    expect(detectTitleStatus("~/projects/katrix")).toBeNull();
+    expect(detectTitleStatus("~/projects/orrery")).toBeNull();
     expect(detectTitleStatus("")).toBeNull();
   });
 

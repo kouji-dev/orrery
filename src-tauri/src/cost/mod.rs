@@ -1,7 +1,7 @@
 //! Total Claude usage cost, read from the `ccusage` CLI. We don't persist
 //! anything — ccusage reads the on-disk transcripts fresh each run, so the total
 //! survives app restarts and agent deletion. Global all-time total (all Claude
-//! Code usage on the machine, not just katrix agents).
+//! Code usage on the machine, not just orrery agents).
 
 use serde::Serialize;
 

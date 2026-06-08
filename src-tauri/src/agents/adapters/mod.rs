@@ -20,8 +20,8 @@ pub use codex::CodexAdapter;
 pub use cursor::CursorAdapter;
 pub use gemini::GeminiAdapter;
 
-/// Identity + connection a katrix-launched agent's hook needs to broker with the
-/// bridge. Stamped onto the agent process env at launch (the `KATRIX_*` vars);
+/// Identity + connection a orrery-launched agent's hook needs to broker with the
+/// bridge. Stamped onto the agent process env at launch (the `ORRERY_*` vars);
 /// the globally-installed hook only brokers when these are present. The hook
 /// executable itself is baked into the global hook config at install time, so it
 /// is not part of this per-launch env.
@@ -78,26 +78,26 @@ pub trait AgentAdapter: Send + Sync {
     }
 
     /// Extra env to set on the agent process so its (globally-installed) hook
-    /// recognises this run as katrix-launched and brokers with the bridge: the
-    /// `KATRIX_*` identity + connection stamps. Default suits every tool now that
+    /// recognises this run as orrery-launched and brokers with the bridge: the
+    /// `ORRERY_*` identity + connection stamps. Default suits every tool now that
     /// hooks live in the user's real config (no per-tool managed home).
     fn env(&self, worktree: &Path, env: &HookEnv) -> Vec<(String, String)> {
         let _ = worktree;
         vec![
-            ("KATRIX_AGENT_ID".into(), env.agent_id.clone()),
-            ("KATRIX_TOOL".into(), env.tool.clone()),
-            ("KATRIX_ENDPOINT".into(), env.endpoint.clone()),
-            ("KATRIX_TOKEN".into(), env.token.clone()),
+            ("ORRERY_AGENT_ID".into(), env.agent_id.clone()),
+            ("ORRERY_TOOL".into(), env.tool.clone()),
+            ("ORRERY_ENDPOINT".into(), env.endpoint.clone()),
+            ("ORRERY_TOKEN".into(), env.token.clone()),
         ]
     }
 
     /// Install the agent's status + needs-input hooks (fire-and-forget) so it
-    /// calls `katrix hook` on those events. Installed GLOBALLY, merged
+    /// calls `orrery hook` on those events. Installed GLOBALLY, merged
     /// non-destructively into the user's real config under `home` (e.g.
     /// `~/.claude/settings.json`). Identity-agnostic — only `hook_bin` is used
     /// (baked into the hook command); the env-presence check at hook time
-    /// (KATRIX_*) is what gates brokering, so a global install stays harmless for
-    /// runs katrix didn't launch. No-op for tools without usable hooks.
+    /// (ORRERY_*) is what gates brokering, so a global install stays harmless for
+    /// runs orrery didn't launch. No-op for tools without usable hooks.
     fn install_hooks(&self, home: &Path, hook_bin: &Path) -> std::io::Result<()>;
 
     /// Does this tool have hooks we drive (vs. PTY-parse fallback)?
@@ -153,7 +153,7 @@ pub fn adapter_for(tool: &str) -> Option<Box<dyn AgentAdapter>> {
     registry().into_iter().find(|a| a.id() == tool)
 }
 
-/// Install katrix's status + needs-input hooks GLOBALLY for every adapter that
+/// Install orrery's status + needs-input hooks GLOBALLY for every adapter that
 /// supports hooks, merging non-destructively into the user's real config under
 /// `home`. No `is_installed` gate: the merge is non-destructive, and a tool the
 /// user installs later still gets hooks (we ran the global install on startup).
@@ -191,7 +191,7 @@ pub fn installed() -> Vec<ToolStatus> {
 /// * Insert each `(key, value)` from `defaults` only if that top-level key is
 ///   absent (e.g. cursor's `"version": 1`) — never overwrite a user's value.
 /// * For every event in `events`: keep the user's own groups, drop only our
-///   prior katrix groups (idempotency), then append one fresh group built by
+///   prior orrery groups (idempotency), then append one fresh group built by
 ///   `make_group`. The per-event lists live under the top-level `"hooks"` object.
 /// * Write pretty JSON back.
 ///
@@ -228,12 +228,12 @@ pub fn merge_json_hooks(
     };
 
     let hook_bin = hook_bin.display().to_string();
-    let is_katrix = |group: &Value| -> bool { group_is_katrix(group, &hook_bin) };
+    let is_orrery = |group: &Value| -> bool { group_is_orrery(group, &hook_bin) };
 
     for event in events {
-        // Keep every existing non-katrix group; treat a non-array as empty.
+        // Keep every existing non-orrery group; treat a non-array as empty.
         let mut groups: Vec<Value> = match hooks.remove(*event) {
-            Some(Value::Array(a)) => a.into_iter().filter(|g| !is_katrix(g)).collect(),
+            Some(Value::Array(a)) => a.into_iter().filter(|g| !is_orrery(g)).collect(),
             _ => Vec::new(),
         };
         groups.push(make_group(event));
@@ -245,13 +245,13 @@ pub fn merge_json_hooks(
 }
 
 /// True if any string value anywhere in `group` contains both the hook_bin path
-/// and `"hook --event"` — i.e. this group was installed by katrix. Recursive so
+/// and `"hook --event"` — i.e. this group was installed by orrery. Recursive so
 /// it is agnostic to the group's shape.
-fn group_is_katrix(group: &Value, hook_bin: &str) -> bool {
+fn group_is_orrery(group: &Value, hook_bin: &str) -> bool {
     match group {
         Value::String(s) => s.contains(hook_bin) && s.contains("hook --event"),
-        Value::Array(a) => a.iter().any(|v| group_is_katrix(v, hook_bin)),
-        Value::Object(m) => m.values().any(|v| group_is_katrix(v, hook_bin)),
+        Value::Array(a) => a.iter().any(|v| group_is_orrery(v, hook_bin)),
+        Value::Object(m) => m.values().any(|v| group_is_orrery(v, hook_bin)),
         _ => false,
     }
 }
@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn install_global_hooks_writes_all_four_hooked_tools_incl_gemini() {
         let home = tempfile::tempdir().unwrap();
-        let hook_bin = PathBuf::from("/opt/katrix/katrix");
+        let hook_bin = PathBuf::from("/opt/orrery/orrery");
         install_global_hooks(home.path(), &hook_bin);
 
         // Every adapter now supports hooks, so all four install their global config.

@@ -7,7 +7,7 @@ use uuid::Uuid;
 pub mod commands;
 
 /// One subtree's roll-up: an agent's process tree, or the app's own tree.
-/// `id` is the agent uuid string (or "app"); `label` is the agent name (or "katrix").
+/// `id` is the agent uuid string (or "app"); `label` is the agent name (or "Orrery").
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProcMetric {
@@ -18,7 +18,7 @@ pub struct ProcMetric {
 }
 
 /// The whole snapshot pushed to the UI every tick. Totals are the SUM of the
-/// per-subtree rows — i.e. the cpu% and memory used by katrix + its agents ONLY
+/// per-subtree rows — i.e. the cpu% and memory used by orrery + its agents ONLY
 /// (NOT machine-wide). `total_cpu` is machine-relative (a share of ALL logical
 /// cores, like Task Manager), so it never exceeds 100.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -70,18 +70,18 @@ impl MetricsSampler {
         );
     }
 
-    /// Sample the app subtree (pid `app_pid`, labelled "katrix") plus one subtree
+    /// Sample the app subtree (pid `app_pid`, labelled "Orrery") plus one subtree
     /// per agent. Each row aggregates the pid AND all its descendants — so the
-    /// "katrix" row rolls up the Rust core PLUS its WebView2 child processes (the UI
+    /// "Orrery" row rolls up the Rust core PLUS its WebView2 child processes (the UI
     /// renderer/GPU procs), which hold the bulk of the app's memory. Per-row cpu% is
     /// normalized by the logical core count (machine-relative, like Task Manager).
-    /// Totals are the SUM of the rows — the cpu/memory used by katrix + its agents.
+    /// Totals are the SUM of the rows — the cpu/memory used by orrery + its agents.
     pub fn sample(&self, app_pid: u32, agents: &[(Uuid, u32)]) -> SystemMetrics {
         let map = self.process_map();
         let cores = self.cpu_count.max(1) as f32;
 
         let mut procs = Vec::with_capacity(agents.len() + 1);
-        procs.push(subtree_metric("app".into(), "katrix".into(), app_pid, &map, cores));
+        procs.push(subtree_metric("app".into(), "Orrery".into(), app_pid, &map, cores));
         for (id, pid) in agents {
             procs.push(subtree_metric(id.to_string(), id.to_string(), *pid, &map, cores));
         }
@@ -225,14 +225,14 @@ mod tests {
         let m = fixture();
         // cores = 1.0 → cpu stays the raw subtree sum (the /cores normalization is a
         // no-op here, so the roll-up math is asserted directly).
-        let app = subtree_metric("app".into(), "katrix".into(), 1, &m, 1.0);
+        let app = subtree_metric("app".into(), "Orrery".into(), 1, &m, 1.0);
         let agent_id = Uuid::new_v4();
 
         // point the agent row at node 10's branch directly.
         let agent = subtree_metric(agent_id.to_string(), "nova".into(), 10, &m, 1.0);
 
         assert_eq!(app.id, "app");
-        assert_eq!(app.label, "katrix");
+        assert_eq!(app.label, "Orrery");
         assert_eq!(agent.cpu, 10.0 + 11.0);
         assert_eq!(agent.mem_bytes, 1000 + 1100);
     }

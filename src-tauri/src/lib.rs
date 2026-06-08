@@ -53,9 +53,9 @@ pub fn run() {
                 }
                 Err(e) => log::error!("hook bridge failed to start: {e}"),
             }
-            // Install katrix's status/needs-input hooks GLOBALLY (merged into the
-            // user's real config). Harmless for non-katrix runs — the hook only
-            // brokers when the KATRIX_* env is present. Best-effort: never abort
+            // Install orrery's status/needs-input hooks GLOBALLY (merged into the
+            // user's real config). Harmless for non-orrery runs — the hook only
+            // brokers when the ORRERY_* env is present. Best-effort: never abort
             // startup if this fails.
             match (app.path().home_dir(), crate::hooks::hook_binary()) {
                 (Ok(home), Some(hook_bin)) => {

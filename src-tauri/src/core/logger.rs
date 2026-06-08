@@ -11,7 +11,7 @@ where
         ))
         .target(tauri_plugin_log::Target::new(
             tauri_plugin_log::TargetKind::LogDir {
-                file_name: Some("katrix".to_string()),
+                file_name: Some("orrery".to_string()),
             },
         ))
         .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)

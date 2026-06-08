@@ -195,7 +195,7 @@ pub enum AgentEvent {
 ///   `afterAgentResponse`/`afterAgentThought` → AgentMessage; `beforeSubmitPrompt`
 ///   → UserPrompt; `stop` → TurnEnd; `sessionStart`/`sessionEnd` (cursor.com/docs/hooks).
 ///   Cursor has NO dedicated permission EVENT (it is returned inline from the
-///   before* hooks), so katrix surfaces no PermissionRequest for cursor.
+///   before* hooks), so orrery surfaces no PermissionRequest for cursor.
 /// * **Gemini** — `BeforeTool`/`AfterTool`/`BeforeAgent`/`AfterAgent`/`AfterModel`/
 ///   `Notification`/`SessionStart`/`SessionEnd` (geminicli.com/docs/hooks). Gemini
 ///   has NO permission "ask" event, so a tool denial only ever surfaces as a

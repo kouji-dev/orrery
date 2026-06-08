@@ -12,8 +12,8 @@ use super::AgentAdapter;
 /// "Bash ✗"), `MessageDisplay` (streamed assistant prose for the feed),
 /// `SessionStart`/`SessionEnd` (lifecycle pings), `Stop` (idle). The post/lifecycle
 /// hooks are activity/status-only and NEVER raise a notification — only
-/// `Notification`/`PermissionRequest` do. The hooks are harmless for runs katrix
-/// didn't launch — `katrix hook` only brokers when the KATRIX_* env is present.
+/// `Notification`/`PermissionRequest` do. The hooks are harmless for runs orrery
+/// didn't launch — `orrery hook` only brokers when the ORRERY_* env is present.
 /// Claude's own permission flow is untouched — user approves in its TUI. Hook
 /// names + payload shapes per Claude Code hooks docs (code.claude.com).
 pub struct ClaudeAdapter;
@@ -102,7 +102,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn hook_bin() -> PathBuf {
-        PathBuf::from("/opt/katrix/katrix")
+        PathBuf::from("/opt/orrery/orrery")
     }
 
     #[test]
@@ -179,8 +179,8 @@ mod tests {
         serde_json::from_str(&body).unwrap()
     }
 
-    fn is_katrix(cmd: &str) -> bool {
-        cmd.contains("/opt/katrix/katrix") && cmd.contains("hook --event")
+    fn is_orrery(cmd: &str) -> bool {
+        cmd.contains("/opt/orrery/orrery") && cmd.contains("hook --event")
     }
 
     #[test]
@@ -232,23 +232,23 @@ mod tests {
             "user's own Notification hook preserved: {commands:?}"
         );
         assert!(
-            commands.iter().any(|c| is_katrix(c)),
-            "katrix Notification hook present: {commands:?}"
+            commands.iter().any(|c| is_orrery(c)),
+            "orrery Notification hook present: {commands:?}"
         );
     }
 
     #[test]
-    fn install_is_idempotent_no_duplicate_katrix_groups() {
+    fn install_is_idempotent_no_duplicate_orrery_groups() {
         let home = tempfile::tempdir().unwrap();
         ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
         ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
 
         let v = read_settings(home.path());
         let groups = v["hooks"]["Notification"].as_array().unwrap();
-        let katrix_count = groups
+        let orrery_count = groups
             .iter()
-            .filter(|g| g["hooks"][0]["command"].as_str().map(is_katrix).unwrap_or(false))
+            .filter(|g| g["hooks"][0]["command"].as_str().map(is_orrery).unwrap_or(false))
             .count();
-        assert_eq!(katrix_count, 1, "exactly one katrix Notification group");
+        assert_eq!(orrery_count, 1, "exactly one orrery Notification group");
     }
 }

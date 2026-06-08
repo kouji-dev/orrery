@@ -1,18 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "katrix",
+  "productName": "Orrery",
   "version": "0.1.0",
-  "identifier": "com.kouji.katrix",
+  "identifier": "com.kouji.orrery",
   "build": {
     "beforeDevCommand": "pnpm start",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
-    "frontendDist": "../dist/katrix/browser"
+    "frontendDist": "../dist/orrery/browser"
   },
   "app": {
     "windows": [
       {
-        "title": "katrix",
+        "title": "Orrery",
         "width": 800,
         "height": 600,
         "dragDropEnabled": false
