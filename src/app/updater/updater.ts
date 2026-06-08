@@ -1,0 +1,24 @@
+import { InjectionToken } from '@angular/core';
+
+/** Outcome of a launch-time update check. `updating` means the app is about to
+ *  relaunch into a new version — the caller must NOT navigate onward. */
+export type UpdateOutcome = 'no-update' | 'updating';
+
+/** A pending update. `downloadAndInstall` reports bytes via `onProgress`
+ *  (`total` is null when the server sends no content-length). */
+export interface UpdateHandle {
+  version: string;
+  downloadAndInstall(onProgress: (downloaded: number, total: number | null) => void): Promise<void>;
+}
+
+/** Thin, mockable boundary over the Tauri updater/process plugins. */
+export interface Updater {
+  /** True only when running inside the Tauri webview. */
+  isAvailable(): boolean;
+  /** Resolve an available update, or null. Rejects/throws on transport errors. */
+  check(timeoutMs: number): Promise<UpdateHandle | null>;
+  /** Restart the app (does not return in a real Tauri process). */
+  relaunch(): Promise<void>;
+}
+
+export const UPDATER = new InjectionToken<Updater>('UPDATER');
