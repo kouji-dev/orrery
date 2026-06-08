@@ -105,34 +105,60 @@ without restructuring.
 - **`capabilities/default.json`:** add `updater:default` and
   `process:allow-restart`.
 
-## Splash-integrated update UX (frontend)
+## Frontend refactor: boot splash → routed LoadingComponent
 
-The boot splash in `src/index.html` already has a progress bar
-(`#orrery-boot-bar`), a status line (`#orrery-boot-status`), and a
-`window.__orreryAppReady()` handoff. We reuse all of it.
+Today the splash is inline in `src/index.html` (markup + animation script) and
+`AppComponent` *is* the whole shell, calling `window.__orreryAppReady()` from
+`ngAfterViewInit`. We restructure so the loading screen is a real, routed
+component and the app boots through it.
 
-**Splash API** — expose from the inline splash script:
-`window.__orreryBoot = { takeover(), setStatus(text), setProgress(0..1), finish() }`
-- `takeover()` sets a flag so the splash's own 2.2s bar/status animation stops
-  writing to the DOM (no fight over the bar).
-- `setStatus` / `setProgress` drive the existing elements directly.
-- `finish()` is the existing app-ready handoff (fade + remove).
+- **`src/index.html`** → strip the inline splash markup and script. Keep only
+  `<app-root>`. Set the first-paint background to the splash dark
+  (`html, body { background: #07080d; }`) so there is no white flash before
+  Angular paints (the bundle is local in a Tauri app, so this gap is brief).
+- **`AppComponent` (`app-root`)** → template becomes just `<router-outlet />`.
+  It no longer imports the shell pieces or calls `__orreryAppReady` (that
+  mechanism is removed).
+- **New `ShellComponent` (`src/app/shell/shell.component.ts`)** → receives the
+  current `AppComponent` template + logic verbatim (top-bar, sidebar, workspace,
+  modals, dev panel, etc.). This is "the real app."
+- **New `LoadingComponent` (`src/app/loading/loading.component.ts`)** → ports the
+  existing splash visuals into Angular: the epicycle SVG draw, the gradient
+  progress bar, and the rotating status line, with progress/status bound to
+  signals instead of DOM ids. Hosts the boot + updater sequence and redirects to
+  the shell when done.
+- **Routes (`src/app/app.routes.ts`)** — loading has first priority:
+  - `{ path: '', component: LoadingComponent }`  (default / first)
+  - `{ path: 'app', component: ShellComponent }`
+  - `{ path: '**', redirectTo: '' }`
 
-**UpdaterService** — runs during Angular bootstrap, *before* signaling app-ready:
-1. If not running under Tauri (e.g. `ng serve` in a browser) → skip, `finish()`.
-2. `check()` the manifest with a ~10s timeout.
-3. No update / error / offline → `finish()` (app boots normally).
-4. Update found → `takeover()`, status `downloading update · <ver>`, then
-   `downloadAndInstall(onEvent)` mapping the byte-progress events to
-   `setProgress(...)`. On finish → `relaunch()` (from plugin-process) into the
-   new version.
+**Trade-off (accepted):** moving the splash into Angular means it paints after
+bootstrap rather than on the literal first frame. The dark `body` background
+covers the brief pre-paint gap, so the visible result is a dark window → splash,
+never a white flash.
+
+## Updater flow (inside LoadingComponent)
+
+`UpdaterService` encapsulates the Tauri updater calls and exposes progress +
+status as signals the LoadingComponent binds to its bar. On init:
+
+1. Start the epicycle draw animation (visual continuity with today's splash).
+2. Not running under Tauri (e.g. `ng serve` in a browser) → once the draw
+   completes, `router.navigate(['/app'])`.
+3. Under Tauri → run `check()` (≤10s timeout) concurrently with the draw:
+   - No update / error / offline → navigate to `/app` once the draw completes.
+   - Update found → status `downloading update · <ver>`, bind the bar to
+     `downloadAndInstall(onEvent)` byte-progress, then `relaunch()` (from
+     plugin-process) into the new version.
+4. **Hard safety timeout** (~12s): navigate to `/app` no matter what, so a hung
+   check or download can never trap the user on the loading screen.
 
 ## Error handling
 
 The updater is fully best-effort. Any failure (no network, bad/missing manifest,
 download error, verification failure) falls through to a normal boot — the app is
-never bricked by the updater. The existing 8s splash safety-timeout remains as a
-backstop in case a check hangs.
+never bricked by the updater. The `LoadingComponent` hard safety timeout (~12s)
+is the backstop: if a check or download hangs, it navigates to the app anyway.
 
 ## Known limitation (accepted for now)
 
@@ -147,3 +173,5 @@ verifies updates. OS code-signing is deferred to a later iteration.
 - In-app "check for updates" button / settings toggle / changelog UI (the launch
   flow is the only updater entry point for now).
 - Committing version bumps back to the repo.
+- Deep-linking / multiple app routes — the shell stays a single `app` route; the
+  router is introduced only to gate the app behind the loading screen.
