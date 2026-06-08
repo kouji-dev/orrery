@@ -48,6 +48,7 @@ export const Commands = {
   DetectTools: 'detect_tools',
   SystemMetrics: 'system_metrics',
   SystemCost: 'system_cost',
+  SetWindowIcon: 'set_window_icon',
 } as const;
 
 export const Events = {

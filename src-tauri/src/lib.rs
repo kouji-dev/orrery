@@ -3,6 +3,7 @@ use crate::git::service::GitService;
 use crate::projects::service::ProjectService;
 
 mod agents;
+mod appicon;
 pub mod cli;
 mod core;
 mod cost;
@@ -145,6 +146,7 @@ pub fn run() {
             agents::commands::detect_tools,
             metrics::commands::system_metrics,
             cost::commands::system_cost,
+            appicon::set_window_icon,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
