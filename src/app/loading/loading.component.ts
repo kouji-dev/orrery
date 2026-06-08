@@ -2,8 +2,10 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   inject,
+  signal,
   viewChild,
 } from '@angular/core';
 import { Router } from '@angular/router';
@@ -59,16 +61,16 @@ import { UpdateOutcome } from '../updater/updater';
     .ob-bar > i {
       display: block;
       height: 100%;
-      width: 0;
       border-radius: 2px;
       background: linear-gradient(90deg, #ff5d9e, #a855f7, #22d3ee);
+      transition: width 0.15s linear;
     }
   `],
   template: `
     <div class="ob-mark"><svg #svg width="168" height="168" viewBox="0 0 100 100" fill="none"></svg></div>
     <div class="ob-word"><span class="o">O</span>rrery</div>
     <div class="ob-status">{{ updater.status() || 'initializing orchestrator' }}</div>
-    <div class="ob-bar"><i #bar></i></div>
+    <div class="ob-bar"><i [style.width.%]="barPct()"></i></div>
   `,
 })
 export class LoadingComponent implements AfterViewInit {
@@ -81,7 +83,18 @@ export class LoadingComponent implements AfterViewInit {
   safetyMs = 12_000;
 
   private readonly svg = viewChild<ElementRef<SVGSVGElement>>('svg');
-  private readonly bar = viewChild<ElementRef<HTMLElement>>('bar');
+
+  /** Intro epicycle sweep, 0..1, advanced over ~2.2s by the draw loop. */
+  private readonly introFrac = signal(0);
+
+  /** Bar width %. Reactive so it tracks the download for its full duration:
+   *  once a download is underway (progress > 0) the bar follows it; otherwise it
+   *  shows the intro sweep. This is bound in the template — NOT written from the
+   *  intro rAF — so it never freezes when the intro animation ends. */
+  readonly barPct = computed(() => {
+    const dl = this.updater.progress();
+    return (dl > 0 ? dl : this.introFrac()) * 100;
+  });
 
   ngAfterViewInit() {
     this.draw();
@@ -110,12 +123,11 @@ export class LoadingComponent implements AfterViewInit {
     return new Promise((r) => setTimeout(r, ms));
   }
 
-  /** Ported epicycle draw from the old index.html splash; drives the bar 0→100%
-   *  unless the updater takes it over via the status/progress signals. */
+  /** Ported epicycle draw from the old index.html splash. Feeds the intro sweep
+   *  into `introFrac`; the bar is rendered reactively via `barPct`. */
   private draw(): void {
     const svg = this.svg()?.nativeElement;
-    const bar = this.bar()?.nativeElement;
-    if (!svg || !bar) return;
+    if (!svg) return;
     const A = 22, B = 13, K = -4, TAU = Math.PI * 2;
     const epi = (t: number): [number, number] => [
       50 + A * Math.cos(t) + B * Math.cos(K * t),
@@ -141,7 +153,7 @@ export class LoadingComponent implements AfterViewInit {
     path.style.strokeDasharray = String(L);
     if (reduce) {
       path.style.strokeDashoffset = '0';
-      bar.style.width = '100%';
+      this.introFrac.set(1);
       return;
     }
     path.style.strokeDashoffset = String(L);
@@ -152,9 +164,7 @@ export class LoadingComponent implements AfterViewInit {
       if (start === null) start = now;
       const p = Math.min(1, (now - start) / DUR), e = ease(p);
       path.style.strokeDashoffset = String(L * (1 - e));
-      // Once the updater is downloading, its progress signal owns the bar.
-      const dl = this.updater.progress();
-      bar.style.width = (dl > 0 ? dl * 100 : e * 100).toFixed(1) + '%';
+      this.introFrac.set(e);
       if (p < 1) requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
