@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, e.g. 0.2.0 (no leading v)"
+        required: true
+        type: string
+      notes:
+        description: "Release notes (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - name: Stamp version (build-only, not committed)
+        run: node scripts/release/stamp-version.mjs ${{ inputs.version }}
+      - name: Build Tauri app with signed updater artifacts
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build
+      - name: Stage release files (flat)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist-release | Out-Null
+          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe dist-release/
+          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe.sig dist-release/
+          Copy-Item src-tauri/target/release/bundle/msi/*.msi dist-release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: dist-release/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: artifacts
+      - name: Build latest.json
+        run: >
+          node scripts/release/make-latest-json.mjs
+          --version ${{ inputs.version }}
+          --dir artifacts
+          --out artifacts/latest.json
+          --repo kouji-dev/orrery-releases
+          --notes "${{ inputs.notes }}"
+      - name: Create release in orrery-releases
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: >
+          gh release create "v${{ inputs.version }}"
+          --repo kouji-dev/orrery-releases
+          --target main
+          --title "v${{ inputs.version }}"
+          --notes "${{ inputs.notes != '' && inputs.notes || format('Orrery v{0}', inputs.version) }}"
+          artifacts/*-setup.exe artifacts/*.msi artifacts/latest.json
