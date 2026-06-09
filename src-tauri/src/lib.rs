@@ -13,6 +13,7 @@ mod hooks;
 mod metrics;
 mod projects;
 mod runtime;
+mod update;
 mod watch;
 
 use core::database::Database;
@@ -147,6 +148,8 @@ pub fn run() {
             metrics::commands::system_metrics,
             cost::commands::system_cost,
             appicon::set_window_icon,
+            update::update_check,
+            update::update_perform,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
