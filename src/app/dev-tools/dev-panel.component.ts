@@ -15,7 +15,7 @@ import { ProjectsStore } from "../stores/projects.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
-import { PerfStore, PerfRow } from "../perf/perf.store";
+import { PerfStore, PerfRow, PERF_WINDOW_MS } from "../perf/perf.store";
 import { Agent, AgentStatus, Project } from "../models";
 
 type Sort = { key: string; dir: number };
@@ -53,6 +53,9 @@ type Sort = { key: string; dir: number };
           <span class="dvc-live on"><span class="dvc-ld"></span>live</span>
           <span class="dvc-sp"></span>
           @if (tab() === 'perf') {
+            @if (hasCalls()) {
+              <button class="dvc-ic" [class.ok]="copied()" (click)="copyPerf()" [title]="copied() ? 'Copied to clipboard' : 'Copy perf data as JSON'"><app-icon [name]="copied() ? 'check' : 'dup'" size="sm" />{{ copied() ? 'Copied' : 'Copy' }}</button>
+            }
             <button class="dvc-ic" (click)="perf.clear()" title="Clear counters"><app-icon name="refresh" size="sm" />Reset</button>
           }
           <button class="dvc-x" (click)="open.set(false)" title="Close"><app-icon name="x" size="sm" /></button>
@@ -241,7 +244,7 @@ type Sort = { key: string; dir: number };
 [data-theme="light"] .dvcon{--lat-g:#0a8f5e;--lat-a:#a9700f;--lat-r:#d6304e;
   --lat-g-bg:rgba(10,143,94,.09);--lat-a-bg:rgba(169,112,15,.13);--lat-r-bg:rgba(214,48,78,.14);
   --lat-r-ring:rgba(214,48,78,.34);}
-.dvc-fab{position:fixed;right:18px;bottom:36px;z-index:90;width:44px;height:44px;border-radius:13px;
+.dvc-fab{position:relative;width:44px;height:44px;border-radius:13px;
   display:grid;place-items:center;cursor:pointer;border:1px solid var(--hair-2);
   background:linear-gradient(180deg,var(--panel-3),var(--panel));color:var(--ink-2);
   box-shadow:var(--shadow);transition:transform .16s,color .16s,border-color .16s,box-shadow .16s;}
@@ -274,6 +277,7 @@ type Sort = { key: string; dir: number };
 .dvc-sp{flex:1;}
 .dvc-ic{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--ink-2);background:transparent;border:1px solid var(--hair);border-radius:var(--r-sm);padding:5px 9px;cursor:pointer;transition:all .12s;}
 .dvc-ic:hover{color:var(--ink);background:var(--panel-3);border-color:var(--hair-2);}
+.dvc-ic.ok{color:var(--lat-g);border-color:color-mix(in oklch,var(--lat-g),transparent 55%);}
 .dvc-ic svg{width:13px;height:13px;}
 .dvc-x{border:none;padding:5px;color:var(--ink-3);background:transparent;border-radius:var(--r-sm);cursor:pointer;display:inline-flex;}
 .dvc-x:hover{color:var(--ink);background:var(--panel-3);}
@@ -389,6 +393,8 @@ export class DevPanelComponent implements OnDestroy {
   readonly openAg = signal<string | null>(null);
   readonly openPr = signal<string | null>(null);
   readonly feedOpen = signal(false);
+  /** Transient "Copied" state for the Copy button. */
+  readonly copied = signal(false);
 
   readonly agents = computed(() => this.runtime.agents());
   readonly projects = computed(() => this.projectsStore.all());
@@ -398,6 +404,7 @@ export class DevPanelComponent implements OnDestroy {
   readonly PRCOLS: [string, string][] = [["name", "project"], ["id", "id"], ["head", "head"], ["branch", "default"], ["branches", "branches"], ["agents", "agents"], ["files", "files"]];
 
   private tickIv?: ReturnType<typeof setInterval>;
+  private copiedTo?: ReturnType<typeof setTimeout>;
 
   constructor() {
     // age out the 10s window while the panel is open
@@ -407,6 +414,7 @@ export class DevPanelComponent implements OnDestroy {
   }
   ngOnDestroy() {
     clearInterval(this.tickIv);
+    clearTimeout(this.copiedTo);
   }
 
   @HostListener("document:keydown.escape") onEsc() {
@@ -446,6 +454,36 @@ export class DevPanelComponent implements OnDestroy {
   });
   clickPerfSort(k: string) {
     this.sort.update((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: k === "cmd" ? 1 : -1 }));
+  }
+
+  /** Copy the perf aggregates as JSON so they can be pasted back for bottleneck
+   *  analysis. Rows follow the visible (sorted) order — slowest first by default.
+   *  Aggregates only: drops per-command `hist`/`recent`. Floats rounded to 1dp. */
+  copyPerf(): void {
+    const r1 = (v: number | null) => (v == null ? null : Math.round(v * 10) / 10);
+    const envelope = {
+      capturedAt: new Date().toISOString(),
+      tier: this.dev ? "dev" : "prod",
+      windowMs: PERF_WINDOW_MS,
+      rows: this.sortedPerf().map((r) => ({
+        cmd: r.cmd,
+        calls10s: r.calls10s,
+        avgRt: r1(r.avgRt),
+        avgExec: r1(r.avgExec),
+        overhead: r1(r.overhead),
+        p95Rt: r1(r.p95Rt),
+        maxRt: r1(r.maxRt),
+        errPct: r1(r.errPct),
+      })),
+    };
+    void navigator.clipboard
+      .writeText(JSON.stringify(envelope, null, 2))
+      .then(() => {
+        this.copied.set(true);
+        clearTimeout(this.copiedTo);
+        this.copiedTo = setTimeout(() => this.copied.set(false), 1200);
+      })
+      .catch(() => {});
   }
 
   ms(v: number | null): string {
