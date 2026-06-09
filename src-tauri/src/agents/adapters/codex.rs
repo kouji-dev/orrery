@@ -107,14 +107,22 @@ mod tests {
     #[test]
     fn install_sets_pre_post_and_stop_hook_keys_in_global_config() {
         let home = tempfile::tempdir().unwrap();
-        CodexAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CodexAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let doc = read_config(home.path());
         let pre = doc["hooks"]["pre_tool_use"].as_str().unwrap();
         let post = doc["hooks"]["post_tool_use"].as_str().unwrap();
         let stop = doc["hooks"]["stop"].as_str().unwrap();
-        assert!(pre.contains("hook --event PreToolUse"), "pre_tool_use: {pre}");
-        assert!(post.contains("hook --event PostToolUse"), "post_tool_use: {post}");
+        assert!(
+            pre.contains("hook --event PreToolUse"),
+            "pre_tool_use: {pre}"
+        );
+        assert!(
+            post.contains("hook --event PostToolUse"),
+            "post_tool_use: {post}"
+        );
         assert!(stop.contains("hook --event Stop"), "stop: {stop}");
     }
 
@@ -123,7 +131,9 @@ mod tests {
     #[test]
     fn install_sets_permission_and_session_start_hook_keys() {
         let home = tempfile::tempdir().unwrap();
-        CodexAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CodexAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let doc = read_config(home.path());
         let perm = doc["hooks"]["permission_request"].as_str().unwrap();
@@ -149,7 +159,9 @@ mod tests {
         )
         .unwrap();
 
-        CodexAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CodexAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let doc = read_config(home.path());
         assert_eq!(doc["model"].as_str(), Some("o3"), "user's model preserved");
@@ -158,23 +170,46 @@ mod tests {
             Some("bar"),
             "user's mcp_servers table preserved"
         );
-        assert!(doc["hooks"]["pre_tool_use"].as_str().unwrap().contains("hook --event"));
+        assert!(doc["hooks"]["pre_tool_use"]
+            .as_str()
+            .unwrap()
+            .contains("hook --event"));
     }
 
     #[test]
     fn install_is_idempotent_no_duplicate_keys() {
         let home = tempfile::tempdir().unwrap();
-        CodexAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
-        CodexAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CodexAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
+        CodexAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let body = std::fs::read_to_string(home.path().join(".codex/config.toml")).unwrap();
         // a re-run must overwrite, not append — exactly one of each key.
         // ("pre_tool_use" is a substring of nothing else; "post_tool_use" is its
         // own distinct key, so each count is exactly one.)
-        assert_eq!(body.matches("pre_tool_use").count(), 1, "one pre_tool_use:\n{body}");
-        assert_eq!(body.matches("post_tool_use").count(), 1, "one post_tool_use:\n{body}");
-        assert_eq!(body.matches("permission_request").count(), 1, "one permission_request:\n{body}");
-        assert_eq!(body.matches("session_start").count(), 1, "one session_start:\n{body}");
+        assert_eq!(
+            body.matches("pre_tool_use").count(),
+            1,
+            "one pre_tool_use:\n{body}"
+        );
+        assert_eq!(
+            body.matches("post_tool_use").count(),
+            1,
+            "one post_tool_use:\n{body}"
+        );
+        assert_eq!(
+            body.matches("permission_request").count(),
+            1,
+            "one permission_request:\n{body}"
+        );
+        assert_eq!(
+            body.matches("session_start").count(),
+            1,
+            "one session_start:\n{body}"
+        );
         assert_eq!(body.matches("stop =").count(), 1, "one stop:\n{body}");
         // and it must still parse cleanly.
         let _: toml_edit::DocumentMut = body.parse().unwrap();

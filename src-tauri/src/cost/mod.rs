@@ -19,10 +19,18 @@ pub struct CostSnapshot {
 
 impl CostSnapshot {
     pub fn unavailable() -> Self {
-        Self { total_cost: 0.0, currency: "USD", available: false }
+        Self {
+            total_cost: 0.0,
+            currency: "USD",
+            available: false,
+        }
     }
     pub fn usd(total: f64) -> Self {
-        Self { total_cost: total, currency: "USD", available: true }
+        Self {
+            total_cost: total,
+            currency: "USD",
+            available: true,
+        }
     }
 }
 
@@ -55,7 +63,10 @@ fn run_ccusage() -> Option<std::process::Output> {
 
 #[cfg(not(windows))]
 fn run_ccusage() -> Option<std::process::Output> {
-    std::process::Command::new("npx").args(["ccusage", "daily", "--json"]).output().ok()
+    std::process::Command::new("npx")
+        .args(["ccusage", "daily", "--json"])
+        .output()
+        .ok()
 }
 
 /// One snapshot: the global total, or `unavailable()` when ccusage can't run.

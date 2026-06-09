@@ -61,8 +61,8 @@ impl AgentAdapter for ClaudeAdapter {
     }
 
     fn install_hooks(&self, home: &Path, hook_bin: &Path) -> std::io::Result<()> {
-        use crate::cli::hook::hook_command;
         use super::merge_json_hooks;
+        use crate::cli::hook::hook_command;
 
         let dir = home.join(".claude");
         std::fs::create_dir_all(&dir)?;
@@ -116,12 +116,22 @@ mod tests {
     #[test]
     fn installs_global_notification_and_status_hooks() {
         let home = tempfile::tempdir().unwrap();
-        ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
         let body = std::fs::read_to_string(home.path().join(".claude/settings.json")).unwrap();
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
-        let cmd = v["hooks"]["Notification"][0]["hooks"][0]["command"].as_str().unwrap();
-        assert!(cmd.contains("hook --event Notification"), "needs-input hook: {cmd}");
-        assert!(v["hooks"]["Stop"][0]["hooks"][0]["command"].is_string(), "status hook present");
+        let cmd = v["hooks"]["Notification"][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert!(
+            cmd.contains("hook --event Notification"),
+            "needs-input hook: {cmd}"
+        );
+        assert!(
+            v["hooks"]["Stop"][0]["hooks"][0]["command"].is_string(),
+            "status hook present"
+        );
     }
 
     // PreToolUse is installed as an activity/status hook (carries the tool/command
@@ -129,12 +139,17 @@ mod tests {
     #[test]
     fn installs_pre_tool_use_activity_hook() {
         let home = tempfile::tempdir().unwrap();
-        ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
         let v = read_settings(home.path());
         let cmd = v["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
             .as_str()
             .expect("PreToolUse hook installed");
-        assert!(cmd.contains("hook --event PreToolUse"), "activity hook: {cmd}");
+        assert!(
+            cmd.contains("hook --event PreToolUse"),
+            "activity hook: {cmd}"
+        );
     }
 
     // PostToolUse (tool result) + SessionStart/SessionEnd (lifecycle) are
@@ -142,7 +157,9 @@ mod tests {
     #[test]
     fn installs_post_tool_and_lifecycle_hooks() {
         let home = tempfile::tempdir().unwrap();
-        ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
         let v = read_settings(home.path());
         for event in ["PostToolUse", "SessionStart", "SessionEnd"] {
             let cmd = v["hooks"][event][0]["hooks"][0]["command"]
@@ -161,7 +178,9 @@ mod tests {
     #[test]
     fn installs_permission_failure_and_message_hooks() {
         let home = tempfile::tempdir().unwrap();
-        ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
         let v = read_settings(home.path());
         for event in ["PermissionRequest", "PostToolUseFailure", "MessageDisplay"] {
             let cmd = v["hooks"][event][0]["hooks"][0]["command"]
@@ -194,7 +213,9 @@ mod tests {
         )
         .unwrap();
 
-        ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let v = read_settings(home.path());
         assert_eq!(
@@ -205,7 +226,10 @@ mod tests {
         let cmd = v["hooks"]["Notification"][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
-        assert!(cmd.contains("hook --event Notification"), "our hook present: {cmd}");
+        assert!(
+            cmd.contains("hook --event Notification"),
+            "our hook present: {cmd}"
+        );
     }
 
     #[test]
@@ -219,7 +243,9 @@ mod tests {
         )
         .unwrap();
 
-        ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let v = read_settings(home.path());
         let groups = v["hooks"]["Notification"].as_array().unwrap();
@@ -240,14 +266,23 @@ mod tests {
     #[test]
     fn install_is_idempotent_no_duplicate_orrery_groups() {
         let home = tempfile::tempdir().unwrap();
-        ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
-        ClaudeAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
+        ClaudeAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let v = read_settings(home.path());
         let groups = v["hooks"]["Notification"].as_array().unwrap();
         let orrery_count = groups
             .iter()
-            .filter(|g| g["hooks"][0]["command"].as_str().map(is_orrery).unwrap_or(false))
+            .filter(|g| {
+                g["hooks"][0]["command"]
+                    .as_str()
+                    .map(is_orrery)
+                    .unwrap_or(false)
+            })
             .count();
         assert_eq!(orrery_count, 1, "exactly one orrery Notification group");
     }
@@ -273,8 +308,18 @@ mod tests {
             .filter_map(|g| g["hooks"][0]["command"].as_str())
             .filter(|c| c.contains("orrery") && c.contains("hook --event"))
             .collect();
-        assert_eq!(orrery.len(), 1, "one orrery group after cross-path reinstall: {orrery:?}");
-        assert!(orrery[0].contains("/new/place/orrery"), "kept current path: {orrery:?}");
-        assert!(!orrery[0].contains("/old/place/orrery"), "dropped stale path: {orrery:?}");
+        assert_eq!(
+            orrery.len(),
+            1,
+            "one orrery group after cross-path reinstall: {orrery:?}"
+        );
+        assert!(
+            orrery[0].contains("/new/place/orrery"),
+            "kept current path: {orrery:?}"
+        );
+        assert!(
+            !orrery[0].contains("/old/place/orrery"),
+            "dropped stale path: {orrery:?}"
+        );
     }
 }

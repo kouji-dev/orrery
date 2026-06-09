@@ -75,9 +75,8 @@ pub fn should_broker(endpoint: &str, token: &str, agent_id: &str) -> bool {
 /// decision. No bridge / no response = print nothing, so the agent proceeds with
 /// its own normal flow and never hangs on orrery.
 pub fn run(args: HookArgs) {
-    let or_env = |v: Option<String>, key: &str| {
-        v.or_else(|| std::env::var(key).ok()).unwrap_or_default()
-    };
+    let or_env =
+        |v: Option<String>, key: &str| v.or_else(|| std::env::var(key).ok()).unwrap_or_default();
     let tool = or_env(args.tool, "ORRERY_TOOL");
     let agent_id = or_env(args.agent_id, "ORRERY_AGENT_ID");
     let endpoint = or_env(args.endpoint, "ORRERY_ENDPOINT");
@@ -198,8 +197,14 @@ mod tests {
         assert!(should_broker("http://127.0.0.1:5000", "tok", "a1"));
         // any one missing → not orrery-launched → no-op
         assert!(!should_broker("", "tok", "a1"), "missing endpoint");
-        assert!(!should_broker("http://127.0.0.1:5000", "", "a1"), "missing token");
-        assert!(!should_broker("http://127.0.0.1:5000", "tok", ""), "missing agent-id");
+        assert!(
+            !should_broker("http://127.0.0.1:5000", "", "a1"),
+            "missing token"
+        );
+        assert!(
+            !should_broker("http://127.0.0.1:5000", "tok", ""),
+            "missing agent-id"
+        );
         assert!(!should_broker("", "", ""), "all missing");
     }
 }

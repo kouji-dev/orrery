@@ -199,7 +199,11 @@ fn handle(
     // `on_session` (which stores it + re-emits `agent://updated`) — no frontend
     // round-trip. Deduped on change: the session id is stable for a whole run but
     // rides every hook, so this collapses to ONE persist + emit per agent/session.
-    if let Some(session_id) = env.payload.get("session_id").and_then(serde_json::Value::as_str) {
+    if let Some(session_id) = env
+        .payload
+        .get("session_id")
+        .and_then(serde_json::Value::as_str)
+    {
         let mut map = last_session.lock().unwrap();
         if map.get(&env.agent_id).map(String::as_str) != Some(session_id) {
             map.insert(env.agent_id.clone(), session_id.to_string());
@@ -261,7 +265,14 @@ fn handle(
             mode,
             suggestions,
         } => {
-            emit_permission(emit, &env.agent_id, tool, input, mode.as_deref(), suggestions);
+            emit_permission(
+                emit,
+                &env.agent_id,
+                tool,
+                input,
+                mode.as_deref(),
+                suggestions,
+            );
             event.activity_detail()
         }
 
@@ -583,7 +594,10 @@ mod tests {
         let perm = perm.expect("agent://permission emitted");
         assert_eq!(perm["tool"], "AskUserQuestion");
         // The new `summary` headline carries the real question (+ header chip).
-        assert_eq!(perm["summary"], "[Database] Which database should I use? (+1 more)");
+        assert_eq!(
+            perm["summary"],
+            "[Database] Which database should I use? (+1 more)"
+        );
         // The new `questions[]` carries the parsed ask for a choice card.
         let qs = perm["questions"].as_array().expect("questions array");
         assert_eq!(qs.len(), 2);
@@ -1009,7 +1023,8 @@ mod tests {
         let bridge = HookBridge::serve(probe).unwrap();
 
         // Two identical working-status hooks (UserPromptSubmit) → "working" once.
-        let working = r#"{"agentId":"a1","tool":"claude","event":"UserPromptSubmit","payload":null}"#;
+        let working =
+            r#"{"agentId":"a1","tool":"claude","event":"UserPromptSubmit","payload":null}"#;
         let (s1, _) = post(&bridge.endpoint(), bridge.token(), working);
         let (s2, _) = post(&bridge.endpoint(), bridge.token(), working);
         assert!(s1.contains("204") && s2.contains("204"));

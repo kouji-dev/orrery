@@ -12,7 +12,12 @@ use clap::{Parser, Subcommand};
 const SUBCOMMANDS: &[&str] = &["hook"];
 
 #[derive(Parser)]
-#[command(name = "orrery", bin_name = "orrery", version, about = "Orrery — agent orchestration")]
+#[command(
+    name = "orrery",
+    bin_name = "orrery",
+    version,
+    about = "Orrery — agent orchestration"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

@@ -48,8 +48,8 @@ impl AgentAdapter for CursorAdapter {
     }
 
     fn install_hooks(&self, home: &Path, hook_bin: &Path) -> std::io::Result<()> {
-        use crate::cli::hook::hook_command;
         use super::merge_json_hooks;
+        use crate::cli::hook::hook_command;
 
         let dir = home.join(".cursor");
         std::fs::create_dir_all(&dir)?;
@@ -92,7 +92,9 @@ mod tests {
     #[test]
     fn installs_global_shell_hook() {
         let home = tempfile::tempdir().unwrap();
-        CursorAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CursorAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
         let body = std::fs::read_to_string(home.path().join(".cursor/hooks.json")).unwrap();
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert_eq!(v["version"], 1);
@@ -107,7 +109,9 @@ mod tests {
     #[test]
     fn installs_after_result_hooks() {
         let home = tempfile::tempdir().unwrap();
-        CursorAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CursorAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
         let v = read_hooks(home.path());
         for event in ["afterShellExecution", "afterFileEdit"] {
             let cmd = v["hooks"][event][0]["command"]
@@ -125,7 +129,9 @@ mod tests {
     #[test]
     fn installs_failure_message_prompt_and_session_hooks() {
         let home = tempfile::tempdir().unwrap();
-        CursorAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CursorAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
         let v = read_hooks(home.path());
         for event in [
             "postToolUseFailure",
@@ -165,7 +171,9 @@ mod tests {
         )
         .unwrap();
 
-        CursorAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CursorAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let v = read_hooks(home.path());
         assert_eq!(
@@ -176,7 +184,10 @@ mod tests {
         let cmd = v["hooks"]["beforeShellExecution"][0]["command"]
             .as_str()
             .unwrap();
-        assert!(cmd.contains("hook --event beforeShellExecution"), "our hook present: {cmd}");
+        assert!(
+            cmd.contains("hook --event beforeShellExecution"),
+            "our hook present: {cmd}"
+        );
     }
 
     #[test]
@@ -190,7 +201,9 @@ mod tests {
         )
         .unwrap();
 
-        CursorAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CursorAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let v = read_hooks(home.path());
         let groups = v["hooks"]["beforeShellExecution"].as_array().unwrap();
@@ -211,8 +224,12 @@ mod tests {
     #[test]
     fn install_is_idempotent_no_duplicate_orrery_groups() {
         let home = tempfile::tempdir().unwrap();
-        CursorAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
-        CursorAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        CursorAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
+        CursorAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let v = read_hooks(home.path());
         let groups = v["hooks"]["beforeShellExecution"].as_array().unwrap();
@@ -220,6 +237,9 @@ mod tests {
             .iter()
             .filter(|g| g["command"].as_str().map(is_orrery).unwrap_or(false))
             .count();
-        assert_eq!(orrery_count, 1, "exactly one orrery beforeShellExecution group");
+        assert_eq!(
+            orrery_count, 1,
+            "exactly one orrery beforeShellExecution group"
+        );
     }
 }

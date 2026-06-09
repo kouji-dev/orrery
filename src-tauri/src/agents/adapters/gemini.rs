@@ -111,7 +111,9 @@ mod tests {
     #[test]
     fn installs_all_managed_events() {
         let home = tempfile::tempdir().unwrap();
-        GeminiAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        GeminiAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
         let v = read_settings(home.path());
         for event in [
             "BeforeTool",
@@ -146,10 +148,16 @@ mod tests {
         )
         .unwrap();
 
-        GeminiAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        GeminiAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let v = read_settings(home.path());
-        assert_eq!(v["theme"].as_str(), Some("GitHub"), "user's theme preserved");
+        assert_eq!(
+            v["theme"].as_str(),
+            Some("GitHub"),
+            "user's theme preserved"
+        );
         assert_eq!(
             v["selectedAuthType"].as_str(),
             Some("oauth-personal"),
@@ -158,7 +166,10 @@ mod tests {
         let cmd = v["hooks"]["BeforeTool"][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
-        assert!(cmd.contains("hook --event BeforeTool"), "our hook present: {cmd}");
+        assert!(
+            cmd.contains("hook --event BeforeTool"),
+            "our hook present: {cmd}"
+        );
     }
 
     // A user's own hook on a managed event survives — we append, not replace.
@@ -173,7 +184,9 @@ mod tests {
         )
         .unwrap();
 
-        GeminiAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        GeminiAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let v = read_settings(home.path());
         let groups = v["hooks"]["BeforeTool"].as_array().unwrap();
@@ -195,14 +208,23 @@ mod tests {
     #[test]
     fn install_is_idempotent_no_duplicate_orrery_groups() {
         let home = tempfile::tempdir().unwrap();
-        GeminiAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
-        GeminiAdapter.install_hooks(home.path(), &hook_bin()).unwrap();
+        GeminiAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
+        GeminiAdapter
+            .install_hooks(home.path(), &hook_bin())
+            .unwrap();
 
         let v = read_settings(home.path());
         let groups = v["hooks"]["BeforeTool"].as_array().unwrap();
         let orrery_count = groups
             .iter()
-            .filter(|g| g["hooks"][0]["command"].as_str().map(is_orrery).unwrap_or(false))
+            .filter(|g| {
+                g["hooks"][0]["command"]
+                    .as_str()
+                    .map(is_orrery)
+                    .unwrap_or(false)
+            })
             .count();
         assert_eq!(orrery_count, 1, "exactly one orrery BeforeTool group");
     }

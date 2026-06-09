@@ -47,7 +47,10 @@ mod tests {
     #[test]
     fn merge_locks_direction_base_into_branch() {
         let p = action_prompt("merge", "agent/x", "main").unwrap();
-        assert!(p.contains("Merge `main` INTO the current branch `agent/x`"), "got: {p}");
+        assert!(
+            p.contains("Merge `main` INTO the current branch `agent/x`"),
+            "got: {p}"
+        );
         assert!(p.contains("git merge main"), "got: {p}");
         assert!(p.contains("Do NOT merge the other direction"), "got: {p}");
     }

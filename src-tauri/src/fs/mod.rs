@@ -78,7 +78,13 @@ fn scan(
         } else {
             None
         };
-        nodes.push(FileNode { name, path: child_rel, is_dir, ignored, children });
+        nodes.push(FileNode {
+            name,
+            path: child_rel,
+            is_dir,
+            ignored,
+            children,
+        });
     }
 
     nodes.sort_by(|a, b| match (a.is_dir, b.is_dir) {
@@ -105,20 +111,32 @@ mod tests {
 
         let t = tree(dir.path());
 
-        let nm = t.iter().find(|n| n.name == "node_modules").expect("ignored dir is listed");
+        let nm = t
+            .iter()
+            .find(|n| n.name == "node_modules")
+            .expect("ignored dir is listed");
         assert!(nm.is_dir && nm.ignored, "node_modules marked ignored");
-        assert!(nm.children.is_none(), "ignored dir not auto-scanned (lazy stub)");
+        assert!(
+            nm.children.is_none(),
+            "ignored dir not auto-scanned (lazy stub)"
+        );
 
         let src = t.iter().find(|n| n.name == "src").expect("src listed");
         assert!(!src.ignored);
         assert!(
-            src.children.as_ref().map(|c| c.iter().any(|x| x.name == "main.rs")).unwrap_or(false),
+            src.children
+                .as_ref()
+                .map(|c| c.iter().any(|x| x.name == "main.rs"))
+                .unwrap_or(false),
             "src is recursed"
         );
 
         // lazy-expand the ignored dir on demand
         let kids = list_dir(dir.path(), "node_modules");
-        assert!(kids.iter().any(|n| n.name == "foo" && n.is_dir), "lazy listing works");
+        assert!(
+            kids.iter().any(|n| n.name == "foo" && n.is_dir),
+            "lazy listing works"
+        );
     }
 
     #[test]

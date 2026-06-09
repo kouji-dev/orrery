@@ -85,7 +85,11 @@ impl ProjectService {
         } else {
             (None, None)
         };
-        let branches = if has_git { self.git.branches(path) } else { Vec::new() };
+        let branches = if has_git {
+            self.git.branches(path)
+        } else {
+            Vec::new()
+        };
         Project {
             id: rec.id,
             name: rec.name,
@@ -257,7 +261,13 @@ impl ProjectService {
         raw.into_iter()
             .map(|(id, name, path, icon, color)| {
                 let id = Uuid::parse_str(&id).map_err(|e| AppError::Other(e.to_string()))?;
-                Ok(ProjectRecord { id, name, path, icon, color })
+                Ok(ProjectRecord {
+                    id,
+                    name,
+                    path,
+                    icon,
+                    color,
+                })
             })
             .collect()
     }
@@ -274,7 +284,13 @@ impl ProjectService {
             .map_err(DbError::Sqlite)?
         };
         match row {
-            Some((name, path, icon, color)) => Ok(ProjectRecord { id, name, path, icon, color }),
+            Some((name, path, icon, color)) => Ok(ProjectRecord {
+                id,
+                name,
+                path,
+                icon,
+                color,
+            }),
             None => Err(ProjectError::NotFound(id.to_string()).into()),
         }
     }
@@ -317,7 +333,9 @@ mod tests {
     fn create_and_list() {
         let s = svc();
         let dir = tempfile::tempdir().unwrap();
-        let p = s.create(req("pay", dir.path().to_str().unwrap(), false)).unwrap();
+        let p = s
+            .create(req("pay", dir.path().to_str().unwrap(), false))
+            .unwrap();
         assert_eq!(p.name, "pay");
         let all = s.list().unwrap();
         assert_eq!(all.len(), 1);
@@ -345,7 +363,9 @@ mod tests {
     fn with_git_initializes_repo() {
         let s = svc();
         let dir = tempfile::tempdir().unwrap();
-        let p = s.create(req("g", dir.path().to_str().unwrap(), true)).unwrap();
+        let p = s
+            .create(req("g", dir.path().to_str().unwrap(), true))
+            .unwrap();
         assert!(p.has_git);
         assert!(dir.path().join(".git").exists());
     }
@@ -361,7 +381,9 @@ mod tests {
     fn remove_deletes() {
         let s = svc();
         let dir = tempfile::tempdir().unwrap();
-        let p = s.create(req("x", dir.path().to_str().unwrap(), false)).unwrap();
+        let p = s
+            .create(req("x", dir.path().to_str().unwrap(), false))
+            .unwrap();
         s.remove(p.id).unwrap();
         assert_eq!(s.list().unwrap().len(), 0);
     }
@@ -371,7 +393,9 @@ mod tests {
         // created without git → hasGit false; after init_git → hasGit true (no column involved)
         let s = svc();
         let dir = tempfile::tempdir().unwrap();
-        let p = s.create(req("t", dir.path().to_str().unwrap(), false)).unwrap();
+        let p = s
+            .create(req("t", dir.path().to_str().unwrap(), false))
+            .unwrap();
         assert!(!p.has_git);
         let p2 = s.init_git(p.id).unwrap();
         assert!(p2.has_git);
@@ -382,9 +406,15 @@ mod tests {
     fn create_with_git_ensures_a_main_branch() {
         let s = svc();
         let dir = tempfile::tempdir().unwrap();
-        let p = s.create(req("withgit", dir.path().to_str().unwrap(), true)).unwrap();
+        let p = s
+            .create(req("withgit", dir.path().to_str().unwrap(), true))
+            .unwrap();
         assert!(p.has_git);
-        assert!(p.branches.contains(&"main".to_string()), "branches: {:?}", p.branches);
+        assert!(
+            p.branches.contains(&"main".to_string()),
+            "branches: {:?}",
+            p.branches
+        );
         assert_eq!(p.branch.as_deref(), Some("main"));
     }
 
@@ -394,7 +424,9 @@ mod tests {
         let base = tempfile::tempdir().unwrap();
         let target = base.path().join("fresh").join("nested");
         assert!(!target.exists(), "precondition: folder does not exist yet");
-        let p = s.create(req("new", target.to_str().unwrap(), false)).unwrap();
+        let p = s
+            .create(req("new", target.to_str().unwrap(), false))
+            .unwrap();
         assert!(target.is_dir(), "create() made the folder");
         assert!(p.folder_exists);
     }
@@ -404,7 +436,9 @@ mod tests {
         let s = svc();
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("gone");
-        let p = s.create(req("ghost", target.to_str().unwrap(), false)).unwrap();
+        let p = s
+            .create(req("ghost", target.to_str().unwrap(), false))
+            .unwrap();
         std::fs::remove_dir_all(&target).unwrap();
         let reread = s.get(p.id).unwrap();
         assert!(!reread.folder_exists);
@@ -420,7 +454,8 @@ mod tests {
         {
             let db: DB = Arc::new(Mutex::new(Connection::open(&dbfile).unwrap()));
             let s = ProjectService::new(db, GitService::new());
-            s.create(req("f", pdir.path().to_str().unwrap(), false)).unwrap();
+            s.create(req("f", pdir.path().to_str().unwrap(), false))
+                .unwrap();
         }
         // fresh connection to the same file — the row must still be there
         let db2: DB = Arc::new(Mutex::new(Connection::open(&dbfile).unwrap()));
@@ -433,7 +468,9 @@ mod tests {
         let s = svc();
         let a = tempfile::tempdir().unwrap();
         let b = tempfile::tempdir().unwrap();
-        let p = s.create(req("mv", a.path().to_str().unwrap(), false)).unwrap();
+        let p = s
+            .create(req("mv", a.path().to_str().unwrap(), false))
+            .unwrap();
         let upd = ProjectUpdateRequest {
             name: None,
             path: Some(b.path().to_str().unwrap().into()),

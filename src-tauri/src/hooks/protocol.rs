@@ -237,7 +237,10 @@ pub fn parse(env: &HookEnvelope) -> AgentEvent {
 
         // Tool about to run. Claude PreToolUse; Cursor before*/preToolUse; Codex
         // PreToolUse; Gemini BeforeTool.
-        "PreToolUse" | "preToolUse" | "beforeShellExecution" | "beforeMCPExecution"
+        "PreToolUse"
+        | "preToolUse"
+        | "beforeShellExecution"
+        | "beforeMCPExecution"
         | "BeforeTool" => AgentEvent::ToolStart {
             tool: tool_name(env),
             input: parse_tool_input(p),
@@ -246,8 +249,12 @@ pub fn parse(env: &HookEnvelope) -> AgentEvent {
         // Tool finished OK (status is still re-derived from the payload, so a
         // result that carries an error/non-zero exit flips to Failed). Claude
         // PostToolUse; Cursor after*/postToolUse; Codex PostToolUse; Gemini AfterTool.
-        "PostToolUse" | "postToolUse" | "afterShellExecution" | "afterMCPExecution"
-        | "afterFileEdit" | "AfterTool" => {
+        "PostToolUse"
+        | "postToolUse"
+        | "afterShellExecution"
+        | "afterMCPExecution"
+        | "afterFileEdit"
+        | "AfterTool" => {
             let (status, result) = parse_tool_result(p);
             AgentEvent::ToolEnd {
                 tool: tool_name(env),
@@ -352,13 +359,17 @@ impl AgentEvent {
                 ToolStatus::Failed => format!("{tool} ✗"),
                 ToolStatus::Denied => format!("{tool} ⃠"),
             }),
-            AgentEvent::UserPrompt { text } => Some(non_empty(text).unwrap_or_else(|| "working…".into())),
+            AgentEvent::UserPrompt { text } => {
+                Some(non_empty(text).unwrap_or_else(|| "working…".into()))
+            }
             AgentEvent::SessionStart { .. } => Some("● started".into()),
             AgentEvent::TurnEnd => Some("✓ done".into()),
             AgentEvent::Notification { message, .. } => non_empty(message),
             AgentEvent::Error { message, .. } => Some(format!("✗ {message}")),
             // No inline preview for these — the card stays on its prior state.
-            AgentEvent::SessionEnd { .. } | AgentEvent::Compact { .. } | AgentEvent::Unknown => None,
+            AgentEvent::SessionEnd { .. } | AgentEvent::Compact { .. } | AgentEvent::Unknown => {
+                None
+            }
         }
     }
 
@@ -486,8 +497,7 @@ fn parse_questions(raw: &Value) -> Vec<Question> {
                             if let Some(label) = string_field(o, "label") {
                                 Some(QuestionOption {
                                     label,
-                                    description: string_field(o, "description")
-                                        .unwrap_or_default(),
+                                    description: string_field(o, "description").unwrap_or_default(),
                                 })
                             } else {
                                 o.as_str().map(|s| QuestionOption {
@@ -505,7 +515,10 @@ fn parse_questions(raw: &Value) -> Vec<Question> {
                 options,
                 // Claude's `multiSelect` flag (camelCase in tool_input); absent or
                 // non-bool → false (the common single-select case).
-                multi_select: q.get("multiSelect").and_then(Value::as_bool).unwrap_or(false),
+                multi_select: q
+                    .get("multiSelect")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
             })
         })
         .collect()
@@ -690,7 +703,13 @@ pub fn read_request<R: BufRead>(r: &mut R) -> io::Result<HttpRequest> {
             match name.trim().to_ascii_lowercase().as_str() {
                 "content-length" => len = value.trim().parse().unwrap_or(0),
                 "authorization" => {
-                    auth = Some(value.trim().trim_start_matches("Bearer ").trim().to_string())
+                    auth = Some(
+                        value
+                            .trim()
+                            .trim_start_matches("Bearer ")
+                            .trim()
+                            .to_string(),
+                    )
                 }
                 _ => {}
             }
@@ -781,7 +800,9 @@ mod tests {
         );
         assert_eq!(
             parse(&e),
-            AgentEvent::AgentMessage { text: "refactoring the parser now".into() }
+            AgentEvent::AgentMessage {
+                text: "refactoring the parser now".into()
+            }
         );
     }
 
@@ -799,7 +820,12 @@ mod tests {
             }),
         );
         match parse(&e) {
-            AgentEvent::PermissionRequest { tool, input, mode, suggestions } => {
+            AgentEvent::PermissionRequest {
+                tool,
+                input,
+                mode,
+                suggestions,
+            } => {
                 assert_eq!(tool, "Bash");
                 assert_eq!(input.command.as_deref(), Some("git push"));
                 assert_eq!(mode.as_deref(), Some("default"));
@@ -889,20 +915,35 @@ mod tests {
     #[test]
     fn parses_session_lifecycle() {
         assert_eq!(
-            parse(&env("SessionStart", serde_json::json!({ "source": "startup" }))),
-            AgentEvent::SessionStart { source: Some("startup".into()) }
+            parse(&env(
+                "SessionStart",
+                serde_json::json!({ "source": "startup" })
+            )),
+            AgentEvent::SessionStart {
+                source: Some("startup".into())
+            }
         );
         assert_eq!(
-            parse(&env("SessionEnd", serde_json::json!({ "why_session_ended": "logout" }))),
-            AgentEvent::SessionEnd { reason: Some("logout".into()) }
+            parse(&env(
+                "SessionEnd",
+                serde_json::json!({ "why_session_ended": "logout" })
+            )),
+            AgentEvent::SessionEnd {
+                reason: Some("logout".into())
+            }
         );
     }
 
     #[test]
     fn parses_user_prompt_submit() {
         assert_eq!(
-            parse(&env("UserPromptSubmit", serde_json::json!({ "prompt": "fix the bug" }))),
-            AgentEvent::UserPrompt { text: "fix the bug".into() }
+            parse(&env(
+                "UserPromptSubmit",
+                serde_json::json!({ "prompt": "fix the bug" })
+            )),
+            AgentEvent::UserPrompt {
+                text: "fix the bug".into()
+            }
         );
     }
 
@@ -928,13 +969,35 @@ mod tests {
         // Codex uses Claude's capitalized event names (array-table schema). The
         // tool-lifecycle + lifecycle arms are shared, but PermissionRequest carries
         // no suggestions (codex doesn't offer them) and SubagentStop folds to text.
-        let start = parse(&env_for("codex", "SessionStart", serde_json::json!({ "source": "cli" })));
-        assert_eq!(start, AgentEvent::SessionStart { source: Some("cli".into()) });
+        let start = parse(&env_for(
+            "codex",
+            "SessionStart",
+            serde_json::json!({ "source": "cli" }),
+        ));
+        assert_eq!(
+            start,
+            AgentEvent::SessionStart {
+                source: Some("cli".into())
+            }
+        );
 
-        let prompt = parse(&env_for("codex", "UserPromptSubmit", serde_json::json!({ "prompt": "ship it" })));
-        assert_eq!(prompt, AgentEvent::UserPrompt { text: "ship it".into() });
+        let prompt = parse(&env_for(
+            "codex",
+            "UserPromptSubmit",
+            serde_json::json!({ "prompt": "ship it" }),
+        ));
+        assert_eq!(
+            prompt,
+            AgentEvent::UserPrompt {
+                text: "ship it".into()
+            }
+        );
 
-        let pre = env_for("codex", "PreToolUse", serde_json::json!({ "tool_name": "Bash", "tool_input": { "command": "ls" } }));
+        let pre = env_for(
+            "codex",
+            "PreToolUse",
+            serde_json::json!({ "tool_name": "Bash", "tool_input": { "command": "ls" } }),
+        );
         match parse(&pre) {
             AgentEvent::ToolStart { tool, input } => {
                 assert_eq!(tool, "Bash");
@@ -944,10 +1007,14 @@ mod tests {
         }
 
         // PostToolUse with an error in tool_response → Failed.
-        let post = env_for("codex", "PostToolUse", serde_json::json!({
-            "tool_name": "Bash",
-            "tool_response": { "error": "boom" }
-        }));
+        let post = env_for(
+            "codex",
+            "PostToolUse",
+            serde_json::json!({
+                "tool_name": "Bash",
+                "tool_response": { "error": "boom" }
+            }),
+        );
         match parse(&post) {
             AgentEvent::ToolEnd { status, result, .. } => {
                 assert_eq!(status, ToolStatus::Failed);
@@ -957,13 +1024,22 @@ mod tests {
         }
 
         // Codex PermissionRequest: full detail, never any suggestions.
-        let perm = env_for("codex", "PermissionRequest", serde_json::json!({
-            "tool_name": "Bash",
-            "tool_input": { "command": "rm x", "description": "delete x" },
-            "permission_mode": "ask"
-        }));
+        let perm = env_for(
+            "codex",
+            "PermissionRequest",
+            serde_json::json!({
+                "tool_name": "Bash",
+                "tool_input": { "command": "rm x", "description": "delete x" },
+                "permission_mode": "ask"
+            }),
+        );
         match parse(&perm) {
-            AgentEvent::PermissionRequest { tool, input, mode, suggestions } => {
+            AgentEvent::PermissionRequest {
+                tool,
+                input,
+                mode,
+                suggestions,
+            } => {
                 assert_eq!(tool, "Bash");
                 assert_eq!(input.command.as_deref(), Some("rm x"));
                 assert_eq!(mode.as_deref(), Some("ask"));
@@ -972,18 +1048,36 @@ mod tests {
             other => panic!("expected PermissionRequest, got {other:?}"),
         }
 
-        assert_eq!(parse(&env_for("codex", "Stop", Value::Null)), AgentEvent::TurnEnd);
         assert_eq!(
-            parse(&env_for("codex", "PostCompact", serde_json::json!({ "trigger": "auto" }))),
-            AgentEvent::Compact { phase: Some("auto".into()) }
+            parse(&env_for("codex", "Stop", Value::Null)),
+            AgentEvent::TurnEnd
+        );
+        assert_eq!(
+            parse(&env_for(
+                "codex",
+                "PostCompact",
+                serde_json::json!({ "trigger": "auto" })
+            )),
+            AgentEvent::Compact {
+                phase: Some("auto".into())
+            }
         );
 
         // SubagentStop with a final message → AgentMessage; without → Unknown.
         assert_eq!(
-            parse(&env_for("codex", "SubagentStop", serde_json::json!({ "last_assistant_message": "done" }))),
-            AgentEvent::AgentMessage { text: "done".into() }
+            parse(&env_for(
+                "codex",
+                "SubagentStop",
+                serde_json::json!({ "last_assistant_message": "done" })
+            )),
+            AgentEvent::AgentMessage {
+                text: "done".into()
+            }
         );
-        assert_eq!(parse(&env_for("codex", "SubagentStop", Value::Null)), AgentEvent::Unknown);
+        assert_eq!(
+            parse(&env_for("codex", "SubagentStop", Value::Null)),
+            AgentEvent::Unknown
+        );
     }
 
     #[test]
@@ -992,7 +1086,11 @@ mod tests {
         // → ToolEnd(Ok); postToolUseFailure → ToolEnd(Failed); afterAgentResponse /
         // afterAgentThought → AgentMessage; beforeSubmitPrompt → UserPrompt; the
         // session lifecycle maps too.
-        let pre = env_for("cursor", "beforeShellExecution", serde_json::json!({ "command": "cargo build" }));
+        let pre = env_for(
+            "cursor",
+            "beforeShellExecution",
+            serde_json::json!({ "command": "cargo build" }),
+        );
         match parse(&pre) {
             AgentEvent::ToolStart { tool, input } => {
                 assert_eq!(tool, "cursor"); // no tool_name → falls back to the agent label
@@ -1002,22 +1100,37 @@ mod tests {
         }
 
         assert!(matches!(
-            parse(&env_for("cursor", "preToolUse", serde_json::json!({ "tool_input": { "command": "ls" } }))),
+            parse(&env_for(
+                "cursor",
+                "preToolUse",
+                serde_json::json!({ "tool_input": { "command": "ls" } })
+            )),
             AgentEvent::ToolStart { .. }
         ));
 
         // afterMCPExecution / postToolUse → ToolEnd(Ok).
-        match parse(&env_for("cursor", "afterMCPExecution", serde_json::json!({ "success": true }))) {
+        match parse(&env_for(
+            "cursor",
+            "afterMCPExecution",
+            serde_json::json!({ "success": true }),
+        )) {
             AgentEvent::ToolEnd { status, .. } => assert_eq!(status, ToolStatus::Ok),
             other => panic!("expected ToolEnd, got {other:?}"),
         }
         assert!(matches!(
             parse(&env_for("cursor", "postToolUse", Value::Null)),
-            AgentEvent::ToolEnd { status: ToolStatus::Ok, .. }
+            AgentEvent::ToolEnd {
+                status: ToolStatus::Ok,
+                ..
+            }
         ));
 
         // postToolUseFailure → ToolEnd(Failed) carrying the error_message.
-        match parse(&env_for("cursor", "postToolUseFailure", serde_json::json!({ "error_message": "timed out" }))) {
+        match parse(&env_for(
+            "cursor",
+            "postToolUseFailure",
+            serde_json::json!({ "error_message": "timed out" }),
+        )) {
             AgentEvent::ToolEnd { status, result, .. } => {
                 assert_eq!(status, ToolStatus::Failed);
                 assert_eq!(result.as_deref(), Some("timed out"));
@@ -1026,27 +1139,58 @@ mod tests {
         }
 
         assert_eq!(
-            parse(&env_for("cursor", "afterAgentResponse", serde_json::json!({ "text": "all set" }))),
-            AgentEvent::AgentMessage { text: "all set".into() }
+            parse(&env_for(
+                "cursor",
+                "afterAgentResponse",
+                serde_json::json!({ "text": "all set" })
+            )),
+            AgentEvent::AgentMessage {
+                text: "all set".into()
+            }
         );
         // afterAgentThought → AgentMessage tagged with the 💭 prefix.
         assert_eq!(
-            parse(&env_for("cursor", "afterAgentThought", serde_json::json!({ "text": "let me think" }))),
-            AgentEvent::AgentMessage { text: "💭 let me think".into() }
+            parse(&env_for(
+                "cursor",
+                "afterAgentThought",
+                serde_json::json!({ "text": "let me think" })
+            )),
+            AgentEvent::AgentMessage {
+                text: "💭 let me think".into()
+            }
         );
 
         assert_eq!(
-            parse(&env_for("cursor", "beforeSubmitPrompt", serde_json::json!({ "prompt": "go" }))),
+            parse(&env_for(
+                "cursor",
+                "beforeSubmitPrompt",
+                serde_json::json!({ "prompt": "go" })
+            )),
             AgentEvent::UserPrompt { text: "go".into() }
         );
-        assert_eq!(parse(&env_for("cursor", "stop", Value::Null)), AgentEvent::TurnEnd);
         assert_eq!(
-            parse(&env_for("cursor", "sessionStart", serde_json::json!({ "source": "cli" }))),
-            AgentEvent::SessionStart { source: Some("cli".into()) }
+            parse(&env_for("cursor", "stop", Value::Null)),
+            AgentEvent::TurnEnd
         );
         assert_eq!(
-            parse(&env_for("cursor", "sessionEnd", serde_json::json!({ "reason": "quit" }))),
-            AgentEvent::SessionEnd { reason: Some("quit".into()) }
+            parse(&env_for(
+                "cursor",
+                "sessionStart",
+                serde_json::json!({ "source": "cli" })
+            )),
+            AgentEvent::SessionStart {
+                source: Some("cli".into())
+            }
+        );
+        assert_eq!(
+            parse(&env_for(
+                "cursor",
+                "sessionEnd",
+                serde_json::json!({ "reason": "quit" })
+            )),
+            AgentEvent::SessionEnd {
+                reason: Some("quit".into())
+            }
         );
     }
 
@@ -1055,7 +1199,11 @@ mod tests {
         // Gemini's own event names: BeforeTool/AfterTool → tool lifecycle, BeforeAgent
         // → SessionStart, AfterAgent → TurnEnd, AfterModel → AgentMessage, Notification
         // stays generic (gemini has NO permission ask), SessionStart/SessionEnd map.
-        let before = env_for("gemini", "BeforeTool", serde_json::json!({ "tool_name": "run_shell_command", "tool_input": { "command": "ls" } }));
+        let before = env_for(
+            "gemini",
+            "BeforeTool",
+            serde_json::json!({ "tool_name": "run_shell_command", "tool_input": { "command": "ls" } }),
+        );
         match parse(&before) {
             AgentEvent::ToolStart { tool, input } => {
                 assert_eq!(tool, "run_shell_command");
@@ -1064,7 +1212,11 @@ mod tests {
             other => panic!("expected ToolStart, got {other:?}"),
         }
 
-        match parse(&env_for("gemini", "AfterTool", serde_json::json!({ "tool_name": "write_file", "tool_response": { "success": true } }))) {
+        match parse(&env_for(
+            "gemini",
+            "AfterTool",
+            serde_json::json!({ "tool_name": "write_file", "tool_response": { "success": true } }),
+        )) {
             AgentEvent::ToolEnd { tool, status, .. } => {
                 assert_eq!(tool, "write_file");
                 assert_eq!(status, ToolStatus::Ok);
@@ -1074,24 +1226,47 @@ mod tests {
 
         // A gemini block that surfaces a denial on the result → ToolEnd(Denied)
         // (the only way a gemini denial is detectable — no permission event).
-        match parse(&env_for("gemini", "AfterTool", serde_json::json!({ "tool_name": "run_shell_command", "tool_response": { "decision": "deny" } }))) {
+        match parse(&env_for(
+            "gemini",
+            "AfterTool",
+            serde_json::json!({ "tool_name": "run_shell_command", "tool_response": { "decision": "deny" } }),
+        )) {
             AgentEvent::ToolEnd { status, .. } => assert_eq!(status, ToolStatus::Denied),
             other => panic!("expected ToolEnd, got {other:?}"),
         }
 
         assert_eq!(
-            parse(&env_for("gemini", "BeforeAgent", serde_json::json!({ "source": "interactive" }))),
-            AgentEvent::SessionStart { source: Some("interactive".into()) }
+            parse(&env_for(
+                "gemini",
+                "BeforeAgent",
+                serde_json::json!({ "source": "interactive" })
+            )),
+            AgentEvent::SessionStart {
+                source: Some("interactive".into())
+            }
         );
-        assert_eq!(parse(&env_for("gemini", "AfterAgent", Value::Null)), AgentEvent::TurnEnd);
         assert_eq!(
-            parse(&env_for("gemini", "AfterModel", serde_json::json!({ "last_assistant_message": "here you go" }))),
-            AgentEvent::AgentMessage { text: "here you go".into() }
+            parse(&env_for("gemini", "AfterAgent", Value::Null)),
+            AgentEvent::TurnEnd
+        );
+        assert_eq!(
+            parse(&env_for(
+                "gemini",
+                "AfterModel",
+                serde_json::json!({ "last_assistant_message": "here you go" })
+            )),
+            AgentEvent::AgentMessage {
+                text: "here you go".into()
+            }
         );
 
         // Gemini Notification stays a generic notification — never promoted to a
         // permission ask even if it somehow carried a permission_prompt type.
-        match parse(&env_for("gemini", "Notification", serde_json::json!({ "type": "permission_prompt", "message": "heads up" }))) {
+        match parse(&env_for(
+            "gemini",
+            "Notification",
+            serde_json::json!({ "type": "permission_prompt", "message": "heads up" }),
+        )) {
             AgentEvent::Notification { kind, message } => {
                 assert_eq!(kind.as_deref(), Some("permission_prompt"));
                 assert_eq!(message, "heads up");
@@ -1100,12 +1275,24 @@ mod tests {
         }
 
         assert_eq!(
-            parse(&env_for("gemini", "SessionStart", serde_json::json!({ "source": "startup" }))),
-            AgentEvent::SessionStart { source: Some("startup".into()) }
+            parse(&env_for(
+                "gemini",
+                "SessionStart",
+                serde_json::json!({ "source": "startup" })
+            )),
+            AgentEvent::SessionStart {
+                source: Some("startup".into())
+            }
         );
         assert_eq!(
-            parse(&env_for("gemini", "SessionEnd", serde_json::json!({ "reason": "done" }))),
-            AgentEvent::SessionEnd { reason: Some("done".into()) }
+            parse(&env_for(
+                "gemini",
+                "SessionEnd",
+                serde_json::json!({ "reason": "done" })
+            )),
+            AgentEvent::SessionEnd {
+                reason: Some("done".into())
+            }
         );
     }
 
@@ -1119,7 +1306,11 @@ mod tests {
             serde_json::json!({ "tool_name": "Bash", "error_message": "exit 127" }),
         );
         match parse(&e) {
-            AgentEvent::ToolEnd { tool, status, result } => {
+            AgentEvent::ToolEnd {
+                tool,
+                status,
+                result,
+            } => {
                 assert_eq!(tool, "Bash");
                 assert_eq!(status, ToolStatus::Failed);
                 assert_eq!(result.as_deref(), Some("exit 127"));
@@ -1169,13 +1360,22 @@ mod tests {
         assert_eq!(
             qs[0].options,
             vec![
-                QuestionOption { label: "Summary".into(), description: "Brief".into() },
-                QuestionOption { label: "Detailed".into(), description: "Full".into() },
+                QuestionOption {
+                    label: "Summary".into(),
+                    description: "Brief".into()
+                },
+                QuestionOption {
+                    label: "Detailed".into(),
+                    description: "Full".into()
+                },
             ]
         );
         assert_eq!(
             qs[1].options,
-            vec![QuestionOption { label: "Intro".into(), description: "x".into() }]
+            vec![QuestionOption {
+                label: "Intro".into(),
+                description: "x".into()
+            }]
         );
         // …and each question carries its `multiSelect` flag (false then true).
         assert!(!qs[0].multi_select);
@@ -1209,8 +1409,14 @@ mod tests {
         assert_eq!(
             qs[0].options,
             vec![
-                QuestionOption { label: "A".into(), description: String::new() },
-                QuestionOption { label: "B".into(), description: String::new() },
+                QuestionOption {
+                    label: "A".into(),
+                    description: String::new()
+                },
+                QuestionOption {
+                    label: "B".into(),
+                    description: String::new()
+                },
             ]
         );
     }
@@ -1239,7 +1445,9 @@ mod tests {
                 assert_eq!(tool, "AskUserQuestion");
                 assert_eq!(input.summary().as_deref(), Some("[Database] Which DB?"));
                 assert_eq!(
-                    AgentEvent::ToolStart { tool, input }.activity_detail().as_deref(),
+                    AgentEvent::ToolStart { tool, input }
+                        .activity_detail()
+                        .as_deref(),
                     Some("▸ AskUserQuestion: [Database] Which DB?")
                 );
             }
@@ -1264,14 +1472,18 @@ mod tests {
     fn generic_input_summary_falls_back_to_salient_field() {
         // A tool with no command/file_path/description and no questions → the
         // generic salient-field fallback picks the most telling string.
-        let grep = parse_tool_input(&serde_json::json!({ "tool_input": { "pattern": "TODO", "glob": "*.rs" } }));
+        let grep = parse_tool_input(
+            &serde_json::json!({ "tool_input": { "pattern": "TODO", "glob": "*.rs" } }),
+        );
         assert_eq!(grep.summary().as_deref(), Some("TODO"));
 
-        let fetch = parse_tool_input(&serde_json::json!({ "tool_input": { "url": "https://x.dev" } }));
+        let fetch =
+            parse_tool_input(&serde_json::json!({ "tool_input": { "url": "https://x.dev" } }));
         assert_eq!(fetch.summary().as_deref(), Some("https://x.dev"));
 
         // Completely opaque input → no summary.
-        let opaque = parse_tool_input(&serde_json::json!({ "tool_input": { "n": 5, "flag": true } }));
+        let opaque =
+            parse_tool_input(&serde_json::json!({ "tool_input": { "n": 5, "flag": true } }));
         assert_eq!(opaque.summary(), None);
     }
 
@@ -1301,7 +1513,9 @@ mod tests {
         );
         assert_eq!(
             parse(&e),
-            AgentEvent::AgentMessage { text: "here is your answer".into() }
+            AgentEvent::AgentMessage {
+                text: "here is your answer".into()
+            }
         );
     }
 
@@ -1361,46 +1575,84 @@ mod tests {
     fn activity_detail_per_variant() {
         let perm = AgentEvent::PermissionRequest {
             tool: "Bash".into(),
-            input: ToolInput { command: Some("npm test".into()), ..Default::default() },
+            input: ToolInput {
+                command: Some("npm test".into()),
+                ..Default::default()
+            },
             mode: None,
             suggestions: vec![],
         };
         assert_eq!(perm.activity_detail().as_deref(), Some("✋ Bash: npm test"));
 
-        let msg = AgentEvent::AgentMessage { text: "hello there".into() };
+        let msg = AgentEvent::AgentMessage {
+            text: "hello there".into(),
+        };
         assert_eq!(msg.activity_detail().as_deref(), Some("hello there"));
 
         let start = AgentEvent::ToolStart {
             tool: "Edit".into(),
-            input: ToolInput { file_path: Some("src/foo.rs".into()), ..Default::default() },
+            input: ToolInput {
+                file_path: Some("src/foo.rs".into()),
+                ..Default::default()
+            },
         };
-        assert_eq!(start.activity_detail().as_deref(), Some("▸ Edit: src/foo.rs"));
+        assert_eq!(
+            start.activity_detail().as_deref(),
+            Some("▸ Edit: src/foo.rs")
+        );
 
-        let end_ok = AgentEvent::ToolEnd { tool: "Edit".into(), status: ToolStatus::Ok, result: None };
+        let end_ok = AgentEvent::ToolEnd {
+            tool: "Edit".into(),
+            status: ToolStatus::Ok,
+            result: None,
+        };
         assert_eq!(end_ok.activity_detail().as_deref(), Some("Edit ✓"));
-        let end_bad = AgentEvent::ToolEnd { tool: "Bash".into(), status: ToolStatus::Failed, result: None };
+        let end_bad = AgentEvent::ToolEnd {
+            tool: "Bash".into(),
+            status: ToolStatus::Failed,
+            result: None,
+        };
         assert_eq!(end_bad.activity_detail().as_deref(), Some("Bash ✗"));
 
-        let prompt = AgentEvent::UserPrompt { text: String::new() };
+        let prompt = AgentEvent::UserPrompt {
+            text: String::new(),
+        };
         assert_eq!(prompt.activity_detail().as_deref(), Some("working…"));
-        let prompt2 = AgentEvent::UserPrompt { text: "do the thing".into() };
+        let prompt2 = AgentEvent::UserPrompt {
+            text: "do the thing".into(),
+        };
         assert_eq!(prompt2.activity_detail().as_deref(), Some("do the thing"));
 
         assert_eq!(
-            AgentEvent::SessionStart { source: None }.activity_detail().as_deref(),
+            AgentEvent::SessionStart { source: None }
+                .activity_detail()
+                .as_deref(),
             Some("● started")
         );
-        assert_eq!(AgentEvent::TurnEnd.activity_detail().as_deref(), Some("✓ done"));
+        assert_eq!(
+            AgentEvent::TurnEnd.activity_detail().as_deref(),
+            Some("✓ done")
+        );
 
-        let notif = AgentEvent::Notification { kind: None, message: "heads up".into() };
+        let notif = AgentEvent::Notification {
+            kind: None,
+            message: "heads up".into(),
+        };
         assert_eq!(notif.activity_detail().as_deref(), Some("heads up"));
 
-        let err = AgentEvent::Error { kind: None, message: "boom".into() };
+        let err = AgentEvent::Error {
+            kind: None,
+            message: "boom".into(),
+        };
         assert_eq!(err.activity_detail().as_deref(), Some("✗ boom"));
 
         // No-preview variants.
-        assert!(AgentEvent::SessionEnd { reason: None }.activity_detail().is_none());
-        assert!(AgentEvent::Compact { phase: None }.activity_detail().is_none());
+        assert!(AgentEvent::SessionEnd { reason: None }
+            .activity_detail()
+            .is_none());
+        assert!(AgentEvent::Compact { phase: None }
+            .activity_detail()
+            .is_none());
         assert!(AgentEvent::Unknown.activity_detail().is_none());
     }
 
@@ -1409,23 +1661,45 @@ mod tests {
     #[test]
     fn kind_per_variant() {
         assert_eq!(AgentEvent::UserPrompt { text: "hi".into() }.kind(), "user");
-        assert_eq!(AgentEvent::AgentMessage { text: "yo".into() }.kind(), "agent");
         assert_eq!(
-            AgentEvent::ToolStart { tool: "Bash".into(), input: ToolInput::default() }.kind(),
+            AgentEvent::AgentMessage { text: "yo".into() }.kind(),
+            "agent"
+        );
+        assert_eq!(
+            AgentEvent::ToolStart {
+                tool: "Bash".into(),
+                input: ToolInput::default()
+            }
+            .kind(),
             "tool"
         );
 
         // ToolEnd: Ok → success; Failed/Denied → error.
         assert_eq!(
-            AgentEvent::ToolEnd { tool: "Edit".into(), status: ToolStatus::Ok, result: None }.kind(),
+            AgentEvent::ToolEnd {
+                tool: "Edit".into(),
+                status: ToolStatus::Ok,
+                result: None
+            }
+            .kind(),
             "success"
         );
         assert_eq!(
-            AgentEvent::ToolEnd { tool: "Bash".into(), status: ToolStatus::Failed, result: None }.kind(),
+            AgentEvent::ToolEnd {
+                tool: "Bash".into(),
+                status: ToolStatus::Failed,
+                result: None
+            }
+            .kind(),
             "error"
         );
         assert_eq!(
-            AgentEvent::ToolEnd { tool: "Bash".into(), status: ToolStatus::Denied, result: None }.kind(),
+            AgentEvent::ToolEnd {
+                tool: "Bash".into(),
+                status: ToolStatus::Denied,
+                result: None
+            }
+            .kind(),
             "error"
         );
 
@@ -1442,19 +1716,35 @@ mod tests {
 
         // Notification: permission/needs-input kinds → question; others → info.
         assert_eq!(
-            AgentEvent::Notification { kind: Some("permission_prompt".into()), message: String::new() }.kind(),
+            AgentEvent::Notification {
+                kind: Some("permission_prompt".into()),
+                message: String::new()
+            }
+            .kind(),
             "question"
         );
         assert_eq!(
-            AgentEvent::Notification { kind: Some("idle_prompt".into()), message: String::new() }.kind(),
+            AgentEvent::Notification {
+                kind: Some("idle_prompt".into()),
+                message: String::new()
+            }
+            .kind(),
             "question"
         );
         assert_eq!(
-            AgentEvent::Notification { kind: Some("info".into()), message: String::new() }.kind(),
+            AgentEvent::Notification {
+                kind: Some("info".into()),
+                message: String::new()
+            }
+            .kind(),
             "info"
         );
         assert_eq!(
-            AgentEvent::Notification { kind: None, message: String::new() }.kind(),
+            AgentEvent::Notification {
+                kind: None,
+                message: String::new()
+            }
+            .kind(),
             "info"
         );
 
@@ -1462,7 +1752,14 @@ mod tests {
         assert_eq!(AgentEvent::SessionStart { source: None }.kind(), "info");
         assert_eq!(AgentEvent::SessionEnd { reason: None }.kind(), "info");
         assert_eq!(AgentEvent::Compact { phase: None }.kind(), "info");
-        assert_eq!(AgentEvent::Error { kind: None, message: "boom".into() }.kind(), "error");
+        assert_eq!(
+            AgentEvent::Error {
+                kind: None,
+                message: "boom".into()
+            }
+            .kind(),
+            "error"
+        );
         assert_eq!(AgentEvent::Unknown.kind(), "info");
     }
 

@@ -19,7 +19,11 @@ pub struct AgentService {
 
 impl AgentService {
     pub fn new(db: DB, git: GitService, worktree_root: PathBuf) -> Self {
-        let svc = Self { db, git, worktree_root };
+        let svc = Self {
+            db,
+            git,
+            worktree_root,
+        };
         svc.init_schema();
         svc
     }
@@ -28,7 +32,13 @@ impl AgentService {
     fn worktree_name(name: &str, id: &Uuid) -> String {
         let mut slug = name
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { ' ' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    ' '
+                }
+            })
             .collect::<String>()
             .split_whitespace()
             .collect::<Vec<_>>()
@@ -77,7 +87,10 @@ impl AgentService {
         )
         .unwrap();
         // migrate DBs created before the `started` column existed (ignored if present)
-        let _ = c.execute("ALTER TABLE agents ADD COLUMN started INTEGER NOT NULL DEFAULT 0", []);
+        let _ = c.execute(
+            "ALTER TABLE agents ADD COLUMN started INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
         // migrate DBs created before the `session_id` column existed (ignored if present)
         let _ = c.execute("ALTER TABLE agents ADD COLUMN session_id TEXT", []);
     }
@@ -108,7 +121,11 @@ impl AgentService {
     }
 
     pub fn list(&self) -> AppResult<Vec<Agent>> {
-        Ok(self.records()?.into_iter().map(|r| self.enrich(r)).collect())
+        Ok(self
+            .records()?
+            .into_iter()
+            .map(|r| self.enrich(r))
+            .collect())
     }
 
     pub fn get(&self, id: Uuid) -> AppResult<Agent> {
@@ -134,13 +151,16 @@ impl AgentService {
         // flat: worktrees/<name>. Only disambiguate on a real cross-project name clash.
         let mut wt_path = self.worktree_root.join(&wt_name);
         if wt_path.exists() {
-            wt_path = self.worktree_root.join(format!("{}-{}", wt_name, &id.to_string()[..6]));
+            wt_path = self
+                .worktree_root
+                .join(format!("{}-{}", wt_name, &id.to_string()[..6]));
         }
 
         // best-effort: only real git projects get a worktree
         if self.git.detect(project_path) {
             if let Err(e) =
-                self.git.create_worktree(project_path, &wt_name, &branch, Some(&req.base), &wt_path)
+                self.git
+                    .create_worktree(project_path, &wt_name, &branch, Some(&req.base), &wt_path)
             {
                 log::warn!("worktree create failed for agent {id}: {e:?}");
             }
@@ -259,7 +279,8 @@ impl AgentService {
     /// Push the agent's branch to `origin` (deterministic backend push).
     pub fn push(&self, id: Uuid) -> AppResult<()> {
         let rec = self.record(id)?;
-        self.git.push(Path::new(&rec.worktree), "origin", &rec.branch)
+        self.git
+            .push(Path::new(&rec.worktree), "origin", &rec.branch)
     }
 
     /// Old/new content of a file in the agent's worktree, for the diff view.
@@ -279,8 +300,9 @@ impl AgentService {
         // best-effort: tear down the worktree before dropping the row
         if let Some(pp) = project_path {
             if let Ok(rec) = self.record(id) {
-                if let Some(wt_name) =
-                    Path::new(&rec.worktree).file_name().and_then(|n| n.to_str())
+                if let Some(wt_name) = Path::new(&rec.worktree)
+                    .file_name()
+                    .and_then(|n| n.to_str())
                 {
                     let _ = self.git.remove_worktree(pp, wt_name);
                 }
@@ -325,8 +347,11 @@ impl AgentService {
     /// Mark the agent as launched-at-least-once (so its prompt is delivered only once).
     pub fn mark_started(&self, id: Uuid) -> AppResult<()> {
         let c = self.db.lock().unwrap();
-        c.execute("UPDATE agents SET started = 1 WHERE id = ?1", [id.to_string()])
-            .map_err(DbError::Sqlite)?;
+        c.execute(
+            "UPDATE agents SET started = 1 WHERE id = ?1",
+            [id.to_string()],
+        )
+        .map_err(DbError::Sqlite)?;
         Ok(())
     }
 
@@ -356,7 +381,21 @@ impl AgentService {
     }
 
     fn records(&self) -> AppResult<Vec<AgentRecord>> {
-        let raw: Vec<(String, String, String, String, Option<String>, String, String, String, String, String, String, bool, Option<String>)> = {
+        let raw: Vec<(
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            bool,
+            Option<String>,
+        )> = {
             let c = self.db.lock().unwrap();
             let mut stmt = c
                 .prepare(
@@ -366,8 +405,19 @@ impl AgentService {
             let rows = stmt
                 .query_map([], |r| {
                     Ok((
-                        r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?,
-                        r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?, r.get(12)?,
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                        r.get(7)?,
+                        r.get(8)?,
+                        r.get(9)?,
+                        r.get(10)?,
+                        r.get(11)?,
+                        r.get(12)?,
                     ))
                 })
                 .map_err(DbError::Sqlite)?;
@@ -375,18 +425,58 @@ impl AgentService {
         };
 
         raw.into_iter()
-            .map(|(id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id)| {
-                Ok(AgentRecord {
-                    id: Uuid::parse_str(&id).map_err(|e| AppError::Other(e.to_string()))?,
-                    project_id: Uuid::parse_str(&project_id).map_err(|e| AppError::Other(e.to_string()))?,
-                    tool, model, effort, name, task, status, branch, worktree, base, started, session_id,
-                })
-            })
+            .map(
+                |(
+                    id,
+                    project_id,
+                    tool,
+                    model,
+                    effort,
+                    name,
+                    task,
+                    status,
+                    branch,
+                    worktree,
+                    base,
+                    started,
+                    session_id,
+                )| {
+                    Ok(AgentRecord {
+                        id: Uuid::parse_str(&id).map_err(|e| AppError::Other(e.to_string()))?,
+                        project_id: Uuid::parse_str(&project_id)
+                            .map_err(|e| AppError::Other(e.to_string()))?,
+                        tool,
+                        model,
+                        effort,
+                        name,
+                        task,
+                        status,
+                        branch,
+                        worktree,
+                        base,
+                        started,
+                        session_id,
+                    })
+                },
+            )
             .collect()
     }
 
     fn record(&self, id: Uuid) -> AppResult<AgentRecord> {
-        let row: Option<(String, String, String, Option<String>, String, String, String, String, String, String, bool, Option<String>)> = {
+        let row: Option<(
+            String,
+            String,
+            String,
+            Option<String>,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            bool,
+            Option<String>,
+        )> = {
             let c = self.db.lock().unwrap();
             c.query_row(
                 "SELECT project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id FROM agents WHERE id = ?1",
@@ -397,10 +487,34 @@ impl AgentService {
             .map_err(DbError::Sqlite)?
         };
         match row {
-            Some((project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id)) => Ok(AgentRecord {
+            Some((
+                project_id,
+                tool,
+                model,
+                effort,
+                name,
+                task,
+                status,
+                branch,
+                worktree,
+                base,
+                started,
+                session_id,
+            )) => Ok(AgentRecord {
                 id,
-                project_id: Uuid::parse_str(&project_id).map_err(|e| AppError::Other(e.to_string()))?,
-                tool, model, effort, name, task, status, branch, worktree, base, started, session_id,
+                project_id: Uuid::parse_str(&project_id)
+                    .map_err(|e| AppError::Other(e.to_string()))?,
+                tool,
+                model,
+                effort,
+                name,
+                task,
+                status,
+                branch,
+                worktree,
+                base,
+                started,
+                session_id,
             }),
             None => Err(AgentError::NotFound(id.to_string()).into()),
         }
@@ -444,7 +558,11 @@ mod tests {
         let a = s.spawn(req(pid, "fix login"), &nogit()).unwrap();
         assert_eq!(a.project_id, pid);
         assert_eq!(a.branch, "agent/fix_login", "branch from snake_case(name)");
-        assert!(a.worktree.replace('\\', "/").ends_with("/fix_login"), "flat worktree named after agent: {}", a.worktree);
+        assert!(
+            a.worktree.replace('\\', "/").ends_with("/fix_login"),
+            "flat worktree named after agent: {}",
+            a.worktree
+        );
         assert_eq!(a.status, "idle");
     }
 
@@ -472,7 +590,11 @@ mod tests {
         let proj = tempfile::tempdir().unwrap();
         GitService::new().init(proj.path()).unwrap(); // empty repo — spawn makes the initial commit
         let a = s.spawn(req(Uuid::new_v4(), "wt"), proj.path()).unwrap();
-        assert!(Path::new(&a.worktree).exists(), "real worktree at {}", a.worktree);
+        assert!(
+            Path::new(&a.worktree).exists(),
+            "real worktree at {}",
+            a.worktree
+        );
     }
 
     #[test]
@@ -509,7 +631,12 @@ mod tests {
     fn update_changes_status() {
         let s = svc();
         let a = s.spawn(req(Uuid::new_v4(), "io"), &nogit()).unwrap();
-        let upd = AgentUpdateRequest { status: Some("running".into()), task: None, model: None, name: None };
+        let upd = AgentUpdateRequest {
+            status: Some("running".into()),
+            task: None,
+            model: None,
+            name: None,
+        };
         assert_eq!(s.update(a.id, upd).unwrap().status, "running");
         assert_eq!(s.get(a.id).unwrap().status, "running");
     }
@@ -527,7 +654,10 @@ mod tests {
     fn set_session_round_trips_and_defaults_none() {
         let s = svc();
         let a = s.spawn(req(Uuid::new_v4(), "sess"), &nogit()).unwrap();
-        assert_eq!(a.session_id, None, "a fresh agent has no session id (migration default NULL)");
+        assert_eq!(
+            a.session_id, None,
+            "a fresh agent has no session id (migration default NULL)"
+        );
         s.set_session(a.id, "abc-123").unwrap();
         assert_eq!(
             s.get(a.id).unwrap().session_id.as_deref(),
@@ -542,7 +672,12 @@ mod tests {
         let run = s.spawn(req(Uuid::new_v4(), "run"), &nogit()).unwrap();
         let block = s.spawn(req(Uuid::new_v4(), "block"), &nogit()).unwrap();
         let done = s.spawn(req(Uuid::new_v4(), "done"), &nogit()).unwrap();
-        let upd = |st: &str| AgentUpdateRequest { status: Some(st.into()), task: None, model: None, name: None };
+        let upd = |st: &str| AgentUpdateRequest {
+            status: Some(st.into()),
+            task: None,
+            model: None,
+            name: None,
+        };
         s.update(run.id, upd("running")).unwrap();
         s.update(block.id, upd("blocked")).unwrap();
         s.update(done.id, upd("done")).unwrap();

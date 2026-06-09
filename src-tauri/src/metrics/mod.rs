@@ -55,8 +55,13 @@ impl Default for MetricsSampler {
 
 impl MetricsSampler {
     pub fn new() -> Self {
-        let cpu_count = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
-        Self { sys: System::new(), cpu_count }
+        let cpu_count = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        Self {
+            sys: System::new(),
+            cpu_count,
+        }
     }
 
     /// Refresh per-process cpu + memory. sysinfo derives cpu% from the delta
@@ -81,9 +86,21 @@ impl MetricsSampler {
         let cores = self.cpu_count.max(1) as f32;
 
         let mut procs = Vec::with_capacity(agents.len() + 1);
-        procs.push(subtree_metric("app".into(), "Orrery".into(), app_pid, &map, cores));
+        procs.push(subtree_metric(
+            "app".into(),
+            "Orrery".into(),
+            app_pid,
+            &map,
+            cores,
+        ));
         for (id, pid) in agents {
-            procs.push(subtree_metric(id.to_string(), id.to_string(), *pid, &map, cores));
+            procs.push(subtree_metric(
+                id.to_string(),
+                id.to_string(),
+                *pid,
+                &map,
+                cores,
+            ));
         }
 
         SystemMetrics {
@@ -121,7 +138,12 @@ fn subtree_metric(
     cores: f32,
 ) -> ProcMetric {
     let (cpu, mem_bytes) = aggregate_subtree(root, map);
-    ProcMetric { id, label, cpu: cpu / cores, mem_bytes }
+    ProcMetric {
+        id,
+        label,
+        cpu: cpu / cores,
+        mem_bytes,
+    }
 }
 
 /// Pure roll-up: sum cpu% and memory over `root` and every process whose ancestry
@@ -170,13 +192,62 @@ mod tests {
     //   99 (unrelated, not in any subtree)
     fn fixture() -> HashMap<u32, ProcSample> {
         let mut m = HashMap::new();
-        m.insert(1, ProcSample { parent: None, cpu: 1.0, mem_bytes: 100 });
-        m.insert(2, ProcSample { parent: Some(1), cpu: 2.0, mem_bytes: 200 });
-        m.insert(3, ProcSample { parent: Some(1), cpu: 3.0, mem_bytes: 300 });
-        m.insert(4, ProcSample { parent: Some(2), cpu: 4.0, mem_bytes: 400 });
-        m.insert(10, ProcSample { parent: Some(1), cpu: 10.0, mem_bytes: 1000 });
-        m.insert(11, ProcSample { parent: Some(10), cpu: 11.0, mem_bytes: 1100 });
-        m.insert(99, ProcSample { parent: None, cpu: 99.0, mem_bytes: 9900 });
+        m.insert(
+            1,
+            ProcSample {
+                parent: None,
+                cpu: 1.0,
+                mem_bytes: 100,
+            },
+        );
+        m.insert(
+            2,
+            ProcSample {
+                parent: Some(1),
+                cpu: 2.0,
+                mem_bytes: 200,
+            },
+        );
+        m.insert(
+            3,
+            ProcSample {
+                parent: Some(1),
+                cpu: 3.0,
+                mem_bytes: 300,
+            },
+        );
+        m.insert(
+            4,
+            ProcSample {
+                parent: Some(2),
+                cpu: 4.0,
+                mem_bytes: 400,
+            },
+        );
+        m.insert(
+            10,
+            ProcSample {
+                parent: Some(1),
+                cpu: 10.0,
+                mem_bytes: 1000,
+            },
+        );
+        m.insert(
+            11,
+            ProcSample {
+                parent: Some(10),
+                cpu: 11.0,
+                mem_bytes: 1100,
+            },
+        );
+        m.insert(
+            99,
+            ProcSample {
+                parent: None,
+                cpu: 99.0,
+                mem_bytes: 9900,
+            },
+        );
         m
     }
 
@@ -210,8 +281,22 @@ mod tests {
     fn cycle_does_not_loop_forever() {
         // pid-reuse style cycle: a <-> b
         let mut m = HashMap::new();
-        m.insert(1, ProcSample { parent: Some(2), cpu: 1.0, mem_bytes: 10 });
-        m.insert(2, ProcSample { parent: Some(1), cpu: 2.0, mem_bytes: 20 });
+        m.insert(
+            1,
+            ProcSample {
+                parent: Some(2),
+                cpu: 1.0,
+                mem_bytes: 10,
+            },
+        );
+        m.insert(
+            2,
+            ProcSample {
+                parent: Some(1),
+                cpu: 2.0,
+                mem_bytes: 20,
+            },
+        );
         let (cpu, mem) = aggregate_subtree(1, &m);
         assert_eq!(cpu, 3.0);
         assert_eq!(mem, 30);

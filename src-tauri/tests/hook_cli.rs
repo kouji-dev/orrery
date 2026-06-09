@@ -63,7 +63,10 @@ fn hook_cli_posts_request_and_prints_the_decision() {
         "stdout should carry the decision, got: {stdout}"
     );
     // and it forwarded a well-formed envelope (auth + payload) to the bridge
-    assert!(req.contains("Authorization: Bearer secret"), "auth header sent");
+    assert!(
+        req.contains("Authorization: Bearer secret"),
+        "auth header sent"
+    );
     assert!(req.contains(r#""agentId":"a1""#), "agent id in envelope");
     assert!(req.contains("ls"), "stdin payload forwarded");
 }

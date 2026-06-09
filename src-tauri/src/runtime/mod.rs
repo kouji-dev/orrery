@@ -280,7 +280,11 @@ fn tool_command(
         }
     }
 
-    let prompt = if send_prompt && !task.is_empty() { Some(task) } else { None };
+    let prompt = if send_prompt && !task.is_empty() {
+        Some(task)
+    } else {
+        None
+    };
     match adapter {
         Some(adapter) => adapter.build_command(prompt),
         None => {
@@ -460,10 +464,7 @@ mod tests {
         let id = Uuid::new_v4();
 
         // Simulate a running proc by inserting a sentinel killer (no real child).
-        svc.procs
-            .lock()
-            .unwrap()
-            .insert(id, fake_proc());
+        svc.procs.lock().unwrap().insert(id, fake_proc());
         assert!(svc.is_running(id), "should be running once inserted");
 
         svc.stop(id);
@@ -573,7 +574,10 @@ mod tests {
         // `call` is prefixed so cmd.exe does not strip the quotes around a spaced
         // shim path + spaced prompt (the C:\Program Files\nodejs case).
         assert_eq!(
-            wrap_for_ext(Path::new(r"C:\Program Files\nodejs\claude.cmd"), &["fix bug".into()]),
+            wrap_for_ext(
+                Path::new(r"C:\Program Files\nodejs\claude.cmd"),
+                &["fix bug".into()]
+            ),
             vec![
                 "cmd.exe".to_string(),
                 "/c".into(),

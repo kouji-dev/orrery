@@ -243,7 +243,10 @@ mod tests {
         // The text block from the SAME (latest) message follows.
         assert_eq!(lines[1], "Now running the tests to confirm");
         // It must NOT include the earlier assistant message's content.
-        assert!(!out.contains("read main.rs"), "leaked older message: {out:?}");
+        assert!(
+            !out.contains("read main.rs"),
+            "leaked older message: {out:?}"
+        );
     }
 
     #[test]
@@ -281,7 +284,11 @@ mod tests {
             r#"{{"type":"assistant","message":{{"content":[{{"type":"text","text":"{long}"}}]}}}}"#
         );
         let out = latest_from_str(&jsonl).unwrap();
-        assert!(out.chars().count() <= MAX_TOTAL, "too long: {}", out.chars().count());
+        assert!(
+            out.chars().count() <= MAX_TOTAL,
+            "too long: {}",
+            out.chars().count()
+        );
         assert!(out.ends_with('…'), "long line should be clipped: {out:?}");
     }
 
@@ -340,8 +347,10 @@ mod tests {
 
     #[test]
     fn handles_string_content() {
-        let jsonl =
-            concat!(r#"{"type":"assistant","message":{"content":"a plain   string  reply"}}"#, "\n");
+        let jsonl = concat!(
+            r#"{"type":"assistant","message":{"content":"a plain   string  reply"}}"#,
+            "\n"
+        );
         assert_eq!(latest_from_str(jsonl).unwrap(), "a plain string reply");
     }
 

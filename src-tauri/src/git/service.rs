@@ -37,7 +37,11 @@ pub struct FileDiff {
 }
 
 fn lang_from_path(rel: &str) -> &'static str {
-    match Path::new(rel).extension().and_then(|e| e.to_str()).unwrap_or("") {
+    match Path::new(rel)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+    {
         "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" => "javascript",
         "json" => "json",
         "css" | "scss" | "less" => "css",
@@ -175,7 +179,9 @@ impl GitService {
             .map_err(|e| AppError::Other(e.to_string()))?;
         let tree_oid = {
             let mut index = repo.index().map_err(|e| AppError::Other(e.to_string()))?;
-            index.write_tree().map_err(|e| AppError::Other(e.to_string()))?
+            index
+                .write_tree()
+                .map_err(|e| AppError::Other(e.to_string()))?
         };
         let tree = repo
             .find_tree(tree_oid)
@@ -234,7 +240,11 @@ impl GitService {
             .map_err(|e| AppError::Other(e.to_string()))?;
         index.write().map_err(|e| AppError::Other(e.to_string()))?;
         let tree = repo
-            .find_tree(index.write_tree().map_err(|e| AppError::Other(e.to_string()))?)
+            .find_tree(
+                index
+                    .write_tree()
+                    .map_err(|e| AppError::Other(e.to_string()))?,
+            )
             .map_err(|e| AppError::Other(e.to_string()))?;
         let sig = repo
             .signature()
@@ -244,7 +254,11 @@ impl GitService {
             .head()
             .and_then(|h| h.peel_to_commit())
             .map_err(|e| AppError::Other(e.to_string()))?;
-        let msg = if message.trim().is_empty() { "wip" } else { message };
+        let msg = if message.trim().is_empty() {
+            "wip"
+        } else {
+            message
+        };
         let oid = repo
             .commit(Some("HEAD"), &sig, &sig, msg, &tree, &[&parent])
             .map_err(|e| AppError::Other(e.to_string()))?;
@@ -315,7 +329,11 @@ impl GitService {
             return Err(AppError::Other("merge conflicts — resolve manually".into()));
         }
         let tree = repo
-            .find_tree(index.write_tree().map_err(|e| AppError::Other(e.to_string()))?)
+            .find_tree(
+                index
+                    .write_tree()
+                    .map_err(|e| AppError::Other(e.to_string()))?,
+            )
             .map_err(|e| AppError::Other(e.to_string()))?;
         let sig = repo
             .signature()
@@ -354,7 +372,11 @@ impl GitService {
             })
             .unwrap_or_default();
         let new = std::fs::read_to_string(worktree.join(rel)).unwrap_or_default();
-        FileDiff { old, new, lang: lang_from_path(rel).to_string() }
+        FileDiff {
+            old,
+            new,
+            lang: lang_from_path(rel).to_string(),
+        }
     }
 
     /// Working-tree changes vs HEAD (staged + unstaged + untracked), with line counts.
@@ -373,10 +395,11 @@ impl GitService {
         opts.include_untracked(true)
             .recurse_untracked_dirs(true)
             .show_untracked_content(true);
-        let mut diff = match repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts)) {
-            Ok(d) => d,
-            Err(_) => return Vec::new(),
-        };
+        let mut diff =
+            match repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts)) {
+                Ok(d) => d,
+                Err(_) => return Vec::new(),
+            };
         // Coalesce a delete + add of similar content into ONE "renamed" delta
         // (incl. untracked new files), so a move shows as a single R entry — not
         // a separate Deleted + Added pair.
@@ -392,7 +415,8 @@ impl GitService {
                 .unwrap_or_default()
         };
         // (add, del, state, old_path) per NEW path; RefCell so both callbacks can mutate it
-        let acc: RefCell<BTreeMap<String, (i64, i64, char, Option<String>)>> = RefCell::new(BTreeMap::new());
+        let acc: RefCell<BTreeMap<String, (i64, i64, char, Option<String>)>> =
+            RefCell::new(BTreeMap::new());
         let _ = diff.foreach(
             &mut |delta, _| {
                 let st = match delta.status() {
@@ -405,7 +429,10 @@ impl GitService {
                 let e = m.entry(new_path_of(&delta)).or_insert((0, 0, st, None));
                 e.2 = st;
                 if st == 'R' {
-                    e.3 = delta.old_file().path().map(|p| p.to_string_lossy().replace('\\', "/"));
+                    e.3 = delta
+                        .old_file()
+                        .path()
+                        .map(|p| p.to_string_lossy().replace('\\', "/"));
                 }
                 true
             },
@@ -454,7 +481,12 @@ impl GitService {
         let repo = Repository::open(path).ok()?;
         let head = repo.head().ok()?;
         let branch = head.shorthand().ok()?.to_string();
-        let short = head.target()?.to_string().chars().take(7).collect::<String>();
+        let short = head
+            .target()?
+            .to_string()
+            .chars()
+            .take(7)
+            .collect::<String>();
         Some((branch, short))
     }
 
@@ -464,7 +496,8 @@ impl GitService {
     /// stderr.
     pub fn push(&self, worktree: &Path, remote: &str, branch: &str) -> AppResult<()> {
         let mut cmd = std::process::Command::new("git");
-        cmd.current_dir(worktree).args(["push", "-u", remote, branch]);
+        cmd.current_dir(worktree)
+            .args(["push", "-u", remote, branch]);
         let out = crate::core::proc::no_window(&mut cmd)
             .output()
             .map_err(|e| AppError::Other(format!("git push: {e}")))?;
@@ -515,7 +548,8 @@ mod tests {
             .and_then(|h| h.target())
             .and_then(|oid| repo.find_commit(oid).ok());
         let parents: Vec<&git2::Commit> = parent.iter().collect();
-        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents)
+            .unwrap();
     }
 
     #[test]
@@ -544,7 +578,8 @@ mod tests {
         let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
         let sig = Signature::now("Test", "t@t").unwrap();
         let parent = repo.head().unwrap().peel_to_commit().unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "two files", &tree, &[&parent]).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "two files", &tree, &[&parent])
+            .unwrap();
 
         let log = svc.log(dir.path(), 10, 0);
         assert_eq!(log[0].files, 2, "two-file commit counts 2");
@@ -562,10 +597,22 @@ mod tests {
         let p1 = svc.log(dir.path(), 2, 0);
         let p2 = svc.log(dir.path(), 2, 2);
         let p3 = svc.log(dir.path(), 2, 4);
-        assert_eq!(p1.iter().map(|e| e.message.as_str()).collect::<Vec<_>>(), ["c4", "c3"]);
-        assert_eq!(p2.iter().map(|e| e.message.as_str()).collect::<Vec<_>>(), ["c2", "c1"]);
-        assert_eq!(p3.iter().map(|e| e.message.as_str()).collect::<Vec<_>>(), ["c0"]);
-        assert!(svc.log(dir.path(), 2, 99).is_empty(), "past-the-end offset is empty");
+        assert_eq!(
+            p1.iter().map(|e| e.message.as_str()).collect::<Vec<_>>(),
+            ["c4", "c3"]
+        );
+        assert_eq!(
+            p2.iter().map(|e| e.message.as_str()).collect::<Vec<_>>(),
+            ["c2", "c1"]
+        );
+        assert_eq!(
+            p3.iter().map(|e| e.message.as_str()).collect::<Vec<_>>(),
+            ["c0"]
+        );
+        assert!(
+            svc.log(dir.path(), 2, 99).is_empty(),
+            "past-the-end offset is empty"
+        );
     }
 
     #[test]
@@ -589,10 +636,17 @@ mod tests {
         commit_file(dir.path(), "a.txt", "first");
         std::fs::write(dir.path().join("a.txt"), "changed\n").unwrap();
         std::fs::write(dir.path().join("b.txt"), "new\n").unwrap();
-        svc.commit(dir.path(), "only a", &["a.txt".to_string()]).unwrap();
+        svc.commit(dir.path(), "only a", &["a.txt".to_string()])
+            .unwrap();
         let st = svc.status(dir.path());
-        assert!(!st.iter().any(|c| c.path == "a.txt"), "a.txt committed: {st:?}");
-        assert!(st.iter().any(|c| c.path == "b.txt"), "b.txt still pending: {st:?}");
+        assert!(
+            !st.iter().any(|c| c.path == "a.txt"),
+            "a.txt committed: {st:?}"
+        );
+        assert!(
+            st.iter().any(|c| c.path == "b.txt"),
+            "b.txt still pending: {st:?}"
+        );
     }
 
     #[test]
@@ -605,8 +659,14 @@ mod tests {
         std::fs::write(dir.path().join("untracked.txt"), "x\n").unwrap();
         svc.discard(dir.path(), &[]).unwrap();
         assert!(svc.status(dir.path()).is_empty(), "clean after discard");
-        assert!(!dir.path().join("untracked.txt").exists(), "untracked removed");
-        assert_eq!(std::fs::read_to_string(dir.path().join("a.txt")).unwrap(), "x");
+        assert!(
+            !dir.path().join("untracked.txt").exists(),
+            "untracked removed"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("a.txt")).unwrap(),
+            "x"
+        );
     }
 
     #[test]
@@ -632,7 +692,13 @@ mod tests {
         ff(&format!("refs/heads/{main}"));
 
         svc.merge(dir.path(), "feature").unwrap();
-        let tip = Repository::open(dir.path()).unwrap().head().unwrap().peel_to_commit().unwrap().id();
+        let tip = Repository::open(dir.path())
+            .unwrap()
+            .head()
+            .unwrap()
+            .peel_to_commit()
+            .unwrap()
+            .id();
         assert_eq!(tip, feat_tip, "main fast-forwarded to feature");
         assert!(dir.path().join("b.txt").exists());
     }
@@ -680,18 +746,36 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let svc = GitService::new();
         svc.init(dir.path()).unwrap();
-        commit_file(dir.path(), "a.txt", "hello world\nsecond line\nthird line\n");
+        commit_file(
+            dir.path(),
+            "a.txt",
+            "hello world\nsecond line\nthird line\n",
+        );
         // move a.txt -> sub/b.txt (unstaged, like dragging it in a file explorer)
         std::fs::create_dir_all(dir.path().join("sub")).unwrap();
         std::fs::rename(dir.path().join("a.txt"), dir.path().join("sub/b.txt")).unwrap();
 
         let st = svc.status(dir.path());
         let renamed: Vec<_> = st.iter().filter(|f| f.state == "R").collect();
-        assert_eq!(renamed.len(), 1, "the move is ONE renamed entry, got: {st:?}");
+        assert_eq!(
+            renamed.len(),
+            1,
+            "the move is ONE renamed entry, got: {st:?}"
+        );
         assert_eq!(renamed[0].path, "sub/b.txt", "new path");
-        assert_eq!(renamed[0].old_path.as_deref(), Some("a.txt"), "carries the old path");
-        assert!(!st.iter().any(|f| f.state == "A"), "no separate Added entry: {st:?}");
-        assert!(!st.iter().any(|f| f.state == "D"), "no separate Deleted entry: {st:?}");
+        assert_eq!(
+            renamed[0].old_path.as_deref(),
+            Some("a.txt"),
+            "carries the old path"
+        );
+        assert!(
+            !st.iter().any(|f| f.state == "A"),
+            "no separate Added entry: {st:?}"
+        );
+        assert!(
+            !st.iter().any(|f| f.state == "D"),
+            "no separate Deleted entry: {st:?}"
+        );
     }
 
     #[test]
@@ -703,8 +787,14 @@ mod tests {
         std::fs::write(dir.path().join("a.txt"), "x\ny\n").unwrap(); // modify
         std::fs::write(dir.path().join("new.txt"), "n\n").unwrap(); // add (untracked)
         let st = svc.status(dir.path());
-        assert!(st.iter().any(|c| c.path == "a.txt" && c.state == "M"), "{st:?}");
-        assert!(st.iter().any(|c| c.path == "new.txt" && c.state == "A"), "{st:?}");
+        assert!(
+            st.iter().any(|c| c.path == "a.txt" && c.state == "M"),
+            "{st:?}"
+        );
+        assert!(
+            st.iter().any(|c| c.path == "new.txt" && c.state == "A"),
+            "{st:?}"
+        );
         // a brand-new untracked file must report its added line count, not +0
         let new = st.iter().find(|c| c.path == "new.txt").unwrap();
         assert_eq!(new.add, 1, "untracked file counts added lines: {st:?}");
@@ -737,9 +827,14 @@ mod tests {
         svc.create_worktree(dir.path(), "my_task", "agent/my_task", None, &wt_path)
             .unwrap();
 
-        assert!(wt_path.join("a.txt").exists(), "worktree checked out the files");
+        assert!(
+            wt_path.join("a.txt").exists(),
+            "worktree checked out the files"
+        );
         let repo = Repository::open(dir.path()).unwrap();
-        assert!(repo.find_branch("agent/my_task", git2::BranchType::Local).is_ok());
+        assert!(repo
+            .find_branch("agent/my_task", git2::BranchType::Local)
+            .is_ok());
 
         svc.remove_worktree(dir.path(), "my_task").unwrap();
         assert!(!wt_path.exists(), "worktree dir removed");
@@ -758,7 +853,10 @@ mod tests {
             .unwrap();
 
         assert!(wt_path.exists());
-        assert!(Repository::open(dir.path()).unwrap().head().is_ok(), "now has a HEAD");
+        assert!(
+            Repository::open(dir.path()).unwrap().head().is_ok(),
+            "now has a HEAD"
+        );
     }
 
     #[test]
@@ -766,7 +864,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let svc = GitService::new();
         svc.init(dir.path()).unwrap();
-        assert!(Repository::open(dir.path()).unwrap().head().is_err(), "starts unborn");
+        assert!(
+            Repository::open(dir.path()).unwrap().head().is_err(),
+            "starts unborn"
+        );
 
         svc.ensure_main_branch(dir.path()).unwrap();
 

@@ -32,7 +32,9 @@ impl Default for WatchService {
 
 impl WatchService {
     pub fn new() -> Self {
-        Self { watchers: Mutex::new(HashMap::new()) }
+        Self {
+            watchers: Mutex::new(HashMap::new()),
+        }
     }
 
     /// Watch `path` for `id`, replacing that agent's previous watcher (if any).
@@ -107,7 +109,13 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    fn run(settle: Duration) -> (std::sync::mpsc::Sender<()>, Arc<AtomicUsize>, std::thread::JoinHandle<()>) {
+    fn run(
+        settle: Duration,
+    ) -> (
+        std::sync::mpsc::Sender<()>,
+        Arc<AtomicUsize>,
+        std::thread::JoinHandle<()>,
+    ) {
         let (tx, rx) = std::sync::mpsc::channel::<()>();
         let count = Arc::new(AtomicUsize::new(0));
         let c = count.clone();
@@ -128,9 +136,17 @@ mod tests {
             std::thread::sleep(Duration::from_millis(8));
         }
         // trailing-edge: must NOT have emitted yet (still within the settle window)
-        assert_eq!(count.load(Ordering::SeqCst), 0, "no emit until the worktree goes quiet");
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            0,
+            "no emit until the worktree goes quiet"
+        );
         std::thread::sleep(Duration::from_millis(140)); // let it settle
-        assert_eq!(count.load(Ordering::SeqCst), 1, "exactly one emit after the burst settles");
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            1,
+            "exactly one emit after the burst settles"
+        );
         drop(tx); // disconnect → thread exits
         h.join().unwrap();
     }
@@ -142,7 +158,11 @@ mod tests {
         std::thread::sleep(Duration::from_millis(140)); // settle → emit #1
         tx.send(()).unwrap();
         std::thread::sleep(Duration::from_millis(140)); // settle → emit #2
-        assert_eq!(count.load(Ordering::SeqCst), 2, "a second burst triggers a second refresh");
+        assert_eq!(
+            count.load(Ordering::SeqCst),
+            2,
+            "a second burst triggers a second refresh"
+        );
         drop(tx);
         h.join().unwrap();
     }

@@ -186,7 +186,9 @@ mod tests {
     #[test]
     fn is_msi_distinguishes_compound_file_from_pe() {
         // CFBF (MSI) magic vs a PE (`MZ`, an NSIS -setup.exe), plus edge inputs.
-        assert!(is_msi(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0x00]));
+        assert!(is_msi(&[
+            0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0x00
+        ]));
         assert!(!is_msi(b"MZ\x90\x00\x03"));
         assert!(!is_msi(&[]));
         assert!(!is_msi(&[0xD0, 0xCF, 0x11])); // truncated, fewer than the 8 magic bytes
@@ -204,12 +206,23 @@ mod tests {
         assert!(s.contains("-Wait"), "waits for install to finish: {s}");
         assert!(s.contains("-PassThru"), "captures msiexec exit code: {s}");
         assert!(s.contains("Out-File"), "logs each step for diagnosis: {s}");
-        assert!(s.contains("Orrery_0.1.7_update.msi"), "msi path present: {s}");
+        assert!(
+            s.contains("Orrery_0.1.7_update.msi"),
+            "msi path present: {s}"
+        );
         // relaunch happens AFTER the elevate block and must NOT ride AUTOLAUNCHAPP
-        assert!(!s.contains("AUTOLAUNCHAPP"), "must not elevate-relaunch: {s}");
-        let relaunch_at = s.rfind("Start-Process -FilePath").expect("relaunch present");
+        assert!(
+            !s.contains("AUTOLAUNCHAPP"),
+            "must not elevate-relaunch: {s}"
+        );
+        let relaunch_at = s
+            .rfind("Start-Process -FilePath")
+            .expect("relaunch present");
         let elevate_at = s.find("-Verb RunAs").unwrap();
-        assert!(relaunch_at > elevate_at, "relaunch comes after elevate: {s}");
+        assert!(
+            relaunch_at > elevate_at,
+            "relaunch comes after elevate: {s}"
+        );
         assert!(
             s.contains(r"C:\Program Files\Orrery\Orrery.exe"),
             "relaunch exe: {s}"
@@ -219,6 +232,9 @@ mod tests {
     #[test]
     fn relaunch_script_escapes_single_quotes_for_ps_literal() {
         let s = relaunch_script(Path::new(r"C:\a'b\x.msi"), Path::new(r"C:\a'b\Orrery.exe"));
-        assert!(s.contains("a''b"), "single quote doubled for PS literal: {s}");
+        assert!(
+            s.contains("a''b"),
+            "single quote doubled for PS literal: {s}"
+        );
     }
 }

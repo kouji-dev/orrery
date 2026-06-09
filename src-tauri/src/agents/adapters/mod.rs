@@ -289,8 +289,10 @@ pub fn which(cmd: &str) -> bool {
     } else {
         &[""]
     };
-    std::env::split_paths(&paths)
-        .any(|dir| exts.iter().any(|ext| dir.join(format!("{cmd}{ext}")).is_file()))
+    std::env::split_paths(&paths).any(|dir| {
+        exts.iter()
+            .any(|ext| dir.join(format!("{cmd}{ext}")).is_file())
+    })
 }
 
 #[cfg(test)]
@@ -349,7 +351,11 @@ mod tests {
         // Mirrors the agent_allow/agent_deny command path: resolve tool → adapter,
         // then read its allow/deny keystrokes. Claude is the SELECT-style case.
         let claude = adapter_for("claude").unwrap();
-        assert_eq!(claude.allow_keys(), "1\r", "claude allow is option 1 + Enter");
+        assert_eq!(
+            claude.allow_keys(),
+            "1\r",
+            "claude allow is option 1 + Enter"
+        );
         assert_eq!(claude.deny_keys(), "\x1b", "claude deny is Esc");
         // An unknown tool has no adapter — the command turns this into an error.
         assert!(adapter_for("nope").is_none());
@@ -363,7 +369,11 @@ mod tests {
         assert_eq!(claude.decide_keys(3), "3\r", "option 3 → \"3\" + Enter");
         // Claude / Gemini render a numbered select, so both use the default.
         let gemini = adapter_for("gemini").unwrap();
-        assert_eq!(gemini.decide_keys(2), "2\r", "gemini option 2 → \"2\" + Enter");
+        assert_eq!(
+            gemini.decide_keys(2),
+            "2\r",
+            "gemini option 2 → \"2\" + Enter"
+        );
     }
 
     #[test]
@@ -371,7 +381,11 @@ mod tests {
         // Mirrors the agent_decide command path: resolve tool → adapter, then read
         // its decide keystrokes for a 1-based choice.
         let claude = adapter_for("claude").unwrap();
-        assert_eq!(claude.decide_keys(2), "2\r", "claude option 2 → \"2\" + Enter");
+        assert_eq!(
+            claude.decide_keys(2),
+            "2\r",
+            "claude option 2 → \"2\" + Enter"
+        );
         // An unknown tool has no adapter — the command turns this into an error.
         assert!(adapter_for("nope").is_none());
     }
@@ -381,10 +395,18 @@ mod tests {
         // A throwaway adapter that overrides nothing must inherit the y/n default.
         struct Bare;
         impl AgentAdapter for Bare {
-            fn id(&self) -> &str { "bare" }
-            fn binary(&self) -> &str { "bare" }
-            fn argv(&self, _task: Option<&str>) -> Vec<String> { vec!["bare".into()] }
-            fn install_hooks(&self, _home: &Path, _hook_bin: &Path) -> std::io::Result<()> { Ok(()) }
+            fn id(&self) -> &str {
+                "bare"
+            }
+            fn binary(&self) -> &str {
+                "bare"
+            }
+            fn argv(&self, _task: Option<&str>) -> Vec<String> {
+                vec!["bare".into()]
+            }
+            fn install_hooks(&self, _home: &Path, _hook_bin: &Path) -> std::io::Result<()> {
+                Ok(())
+            }
         }
         assert_eq!(Bare.allow_keys(), "y\r");
         assert_eq!(Bare.deny_keys(), "n\r");
@@ -402,7 +424,11 @@ mod tests {
         let claude = adapter_for("claude").unwrap();
         assert_eq!(
             claude.resume_argv("abc"),
-            Some(vec!["claude".to_string(), "--resume".to_string(), "abc".to_string()])
+            Some(vec![
+                "claude".to_string(),
+                "--resume".to_string(),
+                "abc".to_string()
+            ])
         );
         // Other tools have no resume-by-id flow → None (fall back to a normal launch).
         for tool in ["codex", "cursor", "gemini"] {
