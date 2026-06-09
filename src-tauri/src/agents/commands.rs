@@ -17,17 +17,22 @@ pub fn agent_list(svc: State<'_, AgentService>) -> AppResult<Vec<Agent>> {
     svc.list()
 }
 
-#[tauri::command(async)]
-pub fn agent_spawn<R: Runtime>(
+/// Blocking pool: creates the git worktree + branch.
+#[tauri::command]
+pub async fn agent_spawn<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, AgentService>,
     projects: State<'_, ProjectService>,
     req: AgentSpawnRequest,
 ) -> AppResult<Agent> {
-    let project_path = projects.path_of(req.project_id)?;
-    let agent = svc
-        .spawn(req, std::path::Path::new(&project_path))
-        .inspect_err(|e| log::error!("agent_spawn failed: {e:?}"))?;
+    let (svc, projects) = (svc.inner().clone(), projects.inner().clone());
+    let agent = tauri::async_runtime::spawn_blocking(move || {
+        let project_path = projects.path_of(req.project_id)?;
+        svc.spawn(req, std::path::Path::new(&project_path))
+            .inspect_err(|e| log::error!("agent_spawn failed: {e:?}"))
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))??;
     emit_entity(&app, "agent", Change::Created, agent.clone());
     Ok(agent)
 }
@@ -44,8 +49,9 @@ pub fn agent_update<R: Runtime>(
     Ok(agent)
 }
 
-#[tauri::command(async)]
-pub fn agent_remove<R: Runtime>(
+/// Blocking pool: removes the worktree directory + prunes git metadata.
+#[tauri::command]
+pub async fn agent_remove<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, AgentService>,
     projects: State<'_, ProjectService>,
@@ -54,58 +60,97 @@ pub fn agent_remove<R: Runtime>(
 ) -> AppResult<()> {
     let project_path = svc.get(id).ok().and_then(|a| projects.path_of(a.project_id).ok());
     watch.unwatch(id); // stop watching its worktree before tearing it down
-    svc.remove(id, project_path.as_deref().map(std::path::Path::new))?;
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        svc.remove(id, project_path.as_deref().map(std::path::Path::new))
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))??;
     emit_entity(&app, "agent", Change::Deleted, serde_json::json!({ "id": id }));
     Ok(())
 }
 
 /// Worktree file tree (source recursed, ignored dirs as lazy stubs).
-#[tauri::command(async)]
-pub fn agent_tree(svc: State<'_, AgentService>, id: Uuid) -> AppResult<Vec<crate::fs::FileNode>> {
-    let agent = svc.get(id)?;
-    Ok(crate::fs::tree(std::path::Path::new(&agent.worktree)))
+/// Blocking pool: walks up to 10k fs entries.
+#[tauri::command]
+pub async fn agent_tree(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+) -> AppResult<Vec<crate::fs::FileNode>> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let agent = svc.get(id)?;
+        Ok(crate::fs::tree(std::path::Path::new(&agent.worktree)))
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
 /// Working-tree changes in an agent's worktree (transient `git_changes`).
-#[tauri::command(async)]
-pub fn agent_changes(
+/// Blocking pool: full git2 status with line counts.
+#[tauri::command]
+pub async fn agent_changes(
     svc: State<'_, AgentService>,
     id: Uuid,
 ) -> AppResult<Vec<crate::git::service::FileChange>> {
-    svc.changes(id)
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || svc.changes(id))
+        .await
+        .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
 /// Commits on the agent's branch — read from its worktree HEAD, tagged with the
-/// agent id (transient `git_commits`).
-#[tauri::command(async)]
-pub fn agent_commits(
+/// agent id (transient `git_commits`). Blocking pool: revwalk + per-commit tree diff.
+#[tauri::command]
+pub async fn agent_commits(
     svc: State<'_, AgentService>,
     id: Uuid,
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> AppResult<Vec<crate::projects::model::CommitView>> {
-    svc.commits(id, limit.unwrap_or(50), offset.unwrap_or(0))
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        svc.commits(id, limit.unwrap_or(50), offset.unwrap_or(0))
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
-#[tauri::command(async)]
-pub fn agent_commit(
+/// Blocking pool: git2 index add + commit.
+#[tauri::command]
+pub async fn agent_commit(
     svc: State<'_, AgentService>,
     id: Uuid,
     message: String,
     paths: Vec<String>,
 ) -> AppResult<String> {
-    svc.commit(id, &message, &paths)
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || svc.commit(id, &message, &paths))
+        .await
+        .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
-#[tauri::command(async)]
-pub fn agent_discard(svc: State<'_, AgentService>, id: Uuid, paths: Vec<String>) -> AppResult<()> {
-    svc.discard(id, &paths)
+/// Blocking pool: git2 checkout-head over the selected paths.
+#[tauri::command]
+pub async fn agent_discard(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    paths: Vec<String>,
+) -> AppResult<()> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || svc.discard(id, &paths))
+        .await
+        .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
 /// Backend push: push the agent's branch to origin (deterministic).
-#[tauri::command(async)]
-pub fn agent_push(svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
-    svc.push(id)
+/// Blocking pool: shells out to the system git for credential handling.
+#[tauri::command]
+pub async fn agent_push(svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || svc.push(id))
+        .await
+        .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
 /// AI-driven completion action: resolve the predefined prompt for `kind`
@@ -125,14 +170,18 @@ pub fn agent_action(
     rt.write(id, &format!("{prompt}\r")).map_err(AppError::Other)
 }
 
-#[tauri::command(async)]
-pub fn agent_diff(
+/// Blocking pool: reads HEAD blob + working file content.
+#[tauri::command]
+pub async fn agent_diff(
     svc: State<'_, AgentService>,
     id: Uuid,
     path: String,
     old_path: Option<String>,
 ) -> AppResult<crate::git::service::FileDiff> {
-    svc.file_diff(id, &path, old_path.as_deref())
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || svc.file_diff(id, &path, old_path.as_deref()))
+        .await
+        .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
 /// Launch the agent's tool in its worktree (PTY-streamed) and mark it running.
@@ -283,7 +332,10 @@ pub fn agent_dir(
 
 /// Detection of which CLI coding agents are installed — delegated to the adapter
 /// registry so only-installed tools are offered (and, later, hooked).
-#[tauri::command(async)]
-pub fn detect_tools() -> Vec<super::adapters::ToolStatus> {
-    super::adapters::installed()
+/// Blocking pool: shells out per known tool.
+#[tauri::command]
+pub async fn detect_tools() -> AppResult<Vec<super::adapters::ToolStatus>> {
+    tauri::async_runtime::spawn_blocking(super::adapters::installed)
+        .await
+        .map_err(|e| AppError::Other(format!("join: {e}")))
 }

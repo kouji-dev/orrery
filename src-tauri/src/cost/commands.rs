@@ -1,8 +1,11 @@
 use super::{snapshot, CostSnapshot};
 
-/// Optional synchronous initial value so the status bar can paint a cost before
-/// the first 60s push. Runs ccusage inline (a few hundred ms) — fine for a prime.
-#[tauri::command(async)]
-pub fn system_cost() -> CostSnapshot {
-    snapshot()
+/// Initial value so the status bar can paint a cost without waiting for the 60s
+/// push loop (whose first emit fires before the webview subscribes). The ccusage
+/// shell-out takes seconds — blocking pool.
+#[tauri::command]
+pub async fn system_cost() -> Result<CostSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(snapshot)
+        .await
+        .map_err(|e| format!("join: {e}"))
 }

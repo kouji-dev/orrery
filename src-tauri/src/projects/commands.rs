@@ -13,13 +13,19 @@ pub fn project_list(svc: State<'_, ProjectService>) -> AppResult<Vec<Project>> {
     svc.list()
 }
 
-#[tauri::command(async)]
-pub fn project_create<R: Runtime>(
+/// Blocking pool: may git-init / inspect the repo on disk.
+#[tauri::command]
+pub async fn project_create<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, ProjectService>,
     req: ProjectCreateRequest,
 ) -> AppResult<Project> {
-    let project = svc.create(req).inspect_err(|e| log::error!("project_create failed: {e:?}"))?;
+    let svc = svc.inner().clone();
+    let project = tauri::async_runtime::spawn_blocking(move || {
+        svc.create(req).inspect_err(|e| log::error!("project_create failed: {e:?}"))
+    })
+    .await
+    .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))??;
     emit_entity(&app, "project", Change::Created, project.clone());
     Ok(project)
 }
@@ -36,13 +42,17 @@ pub fn project_update<R: Runtime>(
     Ok(project)
 }
 
-#[tauri::command(async)]
-pub fn project_init_git<R: Runtime>(
+/// Blocking pool: git init on disk.
+#[tauri::command]
+pub async fn project_init_git<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, ProjectService>,
     id: Uuid,
 ) -> AppResult<Project> {
-    let project = svc.init_git(id)?;
+    let svc = svc.inner().clone();
+    let project = tauri::async_runtime::spawn_blocking(move || svc.init_git(id))
+        .await
+        .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))??;
     emit_entity(&app, "project", Change::Updated, project.clone());
     Ok(project)
 }
@@ -65,16 +75,24 @@ pub fn project_remove<R: Runtime>(
     Ok(())
 }
 
-#[tauri::command(async)]
-pub fn project_detect_git(svc: State<'_, ProjectService>, path: String) -> AppResult<bool> {
-    Ok(svc.detect_git(&path))
+/// Blocking pool: opens the repo on disk to probe it.
+#[tauri::command]
+pub async fn project_detect_git(svc: State<'_, ProjectService>, path: String) -> AppResult<bool> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(svc.detect_git(&path)))
+        .await
+        .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))?
 }
 
-#[tauri::command(async)]
-pub fn project_commits(
+/// Blocking pool: revwalk + per-commit tree diff.
+#[tauri::command]
+pub async fn project_commits(
     svc: State<'_, ProjectService>,
     id: Uuid,
     limit: Option<usize>,
 ) -> AppResult<Vec<CommitView>> {
-    svc.commits(id, limit.unwrap_or(50))
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || svc.commits(id, limit.unwrap_or(50)))
+        .await
+        .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))?
 }

@@ -29,6 +29,7 @@ pub(crate) fn relative_time(then: i64) -> String {
     }
 }
 
+#[derive(Clone)]
 pub struct ProjectService {
     db: DB,
     git: GitService,

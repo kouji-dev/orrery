@@ -10,6 +10,7 @@ use crate::projects::model::CommitView;
 
 use super::model::{Agent, AgentRecord, AgentSpawnRequest, AgentUpdateRequest};
 
+#[derive(Clone)]
 pub struct AgentService {
     db: DB,
     git: GitService,

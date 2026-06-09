@@ -42,17 +42,36 @@ pub fn sample_with_labels(
     metrics
 }
 
-/// Optional synchronous initial value so the UI can paint before the first push.
-/// Does a warm-up + a real refresh inline (two refreshes spaced by sysinfo's
-/// minimum cpu interval) so the one-shot reading still has a usable cpu%.
-#[tauri::command(async)]
-pub fn system_metrics(
+/// Optional initial value so the UI can paint before the first push. Does a
+/// warm-up + a real refresh (two refreshes spaced by sysinfo's minimum cpu
+/// interval) so the one-shot reading still has a usable cpu%. The cold sampler
+/// init + deliberate sleep cost ~2s — blocking pool; State reads stay outside
+/// the closure (cheap, non-Send).
+#[tauri::command]
+pub async fn system_metrics(
     runtime: State<'_, RuntimeService>,
     agents: State<'_, AgentService>,
-) -> SystemMetrics {
-    let mut sampler = MetricsSampler::new();
-    sampler.refresh(); // warm-up
-    std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
-    sampler.refresh();
-    sample_with_labels(&sampler, std::process::id(), &runtime, &agents)
+) -> Result<SystemMetrics, String> {
+    let pids = runtime.pids();
+    let labels = agent_labels(&agents);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut sampler = MetricsSampler::new();
+        sampler.refresh(); // warm-up
+        std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+        sampler.refresh();
+        let mut metrics = sampler.sample(std::process::id(), &pids);
+        for p in &mut metrics.procs {
+            if p.id == "app" {
+                continue;
+            }
+            if let Ok(uuid) = Uuid::parse_str(&p.id) {
+                if let Some(name) = labels.get(&uuid) {
+                    p.label = name.clone();
+                }
+            }
+        }
+        metrics
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))
 }
