@@ -1,0 +1,67 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { PerfStore } from "./perf.store";
+
+function row(store: PerfStore, cmd: string) {
+  return store.rows().find((r) => r.cmd === cmd);
+}
+
+afterEach(() => vi.useRealTimers());
+
+describe("PerfStore", () => {
+  it("aggregates round-trip samples per command", () => {
+    const s = new PerfStore();
+    s.record("agent_diff", 10, true);
+    s.record("agent_diff", 20, true);
+    s.record("agent_diff", 30, false);
+    const r = row(s, "agent_diff")!;
+    expect(r.calls10s).toBe(3);
+    expect(r.avgRt).toBe(20);
+    expect(r.maxRt).toBe(30);
+    expect(r.errPct).toBeCloseTo(100 / 3);
+    expect(r.hist).toEqual([10, 20, 30]);
+  });
+
+  it("computes p95 from the window", () => {
+    const s = new PerfStore();
+    for (let i = 1; i <= 100; i++) s.record("c", i, true);
+    // 100 samples 1..100 → ceil(0.95*100)-1 = idx 94 → value 95
+    expect(row(s, "c")!.p95Rt).toBe(95);
+  });
+
+  it("merges backend exec aggregates and derives overhead", () => {
+    const s = new PerfStore();
+    s.record("git_status", 96, true);
+    s.setExec([{ cmd: "git_status", avgMs: 91, p95Ms: 142, maxMs: 210 }]);
+    const r = row(s, "git_status")!;
+    expect(r.avgExec).toBe(91);
+    expect(r.overhead).toBeCloseTo(96 - 91);
+  });
+
+  it("leaves exec/overhead null until a stat is pushed", () => {
+    const s = new PerfStore();
+    s.record("file_read", 7, true);
+    const r = row(s, "file_read")!;
+    expect(r.avgExec).toBeNull();
+    expect(r.overhead).toBeNull();
+  });
+
+  it("drops samples older than the 10s window", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const s = new PerfStore();
+    s.record("old", 50, true);
+    vi.setSystemTime(11_000); // 11s later → outside the 10s window
+    s.record("old", 8, true);
+    const r = row(s, "old")!;
+    expect(r.calls10s).toBe(1); // only the fresh one counts
+    expect(r.avgRt).toBe(8);
+  });
+
+  it("clear() empties everything", () => {
+    const s = new PerfStore();
+    s.record("c", 5, true);
+    s.setExec([{ cmd: "c", avgMs: 4, p95Ms: 6, maxMs: 9 }]);
+    s.clear();
+    expect(s.rows()).toEqual([]);
+  });
+});
