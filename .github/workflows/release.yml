@@ -46,6 +46,9 @@ jobs:
           Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe dist-release/
           Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe.sig dist-release/
           Copy-Item src-tauri/target/release/bundle/msi/*.msi dist-release/
+          # MSI updater signature (per-machine installs update via the MSI). Tolerant:
+          # if it's absent, make-latest-json just omits the MSI updater entry.
+          Copy-Item src-tauri/target/release/bundle/msi/*.msi.sig dist-release/ -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         with:
           name: release-files
