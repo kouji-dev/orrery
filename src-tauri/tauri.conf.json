@@ -34,7 +34,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "wix": {
+        "upgradeCode": "CB7D1311-3BE0-4D98-A8BA-AE4FB08907FC"
+      }
+    }
   },
   "plugins": {
     "updater": {
