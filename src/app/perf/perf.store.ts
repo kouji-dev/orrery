@@ -77,6 +77,12 @@ export class PerfStore {
     this.rev.update((v) => v + 1);
   }
 
+  /** Force `rows` to recompute so the 10s window ages out without new calls.
+   *  The DevConsole calls this on a 1s timer while it's open. */
+  tick(): void {
+    this.rev.update((v) => v + 1);
+  }
+
   /** Reset all counters (the panel's Reset button). */
   clear(): void {
     this.rings.clear();
