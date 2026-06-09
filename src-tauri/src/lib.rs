@@ -11,6 +11,7 @@ mod fs;
 mod git;
 mod hooks;
 mod metrics;
+mod perf;
 mod projects;
 mod runtime;
 mod update;
@@ -86,12 +87,14 @@ pub fn run() {
                     ) else {
                         continue; // services not ready yet (shouldn't happen post-setup)
                     };
-                    let m = metrics::commands::sample_with_labels(
-                        &sampler, app_pid, &runtime, &agents,
-                    );
+                    let m =
+                        metrics::commands::sample_with_labels(&sampler, app_pid, &runtime, &agents);
                     let _ = metrics_app.emit("system://metrics", m);
                 }
             });
+
+            // Perf exec-aggregate push loop (perf://stats every 2s; see src/perf).
+            perf::spawn_push_loop(app.handle().clone());
 
             // Cost push loop: every 60s shell out to `ccusage` and emit the global
             // total on `system://cost`. Slow-moving, so 60s (vs metrics' 3s) keeps

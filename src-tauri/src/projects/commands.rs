@@ -10,7 +10,7 @@ use super::service::ProjectService;
 
 #[tauri::command(async)]
 pub fn project_list(svc: State<'_, ProjectService>) -> AppResult<Vec<Project>> {
-    svc.list()
+    crate::perf::timed("project_list", || svc.list())
 }
 
 /// Blocking pool: may git-init / inspect the repo on disk.
@@ -22,7 +22,10 @@ pub async fn project_create<R: Runtime>(
 ) -> AppResult<Project> {
     let svc = svc.inner().clone();
     let project = tauri::async_runtime::spawn_blocking(move || {
-        svc.create(req).inspect_err(|e| log::error!("project_create failed: {e:?}"))
+        crate::perf::timed("project_create", || {
+            svc.create(req)
+                .inspect_err(|e| log::error!("project_create failed: {e:?}"))
+        })
     })
     .await
     .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))??;
@@ -37,9 +40,11 @@ pub fn project_update<R: Runtime>(
     id: Uuid,
     req: ProjectUpdateRequest,
 ) -> AppResult<Project> {
-    let project = svc.update(id, req)?;
-    emit_entity(&app, "project", Change::Updated, project.clone());
-    Ok(project)
+    crate::perf::timed("project_update", || {
+        let project = svc.update(id, req)?;
+        emit_entity(&app, "project", Change::Updated, project.clone());
+        Ok(project)
+    })
 }
 
 /// Blocking pool: git init on disk.
@@ -50,9 +55,11 @@ pub async fn project_init_git<R: Runtime>(
     id: Uuid,
 ) -> AppResult<Project> {
     let svc = svc.inner().clone();
-    let project = tauri::async_runtime::spawn_blocking(move || svc.init_git(id))
-        .await
-        .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))??;
+    let project = tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("project_init_git", || svc.init_git(id))
+    })
+    .await
+    .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))??;
     emit_entity(&app, "project", Change::Updated, project.clone());
     Ok(project)
 }
@@ -64,24 +71,38 @@ pub fn project_remove<R: Runtime>(
     agents: State<'_, AgentService>,
     id: Uuid,
 ) -> AppResult<()> {
-    svc.remove(id)?;
-    // cascade: drop the project's agents and announce each removal
-    if let Ok(removed) = agents.remove_for_project(id) {
-        for aid in removed {
-            emit_entity(&app, "agent", Change::Deleted, serde_json::json!({ "id": aid }));
+    crate::perf::timed("project_remove", || {
+        svc.remove(id)?;
+        // cascade: drop the project's agents and announce each removal
+        if let Ok(removed) = agents.remove_for_project(id) {
+            for aid in removed {
+                emit_entity(
+                    &app,
+                    "agent",
+                    Change::Deleted,
+                    serde_json::json!({ "id": aid }),
+                );
+            }
         }
-    }
-    emit_entity(&app, "project", Change::Deleted, serde_json::json!({ "id": id }));
-    Ok(())
+        emit_entity(
+            &app,
+            "project",
+            Change::Deleted,
+            serde_json::json!({ "id": id }),
+        );
+        Ok(())
+    })
 }
 
 /// Blocking pool: opens the repo on disk to probe it.
 #[tauri::command]
 pub async fn project_detect_git(svc: State<'_, ProjectService>, path: String) -> AppResult<bool> {
     let svc = svc.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || Ok(svc.detect_git(&path)))
-        .await
-        .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))?
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("project_detect_git", || Ok(svc.detect_git(&path)))
+    })
+    .await
+    .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))?
 }
 
 /// Blocking pool: revwalk + per-commit tree diff.
@@ -92,7 +113,9 @@ pub async fn project_commits(
     limit: Option<usize>,
 ) -> AppResult<Vec<CommitView>> {
     let svc = svc.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || svc.commits(id, limit.unwrap_or(50)))
-        .await
-        .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))?
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("project_commits", || svc.commits(id, limit.unwrap_or(50)))
+    })
+    .await
+    .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))?
 }

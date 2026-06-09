@@ -17,7 +17,9 @@ const ICON_LIGHT: &[u8] = include_bytes!("../icons/icon-light.png");
 /// `image-png` feature (see Cargo.toml). Best-effort from the caller's side.
 #[tauri::command(async)]
 pub fn set_window_icon(window: tauri::WebviewWindow, dark: bool) -> Result<(), String> {
-    let img = Image::from_bytes(if dark { ICON_DARK } else { ICON_LIGHT })
-        .map_err(|e| e.to_string())?;
-    window.set_icon(img).map_err(|e| e.to_string())
+    crate::perf::timed("set_window_icon", || {
+        let img = Image::from_bytes(if dark { ICON_DARK } else { ICON_LIGHT })
+            .map_err(|e| e.to_string())?;
+        window.set_icon(img).map_err(|e| e.to_string())
+    })
 }

@@ -72,6 +72,8 @@ export const Events = {
   SystemMetrics: 'system://metrics',
   /** Global Claude cost total from ccusage (pushed every 60s). */
   SystemCost: 'system://cost',
+  /** Per-command backend exec aggregates (pushed every 2s; dev + prod). */
+  PerfStats: 'perf://stats',
 } as const;
 
 export const BRIDGE = new InjectionToken<Bridge>('BRIDGE');

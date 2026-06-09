@@ -55,22 +55,24 @@ pub async fn system_metrics(
     let pids = runtime.pids();
     let labels = agent_labels(&agents);
     tauri::async_runtime::spawn_blocking(move || {
-        let mut sampler = MetricsSampler::new();
-        sampler.refresh(); // warm-up
-        std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
-        sampler.refresh();
-        let mut metrics = sampler.sample(std::process::id(), &pids);
-        for p in &mut metrics.procs {
-            if p.id == "app" {
-                continue;
-            }
-            if let Ok(uuid) = Uuid::parse_str(&p.id) {
-                if let Some(name) = labels.get(&uuid) {
-                    p.label = name.clone();
+        crate::perf::timed("system_metrics", move || {
+            let mut sampler = MetricsSampler::new();
+            sampler.refresh(); // warm-up
+            std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL);
+            sampler.refresh();
+            let mut metrics = sampler.sample(std::process::id(), &pids);
+            for p in &mut metrics.procs {
+                if p.id == "app" {
+                    continue;
+                }
+                if let Ok(uuid) = Uuid::parse_str(&p.id) {
+                    if let Some(name) = labels.get(&uuid) {
+                        p.label = name.clone();
+                    }
                 }
             }
-        }
-        metrics
+            metrics
+        })
     })
     .await
     .map_err(|e| format!("join: {e}"))

@@ -5,7 +5,7 @@ use super::{snapshot, CostSnapshot};
 /// shell-out takes seconds — blocking pool.
 #[tauri::command]
 pub async fn system_cost() -> Result<CostSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(snapshot)
+    tauri::async_runtime::spawn_blocking(|| crate::perf::timed("system_cost", snapshot))
         .await
         .map_err(|e| format!("join: {e}"))
 }

@@ -1,16 +1,22 @@
-import { Bridge } from "./bridge";
-import { PerfStore } from "../perf/perf.store";
+import { Bridge, Events } from "./bridge";
+import { ExecAgg, PerfStore } from "../perf/perf.store";
 
 /**
  * Wraps a {@link Bridge} to time every command round-trip into the
  * {@link PerfStore}. Keeps the underlying `TauriBridge` pure; provided for the
  * `BRIDGE` token in its place. `on` / `pickDirectory` pass straight through.
+ * Also subscribes to the backend's `perf://stats` exec aggregates so the
+ * store's exec/overhead columns populate.
  */
 export class InstrumentedBridge implements Bridge {
   constructor(
     private readonly inner: Bridge,
     private readonly perf: PerfStore,
-  ) {}
+  ) {
+    void this.inner
+      .on<ExecAgg[]>(Events.PerfStats, (aggs) => this.perf.setExec(aggs))
+      .catch(() => {});
+  }
 
   async invoke<R>(command: string, payload?: Record<string, unknown>): Promise<R> {
     const start = performance.now();
