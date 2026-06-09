@@ -319,5 +319,54 @@ every row showing `overhead ≈ 1ms` as proof.
 
 ## Open decisions
 
-1. **B1 strategy:** S1-a / S1-b / S1-c (recommended: S1-c hybrid).
+1. **B1 strategy:** S1-a / S1-b / S1-c (recommended: S1-c hybrid). → **Decided: S1-c.**
 2. **Session scope:** B1 only · B1+B2 · B1+B2+B4+B5 (recommended: all four, B3 deferred).
+   → **Decided: B1 (S1-c) + B2 (lazy stores + pagination + deltas swap) + B5; B4 primes
+   kept (they cover the lost-first-emit gap) but moved to the blocking pool; B3 deferred.**
+
+---
+
+# After — 2026-06-10 fixes (branch `perf_enhancements`)
+
+Implemented per `docs/superpowers/specs/2026-06-09-perf-global-fix-design.md`:
+blanket `(async)` + `spawn_blocking` heavy set (S1-c) · `deltas().len()` files count ·
+`agent_commits` offset paging (10 + Load more) · `AgentWorkStore` Loadable hashMaps with
+lazy tree/commits · Rust `perf::timed` + `perf://stats` (exec/overhead columns live).
+
+## Same-machine capture, same 5-agent dev DB (startup, dev tier)
+
+| cmd | before avg RT | after avg RT | after exec | overhead |
+|---|---|---|---|---|
+| `agent_watch`   | 5,224.6ms | **50ms**  | 1.8ms | 48ms |
+| `agent_tree`    | 5,223.4ms | **194ms** (on open, not startup) | 97ms | 96ms |
+| `agent_commits` | 5,223.0ms | **178ms** (on open, limit 10) | 74ms | 104ms |
+| `agent_changes` | 5,218.5ms | **68ms**  | 33ms | 35ms |
+| `system_metrics`| 1,796.2ms | 379ms | 376ms | 2.5ms |
+| `system_cost`   | 1,796.1ms | 2,572ms (true ccusage cost, blocking pool — blocks nothing) | 2,567ms | 4.6ms |
+| `agent_list`    | 13.7ms | 7.6ms | 0.5ms | 7.1ms |
+
+## Verified behaviors
+
+- **No 5s rows; startup table contains NO `agent_tree`/`agent_commits`** — they appear
+  only after an agent is first opened (lazy confirmed at the IPC level).
+- **Pagination:** git tab shows exactly 10 commits; "Load more" → 20. Files-count label
+  preserved ("23 files", "3 files", … — now from `deltas().len()`).
+- **Per-commit cost:** ~7ms/commit (74ms exec / 10) vs ~104ms/commit with `.stats()` —
+  ≈15× per commit, ≈70× per call combined with the limit (5,247ms → 74ms exec).
+- **Concurrency:** `agent_list` returned in 9.6ms while `system_metrics` (387ms) was
+  in flight — `parallel: true`.
+- **Exec/overhead columns populated** (B5 live): overhead ≈ 2–5ms on heavy commands,
+  i.e. queueing is gone; the larger overheads (tens of ms) appear only on commands fired
+  during webview startup or UI bursts — frontend-side scheduling, not backend queueing.
+
+## Notes / loose ends
+
+- `agent_resize` 50% err / `agent_input` 9.1% err in the capture: writes to a dead PTY
+  (the test agent's `claude --resume` exited on a stale session id). Pre-existing
+  behavior surfaced by err tracking, unrelated to this work.
+- `hooks::tests::activity_uses_transcript_content_when_path_present` is flaky under
+  parallel `cargo test` (~40% in this session; passes in isolation and on re-runs).
+  Pre-existing; worth a dedicated fix.
+- These remain **debug-build** numbers; release (`-O2` libgit2) will be faster still.
+- Deferred (tracked in the spec, D10): B3 visibility-gating, liveness-tick hashMap
+  migration, SHA files-count cache, `before_sha` cursor pagination.
