@@ -56,14 +56,14 @@ pub fn read_total() -> Option<f64> {
 
 #[cfg(windows)]
 fn run_ccusage() -> Option<std::process::Output> {
-    let mut cmd = std::process::Command::new("cmd");
+    let mut cmd = crate::core::proc::cmd("cmd");
     cmd.args(["/C", "npx", "ccusage", "daily", "--json"]);
-    crate::core::proc::no_window(&mut cmd).output().ok()
+    cmd.output().ok()
 }
 
 #[cfg(not(windows))]
 fn run_ccusage() -> Option<std::process::Output> {
-    std::process::Command::new("npx")
+    crate::core::proc::cmd("npx")
         .args(["ccusage", "daily", "--json"])
         .output()
         .ok()
