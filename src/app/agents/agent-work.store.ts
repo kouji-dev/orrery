@@ -104,7 +104,8 @@ export class AgentWorkStore {
     if (this.treeFor(id).status !== "idle") return;
     this.loadTree(id);
   }
-  private loadTree(id: string): void {
+  /** Forced reload (file-tree refresh button; watcher path once loaded). */
+  loadTree(id: string): void {
     const gen = (this.treesGen[id] ?? 0) + 1;
     this.treesGen[id] = gen;
     const prev = this.treeFor(id);

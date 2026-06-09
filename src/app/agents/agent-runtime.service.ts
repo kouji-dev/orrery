@@ -3,13 +3,13 @@ import {
   ActivityKind,
   Agent,
   AgentNotification,
-  FileNode,
   LogLine,
   PermissionQuestion,
   PermissionSuggestion,
 } from "../models";
 import { NotificationStore } from "../stores/notifications.store";
 import { AgentsStore } from "../stores/agents.store";
+import { AgentWorkStore } from "./agent-work.store";
 import { TerminalService } from "../terminal.service";
 import { UiStore } from "../ui/ui.store";
 import { treeAgentIds } from "../workspace/pane-model";
@@ -31,6 +31,7 @@ import {
 @Injectable({ providedIn: "root" })
 export class AgentRuntimeService {
   private agentsStore = inject(AgentsStore);
+  private work = inject(AgentWorkStore);
   private terminals = inject(TerminalService);
   private ui = inject(UiStore);
   private notifications = inject(NotificationStore);
@@ -103,24 +104,27 @@ export class AgentRuntimeService {
       )
       .catch(() => {});
 
-    // watch + initially scan EVERY agent's worktree (not just the active tab), so
-    // background agents show live file-tree/diff too. Each id is set up once; the
-    // backend keeps one watcher per agent.
+    // Watch EVERY agent's worktree and eagerly scan only its CHANGES (cheap, and
+    // the overview badges/kanban/sidebar need them without opening the agent).
+    // Tree + commits stay lazy — ensured on first open below.
     effect(() => {
       for (const a of this.agentsStore.all()) {
         if (this.watched.has(a.id)) continue;
         this.watched.add(a.id);
-        this.loadChanges(a.id);
-        this.loadCommits(a.id);
-        this.loadFiles(a.id);
+        this.work.loadChanges(a.id);
         void this.agentsStore.watch(a.id).catch(() => {});
       }
     });
+    // Lazy: first time an agent becomes the active/scoped one, load its tree +
+    // first commits page (no-ops when already loaded).
+    effect(() => {
+      const ag = this.activeAgent();
+      if (!ag) return;
+      this.work.ensureTree(ag.id);
+      this.work.ensureCommits(ag.id);
+    });
     void this.agentsStore
-      .onWorktreeChanged((id) => {
-        this.loadFiles(id);
-        this.loadChanges(id);
-      })
+      .onWorktreeChanged((id) => this.work.onWorktreeChanged(id))
       .catch(() => {});
 
     // live agent state from the terminal title (spinner = working, ✋ = needs input)
@@ -231,73 +235,6 @@ export class AgentRuntimeService {
     });
   }
 
-  // ---- worktree scans (async, superseded per worktree) ----
-  private changesGen: Record<string, number> = {};
-  loadChanges(agentId: string) {
-    const gen = (this.changesGen[agentId] ?? 0) + 1;
-    this.changesGen[agentId] = gen;
-    this.patchRuntime(agentId, { git_changes: { loading: true, files: [] } });
-    void this.agentsStore
-      .changes(agentId)
-      .then((files) => {
-        if (this.changesGen[agentId] !== gen) return; // superseded
-        this.patchRuntime(agentId, { git_changes: { loading: false, files } });
-      })
-      .catch(() => {
-        if (this.changesGen[agentId] !== gen) return;
-        this.patchRuntime(agentId, { git_changes: { loading: false, files: [] } });
-      });
-  }
-
-  private commitsGen: Record<string, number> = {};
-  loadCommits(agentId: string) {
-    const gen = (this.commitsGen[agentId] ?? 0) + 1;
-    this.commitsGen[agentId] = gen;
-    const prev = this.runtime()[agentId]?.git_commits?.commits ?? [];
-    this.patchRuntime(agentId, { git_commits: { loading: true, commits: prev } });
-    void this.agentsStore
-      .commits(agentId, 50, 0)
-      .then((commits) => {
-        if (this.commitsGen[agentId] !== gen) return; // superseded
-        this.patchRuntime(agentId, { git_commits: { loading: false, commits } });
-      })
-      .catch(() => {
-        if (this.commitsGen[agentId] !== gen) return;
-        this.patchRuntime(agentId, { git_commits: { loading: false, commits: [] } });
-      });
-  }
-
-  private filesGen: Record<string, number> = {};
-  loadFiles(agentId: string) {
-    const gen = (this.filesGen[agentId] ?? 0) + 1;
-    this.filesGen[agentId] = gen;
-    this.patchRuntime(agentId, { files: { loading: true, nodes: [] } });
-    void this.agentsStore
-      .tree(agentId)
-      .then((nodes) => {
-        if (this.filesGen[agentId] !== gen) return; // superseded
-        this.patchRuntime(agentId, { files: { loading: false, nodes } });
-      })
-      .catch(() => {
-        if (this.filesGen[agentId] !== gen) return;
-        this.patchRuntime(agentId, { files: { loading: false, nodes: [] } });
-      });
-  }
-
-  expandDir(agentId: string, path: string) {
-    void this.agentsStore.listDir(agentId, path).then((kids) => {
-      const cur = this.runtime()[agentId]?.files;
-      if (!cur) return;
-      const patch = (list: FileNode[]): FileNode[] =>
-        list.map((n) => {
-          if (n.path === path) return { ...n, children: kids };
-          if (n.children) return { ...n, children: patch(n.children) };
-          return n;
-        });
-      this.patchRuntime(agentId, { files: { loading: cur.loading, nodes: patch(cur.nodes) } });
-    });
-  }
-
   // ---- process lifecycle ----
   /** Launch (or, with `{resume:true}`, continue the captured CLI session via
    *  `claude --resume <sessionId>`) the agent's tool process. */
@@ -324,6 +261,7 @@ export class AgentRuntimeService {
   dispose(id: string) {
     this.terminals.dispose(id);
     this.clearRuntime(id);
+    this.work.dispose(id);
     delete this.startedAt[id];
     delete this.titleStatus[id];
     delete this.titleAt[id];
