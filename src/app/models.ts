@@ -75,6 +75,12 @@ export interface Project {
   files?: string[];
 }
 
+/** Async per-entity sub-resource: `idle` = never requested (unknown, NOT empty). */
+export interface Loadable<T> {
+  status: "idle" | "loading" | "ready" | "error";
+  data: T;
+}
+
 export interface Agent {
   id: string;
   projectId: string;
