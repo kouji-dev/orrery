@@ -83,12 +83,11 @@ import { IconComponent } from "../shared/icon.component";
   `,
   styles: [
     `
-      /* matches the DevConsole FAB (.dvc-fab) — stacked directly above it */
+      /* matches the DevConsole FAB (.dvc-fab); positioned by the shell's
+         .anchor-rail flex container, not individually — so it drops to the corner
+         when the Perf FAB is hidden in PRD. */
       .tweak-fab {
-        position: fixed;
-        right: 18px;
-        bottom: 92px;
-        z-index: 90;
+        position: relative;
         width: 44px;
         height: 44px;
         border-radius: 13px;

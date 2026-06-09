@@ -70,11 +70,37 @@ declare const ngDevMode: boolean | undefined;
       <app-add-project-modal />
     }
     <app-context-menu />
-    <app-tweaks-panel />
-    @if (dev) {
-      <app-dev-panel />
-    }
+    <div class="anchor-rail">
+      <app-tweaks-panel />
+      @if (dev) {
+        <app-dev-panel />
+      }
+    </div>
   `,
+  styles: [
+    `
+      /* One fixed, bottom-right, vertical flex container for the floating action
+         buttons (Tweaks + DevConsole/Perf). The FABs are flex children — not each
+         individually fixed — so the stack auto-reflows when the Perf FAB is absent
+         (it is dev-only via @if(dev)): in PRD, Tweaks drops to the corner instead
+         of floating with an empty gap below it. The Perf FAB renders last, so it
+         sits at the bottom (the corner) and Tweaks stacks above it. */
+      .anchor-rail {
+        position: fixed;
+        right: 18px;
+        bottom: 36px;
+        z-index: 90;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 12px;
+        pointer-events: none;
+      }
+      .anchor-rail > * {
+        pointer-events: auto;
+      }
+    `,
+  ],
 })
 export class ShellComponent {
   readonly ui = inject(UiStore);
