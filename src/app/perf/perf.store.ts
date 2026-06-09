@@ -98,8 +98,11 @@ export class PerfStore {
     const out: PerfRow[] = [];
     for (const cmd of cmds) {
       const ring = this.rings.get(cmd) ?? [];
+      // calls/10s is a RATE → only the 10s window. Latency stats use the whole
+      // ring (recent samples) so the row keeps its profile while idle instead of
+      // blanking out the moment the window empties.
       const win = ring.filter((s) => s.ts > now - PERF_WINDOW_MS);
-      const ms = win.map((s) => s.ms).sort((a, b) => a - b);
+      const ms = ring.map((s) => s.ms).sort((a, b) => a - b);
       const ex = exec.get(cmd);
       const avgRt = ms.length ? ms.reduce((a, b) => a + b, 0) / ms.length : null;
       const avgExec = ex ? ex.avgMs : null;
@@ -109,7 +112,7 @@ export class PerfStore {
         avgRt,
         p95Rt: ms.length ? percentile(ms, 0.95) : null,
         maxRt: ms.length ? ms[ms.length - 1] : null,
-        errPct: win.length ? (win.filter((s) => !s.ok).length / win.length) * 100 : 0,
+        errPct: ring.length ? (ring.filter((s) => !s.ok).length / ring.length) * 100 : 0,
         avgExec,
         overhead: avgRt != null && avgExec != null ? avgRt - avgExec : null,
         hist: ring.slice(-HIST).map((s) => s.ms),

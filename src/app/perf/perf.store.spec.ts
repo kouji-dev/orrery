@@ -45,7 +45,7 @@ describe("PerfStore", () => {
     expect(r.overhead).toBeNull();
   });
 
-  it("drops samples older than the 10s window", () => {
+  it("decays calls/10s to the window but keeps the ring's latency profile", () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
     const s = new PerfStore();
@@ -53,8 +53,9 @@ describe("PerfStore", () => {
     vi.setSystemTime(11_000); // 11s later → outside the 10s window
     s.record("old", 8, true);
     const r = row(s, "old")!;
-    expect(r.calls10s).toBe(1); // only the fresh one counts
-    expect(r.avgRt).toBe(8);
+    expect(r.calls10s).toBe(1); // rate: only the fresh call is in-window
+    expect(r.avgRt).toBe(29); // latency: ring keeps both → (50 + 8) / 2
+    expect(r.maxRt).toBe(50);
   });
 
   it("clear() empties everything", () => {

@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   HostListener,
   OnDestroy,
   ViewEncapsulation,
@@ -61,6 +62,7 @@ type Sort = { key: string; dir: number };
           <!-- ── PERF ── -->
           @if (tab() === 'perf') {
             @if (hasCalls()) {
+              <div class="dvc-scroll">
               <table class="dvc-tbl">
                 <thead><tr>
                   @for (c of PCOLS; track c[0]) {
@@ -97,6 +99,7 @@ type Sort = { key: string; dir: number };
                   }
                 </tbody>
               </table>
+              </div>
             } @else {
               <div class="dvc-empty">
                 <div class="dvc-ring"><app-icon name="spark" /></div>
@@ -107,18 +110,26 @@ type Sort = { key: string; dir: number };
             }
             @if (hasCalls() && dev) {
               <div class="dvc-feed">
-                <div class="dvc-fh"><span class="lbl">Recent calls</span><app-icon name="timeline" size="sm" [color]="'var(--ink-4)'" /><span class="ct">last {{ feed().length }}</span></div>
-                <div class="dvc-fl">
-                  @for (f of feed(); track f.ts + f.cmd) {
-                    <div class="dvc-fr"><span class="ts tnum">{{ clock(f.ts) }}</span><span [class]="'dvc-dot ' + (f.ok ? 'ok' : 'er')" style="justify-self:start"></span><span class="cm">{{ f.cmd }}</span><span [class]="'du ' + lat(f.ms) + ' tnum'">{{ ms(f.ms) }}</span><span class="ix tnum">{{ f.ok ? 'ok' : 'err' }}</span></div>
-                  }
-                </div>
+                <button class="dvc-fh" [class.open]="feedOpen()" (click)="feedOpen.set(!feedOpen())">
+                  <svg class="dvc-tw" [class.open]="feedOpen()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                  <span class="lbl">Recent calls</span>
+                  <app-icon name="timeline" size="sm" [color]="'var(--ink-4)'" />
+                  <span class="ct">last {{ feed().length }}</span>
+                </button>
+                @if (feedOpen()) {
+                  <div class="dvc-fl">
+                    @for (f of feed(); track f.ts + f.cmd) {
+                      <div class="dvc-fr"><span class="ts tnum">{{ clock(f.ts) }}</span><span [class]="'dvc-dot ' + (f.ok ? 'ok' : 'er')" style="justify-self:start"></span><span class="cm">{{ f.cmd }}</span><span [class]="'du ' + lat(f.ms) + ' tnum'">{{ ms(f.ms) }}</span><span class="ix tnum">{{ f.ok ? 'ok' : 'err' }}</span></div>
+                    }
+                  </div>
+                }
               </div>
             }
           }
 
           <!-- ── AGENTS ── -->
           @if (tab() === 'agents') {
+            <div class="dvc-scroll">
             <table class="dvc-tbl">
               <thead><tr>
                 @for (c of ACOLS; track c[0]) {
@@ -156,10 +167,12 @@ type Sort = { key: string; dir: number };
                 }
               </tbody>
             </table>
+            </div>
           }
 
           <!-- ── PROJECTS ── -->
           @if (tab() === 'projects') {
+            <div class="dvc-scroll">
             <table class="dvc-tbl">
               <thead><tr>
                 @for (c of PRCOLS; track c[0]) {
@@ -196,6 +209,7 @@ type Sort = { key: string; dir: number };
                 }
               </tbody>
             </table>
+            </div>
           }
         </div>
 
@@ -227,7 +241,7 @@ type Sort = { key: string; dir: number };
 [data-theme="light"] .dvcon{--lat-g:#0a8f5e;--lat-a:#a9700f;--lat-r:#d6304e;
   --lat-g-bg:rgba(10,143,94,.09);--lat-a-bg:rgba(169,112,15,.13);--lat-r-bg:rgba(214,48,78,.14);
   --lat-r-ring:rgba(214,48,78,.34);}
-.dvc-fab{position:fixed;right:18px;bottom:18px;z-index:90;width:44px;height:44px;border-radius:13px;
+.dvc-fab{position:fixed;right:18px;bottom:36px;z-index:90;width:44px;height:44px;border-radius:13px;
   display:grid;place-items:center;cursor:pointer;border:1px solid var(--hair-2);
   background:linear-gradient(180deg,var(--panel-3),var(--panel));color:var(--ink-2);
   box-shadow:var(--shadow);transition:transform .16s,color .16s,border-color .16s,box-shadow .16s;}
@@ -236,8 +250,8 @@ type Sort = { key: string; dir: number };
 .dvc-fab svg{width:19px;height:19px;}
 .dvc-fab .dvc-pulse{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:#ff5d7a;animation:dvcpulse 1.6s ease-in-out infinite;}
 @keyframes dvcpulse{0%{box-shadow:0 0 0 0 rgba(255,93,122,.5);}70%{box-shadow:0 0 0 7px rgba(255,93,122,0);}100%{box-shadow:0 0 0 0 rgba(255,93,122,0);}}
-.dvcon{position:fixed;right:18px;bottom:74px;z-index:91;width:720px;max-width:calc(100vw - 32px);
-  max-height:calc(100vh - 130px);display:flex;flex-direction:column;overflow:hidden;
+.dvcon{position:fixed;right:18px;bottom:92px;z-index:91;width:720px;max-width:calc(100vw - 32px);
+  max-height:calc(100vh - 148px);display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel);border:1px solid var(--hair-2);border-radius:14px;
   box-shadow:var(--shadow),0 0 0 1px rgba(var(--accent-rgb),.04);font-family:var(--font-mono);
   transform-origin:bottom right;animation:dvcin .22s cubic-bezier(.2,.7,.2,1);}
@@ -264,10 +278,11 @@ type Sort = { key: string; dir: number };
 .dvc-x{border:none;padding:5px;color:var(--ink-3);background:transparent;border-radius:var(--r-sm);cursor:pointer;display:inline-flex;}
 .dvc-x:hover{color:var(--ink);background:var(--panel-3);}
 .dvc-x svg{width:13px;height:13px;}
-.dvc-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;}
-.dvc-body::-webkit-scrollbar{width:9px;}
-.dvc-body::-webkit-scrollbar-thumb{background:var(--hair-2);border-radius:6px;border:2px solid transparent;background-clip:padding-box;}
-.dvc-tbl{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
+.dvc-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+.dvc-scroll{flex:1;min-height:0;overflow:auto;}
+.dvc-scroll::-webkit-scrollbar,.dvc-fl::-webkit-scrollbar{width:9px;}
+.dvc-scroll::-webkit-scrollbar-thumb,.dvc-fl::-webkit-scrollbar-thumb{background:var(--hair-2);border-radius:6px;border:2px solid transparent;background-clip:padding-box;}
+.dvc-tbl{min-width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
 .dvc-tbl thead th{position:sticky;top:0;z-index:2;background:var(--panel-2);border-bottom:1px solid var(--hair-2);font-weight:500;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:8px 9px;text-align:right;white-space:nowrap;cursor:pointer;user-select:none;transition:color .12s,background .12s;}
 .dvc-tbl thead th:first-child{text-align:left;padding-left:13px;}
 .dvc-tbl thead th:last-child{padding-right:13px;}
@@ -332,18 +347,20 @@ type Sort = { key: string; dir: number };
 .dvc-dh .lbl{text-transform:uppercase;letter-spacing:.1em;}
 .dvc-ds{display:flex;gap:14px;margin-left:auto;color:var(--ink-2);}
 .dvc-ds b{color:var(--ink);font-weight:600;}
-.dvc-feed{border-top:1px solid var(--hair-2);}
-.dvc-fh{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:9px;padding:9px 13px;background:var(--panel-2);border-bottom:1px solid var(--hair);}
+.dvc-feed{flex:none;border-top:1px solid var(--hair-2);}
+.dvc-fh{display:flex;align-items:center;gap:9px;width:100%;padding:9px 13px;background:var(--panel-2);border:none;border-bottom:1px solid var(--hair);cursor:pointer;color:var(--ink-3);font-family:var(--font-mono);text-align:left;}
+.dvc-fh:hover{color:var(--ink-2);}
+.dvc-fh .dvc-tw.open{transform:rotate(90deg);color:var(--accent);}
 .dvc-fh .lbl{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);}
 .dvc-fh .ct{font-size:10px;color:var(--ink-4);margin-left:auto;}
-.dvc-fl{padding:5px 13px 12px;}
+.dvc-fl{padding:5px 13px 12px;max-height:240px;overflow-y:auto;}
 .dvc-fr{display:grid;grid-template-columns:90px 16px 1fr auto 22px;align-items:center;gap:10px;font-size:11px;padding:4px 0;border-bottom:1px solid var(--hair);color:var(--ink-2);}
 .dvc-fr:last-child{border-bottom:none;}
 .dvc-fr .ts{color:var(--ink-4);} .dvc-fr .cm{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .dvc-fr .du{text-align:right;font-weight:500;}
 .dvc-fr .du.g{color:var(--lat-g);} .dvc-fr .du.a{color:var(--lat-a);} .dvc-fr .du.r{color:var(--lat-r);}
 .dvc-fr .ix{color:var(--ink-4);text-align:right;font-size:9px;}
-.dvc-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px;padding:54px 20px 60px;text-align:center;}
+.dvc-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px;padding:54px 20px 60px;text-align:center;}
 .dvc-ring{width:46px;height:46px;border-radius:50%;border:1.5px dashed var(--hair-2);display:grid;place-items:center;color:var(--ink-4);}
 .dvc-empty h4{font-family:var(--font-disp);font-weight:600;font-size:14px;color:var(--ink-2);}
 .dvc-empty p{font-size:11.5px;color:var(--ink-4);max-width:300px;line-height:1.55;}
@@ -360,6 +377,7 @@ export class DevPanelComponent implements OnDestroy {
   readonly perf = inject(PerfStore);
   private readonly runtime = inject(AgentRuntimeService);
   private readonly projectsStore = inject(ProjectsStore);
+  private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly dev = isDevMode();
   readonly open = signal(false);
@@ -370,6 +388,7 @@ export class DevPanelComponent implements OnDestroy {
   readonly openCmd = signal<string | null>(null);
   readonly openAg = signal<string | null>(null);
   readonly openPr = signal<string | null>(null);
+  readonly feedOpen = signal(false);
 
   readonly agents = computed(() => this.runtime.agents());
   readonly projects = computed(() => this.projectsStore.all());
@@ -394,8 +413,14 @@ export class DevPanelComponent implements OnDestroy {
     if (this.open()) this.open.set(false);
   }
 
+  // close on click outside the FAB + panel (both live under this host element)
+  @HostListener("document:mousedown", ["$event"]) onDocDown(e: MouseEvent) {
+    if (this.open() && !this.host.nativeElement.contains(e.target as Node)) this.open.set(false);
+  }
+
   // ── perf ──
-  readonly hasCalls = computed(() => this.perf.rows().some((r) => r.calls10s > 0));
+  // table persists once any command has been seen (don't blank out when idle)
+  readonly hasCalls = computed(() => this.perf.rows().length > 0);
   readonly sortedPerf = computed<PerfRow[]>(() => {
     const rows = this.perf.rows().slice();
     const { key, dir } = this.sort();
@@ -414,11 +439,10 @@ export class DevPanelComponent implements OnDestroy {
   });
   readonly perfSummary = computed(() => {
     const rows = this.perf.rows();
-    if (!this.hasCalls()) return "0 commands · 0 calls";
-    const active = rows.filter((r) => r.calls10s > 0).length;
+    if (!rows.length) return "0 commands · 0 calls";
     const calls = rows.reduce((a, r) => a + r.calls10s, 0);
     const slow = rows.filter((r) => r.avgRt != null && r.avgRt > 100).length;
-    return `${active} commands · ${calls} calls/10s · ${slow} >100ms` + (this.dev ? "" : " · prod (aggregates only)");
+    return `${rows.length} commands · ${calls} calls/10s · ${slow} >100ms` + (this.dev ? "" : " · prod (aggregates only)");
   });
   clickPerfSort(k: string) {
     this.sort.update((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: k === "cmd" ? 1 : -1 }));
