@@ -104,7 +104,10 @@ impl RuntimeService {
             })
             .map_err(|e| e.to_string())?;
 
-        let mut cmd = tool_command(&agent.tool, &agent.task, send_prompt, resume_session);
+        let cmd = tool_command(&agent.tool, &agent.task, send_prompt, resume_session);
+        // Resolve argv[0] to something CreateProcessW can actually launch (Windows):
+        // see resolve_program_command. No-op elsewhere.
+        let mut cmd = resolve_program_command(cmd);
         cmd.cwd(worktree);
 
         // Hooks are installed GLOBALLY at app startup (merged into the user's real
@@ -290,6 +293,116 @@ fn tool_command(
     }
 }
 
+/// Windows-safe argv[0] resolution for the PTY launch.
+///
+/// portable-pty hands argv[0] to `CreateProcessW`, which only starts real PE images
+/// (`.exe`/`.com`) — a shell/script shim makes it fail with os error 193 ("not a
+/// valid Win32 application"). Worse, portable-pty's own PATH search matches an
+/// EXTENSIONLESS file in a dir before trying PATHEXT, so when `claude` is installed
+/// by BOTH npm (an extensionless Node shim plus `claude.cmd`/`.ps1`, in a PATH dir
+/// that precedes winget's) AND winget (a real `claude.exe`), it picks the npm shell
+/// script and the spawn dies with 193.
+///
+/// We resolve argv[0] ourselves before spawning: a real executable anywhere on PATH
+/// beats a script shim anywhere, and `.cmd`/`.bat`/`.ps1` shims are wrapped in their
+/// interpreter so they actually run. No-op when argv[0] already names a path, when
+/// nothing resolves, or off Windows.
+#[cfg(windows)]
+fn resolve_program_command(cmd: CommandBuilder) -> CommandBuilder {
+    let argv: Vec<String> = cmd
+        .get_argv()
+        .iter()
+        .map(|s| s.to_string_lossy().into_owned())
+        .collect();
+    if argv.is_empty() {
+        return cmd;
+    }
+    let resolved = resolve_program(argv);
+    let mut out = CommandBuilder::new(&resolved[0]);
+    for a in &resolved[1..] {
+        out.arg(a);
+    }
+    out
+}
+
+#[cfg(not(windows))]
+fn resolve_program_command(cmd: CommandBuilder) -> CommandBuilder {
+    cmd
+}
+
+/// Rewrite `argv` so argv[0] is something `CreateProcessW` can launch. See
+/// [`resolve_program_command`]. Returns the input unchanged when argv[0] already
+/// names a path or nothing resolves on PATH.
+#[cfg(windows)]
+fn resolve_program(argv: Vec<String>) -> Vec<String> {
+    let prog = &argv[0];
+    // A path (has a separator) is the caller's explicit choice — take it as-is.
+    if prog.contains('/') || prog.contains('\\') {
+        return argv;
+    }
+    let dirs: Vec<std::path::PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    match find_program(prog, &dirs) {
+        Some(found) => wrap_for_ext(&found, &argv[1..]),
+        None => argv, // nothing better to offer; let portable-pty try
+    }
+}
+
+/// Locate `prog` on `dirs`, preferring a real executable over a script shim and a
+/// script shim over an extensionless file. ACROSS extensions a higher-priority kind
+/// anywhere beats a lower one in an earlier dir (so winget's `claude.exe` wins over
+/// npm's bare `claude`); within one extension the earliest PATH dir wins.
+#[cfg(windows)]
+fn find_program(prog: &str, dirs: &[std::path::PathBuf]) -> Option<std::path::PathBuf> {
+    for ext in ["exe", "com", "cmd", "bat", "ps1", ""] {
+        for dir in dirs {
+            let cand = if ext.is_empty() {
+                dir.join(prog)
+            } else {
+                dir.join(format!("{prog}.{ext}"))
+            };
+            if cand.is_file() {
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
+/// Build the launch argv for a resolved program path: a real executable runs
+/// directly; `.cmd`/`.bat` go through `cmd.exe /c`; `.ps1` through PowerShell;
+/// anything else (incl. an extensionless file) is handed back as-is, best effort.
+#[cfg(windows)]
+fn wrap_for_ext(found: &std::path::Path, args_tail: &[String]) -> Vec<String> {
+    let full = found.to_string_lossy().into_owned();
+    let ext = found
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+    let mut out = match ext.as_deref() {
+        // `cmd.exe /c call <shim> <args>` — NOT `/c <shim>`. The npm/pnpm shim often
+        // lives in a spaced dir (e.g. `C:\Program Files\nodejs\`), so portable-pty
+        // quotes its path; with a spaced task prompt that is 4 quote chars total, and
+        // cmd's quote rule then strips the OUTER pair and mangles the path into
+        // `C:\Program …`. Prefixing `call` makes the first token after `/c` a
+        // non-quote, which suppresses that stripping, so both the quoted shim path
+        // and quoted args survive intact.
+        Some("cmd") | Some("bat") => vec!["cmd.exe".into(), "/c".into(), "call".into(), full],
+        Some("ps1") => vec![
+            "powershell.exe".into(),
+            "-NoProfile".into(),
+            "-ExecutionPolicy".into(),
+            "Bypass".into(),
+            "-File".into(),
+            full,
+        ],
+        _ => vec![full],
+    };
+    out.extend(args_tail.iter().cloned());
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,5 +507,100 @@ mod tests {
         fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
             Box::new(NoopKiller)
         }
+    }
+
+    // The 193 fix: when `claude` is installed by both npm (extensionless Node shim +
+    // .cmd/.ps1) and winget (real .exe), the real .exe MUST win even though its PATH
+    // dir comes LATER and a bare `claude` sits in an earlier dir. This is the exact
+    // shadowing that handed portable-pty a shell script and produced os error 193.
+    #[cfg(windows)]
+    #[test]
+    fn find_program_prefers_real_exe_over_npm_shims() {
+        use std::fs;
+        use std::path::PathBuf;
+        let npm = tempfile::tempdir().unwrap();
+        let winget = tempfile::tempdir().unwrap();
+        // npm dir (earlier on PATH): the extensionless shim + the .cmd/.ps1 shims.
+        fs::write(npm.path().join("claude"), b"#!/bin/sh\n").unwrap();
+        fs::write(npm.path().join("claude.cmd"), b"@echo off\n").unwrap();
+        fs::write(npm.path().join("claude.ps1"), b"").unwrap();
+        // winget dir (later on PATH): the real executable.
+        fs::write(winget.path().join("claude.exe"), b"MZ").unwrap();
+        let dirs: Vec<PathBuf> = vec![npm.path().into(), winget.path().into()];
+        assert_eq!(
+            find_program("claude", &dirs),
+            Some(winget.path().join("claude.exe")),
+            "real .exe beats the bare npm shim in an earlier dir"
+        );
+    }
+
+    // No real .exe anywhere → the .cmd shim is chosen over the extensionless file
+    // (CreateProcessW can't run either directly, but a .cmd we can wrap via cmd.exe).
+    #[cfg(windows)]
+    #[test]
+    fn find_program_falls_back_to_cmd_over_extensionless() {
+        use std::fs;
+        use std::path::PathBuf;
+        let npm = tempfile::tempdir().unwrap();
+        fs::write(npm.path().join("claude"), b"#!/bin/sh\n").unwrap();
+        fs::write(npm.path().join("claude.cmd"), b"@echo off\n").unwrap();
+        let dirs: Vec<PathBuf> = vec![npm.path().into()];
+        assert_eq!(
+            find_program("claude", &dirs),
+            Some(npm.path().join("claude.cmd")),
+            ".cmd shim beats the extensionless file"
+        );
+    }
+
+    // A real .exe launches directly (args preserved); .cmd/.bat route through
+    // cmd.exe /c; .ps1 through PowerShell -File. This is what keeps CreateProcessW
+    // from ever receiving a non-PE program.
+    #[cfg(windows)]
+    #[test]
+    fn wrap_for_ext_runs_exe_directly_and_wraps_scripts() {
+        use std::path::Path;
+        assert_eq!(
+            wrap_for_ext(
+                Path::new(r"C:\winget\claude.exe"),
+                &["--resume".into(), "id".into()]
+            ),
+            vec![
+                r"C:\winget\claude.exe".to_string(),
+                "--resume".into(),
+                "id".into()
+            ]
+        );
+        // `call` is prefixed so cmd.exe does not strip the quotes around a spaced
+        // shim path + spaced prompt (the C:\Program Files\nodejs case).
+        assert_eq!(
+            wrap_for_ext(Path::new(r"C:\Program Files\nodejs\claude.cmd"), &["fix bug".into()]),
+            vec![
+                "cmd.exe".to_string(),
+                "/c".into(),
+                "call".into(),
+                r"C:\Program Files\nodejs\claude.cmd".into(),
+                "fix bug".into()
+            ]
+        );
+        assert_eq!(
+            wrap_for_ext(Path::new(r"C:\npm\claude.ps1"), &[]),
+            vec![
+                "powershell.exe".to_string(),
+                "-NoProfile".into(),
+                "-ExecutionPolicy".into(),
+                "Bypass".into(),
+                "-File".into(),
+                r"C:\npm\claude.ps1".into()
+            ]
+        );
+    }
+
+    // An argv[0] that is already a path is taken as-is — we don't second-guess an
+    // explicit absolute/relative program the caller chose.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_program_passes_through_explicit_paths() {
+        let argv = vec![r"C:\custom\claude.exe".to_string(), "task".into()];
+        assert_eq!(resolve_program(argv.clone()), argv);
     }
 }
