@@ -70,8 +70,9 @@ impl GitService {
         Ok(())
     }
 
-    /// Most recent commits (newest first), or empty for a repo with no commits / no repo.
-    pub fn log(&self, path: &Path, limit: usize) -> Vec<LogEntry> {
+    /// Most recent commits (newest first), `offset`-skipped for paging, or empty
+    /// for a repo with no commits / no repo.
+    pub fn log(&self, path: &Path, limit: usize, offset: usize) -> Vec<LogEntry> {
         let Ok(repo) = Repository::open(path) else {
             return Vec::new();
         };
@@ -82,9 +83,12 @@ impl GitService {
             return Vec::new(); // no HEAD (no commits yet)
         }
         walk.flatten()
+            .skip(offset)
             .take(limit)
             .filter_map(|oid| repo.find_commit(oid).ok())
             .map(|commit| {
+                // delta count only — .stats() would load + line-diff every changed
+                // blob per commit just to expose the same files-changed number
                 let files = commit
                     .tree()
                     .ok()
@@ -92,8 +96,7 @@ impl GitService {
                         let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
                         repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)
                             .ok()
-                            .and_then(|d| d.stats().ok())
-                            .map(|s| s.files_changed())
+                            .map(|d| d.deltas().len())
                             .unwrap_or(0)
                     })
                     .unwrap_or(0);
@@ -520,7 +523,49 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let svc = GitService::new();
         svc.init(dir.path()).unwrap();
-        assert!(svc.log(dir.path(), 10).is_empty());
+        assert!(svc.log(dir.path(), 10, 0).is_empty());
+    }
+
+    #[test]
+    fn log_files_counts_changed_files_exactly() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_file(dir.path(), "a.txt", "first");
+        // one commit touching two files
+        use git2::Signature;
+        std::fs::write(dir.path().join("x.txt"), "x\n").unwrap();
+        std::fs::write(dir.path().join("y.txt"), "y\n").unwrap();
+        let repo = Repository::open(dir.path()).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("x.txt")).unwrap();
+        index.add_path(Path::new("y.txt")).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = Signature::now("Test", "t@t").unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "two files", &tree, &[&parent]).unwrap();
+
+        let log = svc.log(dir.path(), 10, 0);
+        assert_eq!(log[0].files, 2, "two-file commit counts 2");
+        assert_eq!(log[1].files, 1, "single-file commit counts 1");
+    }
+
+    #[test]
+    fn log_offset_pages_through_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        for i in 0..5 {
+            commit_file(dir.path(), &format!("f{i}.txt"), &format!("c{i}"));
+        }
+        let p1 = svc.log(dir.path(), 2, 0);
+        let p2 = svc.log(dir.path(), 2, 2);
+        let p3 = svc.log(dir.path(), 2, 4);
+        assert_eq!(p1.iter().map(|e| e.message.as_str()).collect::<Vec<_>>(), ["c4", "c3"]);
+        assert_eq!(p2.iter().map(|e| e.message.as_str()).collect::<Vec<_>>(), ["c2", "c1"]);
+        assert_eq!(p3.iter().map(|e| e.message.as_str()).collect::<Vec<_>>(), ["c0"]);
+        assert!(svc.log(dir.path(), 2, 99).is_empty(), "past-the-end offset is empty");
     }
 
     #[test]
@@ -533,7 +578,7 @@ mod tests {
         std::fs::write(dir.path().join("new.txt"), "n\n").unwrap();
         svc.commit(dir.path(), "wip changes", &[]).unwrap();
         assert!(svc.status(dir.path()).is_empty(), "clean after commit");
-        assert_eq!(svc.log(dir.path(), 10)[0].message, "wip changes");
+        assert_eq!(svc.log(dir.path(), 10, 0)[0].message, "wip changes");
     }
 
     #[test]
@@ -738,7 +783,7 @@ mod tests {
         svc.init(dir.path()).unwrap();
         commit_file(dir.path(), "a.txt", "first");
         commit_file(dir.path(), "b.txt", "second");
-        let log = svc.log(dir.path(), 10);
+        let log = svc.log(dir.path(), 10, 0);
         assert_eq!(log.len(), 2);
         assert_eq!(log[0].message, "second");
         assert_eq!(log[1].message, "first");

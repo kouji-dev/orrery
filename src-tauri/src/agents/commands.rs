@@ -82,8 +82,9 @@ pub fn agent_commits(
     svc: State<'_, AgentService>,
     id: Uuid,
     limit: Option<usize>,
+    offset: Option<usize>,
 ) -> AppResult<Vec<crate::projects::model::CommitView>> {
-    svc.commits(id, limit.unwrap_or(50))
+    svc.commits(id, limit.unwrap_or(50), offset.unwrap_or(0))
 }
 
 #[tauri::command(async)]

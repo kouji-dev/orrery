@@ -212,7 +212,7 @@ impl ProjectService {
         let rec = self.record(id)?;
         Ok(self
             .git
-            .log(Path::new(&rec.path), limit)
+            .log(Path::new(&rec.path), limit, 0)
             .into_iter()
             .map(|e| CommitView {
                 agent: e.author,

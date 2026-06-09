@@ -231,11 +231,11 @@ impl AgentService {
     /// the agent branch), newest first, each tagged with the **agent id** (not the
     /// commit author) so the UI can group commits by agent. Empty for a worktree
     /// with no commits / no repo.
-    pub fn commits(&self, id: Uuid, limit: usize) -> AppResult<Vec<CommitView>> {
+    pub fn commits(&self, id: Uuid, limit: usize, offset: usize) -> AppResult<Vec<CommitView>> {
         let rec = self.record(id)?;
         Ok(self
             .git
-            .log(Path::new(&rec.worktree), limit)
+            .log(Path::new(&rec.worktree), limit, offset)
             .into_iter()
             .map(|e| CommitView {
                 agent: id.to_string(),
@@ -484,7 +484,7 @@ mod tests {
         std::fs::write(Path::new(&a.worktree).join("note.txt"), "hi").unwrap();
         s.commit(a.id, "add note", &[]).unwrap();
 
-        let commits = s.commits(a.id, 50).unwrap();
+        let commits = s.commits(a.id, 50, 0).unwrap();
         assert!(!commits.is_empty(), "worktree commits must be listed");
         assert_eq!(commits[0].msg, "add note", "newest commit first");
         assert_eq!(
