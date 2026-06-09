@@ -64,7 +64,7 @@ mod imp {
     use windows_sys::Win32::System::JobObjects::{
         AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
         JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
@@ -112,7 +112,13 @@ mod imp {
             let guard = OwnedJobHandle(job);
 
             let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            // KILL_ON_JOB_CLOSE: agents (and their trees) die when we exit.
+            // BREAKAWAY_OK: a child that EXPLICITLY passes CREATE_BREAKAWAY_FROM_JOB
+            // may leave the job — used ONLY by the updater relauncher, which must
+            // outlive our exit to run the elevated installer and relaunch us. Agents
+            // never pass that flag, so they stay in the job and are still reaped.
+            info.BasicLimitInformation.LimitFlags =
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
             let ok = SetInformationJobObject(
                 job,
                 JobObjectExtendedLimitInformation,

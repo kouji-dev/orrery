@@ -114,10 +114,15 @@ fn is_msi(bytes: &[u8]) -> bool {
 #[cfg(windows)]
 fn install_msi_elevated(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
-    // Detach + hide so the relauncher outlives this process and shows no console.
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    // CREATE_NEW_CONSOLE: the relauncher needs an INTERACTIVE console / window
+    // station so its `Start-Process -Verb RunAs` can raise the UAC consent. Spawning
+    // it DETACHED / CREATE_NO_WINDOW (the previous attempt) silently failed to
+    // surface the prompt — the install never ran. CREATE_BREAKAWAY_FROM_JOB lets it
+    // leave our kill-on-close Job Object so it outlives our exit (the job permits
+    // this via JOB_OBJECT_LIMIT_BREAKAWAY_OK). The console is briefly visible during
+    // the install — an acceptable tradeoff for a working per-machine update.
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+    const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 
     let msi = std::env::temp_dir().join(format!("Orrery_{version}_update.msi"));
     std::fs::write(&msi, bytes).map_err(|e| format!("write msi: {e}"))?;
@@ -132,13 +137,12 @@ fn install_msi_elevated(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<
     std::process::Command::new("powershell.exe")
         .args([
             "-NoProfile",
-            "-NonInteractive",
-            "-WindowStyle",
-            "Hidden",
+            "-ExecutionPolicy",
+            "Bypass",
             "-Command",
             &relaunch_script(&msi, &exe),
         ])
-        .creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW)
+        .creation_flags(CREATE_NEW_CONSOLE | CREATE_BREAKAWAY_FROM_JOB)
         .spawn()
         .map_err(|e| format!("spawn updater shell: {e}"))?;
 
@@ -156,11 +160,20 @@ fn install_msi_elevated(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<
 /// UAC is swallowed so the app still relaunches (old version) instead of vanishing.
 #[cfg(windows)]
 fn relaunch_script(msi: &std::path::Path, exe: &std::path::Path) -> String {
+    let log = std::env::temp_dir().join("orrery-relaunch.log");
+    let log = log.to_string_lossy().replace('\'', "''");
     let msi = msi.to_string_lossy().replace('\'', "''");
     let exe = exe.to_string_lossy().replace('\'', "''");
+    // Each step appends to orrery-relaunch.log so a failed update is diagnosable:
+    // we see the runas exit code (0 = installed) or the cancellation/error, then the
+    // relaunch. -PassThru -Wait gives us msiexec's exit code.
     format!(
-        "$ErrorActionPreference='SilentlyContinue'; \
-         try {{ Start-Process 'msiexec.exe' -Verb RunAs -Wait -ArgumentList '/i \"{msi}\" /quiet' }} catch {{}}; \
+        "$ErrorActionPreference='SilentlyContinue'; $l='{log}'; \
+         \"$(Get-Date -Format o) start\" | Out-File -Append -Encoding utf8 $l; \
+         try {{ $p = Start-Process 'msiexec.exe' -Verb RunAs -Wait -PassThru -ArgumentList '/i \"{msi}\" /quiet'; \
+                \"$(Get-Date -Format o) msiexec exit=$($p.ExitCode)\" | Out-File -Append -Encoding utf8 $l }} \
+         catch {{ \"$(Get-Date -Format o) runas error: $($_.Exception.Message)\" | Out-File -Append -Encoding utf8 $l }}; \
+         \"$(Get-Date -Format o) relaunch\" | Out-File -Append -Encoding utf8 $l; \
          Start-Process -FilePath '{exe}'"
     )
 }
@@ -189,6 +202,8 @@ mod tests {
         assert!(s.contains("-Verb RunAs"), "elevates msiexec: {s}");
         assert!(s.contains("/quiet"), "silent install: {s}");
         assert!(s.contains("-Wait"), "waits for install to finish: {s}");
+        assert!(s.contains("-PassThru"), "captures msiexec exit code: {s}");
+        assert!(s.contains("Out-File"), "logs each step for diagnosis: {s}");
         assert!(s.contains("Orrery_0.1.7_update.msi"), "msi path present: {s}");
         // relaunch happens AFTER the elevate block and must NOT ride AUTOLAUNCHAPP
         assert!(!s.contains("AUTOLAUNCHAPP"), "must not elevate-relaunch: {s}");
