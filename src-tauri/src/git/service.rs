@@ -460,9 +460,9 @@ impl GitService {
     /// because libgit2 push needs manual credential callbacks). Errors carry git's
     /// stderr.
     pub fn push(&self, worktree: &Path, remote: &str, branch: &str) -> AppResult<()> {
-        let out = std::process::Command::new("git")
-            .current_dir(worktree)
-            .args(["push", "-u", remote, branch])
+        let mut cmd = std::process::Command::new("git");
+        cmd.current_dir(worktree).args(["push", "-u", remote, branch]);
+        let out = crate::core::proc::no_window(&mut cmd)
             .output()
             .map_err(|e| AppError::Other(format!("git push: {e}")))?;
         if out.status.success() {
