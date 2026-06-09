@@ -2,10 +2,23 @@ import { inject, Injectable, signal } from '@angular/core';
 import { UPDATER, UpdateOutcome } from './updater';
 
 const CHECK_TIMEOUT_MS = 10_000;
-// Survives the post-update relaunch (per-origin localStorage). Lets us notice an
-// update that installs but never advances the version — so we don't reinstall
-// the same version on every boot forever (which bricks the app).
+// Survives the post-update relaunch (per-origin localStorage). Records the version
+// we last TRIED to install and when. Lets us notice an update that installs but
+// never advances the version, so we don't reinstall it in a tight relaunch loop
+// (which would brick the app) — while still RETRYING on a genuine later restart.
+// That retry matters for the per-machine MSI path: "didn't advance" there usually
+// just means the user dismissed the one-time UAC prompt, and a permanent suppress
+// would dead-end them (no in-app way to re-trigger).
 const ATTEMPT_KEY = 'orrery:update-attempt';
+// Suppress a re-attempt of the SAME version only within this window of the last
+// attempt — i.e. an immediate failed auto-relaunch. A restart later than this (or a
+// legacy marker that carries no timestamp) is allowed to retry.
+const RETRY_COOLDOWN_MS = 60_000;
+
+interface Attempt {
+  version: string;
+  ts: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class UpdaterService {
@@ -25,17 +38,17 @@ export class UpdaterService {
         this.setAttempt(null); // we're up to date — forget any prior attempt
         return 'no-update';
       }
-      // Loop guard: we already installed this exact version last boot, yet it's
-      // still on offer — the install/relaunch didn't take (e.g. a per-machine
-      // install the silent updater can't touch). Don't reinstall in a loop; boot
-      // normally and tell the user to update manually.
-      if (this.getAttempt() === update.version) {
+      // Loop guard: we tried this exact version moments ago yet it's still on offer
+      // — the install/relaunch didn't take. Don't reinstall in a tight loop; boot
+      // normally. A restart past the cooldown (or a stale/legacy marker) retries.
+      const prev = this.getAttempt();
+      if (prev && prev.version === update.version && Date.now() - prev.ts < RETRY_COOLDOWN_MS) {
         this.status.set(`update ${update.version} available — install manually`);
         return 'no-update';
       }
       // Mark BEFORE installing: on Windows the installer can exit this process
       // before downloadAndInstall resolves, so the marker must already be set.
-      this.setAttempt(update.version);
+      this.setAttempt({ version: update.version, ts: Date.now() });
       this.status.set(`downloading update · ${update.version}`);
       await update.downloadAndInstall((downloaded, total) => {
         this.progress.set(total && total > 0 ? downloaded / total : 0);
@@ -51,16 +64,29 @@ export class UpdaterService {
     }
   }
 
-  private getAttempt(): string | null {
+  /** Read the last attempt. Tolerates the legacy plain-string format (no timestamp)
+   *  by treating it as long ago, so a stale marker never blocks a retry forever. */
+  private getAttempt(): Attempt | null {
     try {
-      return localStorage.getItem(ATTEMPT_KEY);
+      const raw = localStorage.getItem(ATTEMPT_KEY);
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.version === 'string') {
+          return { version: parsed.version, ts: Number(parsed.ts) || 0 };
+        }
+      } catch {
+        /* legacy plain-string marker — fall through */
+      }
+      return { version: raw, ts: 0 };
     } catch {
       return null;
     }
   }
-  private setAttempt(v: string | null): void {
+
+  private setAttempt(a: Attempt | null): void {
     try {
-      if (v) localStorage.setItem(ATTEMPT_KEY, v);
+      if (a) localStorage.setItem(ATTEMPT_KEY, JSON.stringify(a));
       else localStorage.removeItem(ATTEMPT_KEY);
     } catch {
       /* no storage available */

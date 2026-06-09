@@ -16,7 +16,12 @@ function make(updater: Partial<Updater>): UpdaterService {
   return runInInjectionContext(injector, () => new UpdaterService());
 }
 
-// The loop guard persists the attempted version in localStorage across runs.
+const attemptVersion = (): string | undefined => {
+  const raw = localStorage.getItem(ATTEMPT_KEY);
+  return raw ? JSON.parse(raw).version : undefined;
+};
+
+// The loop guard persists the attempted version + timestamp in localStorage.
 afterEach(() => localStorage.clear());
 
 describe('UpdaterService.run', () => {
@@ -57,14 +62,16 @@ describe('UpdaterService.run', () => {
     expect(await svc.run()).toBe('no-update');
   });
 
-  it('records the attempted version before installing', async () => {
+  it('records the attempted version with a timestamp before installing', async () => {
     const handle: UpdateHandle = { version: '2.0.0', downloadAndInstall: async () => {} };
     await make({ check: async () => handle }).run();
-    expect(localStorage.getItem(ATTEMPT_KEY)).toBe('2.0.0');
+    const raw = localStorage.getItem(ATTEMPT_KEY)!;
+    expect(JSON.parse(raw).version).toBe('2.0.0');
+    expect(JSON.parse(raw).ts).toBeGreaterThan(0);
   });
 
-  it('does not reinstall a version already attempted last boot (loop guard)', async () => {
-    localStorage.setItem(ATTEMPT_KEY, '1.2.0');
+  it('does not reinstall a version attempted moments ago (tight-loop guard)', async () => {
+    localStorage.setItem(ATTEMPT_KEY, JSON.stringify({ version: '1.2.0', ts: Date.now() }));
     const relaunch = vi.fn(async () => {});
     const downloadAndInstall = vi.fn(async () => {});
     const handle: UpdateHandle = { version: '1.2.0', downloadAndInstall };
@@ -75,17 +82,28 @@ describe('UpdaterService.run', () => {
     expect(svc.status()).toContain('manually');
   });
 
-  it('still installs a different (newer) version than last attempt', async () => {
+  it('retries the same version on a later restart (stale/legacy marker)', async () => {
+    // Legacy plain-string marker (no timestamp) → treated as long ago → retried.
+    // This is the dead-end the timestamp guard fixes: a stale marker from the old
+    // build must not block the new build's first install attempt forever.
     localStorage.setItem(ATTEMPT_KEY, '1.2.0');
+    const downloadAndInstall = vi.fn(async () => {});
+    const handle: UpdateHandle = { version: '1.2.0', downloadAndInstall };
+    expect(await make({ check: async () => handle }).run()).toBe('updating');
+    expect(downloadAndInstall).toHaveBeenCalledOnce();
+  });
+
+  it('still installs a different (newer) version than last attempt', async () => {
+    localStorage.setItem(ATTEMPT_KEY, JSON.stringify({ version: '1.2.0', ts: Date.now() }));
     const downloadAndInstall = vi.fn(async () => {});
     const handle: UpdateHandle = { version: '1.3.0', downloadAndInstall };
     expect(await make({ check: async () => handle }).run()).toBe('updating');
     expect(downloadAndInstall).toHaveBeenCalledOnce();
-    expect(localStorage.getItem(ATTEMPT_KEY)).toBe('1.3.0');
+    expect(attemptVersion()).toBe('1.3.0');
   });
 
   it('clears the attempt marker once up to date', async () => {
-    localStorage.setItem(ATTEMPT_KEY, '1.2.0');
+    localStorage.setItem(ATTEMPT_KEY, JSON.stringify({ version: '1.2.0', ts: Date.now() }));
     await make({ check: async () => null }).run();
     expect(localStorage.getItem(ATTEMPT_KEY)).toBeNull();
   });

@@ -46,7 +46,9 @@ pub async fn update_check(
 ) -> Result<Option<String>, String> {
     let updater = build_updater(&app, timeout_ms)?;
     let update = updater.check().await.map_err(|e| e.to_string())?;
-    Ok(update.map(|u| u.version))
+    let version = update.map(|u| u.version);
+    log::info!("update_check: available={version:?}");
+    Ok(version)
 }
 
 /// Download (signature-verified by the plugin) and install the available update,
@@ -57,10 +59,13 @@ pub async fn update_check(
 /// network / bad signature), which the caller treats as "no update".
 #[tauri::command]
 pub async fn update_perform(app: AppHandle, timeout_ms: Option<u64>) -> Result<(), String> {
+    log::info!("update_perform: starting");
     let updater = build_updater(&app, timeout_ms)?;
     let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
+        log::info!("update_perform: nothing to install (up to date)");
         return Err("no update available".into());
     };
+    log::info!("update_perform: installing {}", update.version);
 
     let mut downloaded: u64 = 0;
     let bytes = update
@@ -77,13 +82,17 @@ pub async fn update_perform(app: AppHandle, timeout_ms: Option<u64>) -> Result<(
         .await
         .map_err(|e| e.to_string())?;
 
+    log::info!("update_perform: downloaded {} bytes", bytes.len());
+
     // Per-machine MSI on Windows takes our elevated path (which exits the process);
     // everything else (per-user NSIS, non-Windows) uses the plugin's own installer.
     #[cfg(windows)]
     {
         if is_msi(&bytes) {
+            log::info!("update_perform: per-machine MSI → elevated install");
             return install_msi_elevated(&app, &update.version, &bytes);
         }
+        log::info!("update_perform: not an MSI → plugin installer (NSIS/per-user)");
     }
 
     update.install(&bytes).map_err(|e| e.to_string())?;
@@ -113,6 +122,12 @@ fn install_msi_elevated(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<
     let msi = std::env::temp_dir().join(format!("Orrery_{version}_update.msi"));
     std::fs::write(&msi, bytes).map_err(|e| format!("write msi: {e}"))?;
     let exe = std::env::current_exe().map_err(|e| format!("current exe: {e}"))?;
+    log::info!(
+        "install_msi_elevated: msi={} exe={} ({} bytes) — spawning elevated relauncher",
+        msi.display(),
+        exe.display(),
+        bytes.len()
+    );
 
     std::process::Command::new("powershell.exe")
         .args([
@@ -127,6 +142,7 @@ fn install_msi_elevated(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<
         .spawn()
         .map_err(|e| format!("spawn updater shell: {e}"))?;
 
+    log::info!("install_msi_elevated: relauncher spawned, exiting app for msiexec");
     // Quit gracefully (agent PTYs torn down via the RunEvent handler) so the running
     // exe unlocks and msiexec can replace it.
     app.exit(0);
