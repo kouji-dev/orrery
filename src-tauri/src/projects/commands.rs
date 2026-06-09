@@ -8,12 +8,12 @@ use crate::core::events::{emit_entity, Change};
 use super::model::{CommitView, Project, ProjectCreateRequest, ProjectUpdateRequest};
 use super::service::ProjectService;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn project_list(svc: State<'_, ProjectService>) -> AppResult<Vec<Project>> {
     svc.list()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn project_create<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, ProjectService>,
@@ -24,7 +24,7 @@ pub fn project_create<R: Runtime>(
     Ok(project)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn project_update<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, ProjectService>,
@@ -36,7 +36,7 @@ pub fn project_update<R: Runtime>(
     Ok(project)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn project_init_git<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, ProjectService>,
@@ -47,7 +47,7 @@ pub fn project_init_git<R: Runtime>(
     Ok(project)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn project_remove<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, ProjectService>,
@@ -65,12 +65,12 @@ pub fn project_remove<R: Runtime>(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn project_detect_git(svc: State<'_, ProjectService>, path: String) -> AppResult<bool> {
     Ok(svc.detect_git(&path))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn project_commits(
     svc: State<'_, ProjectService>,
     id: Uuid,

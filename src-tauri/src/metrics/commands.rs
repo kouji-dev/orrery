@@ -45,7 +45,7 @@ pub fn sample_with_labels(
 /// Optional synchronous initial value so the UI can paint before the first push.
 /// Does a warm-up + a real refresh inline (two refreshes spaced by sysinfo's
 /// minimum cpu interval) so the one-shot reading still has a usable cpu%.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn system_metrics(
     runtime: State<'_, RuntimeService>,
     agents: State<'_, AgentService>,

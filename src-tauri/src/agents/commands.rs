@@ -12,12 +12,12 @@ use crate::watch::WatchService;
 use super::model::{Agent, AgentSpawnRequest, AgentUpdateRequest};
 use super::service::AgentService;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_list(svc: State<'_, AgentService>) -> AppResult<Vec<Agent>> {
     svc.list()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_spawn<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, AgentService>,
@@ -32,7 +32,7 @@ pub fn agent_spawn<R: Runtime>(
     Ok(agent)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_update<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, AgentService>,
@@ -44,7 +44,7 @@ pub fn agent_update<R: Runtime>(
     Ok(agent)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_remove<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, AgentService>,
@@ -60,14 +60,14 @@ pub fn agent_remove<R: Runtime>(
 }
 
 /// Worktree file tree (source recursed, ignored dirs as lazy stubs).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_tree(svc: State<'_, AgentService>, id: Uuid) -> AppResult<Vec<crate::fs::FileNode>> {
     let agent = svc.get(id)?;
     Ok(crate::fs::tree(std::path::Path::new(&agent.worktree)))
 }
 
 /// Working-tree changes in an agent's worktree (transient `git_changes`).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_changes(
     svc: State<'_, AgentService>,
     id: Uuid,
@@ -77,7 +77,7 @@ pub fn agent_changes(
 
 /// Commits on the agent's branch — read from its worktree HEAD, tagged with the
 /// agent id (transient `git_commits`).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_commits(
     svc: State<'_, AgentService>,
     id: Uuid,
@@ -86,7 +86,7 @@ pub fn agent_commits(
     svc.commits(id, limit.unwrap_or(50))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_commit(
     svc: State<'_, AgentService>,
     id: Uuid,
@@ -96,13 +96,13 @@ pub fn agent_commit(
     svc.commit(id, &message, &paths)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_discard(svc: State<'_, AgentService>, id: Uuid, paths: Vec<String>) -> AppResult<()> {
     svc.discard(id, &paths)
 }
 
 /// Backend push: push the agent's branch to origin (deterministic).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_push(svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
     svc.push(id)
 }
@@ -111,7 +111,7 @@ pub fn agent_push(svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
 /// (commit/push/rebase/merge) and type it into the agent's RUNNING PTY. Errors if
 /// the process isn't running (the UI enables these only when running) or `kind` is
 /// unknown. Fire-and-forward — the agent runs the git with its own tools.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_action(
     rt: State<'_, RuntimeService>,
     svc: State<'_, AgentService>,
@@ -124,7 +124,7 @@ pub fn agent_action(
     rt.write(id, &format!("{prompt}\r")).map_err(AppError::Other)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_diff(
     svc: State<'_, AgentService>,
     id: Uuid,
@@ -141,7 +141,7 @@ pub fn agent_diff(
 /// (e.g. `claude --resume <id>`) instead of a fresh/bare run. Falls back to the
 /// normal launch when there's no session id (or the tool has no resume flow), so
 /// the existing Start/Resume button (resume=false) is unchanged.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_start<R: Runtime>(
     app: AppHandle<R>,
     rt: State<'_, RuntimeService>,
@@ -182,7 +182,7 @@ pub fn agent_start<R: Runtime>(
 }
 
 /// Stop the agent's running process and mark it idle.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_stop<R: Runtime>(
     app: AppHandle<R>,
     rt: State<'_, RuntimeService>,
@@ -199,7 +199,7 @@ pub fn agent_stop<R: Runtime>(
 }
 
 /// Forward UI-terminal keystrokes into the agent's PTY stdin.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_input(rt: State<'_, RuntimeService>, id: Uuid, data: String) -> AppResult<()> {
     rt.write(id, &data).map_err(AppError::Other)
 }
@@ -208,7 +208,7 @@ pub fn agent_input(rt: State<'_, RuntimeService>, id: Uuid, data: String) -> App
 /// approve-keystrokes into its PTY. Resolves the agent's tool → adapter →
 /// `allow_keys()` so the RIGHT keys go to each tool's prompt UI (best-effort
 /// until hook decision-forwarding lands; see `AgentAdapter::allow_keys`).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_allow(rt: State<'_, RuntimeService>, svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
     let tool = svc.get(id)?.tool;
     let adapter = super::adapters::adapter_for(&tool)
@@ -218,7 +218,7 @@ pub fn agent_allow(rt: State<'_, RuntimeService>, svc: State<'_, AgentService>, 
 
 /// Deny the agent's pending permission prompt by typing the tool's
 /// deny-keystrokes into its PTY (mirror of [`agent_allow`], using `deny_keys()`).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_deny(rt: State<'_, RuntimeService>, svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
     let tool = svc.get(id)?.tool;
     let adapter = super::adapters::adapter_for(&tool)
@@ -232,7 +232,7 @@ pub fn agent_deny(rt: State<'_, RuntimeService>, svc: State<'_, AgentService>, i
 /// (mirror of [`agent_allow`]). Best-effort, fire-and-forget — NOT a forwarded
 /// decision; assumes a numbered select where 1..N maps to the displayed options
 /// (see `AgentAdapter::decide_keys`).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_decide(
     rt: State<'_, RuntimeService>,
     svc: State<'_, AgentService>,
@@ -246,7 +246,7 @@ pub fn agent_decide(
 }
 
 /// Resize the agent's PTY to match the visible terminal (cols × rows).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_resize(
     rt: State<'_, RuntimeService>,
     id: Uuid,
@@ -257,7 +257,7 @@ pub fn agent_resize(
 }
 
 /// Start watching an agent's worktree (replaces any previous watch); emits `agent://changed`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_watch<R: Runtime>(
     app: AppHandle<R>,
     watch: State<'_, WatchService>,
@@ -270,7 +270,7 @@ pub fn agent_watch<R: Runtime>(
 }
 
 /// One directory's immediate children — used to lazily expand an unloaded folder.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn agent_dir(
     svc: State<'_, AgentService>,
     id: Uuid,
@@ -282,7 +282,7 @@ pub fn agent_dir(
 
 /// Detection of which CLI coding agents are installed — delegated to the adapter
 /// registry so only-installed tools are offered (and, later, hooked).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn detect_tools() -> Vec<super::adapters::ToolStatus> {
     super::adapters::installed()
 }
