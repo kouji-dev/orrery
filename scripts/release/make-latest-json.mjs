@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 export function assetUrl(repo, tag, filename) {
   return `https://github.com/${repo}/releases/download/${tag}/${filename}`;
@@ -23,7 +24,9 @@ function parseArgs(argv) {
 }
 
 // CLI: node make-latest-json.mjs --version X --dir DIR --out FILE --repo O/R [--notes "..."]
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL: see stamp-version.mjs — the bare-string check fails to detect
+// the main module on Windows.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const a = parseArgs(process.argv.slice(2));
   const tag = `v${a.version}`;
   const setup = readdirSync(a.dir).find((f) => f.endsWith('-setup.exe'));

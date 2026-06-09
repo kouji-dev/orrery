@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 /** Replace the FIRST top-level "version": "x" in a JSON string (regex, so file
  *  formatting/key order is preserved). */
@@ -13,7 +14,10 @@ export function setCargoVersion(content, version) {
 }
 
 // CLI: node scripts/release/stamp-version.mjs <version>
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Use pathToFileURL so the main-module check matches on Windows too (a bare
+// `file://${argv[1]}` yields `file://C:\…`, which never equals the canonical
+// `file:///C:/…` in import.meta.url — silently skipping the stamp).
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const version = process.argv[2];
   if (!version) {
     console.error('usage: stamp-version.mjs <version>');
