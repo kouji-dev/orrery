@@ -1,7 +1,7 @@
 import { ScrollingModule } from "@angular/cdk/scrolling";
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Agent, FileNode, Project } from "../models";
-import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { AgentWorkStore } from "../agents/agent-work.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 
@@ -61,19 +61,19 @@ interface FlatRow {
   `,
 })
 export class FileTreeComponent {
-  private runtime = inject(AgentRuntimeService);
+  private work = inject(AgentWorkStore);
   private ui = inject(UiStore);
   readonly agent = input.required<Agent>();
   readonly project = input<Project | undefined>(undefined);
 
-  readonly nodes = computed<FileNode[]>(() => this.agent().files?.nodes ?? []);
-  readonly loading = computed(() => this.agent().files?.loading ?? false);
+  readonly nodes = computed<FileNode[]>(() => this.work.treeFor(this.agent().id).data);
+  readonly loading = computed(() => this.work.treeFor(this.agent().id).status === "loading");
   readonly openMap = signal<Record<string, boolean>>({});
 
   // git status by (normalized) path → mark changed files in the tree with A/M/D
   readonly stateMap = computed<Record<string, string>>(() => {
     const map: Record<string, string> = {};
-    for (const f of this.agent().git_changes?.files ?? []) {
+    for (const f of this.work.changesFor(this.agent().id).data) {
       map[f.path.replace(/\\/g, "/")] = f.state;
     }
     return map;
@@ -120,7 +120,7 @@ export class FileTreeComponent {
     if (!node.isDir) return;
     const isOpen = this.isOpen(node);
     if (!isOpen && node.children === null) {
-      this.runtime.expandDir(this.agent().id, node.path); // lazy-load stub folders
+      this.work.expandDir(this.agent().id, node.path); // lazy-load stub folders
     }
     this.openMap.update((m) => ({ ...m, [node.path]: !isOpen }));
   }
@@ -130,6 +130,6 @@ export class FileTreeComponent {
   }
   /** Manual fallback: re-scan this agent's worktree file tree. */
   refresh() {
-    this.runtime.loadFiles(this.agent().id);
+    this.work.loadTree(this.agent().id);
   }
 }

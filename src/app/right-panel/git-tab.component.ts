@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from "@angular/core";
 import { Agent, AgentFile, Commit, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { AgentWorkStore } from "../agents/agent-work.store";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
 import { fileDir, fileName } from "../utils";
@@ -127,11 +128,19 @@ import { CommitFeedComponent } from "./commit-feed.component";
           </button>
         </div>
 
-        <!-- this branch's commits -->
+        <!-- this branch's commits (lazy first page + Load more) -->
         <div class="up" style="font-size:9px;color:var(--ink-3);padding:4px 14px">Commits on this branch</div>
         <app-commit-feed [commits]="agentCommits()" [compact]="true" />
-        @if (!agentCommits().length) {
+        @if (commitsEntry()?.status === 'loading' && !agentCommits().length) {
+          <div style="padding:2px 14px 14px;font-size:10.5px;color:var(--ink-4)">loading commits…</div>
+        } @else if (!agentCommits().length) {
           <div style="padding:2px 14px 14px;font-size:10.5px;color:var(--ink-4)">no commits yet</div>
+        }
+        @if (commitsEntry()?.hasMore) {
+          <button class="btn ghost-hair" style="margin:4px 14px 14px;justify-content:center"
+            [disabled]="commitsEntry()?.status === 'loading'" (click)="work.loadMoreCommits(ag.id)">
+            {{ commitsEntry()?.status === 'loading' ? 'loading…' : 'Load more' }}
+          </button>
         }
       </div>
     }
@@ -140,19 +149,30 @@ import { CommitFeedComponent } from "./commit-feed.component";
 export class GitTabComponent {
   readonly projects = inject(ProjectActionsService);
   readonly agentActions = inject(AgentActionsService);
+  readonly work = inject(AgentWorkStore);
   readonly agent = input<Agent | null>(null);
   readonly project = input<Project | undefined>(undefined);
 
   readonly fname = fileName;
   readonly fdir = fileDir;
 
-  readonly changes = computed<AgentFile[]>(() => this.agent()?.git_changes?.files ?? []);
-  readonly changesLoading = computed(() => this.agent()?.git_changes?.loading ?? false);
+  readonly changes = computed<AgentFile[]>(() => {
+    const ag = this.agent();
+    return ag ? this.work.changesFor(ag.id).data : [];
+  });
+  readonly changesLoading = computed(() => {
+    const ag = this.agent();
+    return ag ? this.work.changesFor(ag.id).status === "loading" : false;
+  });
   readonly totAdd = computed(() => this.changes().reduce((s, f) => s + f.add, 0));
   readonly totDel = computed(() => this.changes().reduce((s, f) => s + f.del, 0));
-  // this branch's commits, read from the agent's worktree (loaded as the
-  // `git_commits` runtime transient and tagged with the agent id by the backend).
-  readonly agentCommits = computed<Commit[]>(() => this.agent()?.git_commits?.commits ?? []);
+  // this branch's commits, read lazily from the agent's worktree (first page on
+  // agent open, paged onward via the Load more button).
+  readonly commitsEntry = computed(() => {
+    const ag = this.agent();
+    return ag ? this.work.commitsFor(ag.id) : null;
+  });
+  readonly agentCommits = computed<Commit[]>(() => this.commitsEntry()?.data ?? []);
 
   readonly selected = signal<Set<string>>(new Set());
   readonly commitMsg = signal("");

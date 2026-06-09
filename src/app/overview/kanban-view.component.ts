@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, input } from "@angular/core";
 import { Agent, AgentStatus } from "../models";
+import { AgentWorkStore } from "../agents/agent-work.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
@@ -56,6 +57,7 @@ interface Col {
 })
 export class KanbanViewComponent {
   readonly ui = inject(UiStore);
+  private work = inject(AgentWorkStore);
   readonly agents = input.required<Agent[]>();
 
   readonly cols: Col[] = [
@@ -72,6 +74,6 @@ export class KanbanViewComponent {
     return STATUS_META[key].color;
   }
   add(ag: Agent): number {
-    return (ag.git_changes?.files ?? []).reduce((s, f) => s + f.add, 0);
+    return this.work.changesFor(ag.id).data.reduce((s, f) => s + f.add, 0);
   }
 }

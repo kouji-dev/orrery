@@ -11,6 +11,7 @@ import {
 } from "@angular/core";
 import { Agent, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { AgentWorkStore } from "../agents/agent-work.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { RingComponent } from "../shared/ring.component";
@@ -69,7 +70,8 @@ import { MiniTermComponent } from "./mini-term.component";
       <app-mini-term [agentId]="ag.id" />
 
       <div class="tnum" style="display:flex;align-items:center;gap:10px;font-size:10.5px;color:var(--ink-3)">
-        <span style="display:flex;gap:4px"><app-icon name="file" size="sm" [px]="11" />{{ (ag.git_changes?.files?.length ?? 0) }}</span>
+        <span style="display:flex;gap:4px"><app-icon name="file" size="sm" [px]="11" />{{ ch().data.length }}</span>
+        @if (ch().status === 'loading') { <span style="opacity:.5" title="scanning…">·</span> }
         <span style="color:var(--code-add-ink)">+{{ totAdd() }}</span>
         <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
         <span style="display:flex;gap:4px"><app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}</span>
@@ -155,6 +157,7 @@ import { MiniTermComponent } from "./mini-term.component";
 export class AgentCardComponent {
   readonly ui = inject(UiStore);
   readonly agentActions = inject(AgentActionsService);
+  private work = inject(AgentWorkStore);
   readonly agent = input.required<Agent>();
   readonly proj = input<Project | undefined>(undefined);
 
@@ -192,8 +195,9 @@ export class AgentCardComponent {
         return a.working ? "live" : a.needsInput ? "input" : "idle"; // running
     }
   });
-  readonly totAdd = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.add, 0));
-  readonly totDel = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.del, 0));
+  readonly ch = computed(() => this.work.changesFor(this.agent().id));
+  readonly totAdd = computed(() => this.ch().data.reduce((s, f) => s + f.add, 0));
+  readonly totDel = computed(() => this.ch().data.reduce((s, f) => s + f.del, 0));
 
   // Start/Resume arrow dropdown (Continue session → claude --resume <id>)
   readonly resumeMenuOpen = signal(false);

@@ -10,7 +10,7 @@ import {
 import { Agent, AgentFile, FileDiff } from "../models";
 import { IconComponent } from "../shared/icon.component";
 import { AgentsStore } from "../stores/agents.store";
-import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { AgentWorkStore } from "../agents/agent-work.store";
 import { fileDir, fileName, fileStateLabel, hunkHeader, langId, langTag, mix } from "../utils";
 import { CodeDiffComponent } from "./code-diff.component";
 
@@ -266,7 +266,7 @@ const LIST_DEFAULT = 236;
 })
 export class DiffViewComponent {
   private agents = inject(AgentsStore);
-  private runtime = inject(AgentRuntimeService);
+  private work = inject(AgentWorkStore);
   readonly agent = input.required<Agent>();
   // selection by PATH (works across both flat + tree views); treeMode toggles them
   readonly selPath = signal<string | null>(null);
@@ -276,7 +276,7 @@ export class DiffViewComponent {
   readonly fdir = fileDir;
   readonly stateLabel = fileStateLabel;
 
-  readonly changes = computed(() => this.agent().git_changes?.files ?? []);
+  readonly changes = computed(() => this.work.changesFor(this.agent().id).data);
   // the effectively-selected file: the one matching selPath, else the first
   readonly current = computed<AgentFile | undefined>(() => {
     const cs = this.changes();
@@ -308,7 +308,7 @@ export class DiffViewComponent {
   /** Manual fallback: re-fetch this agent's changed files — the diff effect then
    *  reloads the selected file's content. */
   refresh() {
-    this.runtime.loadChanges(this.agent().id);
+    this.work.loadChanges(this.agent().id);
   }
   readonly diff = signal<FileDiff | null>(null);
   readonly loading = signal(false);

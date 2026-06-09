@@ -7,6 +7,7 @@ import { UiStore } from "../ui/ui.store";
 import { toolMeta } from "../utils";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { AgentRuntimeService } from "./agent-runtime.service";
+import { AgentWorkStore } from "./agent-work.store";
 
 export interface SpawnRequest {
   projectId: string;
@@ -30,6 +31,7 @@ export interface SpawnRequest {
 export class AgentActionsService {
   private agentsStore = inject(AgentsStore);
   private runtime = inject(AgentRuntimeService);
+  private work = inject(AgentWorkStore);
   private projects = inject(ProjectActionsService);
   private terminals = inject(TerminalService);
   private notifications = inject(NotificationStore);
@@ -79,8 +81,8 @@ export class AgentActionsService {
       .commit(id, message, paths)
       .then(() => {
         this.ui.flash("committed in " + (ag?.name ?? id));
-        this.runtime.loadChanges(id);
-        this.runtime.loadCommits(id);
+        this.work.loadChanges(id);
+        this.work.refreshCommits(id);
         void this.projects.refreshCommits(this.projects.all().map((p) => p.id));
         if (ag) this.runtime.patchRuntime(id, { commits: ag.commits + 1 });
       })
@@ -92,7 +94,7 @@ export class AgentActionsService {
       .discard(id, paths)
       .then(() => {
         this.ui.flash("discarded changes");
-        this.runtime.loadChanges(id);
+        this.work.loadChanges(id);
       })
       .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "discard failed"));
   }
@@ -246,7 +248,7 @@ export class AgentActionsService {
       {
         label: "Commit changes",
         icon: "commit",
-        disabled: !ag.git_changes?.files.length,
+        disabled: !this.work.changesFor(id).data.length,
         onClick: () => this.act(id, "commit"),
       },
       { label: "Push to origin", icon: "push", disabled: !ag.commits, onClick: () => this.act(id, "push") },
@@ -268,7 +270,7 @@ export class AgentActionsService {
       {
         label: "Discard changes",
         icon: "discard",
-        disabled: !ag.git_changes?.files.length,
+        disabled: !this.work.changesFor(id).data.length,
         onClick: () => this.act(id, "discard"),
       },
       { label: "Delete worktree", icon: "trash", danger: true, onClick: () => this.removeAgent(id) },

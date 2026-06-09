@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Agent } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { AgentWorkStore } from "../agents/agent-work.store";
 import { DragService } from "../shared/drag.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -40,7 +41,7 @@ import { fmtDur } from "../utils";
       <div style="display:flex;align-items:center;gap:6px;padding-left:15px">
         <app-icon name="branch" size="sm" [px]="11" color="var(--ink-4)" />
         <span style="font-size:10.5px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
-        @if ((ag.git_changes?.files?.length ?? 0) > 0) {
+        @if (ch().data.length > 0) {
           <span class="tnum" style="margin-left:auto;font-size:10px;display:flex;gap:5px;flex:none">
             <span style="color:var(--code-add-ink)">+{{ totAdd() }}</span>
             <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
@@ -75,8 +76,10 @@ export class AgentRowComponent {
   readonly active = input<boolean>(false);
 
   readonly fmt = fmtDur;
-  readonly totAdd = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.add, 0));
-  readonly totDel = computed(() => (this.agent().git_changes?.files ?? []).reduce((s, f) => s + f.del, 0));
+  private work = inject(AgentWorkStore);
+  readonly ch = computed(() => this.work.changesFor(this.agent().id));
+  readonly totAdd = computed(() => this.ch().data.reduce((s, f) => s + f.add, 0));
+  readonly totDel = computed(() => this.ch().data.reduce((s, f) => s + f.del, 0));
   readonly needs = computed(() => {
     const ag = this.agent();
     return (

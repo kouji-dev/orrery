@@ -107,10 +107,8 @@ export interface Agent {
   blockReason?: string;
   waitReason?: string;
   pending: PendingItem[];
-  // worktree-scoped transients, async-loaded (loading flag + superseded on re-scan)
-  files?: { loading: boolean; nodes: FileNode[] }; // the file tree
-  git_changes?: { loading: boolean; files: AgentFile[] }; // git status
-  git_commits?: { loading: boolean; commits: Commit[] }; // this branch's commits (worktree HEAD log)
+  // (worktree-scoped transients — file tree / git status / branch commits — live
+  // in AgentWorkStore as per-agent Loadable maps, NOT on the Agent record)
 }
 
 // ---- agent notifications ----
