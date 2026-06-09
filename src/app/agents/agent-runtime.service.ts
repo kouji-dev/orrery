@@ -256,7 +256,7 @@ export class AgentRuntimeService {
     const prev = this.runtime()[agentId]?.git_commits?.commits ?? [];
     this.patchRuntime(agentId, { git_commits: { loading: true, commits: prev } });
     void this.agentsStore
-      .commits(agentId)
+      .commits(agentId, 50, 0)
       .then((commits) => {
         if (this.commitsGen[agentId] !== gen) return; // superseded
         this.patchRuntime(agentId, { git_commits: { loading: false, commits } });

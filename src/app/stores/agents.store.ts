@@ -83,9 +83,10 @@ export class AgentsStore {
   changes(id: string): Promise<AgentFile[]> {
     return this.bridge.invoke<AgentFile[]>(Commands.AgentChanges, { id });
   }
-  /** Commits on the agent's branch (worktree HEAD log), tagged with the agent id. */
-  commits(id: string): Promise<Commit[]> {
-    return this.bridge.invoke<Commit[]>(Commands.AgentCommits, { id });
+  /** Commits on the agent's branch (worktree HEAD log), tagged with the agent id.
+   *  Paged: `limit` newest-first commits starting at `offset`. */
+  commits(id: string, limit: number, offset = 0): Promise<Commit[]> {
+    return this.bridge.invoke<Commit[]>(Commands.AgentCommits, { id, limit, offset });
   }
   /** Commit selected paths (empty = all) in the worktree; resolves the short sha. */
   commit(id: string, message: string, paths: string[]): Promise<string> {
