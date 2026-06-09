@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, signal } from "@angular/core";
 import { PALETTES } from "../data";
 import { VizMode } from "../models";
 import { UiStore } from "../ui/ui.store";
@@ -11,25 +11,19 @@ import { IconComponent } from "../shared/icon.component";
   template: `
     @let t = ui.tweaks();
     <!-- launcher -->
-    <button
-      class="tweak-fab"
-      (click)="open.set(!open())"
-      title="Tweaks"
-      style="position:fixed;right:18px;bottom:38px;z-index:70;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#06070b;border:none;background:linear-gradient(180deg,var(--accent),color-mix(in oklch,var(--accent),#000 14%));box-shadow:0 0 22px -4px rgba(var(--accent-rgb),0.8)"
-    >
-      <app-icon name="spark" [color]="'#06070b'" />
+    <button class="tweak-fab" [class.on]="open()" (click)="open.set(!open())" title="Tweaks">
+      <app-icon name="spark" />
     </button>
 
     @if (open()) {
-      <div
-        class="rise"
-        style="position:fixed;right:18px;bottom:90px;z-index:70;width:288px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:14px 16px;display:flex;flex-direction:column;gap:4px"
-      >
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <app-icon name="spark" size="sm" color="var(--accent)" />
+      <section class="tweak-panel" aria-label="Tweaks">
+        <header class="tweak-head">
+          <span class="tweak-brand"><app-icon name="spark" size="sm" [color]="'var(--accent)'" /></span>
           <span class="disp" style="font-size:13px;font-weight:600">Tweaks</span>
-          <button class="btn" (click)="open.set(false)" style="margin-left:auto;padding:3px"><app-icon name="x" size="sm" /></button>
-        </div>
+          <span style="flex:1"></span>
+          <button class="tweak-x" (click)="open.set(false)" title="Close"><app-icon name="x" size="sm" /></button>
+        </header>
+        <div class="tweak-body">
 
         <!-- Theme -->
         <div class="tweak-section">Theme</div>
@@ -83,13 +77,95 @@ import { IconComponent } from "../shared/icon.component";
           <span class="tweak-label">Live motion</span>
           <button class="toggle" [class.on]="t.motion" (click)="ui.setTweak('motion', !t.motion)"><span></span></button>
         </div>
-      </div>
+        </div>
+      </section>
     }
   `,
   styles: [
     `
+      /* matches the DevConsole FAB (.dvc-fab) — stacked directly above it */
+      .tweak-fab {
+        position: fixed;
+        right: 18px;
+        bottom: 92px;
+        z-index: 90;
+        width: 44px;
+        height: 44px;
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        border: 1px solid var(--hair-2);
+        background: linear-gradient(180deg, var(--panel-3), var(--panel));
+        color: var(--ink-2);
+        box-shadow: var(--shadow);
+        transition: transform 0.16s, color 0.16s, border-color 0.16s, box-shadow 0.16s;
+      }
       .tweak-fab:hover {
-        filter: brightness(1.08);
+        transform: translateY(-2px);
+        color: var(--ink);
+        border-color: rgba(var(--accent-rgb), 0.5);
+      }
+      .tweak-fab.on {
+        color: var(--accent);
+        border-color: rgba(var(--accent-rgb), 0.6);
+        box-shadow: var(--shadow), 0 0 18px -6px rgba(var(--accent-rgb), 0.7);
+      }
+      .tweak-fab svg {
+        width: 19px;
+        height: 19px;
+      }
+      /* popup chrome mirrors the DevConsole (.dvcon) — opens above its FAB */
+      .tweak-panel {
+        position: fixed;
+        right: 18px;
+        bottom: 148px;
+        z-index: 70;
+        width: 288px;
+        overflow: hidden;
+        background: var(--panel);
+        border: 1px solid var(--hair-2);
+        border-radius: 14px;
+        box-shadow: var(--shadow), 0 0 0 1px rgba(var(--accent-rgb), 0.04);
+        font-family: var(--font-mono);
+        transform-origin: bottom right;
+        animation: tweakin 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+      }
+      @keyframes tweakin {
+        from { opacity: 0; transform: translateY(8px) scale(0.985); }
+        to { opacity: 1; transform: none; }
+      }
+      .tweak-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 11px 9px 13px;
+        border-bottom: 1px solid var(--hair);
+        background: linear-gradient(180deg, var(--panel-3), var(--panel));
+      }
+      .tweak-brand {
+        display: flex;
+        align-items: center;
+        color: var(--accent);
+      }
+      .tweak-x {
+        border: none;
+        padding: 5px;
+        color: var(--ink-3);
+        background: transparent;
+        border-radius: var(--r-sm);
+        cursor: pointer;
+        display: inline-flex;
+      }
+      .tweak-x:hover {
+        color: var(--ink);
+        background: var(--panel-3);
+      }
+      .tweak-body {
+        padding: 12px 16px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
       }
       .tweak-section {
         font-size: 9px;
@@ -181,6 +257,12 @@ import { IconComponent } from "../shared/icon.component";
 export class TweaksPanelComponent {
   readonly ui = inject(UiStore);
   readonly open = signal(false);
+  private readonly host = inject(ElementRef<HTMLElement>);
+
+  // close on click outside the FAB + panel (both live under this host element)
+  @HostListener("document:mousedown", ["$event"]) onDocDown(e: MouseEvent) {
+    if (this.open() && !this.host.nativeElement.contains(e.target as Node)) this.open.set(false);
+  }
 
   readonly palettes = Object.entries(PALETTES).map(([name, value]) => ({ name, value }));
   readonly vizOptions: VizMode[] = ["grid", "kanban", "graph", "timeline"];
