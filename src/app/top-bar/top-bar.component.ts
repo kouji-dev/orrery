@@ -20,11 +20,12 @@ import { treeAgentIds } from "../workspace/pane-model";
 import { LogoComponent } from "./logo.component";
 import { NotificationCenterComponent } from "./notification-center.component";
 import { WindowControlsComponent } from "./window-controls.component";
+import { VersionBadgeComponent } from "../shared/version-badge.component";
 
 @Component({
   selector: "app-top-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LogoComponent, IconComponent, StatusDotComponent, NotificationCenterComponent, WindowControlsComponent],
+  imports: [LogoComponent, IconComponent, StatusDotComponent, NotificationCenterComponent, WindowControlsComponent, VersionBadgeComponent],
   template: `
     <header
       data-tauri-drag-region
@@ -36,8 +37,9 @@ import { WindowControlsComponent } from "./window-controls.component";
       <div data-tauri-drag-region style="display:flex;align-items:center;gap:11px;padding:0 14px;flex:none;width:var(--sidebar-w, 252px);box-sizing:border-box">
         <app-logo style="pointer-events:none" />
         <div style="display:flex;flex-direction:column;line-height:1.12;pointer-events:none">
-          <span class="disp" style="font-size:15px;font-weight:600;letter-spacing:0.005em">
-            <span style="color:var(--accent)">O</span>rrery
+          <span class="disp" style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;letter-spacing:0.005em">
+            <span><span style="color:var(--accent)">O</span>rrery</span>
+            <app-version-badge style="pointer-events:auto" />
           </span>
           <span style="font-size:9.5px;color:var(--ink-3);letter-spacing:0.04em">
             {{ projects.all().length }} projects · {{ runtime.agents().length }} agents

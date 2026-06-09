@@ -13,11 +13,12 @@ import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { MetricsStore } from "../metrics/metrics.store";
 import { CostStore } from "../metrics/cost.store";
+import { VersionBadgeComponent } from "../shared/version-badge.component";
 
 @Component({
   selector: "app-status-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, VersionBadgeComponent],
   template: `
     <footer
       style="display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--panel);border-top:1px solid var(--hair);font-size:10.5px;color:var(--ink-3)"
@@ -52,6 +53,9 @@ import { CostStore } from "../metrics/cost.store";
           <span style="color:var(--ink-4)">·</span>
         }
       </span>
+
+      <!-- app version + channel tag (DEV / BETA) -->
+      <app-version-badge variant="chip" class="tnum" />
 
       <!-- total Claude cost (ccusage); hover → bigger tooltip. hidden when unavailable -->
       @if (cost.cost()?.available) {
