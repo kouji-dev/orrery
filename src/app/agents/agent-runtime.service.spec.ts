@@ -48,58 +48,99 @@ beforeAll(() => {
   }
 });
 
+let output: OutputCb;
+let exit: (id: string) => void;
+let notifications: { pending: () => never[]; push: ReturnType<typeof vi.fn>; dismissPendingFor: ReturnType<typeof vi.fn> };
+let terminals: { write: ReturnType<typeof vi.fn>; exit: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; size: () => null; syncSize: ReturnType<typeof vi.fn>; onTitle: ReturnType<typeof vi.fn> };
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  foldSpy.mockClear();
+});
+afterEach(() => {
+  TestBed.resetTestingModule();
+  vi.useRealTimers();
+});
+
+function setup(agents: Agent[]): AgentRuntimeService {
+  const agentsStore = {
+    all: signal(agents),
+    detectTools: () => Promise.resolve([]),
+    watch: () => Promise.resolve(),
+    onScan: () => new Promise<() => void>(() => {}),
+    onPermission: () => Promise.resolve(() => {}),
+    onStatus: () => Promise.resolve(() => {}),
+    onActivity: () => Promise.resolve(() => {}),
+    onOutput: (cb: OutputCb) => {
+      output = cb;
+      return Promise.resolve(() => {});
+    },
+    onExit: (cb: (id: string) => void) => {
+      exit = cb;
+      return Promise.resolve(() => {});
+    },
+    start: vi.fn(() => Promise.resolve()),
+    stop: vi.fn(() => Promise.resolve()),
+    update: vi.fn(() => Promise.resolve()),
+  };
+  notifications = { pending: () => [], push: vi.fn(() => null), dismissPendingFor: vi.fn() };
+  terminals = { write: vi.fn(), exit: vi.fn(), dispose: vi.fn(), size: () => null, syncSize: vi.fn(), onTitle: vi.fn() };
+  TestBed.configureTestingModule({
+    providers: [
+      provideZonelessChangeDetection(),
+      AgentRuntimeService,
+      { provide: AgentsStore, useValue: agentsStore },
+      { provide: NotificationStore, useValue: notifications },
+      { provide: TerminalService, useValue: terminals },
+      { provide: UiStore, useValue: { activeTab: signal("orchestrator"), paneRoots: signal({}), scopeAgentId: signal(null), flash: vi.fn() } },
+      { provide: AgentWorkStore, useValue: { applyScan: vi.fn(), ensureTree: vi.fn(), ensureCommits: vi.fn(), dispose: vi.fn() } },
+    ],
+  });
+  return TestBed.inject(AgentRuntimeService);
+}
+
+describe("AgentRuntimeService — shared clock & stable agents identity", () => {
+  it("agents() keeps array AND object identities across clock ticks (zero churn from the clock)", () => {
+    const svc = setup([makeAgent({ id: "a1", tool: "claude" })]);
+    svc.startProcess("a1");
+    vi.advanceTimersByTime(800); // settle tick: no output yet → working flips true→false once
+    const before = svc.agents();
+    vi.advanceTimersByTime(4000); // five more ticks — nothing real changes
+    const after = svc.agents();
+    expect(after).toBe(before); // same array identity
+    expect(after[0]).toBe(before[0]); // same merged-object identity
+    expect(after[0].elapsed).toBe(0); // the clock no longer patches elapsed into runtime state
+  });
+
+  it("now() ticks while an agent is running", () => {
+    const svc = setup([makeAgent({ id: "r1", tool: "claude" })]); // status: running
+    const t0 = svc.now();
+    vi.advanceTimersByTime(3200);
+    expect(svc.now()).toBeGreaterThan(t0);
+  });
+
+  it("now() stays parked when no agent is running", () => {
+    const svc = setup([makeAgent({ id: "i1", tool: "claude", status: "idle" })]);
+    const t0 = svc.now();
+    vi.advanceTimersByTime(3200);
+    expect(svc.now()).toBe(t0);
+  });
+
+  it("elapsedFor() derives live seconds from the clock, freezes at exit, clears on dispose", () => {
+    const svc = setup([makeAgent({ id: "a1", tool: "claude" })]);
+    expect(svc.elapsedFor("a1")).toBe(0); // never started
+    svc.startProcess("a1");
+    vi.advanceTimersByTime(5000); // last clock tick at 4800ms → round(4.8) = 5
+    expect(svc.elapsedFor("a1")).toBe(5);
+    exit("a1");
+    vi.advanceTimersByTime(3000);
+    expect(svc.elapsedFor("a1")).toBe(5); // frozen at the exit value
+    svc.dispose("a1");
+    expect(svc.elapsedFor("a1")).toBe(0);
+  });
+});
+
 describe("AgentRuntimeService — lazy PTY tail folding", () => {
-  let output: OutputCb;
-  let exit: (id: string) => void;
-  let notifications: { pending: () => never[]; push: ReturnType<typeof vi.fn>; dismissPendingFor: ReturnType<typeof vi.fn> };
-  let terminals: { write: ReturnType<typeof vi.fn>; exit: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; size: () => null; syncSize: ReturnType<typeof vi.fn>; onTitle: ReturnType<typeof vi.fn> };
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-    foldSpy.mockClear();
-  });
-  afterEach(() => {
-    TestBed.resetTestingModule();
-    vi.useRealTimers();
-  });
-
-  function setup(agents: Agent[]): AgentRuntimeService {
-    const agentsStore = {
-      all: signal(agents),
-      detectTools: () => Promise.resolve([]),
-      watch: () => Promise.resolve(),
-      onScan: () => new Promise<() => void>(() => {}),
-      onPermission: () => Promise.resolve(() => {}),
-      onStatus: () => Promise.resolve(() => {}),
-      onActivity: () => Promise.resolve(() => {}),
-      onOutput: (cb: OutputCb) => {
-        output = cb;
-        return Promise.resolve(() => {});
-      },
-      onExit: (cb: (id: string) => void) => {
-        exit = cb;
-        return Promise.resolve(() => {});
-      },
-      start: vi.fn(() => Promise.resolve()),
-      stop: vi.fn(() => Promise.resolve()),
-      update: vi.fn(() => Promise.resolve()),
-    };
-    notifications = { pending: () => [], push: vi.fn(() => null), dismissPendingFor: vi.fn() };
-    terminals = { write: vi.fn(), exit: vi.fn(), dispose: vi.fn(), size: () => null, syncSize: vi.fn(), onTitle: vi.fn() };
-    TestBed.configureTestingModule({
-      providers: [
-        provideZonelessChangeDetection(),
-        AgentRuntimeService,
-        { provide: AgentsStore, useValue: agentsStore },
-        { provide: NotificationStore, useValue: notifications },
-        { provide: TerminalService, useValue: terminals },
-        { provide: UiStore, useValue: { activeTab: signal("orchestrator"), paneRoots: signal({}), scopeAgentId: signal(null), flash: vi.fn() } },
-        { provide: AgentWorkStore, useValue: { applyScan: vi.fn(), ensureTree: vi.fn(), ensureCommits: vi.fn(), dispose: vi.fn() } },
-      ],
-    });
-    return TestBed.inject(AgentRuntimeService);
-  }
-
   it("hook-driven tool: streaming never folds; exit folds once for the notification detail", () => {
     const svc = setup([makeAgent({ id: "a1", tool: "claude" })]);
     output([{ id: "a1", chunk: "line one\r\n" }]);

@@ -11,6 +11,7 @@ import {
 } from "@angular/core";
 import { Agent, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -76,7 +77,7 @@ import { MiniTermComponent } from "./mini-term.component";
         <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
         <span style="display:flex;gap:4px"><app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}</span>
         <span style="margin-left:auto;display:flex;gap:4px;color:var(--ink-4)">
-          <app-icon name="clock" size="sm" [px]="11" />{{ ag.elapsed ? fmt(ag.elapsed) : '—' }}
+          <app-icon name="clock" size="sm" [px]="11" />{{ elapsed() ? fmt(elapsed()) : '—' }}
         </span>
       </div>
 
@@ -160,6 +161,11 @@ export class AgentCardComponent {
   private work = inject(AgentWorkStore);
   readonly agent = input.required<Agent>();
   readonly proj = input<Project | undefined>(undefined);
+
+  private runtime = inject(AgentRuntimeService);
+  // derived from the shared clock — only this text re-renders on a tick, the
+  // agent input (and the agents array behind it) keeps its identity
+  readonly elapsed = computed(() => this.runtime.elapsedFor(this.agent().id));
 
   readonly fmt = fmtDur;
   readonly mix = mix;

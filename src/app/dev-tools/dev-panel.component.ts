@@ -150,7 +150,7 @@ type Sort = { key: string; dir: number };
                     <td><span class="dvc-pchip"><span class="dvc-pn">{{ proj(ag.projectId).name }}</span><span class="dvc-pi" [style.background]="'color-mix(in oklch,' + proj(ag.projectId).color + ',transparent 82%)'"><app-icon [name]="proj(ag.projectId).icon" size="sm" [px]="11" [color]="proj(ag.projectId).color" /></span></span></td>
                     <td><span class="dvc-branch">{{ ag.branch.replace('agent/', '') }}</span></td>
                     <td class="tnum">{{ ag.commits }}</td>
-                    <td class="tnum" style="color:var(--ink-3)">{{ ag.elapsed ? fmtDur(ag.elapsed) : '—' }}</td>
+                    <td class="tnum" style="color:var(--ink-3)">{{ elapsed(ag) ? fmtDur(elapsed(ag)) : '—' }}</td>
                     <td class="tnum"><span class="dvc-mtr"><i [style.width.%]="pct(ag.progress)" [style.background]="statusColor(ag.status)"></i></span>{{ pct(ag.progress) }}%</td>
                   </tr>
                   @if (openAg() === ag.id) {
@@ -542,6 +542,8 @@ export class DevPanelComponent implements OnDestroy {
     arr.sort((a, b) => {
       if (key === "status") return (this.SPRIO[a.status] - this.SPRIO[b.status]) * dir;
       if (key === "project") return a.projectId < b.projectId ? -dir : dir;
+      // live elapsed comes from the runtime clock, not the Agent record
+      if (key === "elapsed") return (this.elapsed(a) - this.elapsed(b)) * dir;
       const av = (a as unknown as Record<string, unknown>)[key];
       const bv = (b as unknown as Record<string, unknown>)[key];
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
@@ -551,6 +553,9 @@ export class DevPanelComponent implements OnDestroy {
   });
   clickASort(k: string) {
     this.aSort.update((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: 1 }));
+  }
+  elapsed(ag: Agent): number {
+    return this.runtime.elapsedFor(ag.id);
   }
   attn(ag: Agent): boolean {
     return ag.status === "blocked" || !!ag.needsInput || (ag.pending ?? []).some((p) => p.kind === "permission" || p.kind === "decision");

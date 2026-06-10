@@ -15,8 +15,9 @@ import { createEntityStore } from "../state/entity-store";
 
 /**
  * Backend-backed source of truth for agent identity/config/status.
- * Live runtime metrics (elapsed/working/files) are an overlay kept in
- * AgentRuntimeService and merged over these records.
+ * Live runtime metrics (working/needsInput/files) are an overlay kept in
+ * AgentRuntimeService and merged over these records; elapsed time is derived
+ * there from a shared clock (elapsedFor) and never written into the records.
  */
 @Injectable({ providedIn: "root" })
 export class AgentsStore {

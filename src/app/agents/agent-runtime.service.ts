@@ -17,10 +17,11 @@ import { createPtyTailBuffer } from "./pty-tail-buffer";
 
 /**
  * The live runtime layer for agents: a per-agent overlay of transient metrics
- * (elapsed / working / needsInput / worktree scans) merged over the backend
- * record, fed by the PTY output/title/exit streams. Also owns the liveness
- * tick and — for now — the heuristic that raises notifications (this detection
- * moves to the backend in a later step).
+ * (working / needsInput / worktree scans) merged over the backend record, fed
+ * by the PTY output/title/exit streams. Also owns the liveness tick, the
+ * shared elapsed clock (`now` / `elapsedFor`) and — for now — the heuristic
+ * that raises notifications (this detection moves to the backend in a later
+ * step).
  */
 @Injectable({ providedIn: "root" })
 export class AgentRuntimeService {
@@ -39,6 +40,13 @@ export class AgentRuntimeService {
       return o ? { ...a, ...o } : a;
     });
   });
+  // Shared wall clock for elapsed displays. Advanced by the liveness tick ONLY
+  // while at least one agent is running — and it is the ONLY thing the clock
+  // writes. elapsed is deliberately NOT patched into the runtime overlay: that
+  // rebuilt the agents array (new array + merged-object identities) every tick,
+  // re-rendering every agents() consumer ~1.25x/s and already caused one bug
+  // (diff-view refetch). Consumers derive elapsed locally via elapsedFor().
+  readonly now = signal(Date.now());
   readonly toolsAvailable = signal<Record<string, boolean>>({});
   // Per-agent ROLLING list of hook-driven activity entries — each
   // `{detail, event, kind}` where detail is the latest message content scraped
@@ -70,6 +78,9 @@ export class AgentRuntimeService {
 
   // real liveness tracking (when launched, last output) + title-derived state
   private startedAt: Record<string, number> = {};
+  // elapsed seconds captured at process exit — what elapsedFor() reports once
+  // the run is over (cleared on the next start / on dispose)
+  private finalElapsed: Record<string, number> = {};
   private lastOutputAt: Record<string, number> = {};
   private titleStatus: Record<string, TitleStatus> = {};
   private titleAt: Record<string, number> = {};
@@ -197,6 +208,17 @@ export class AgentRuntimeService {
     return this.toolsAvailable()[id] !== false;
   }
 
+  /** Elapsed seconds for an agent, derived from the shared clock: live while
+   *  the process runs (now − startedAt), frozen at the exit-time value after
+   *  it ends, 0 before any run. Reading this subscribes to `now` — so on a
+   *  tick ONLY the elapsed text re-renders, never the agents array. */
+  elapsedFor(id: string): number {
+    const now = this.now();
+    const started = this.startedAt[id];
+    if (started === undefined) return this.finalElapsed[id] ?? 0;
+    return Math.max(0, Math.round((now - started) / 1000));
+  }
+
   // ---- hook-driven activity (rolling last-10 message entries) ----
   /** Append an {detail, event, kind} entry for an agent, capped at the last 10.
    *  Skips a blank detail or one identical to the current last entry (the backend
@@ -250,12 +272,14 @@ export class AgentRuntimeService {
   startProcess(id: string, opts?: { resume?: boolean }) {
     const sz = this.terminals.size(id); // open the PTY at the visible terminal's size
     this.startedAt[id] = Date.now();
+    delete this.finalElapsed[id]; // a fresh run derives elapsed from startedAt again
+    this.now.set(Date.now()); // the clock may have been parked — show 0s immediately
     delete this.titleStatus[id];
     delete this.titleAt[id];
     delete this.hookState[id];
     this.prevNeedsInput[id] = false;
     this.clearActivity(id); // a fresh run starts with an empty feed
-    this.patchRuntime(id, { elapsed: 0, working: true, needsInput: false });
+    this.patchRuntime(id, { working: true, needsInput: false });
     void this.agentsStore
       .start(id, sz?.rows ?? 0, sz?.cols ?? 0, opts?.resume ?? false)
       .then(() => this.terminals.syncSize(id))
@@ -273,6 +297,7 @@ export class AgentRuntimeService {
     this.work.dispose(id);
     this.tailBuf.clear(id);
     delete this.startedAt[id];
+    delete this.finalElapsed[id];
     delete this.titleStatus[id];
     delete this.titleAt[id];
     delete this.hookState[id];
@@ -281,18 +306,24 @@ export class AgentRuntimeService {
     this.watched.delete(id);
   }
 
-  // ---- live tick: real elapsed + working/needsInput, plus notification edges ----
+  // ---- live tick: working/needsInput edges + the shared elapsed clock ----
+  // Runtime state is only patched on a REAL transition, so across plain clock
+  // ticks agents() keeps its array and object identities (no consumer churn).
   private tick() {
     const now = Date.now();
+    let anyRunning = false;
     this.agents().forEach((ag) => {
       if (ag.status !== "running") return;
-      const elapsed = Math.max(0, Math.round((now - (this.startedAt[ag.id] ?? now)) / 1000));
+      anyRunning = true;
       const { working, needsInput } = this.liveState(ag, now);
-      if (ag.elapsed !== elapsed || ag.working !== working || ag.needsInput !== needsInput) {
-        this.patchRuntime(ag.id, { elapsed, working, needsInput });
+      if (ag.working !== working || ag.needsInput !== needsInput) {
+        this.patchRuntime(ag.id, { working, needsInput });
       }
       this.detectNeedsInput(ag, needsInput);
     });
+    // advance the shared clock only while something runs — elapsed displays
+    // update through elapsedFor() without touching runtime state.
+    if (anyRunning) this.now.set(now);
   }
 
   /**
@@ -340,6 +371,11 @@ export class AgentRuntimeService {
 
   private onExit(id: string) {
     this.terminals.exit(id);
+    // freeze the elapsed display at the run's final duration
+    const started = this.startedAt[id];
+    if (started !== undefined) {
+      this.finalElapsed[id] = Math.max(0, Math.round((Date.now() - started) / 1000));
+    }
     delete this.startedAt[id];
     delete this.titleStatus[id];
     delete this.titleAt[id];

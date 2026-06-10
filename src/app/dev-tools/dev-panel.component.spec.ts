@@ -63,7 +63,7 @@ function setup(rows: PerfRow[] = []): ComponentFixture<DevPanelComponent> {
     providers: [
       provideZonelessChangeDetection(),
       { provide: PerfStore, useValue: { rows: signal(rows), tick() {}, clear() {} } },
-      { provide: AgentRuntimeService, useValue: { agents: signal([]) } },
+      { provide: AgentRuntimeService, useValue: { agents: signal([]), elapsedFor: () => 0 } },
       { provide: ProjectsStore, useValue: { all: signal([]) } },
     ],
   });

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Agent } from "../models";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { UiStore } from "../ui/ui.store";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { fmtDur, mix, STATUS_META } from "../utils";
@@ -39,7 +40,7 @@ import { fmtDur, mix, STATUS_META } from "../utils";
               }
             </div>
             <span class="tnum" [style.left]="'calc(' + w + '% + 8px)'" style="position:absolute;font-size:10px;color:var(--ink-3);white-space:nowrap">
-              {{ ag.elapsed ? fmt(ag.elapsed) : '—' }} · {{ pct(ag) }}%
+              {{ elapsed(ag) ? fmt(elapsed(ag)) : '—' }} · {{ pct(ag) }}%
             </span>
           </div>
           <span class="tnum" style="text-align:right;font-size:11px;color:var(--ink-2)">{{ ag.commits }}</span>
@@ -55,13 +56,21 @@ export class TimelineViewComponent {
 
   readonly fmt = fmtDur;
   readonly mix = mix;
-  readonly maxEl = computed(() => Math.max(...this.agents().map((a) => a.elapsed), 1));
+  // elapsed comes from the shared runtime clock (not the Agent record), so the
+  // bars/labels track time without the agents array changing identity
+  private runtime = inject(AgentRuntimeService);
+  readonly maxEl = computed(() =>
+    Math.max(...this.agents().map((a) => this.runtime.elapsedFor(a.id)), 1),
+  );
 
+  elapsed(ag: Agent): number {
+    return this.runtime.elapsedFor(ag.id);
+  }
   color(ag: Agent): string {
     return STATUS_META[ag.status].color;
   }
   width(ag: Agent): number {
-    return Math.max((ag.elapsed / this.maxEl()) * 100, 3);
+    return Math.max((this.elapsed(ag) / this.maxEl()) * 100, 3);
   }
   pct(ag: Agent): number {
     return Math.round(ag.progress * 100);

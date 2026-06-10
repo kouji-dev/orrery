@@ -277,9 +277,9 @@ export class DiffViewComponent {
   readonly stateLabel = fileStateLabel;
 
   // Why id, not the Agent object: runtime.agents() re-creates agent objects on
-  // every overlay patch (elapsed ticks each second while running), so anything
-  // keyed on agent() identity re-fires ~1/s for free. The id string is stable —
-  // computed memoization stops the churn here for everything downstream.
+  // every overlay patch (working/needsInput transitions while running), so
+  // anything keyed on agent() identity re-fires for free. The id string is
+  // stable — computed memoization stops the churn here for everything downstream.
   private readonly agentId = computed(() => this.agent().id);
 
   readonly changes = computed(() => this.work.changesFor(this.agentId()).data);
@@ -370,8 +370,8 @@ export class DiffViewComponent {
     // Load the diff for the selected file (superseded on rapid changes).
     // Triggers: agent switch (id), selection change, or a refreshed changes
     // entry (push/pull → new file objects = content may differ). Reading the
-    // id (not agent()) keeps the 800ms elapsed tick from re-fetching the diff
-    // when nothing changed.
+    // id (not agent()) keeps runtime overlay patches from re-fetching the
+    // diff when nothing changed.
     effect(() => {
       const id = this.agentId();
       const f = this.current();
