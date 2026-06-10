@@ -61,6 +61,20 @@ const stats = signal<TerminalSchedulerStats>({ ...ZERO_STATS });
 /** Live scheduler counters (dev panel perf footer). */
 export const terminalSchedulerStats = stats.asReadonly();
 
+let statsEnabled = false;
+
+/**
+ * Enable or disable per-chunk stats collection.
+ * Call with `true` when the dev panel opens, `false` when it closes/destroys.
+ * Enabling resets counters so the panel always shows a fresh window.
+ * When disabled, `bumpStats` is a no-op — zero allocations, zero signal updates.
+ */
+export function setSchedulerStatsEnabled(enabled: boolean): void {
+  if (enabled === statsEnabled) return;
+  statsEnabled = enabled;
+  if (enabled) stats.set({ ...ZERO_STATS });
+}
+
 function totalQueuedChars(): number {
   let n = 0;
   for (const e of queues.values()) n += e.queuedChars;
@@ -68,6 +82,7 @@ function totalQueuedChars(): number {
 }
 
 function bumpStats(adjust?: (s: TerminalSchedulerStats) => Partial<TerminalSchedulerStats>): void {
+  if (!statsEnabled) return;
   stats.update((s) => {
     const queuedChars = totalQueuedChars();
     return {
@@ -210,5 +225,6 @@ export function resetTerminalSchedulerForTests(): void {
     clearTimeout(drainTimer);
     drainTimer = null;
   }
+  statsEnabled = false;
   stats.set({ ...ZERO_STATS });
 }

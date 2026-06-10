@@ -6,6 +6,7 @@ import {
   discardTerminalQueue,
   flushTerminalQueue,
   resetTerminalSchedulerForTests,
+  setSchedulerStatsEnabled,
   terminalSchedulerStats,
   writeScheduled,
 } from "./terminal-output-scheduler";
@@ -62,6 +63,7 @@ describe("terminal-output-scheduler", () => {
   });
 
   it("caps the hidden backlog: drops the middle, keeps the newest tail, warns once", () => {
+    setSchedulerStatsEnabled(true);
     const t = fakeTerm();
     let dropped = 0;
     const chunk = "y".repeat(256 * 1024);
@@ -104,5 +106,68 @@ describe("terminal-output-scheduler", () => {
     vi.advanceTimersByTime(HIDDEN_FIRST_FLUSH_DELAY_MS + 1);
     writeScheduled("a", t, "v", { visible: true, onParsed: () => parsed++ });
     expect(parsed).toBe(2);
+  });
+
+  describe("stats gate (setSchedulerStatsEnabled)", () => {
+    it("disabled by default: bumpStats is a no-op — stats stay zero", () => {
+      const t = fakeTerm();
+      writeScheduled("a", t, "chunk", { visible: true });
+      expect(terminalSchedulerStats().directWrites).toBe(0);
+      expect(terminalSchedulerStats().queuedChars).toBe(0);
+    });
+
+    it("disabled: hidden enqueue does not update stats", () => {
+      const t = fakeTerm();
+      writeScheduled("a", t, "hidden", { visible: false });
+      vi.advanceTimersByTime(HIDDEN_FIRST_FLUSH_DELAY_MS + 1);
+      expect(terminalSchedulerStats().drainedWrites).toBe(0);
+      expect(terminalSchedulerStats().queuedChars).toBe(0);
+    });
+
+    it("enabled: direct writes increment directWrites", () => {
+      setSchedulerStatsEnabled(true);
+      const t = fakeTerm();
+      writeScheduled("a", t, "chunk1", { visible: true });
+      writeScheduled("a", t, "chunk2", { visible: true });
+      expect(terminalSchedulerStats().directWrites).toBe(2);
+    });
+
+    it("enabled: hidden drain increments drainedWrites", () => {
+      setSchedulerStatsEnabled(true);
+      const t = fakeTerm();
+      writeScheduled("a", t, "x", { visible: false });
+      vi.advanceTimersByTime(HIDDEN_FIRST_FLUSH_DELAY_MS + 1);
+      expect(terminalSchedulerStats().drainedWrites).toBe(1);
+    });
+
+    it("re-enable resets counters to zero", () => {
+      setSchedulerStatsEnabled(true);
+      const t = fakeTerm();
+      writeScheduled("a", t, "chunk", { visible: true });
+      expect(terminalSchedulerStats().directWrites).toBe(1);
+      // disable then re-enable — counters must reset
+      setSchedulerStatsEnabled(false);
+      setSchedulerStatsEnabled(true);
+      expect(terminalSchedulerStats().directWrites).toBe(0);
+      expect(terminalSchedulerStats().drainedWrites).toBe(0);
+      expect(terminalSchedulerStats().droppedBacklogs).toBe(0);
+    });
+
+    it("enabling twice is idempotent: does not reset mid-session", () => {
+      setSchedulerStatsEnabled(true);
+      const t = fakeTerm();
+      writeScheduled("a", t, "c1", { visible: true });
+      setSchedulerStatsEnabled(true); // second enable — should be no-op
+      expect(terminalSchedulerStats().directWrites).toBe(1);
+    });
+
+    it("disabled: backlog drop does not increment droppedBacklogs", () => {
+      const t = fakeTerm();
+      const chunk = "y".repeat(256 * 1024);
+      for (let i = 0; i < 10; i++) {
+        writeScheduled("a", t, chunk, { visible: false });
+      }
+      expect(terminalSchedulerStats().droppedBacklogs).toBe(0);
+    });
   });
 });

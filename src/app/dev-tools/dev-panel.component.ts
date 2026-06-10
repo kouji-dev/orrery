@@ -16,7 +16,7 @@ import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { PerfStore, PerfRow, PERF_WINDOW_MS } from "../perf/perf.store";
-import { terminalSchedulerStats } from "../terminal-output-scheduler";
+import { setSchedulerStatsEnabled, terminalSchedulerStats } from "../terminal-output-scheduler";
 import { Agent, AgentStatus, Project } from "../models";
 
 type Sort = { key: string; dir: number };
@@ -403,7 +403,22 @@ export class DevPanelComponent implements OnDestroy {
   private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly dev = isDevMode();
-  readonly open = signal(false);
+  /** open signal — setting it also gates the scheduler stats collector. */
+  readonly open = (() => {
+    const s = signal(false);
+    return {
+      ...s,
+      set(v: boolean) {
+        s.set(v);
+        setSchedulerStatsEnabled(v);
+      },
+      update(fn: (v: boolean) => boolean) {
+        const next = fn(s());
+        s.set(next);
+        setSchedulerStatsEnabled(next);
+      },
+    };
+  })();
   readonly tab = signal<"perf" | "agents" | "projects">("perf");
   readonly sort = signal<Sort>({ key: "rt", dir: -1 });
   readonly aSort = signal<Sort>({ key: "status", dir: 1 });
@@ -434,6 +449,7 @@ export class DevPanelComponent implements OnDestroy {
   ngOnDestroy() {
     clearInterval(this.tickIv);
     clearTimeout(this.copiedTo);
+    setSchedulerStatsEnabled(false);
   }
 
   @HostListener("document:keydown.escape") onEsc() {
