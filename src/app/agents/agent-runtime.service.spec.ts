@@ -2,8 +2,9 @@ import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { Agent } from "../models";
+import { Agent, Settings } from "../models";
 import { appendPtyTail } from "../utils";
+import { settingsDefaults, SettingsStore } from "../settings/settings.store";
 import { AgentsStore } from "../stores/agents.store";
 import { NotificationStore } from "../stores/notifications.store";
 import { UiStore } from "../ui/ui.store";
@@ -62,9 +63,15 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function setup(agents: Agent[]): AgentRuntimeService {
+function setup(
+  agents: Agent[],
+  opts: { settings?: Partial<Settings>; interrupted?: string[] } = {},
+): AgentRuntimeService {
+  const settings: Settings = { ...settingsDefaults(), ...opts.settings };
   const agentsStore = {
     all: signal(agents),
+    ready: () => Promise.resolve(),
+    interrupted: vi.fn(() => Promise.resolve(opts.interrupted ?? [])),
     detectTools: () => Promise.resolve([]),
     watch: () => Promise.resolve(),
     onScan: () => new Promise<() => void>(() => {}),
@@ -92,11 +99,19 @@ function setup(agents: Agent[]): AgentRuntimeService {
       { provide: AgentsStore, useValue: agentsStore },
       { provide: NotificationStore, useValue: notifications },
       { provide: TerminalService, useValue: terminals },
-      { provide: UiStore, useValue: { activeTab: signal("orchestrator"), paneRoots: signal({}), scopeAgentId: signal(null), flash: vi.fn() } },
+      { provide: SettingsStore, useValue: { settings: signal(settings), ready: () => Promise.resolve(settings) } },
+      { provide: UiStore, useValue: { activeTab: signal("orchestrator"), paneRoots: signal({}), scopeAgentId: signal(null), flash: vi.fn(), openAgent: vi.fn() } },
       { provide: AgentWorkStore, useValue: { applyScan: vi.fn(), ensureTree: vi.fn(), ensureCommits: vi.fn(), dispose: vi.fn() } },
     ],
   });
   return TestBed.inject(AgentRuntimeService);
+}
+
+/** Let the constructor's fire-and-forget auto-resume promise chain settle
+ *  (settings.ready → agents ready → agents_interrupted → start). Microtasks
+ *  only — unaffected by the fake timers. */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
 }
 
 describe("AgentRuntimeService — idle tick timer gating", () => {
@@ -245,5 +260,39 @@ describe("AgentRuntimeService — lazy PTY tail folding", () => {
     expect(svc.promptTail("a1")).toBe("");
     expect(foldSpy).not.toHaveBeenCalled();
     expect(terminals.dispose).toHaveBeenCalledWith("a1");
+  });
+});
+
+describe("AgentRuntimeService — settings auto-resume", () => {
+  it("autoResume ON: relaunches interrupted agents that have a session, with resume:true", async () => {
+    setup(
+      [
+        makeAgent({ id: "a1", tool: "claude", status: "idle", sessionId: "s-1" }),
+        makeAgent({ id: "a2", tool: "claude", status: "idle" }), // no captured session — skipped
+      ],
+      { settings: { autoResume: true }, interrupted: ["a1", "a2", "ghost"] }, // ghost: removed since
+    );
+    await flushMicrotasks();
+    const store = TestBed.inject(AgentsStore) as unknown as {
+      start: ReturnType<typeof vi.fn>;
+      interrupted: ReturnType<typeof vi.fn>;
+    };
+    expect(store.interrupted).toHaveBeenCalledTimes(1);
+    expect(store.start).toHaveBeenCalledTimes(1);
+    expect(store.start).toHaveBeenCalledWith("a1", 0, 0, true);
+  });
+
+  it("autoResume OFF: never drains the backend's interrupted snapshot", async () => {
+    setup([makeAgent({ id: "a1", tool: "claude", status: "idle", sessionId: "s-1" })], {
+      settings: { autoResume: false },
+      interrupted: ["a1"],
+    });
+    await flushMicrotasks();
+    const store = TestBed.inject(AgentsStore) as unknown as {
+      start: ReturnType<typeof vi.fn>;
+      interrupted: ReturnType<typeof vi.fn>;
+    };
+    expect(store.interrupted).not.toHaveBeenCalled();
+    expect(store.start).not.toHaveBeenCalled();
   });
 });

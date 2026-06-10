@@ -6,6 +6,8 @@ import {
   PermissionQuestion,
   PermissionSuggestion,
 } from "../models";
+import { NotificationAlertService } from "../notifications/notification-alert.service";
+import { SettingsStore } from "../settings/settings.store";
 import { NotificationStore } from "../stores/notifications.store";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "./agent-work.store";
@@ -30,6 +32,9 @@ export class AgentRuntimeService {
   private terminals = inject(TerminalService);
   private ui = inject(UiStore);
   private notifications = inject(NotificationStore);
+  // settings-gated raise path: per-event toggles + native toast + sound cue
+  private alerts = inject(NotificationAlertService);
+  private settings = inject(SettingsStore);
 
   // backend agents merged with an in-memory runtime overlay (live metrics)
   private runtime = signal<Record<string, Partial<Agent>>>({});
@@ -198,6 +203,30 @@ export class AgentRuntimeService {
     // Arm immediately if there are already running agents (app loaded mid-session).
     if (this.agentsStore.all().some((a) => a.status === "running")) {
       this.ensureTicking();
+    }
+
+    // Settings-driven auto-resume — fully async (awaits the persisted settings
+    // AND the initial agent list), so nothing blocks the constructor hot path.
+    void this.autoResume();
+  }
+
+  /** When settings `autoResume` is on, relaunch the agents the backend captured
+   *  as running at the last shutdown (a ONE-SHOT drain — a frontend reload can't
+   *  double-launch), continuing each agent's recorded CLI session. */
+  private async autoResume(): Promise<void> {
+    try {
+      const s = await this.settings.ready();
+      if (!s.autoResume) return;
+      await this.agentsStore.ready();
+      const ids = await this.agentsStore.interrupted();
+      for (const id of ids) {
+        const ag = this.agentsStore.all().find((a) => a.id === id);
+        // Only a captured session can be CONTINUED — relaunching a session-less
+        // agent would restart its task from scratch, which resume never promises.
+        if (ag?.sessionId) this.startProcess(id, { resume: true });
+      }
+    } catch {
+      // backend unavailable (plain ng serve) — no auto-resume
     }
   }
 
@@ -473,7 +502,7 @@ export class AgentRuntimeService {
     const name = ag?.name ?? "agent";
     const detail =
       p.summary || p.command || p.description || p.filePath || p.tool || "needs your input";
-    const note = this.notifications.push({
+    this.alerts.raise({
       agentId: p.agentId,
       agentName: name,
       kind: "permission",
@@ -488,7 +517,6 @@ export class AgentRuntimeService {
       summary: p.summary,
       questions: p.questions,
     });
-    if (note) void this.notifyOS(note);
   }
 
   // ---- PTY-parsing fallback (for tools WITHOUT native hooks, e.g. gemini) ----
@@ -523,6 +551,9 @@ export class AgentRuntimeService {
       .join("\n");
   }
 
+  /** All notifications go through the settings-gated alert service: per-event
+   *  toggles can drop the raise entirely; the master toggle adds the native
+   *  toast + sound cue (see NotificationAlertService for the full policy). */
   private raise(input: {
     agentId: string;
     agentName: string;
@@ -530,19 +561,6 @@ export class AgentRuntimeService {
     title: string;
     detail: string;
   }) {
-    const note = this.notifications.push(input);
-    if (note) void this.notifyOS(note);
-  }
-
-  private async notifyOS(note: AgentNotification) {
-    if (typeof document !== "undefined" && document.hasFocus()) return;
-    try {
-      const m = await import("@tauri-apps/plugin-notification");
-      let granted = await m.isPermissionGranted();
-      if (!granted) granted = (await m.requestPermission()) === "granted";
-      if (granted) m.sendNotification({ title: note.title, body: note.detail || "tap to open" });
-    } catch {
-      // not under Tauri / plugin unavailable — in-app feed still has it
-    }
+    this.alerts.raise(input);
   }
 }

@@ -46,6 +46,9 @@ export const Commands = {
   AgentDecide: 'agent_decide',
   AgentResize: 'agent_resize',
   AgentFocus: 'agent_focus',
+  /** ONE-SHOT drain of the agents that were running when the app last shut
+   *  down (captured before reset_running) — the auto-resume flow's source. */
+  AgentsInterrupted: 'agents_interrupted',
   DetectTools: 'detect_tools',
   SystemMetrics: 'system_metrics',
   SystemCost: 'system_cost',

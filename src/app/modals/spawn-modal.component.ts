@@ -9,10 +9,11 @@ import {
   viewChild,
 } from "@angular/core";
 import { AGENT_TOOLS } from "../data";
-import { Agent } from "../models";
+import { Agent, AgentTool } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
+import { effectiveEffort, effectiveModel, SettingsStore } from "../settings/settings.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
@@ -161,13 +162,14 @@ export class SpawnModalComponent implements AfterViewInit {
   readonly projects = inject(ProjectActionsService);
   readonly runtime = inject(AgentRuntimeService);
   readonly agentActions = inject(AgentActionsService);
+  private readonly settingsStore = inject(SettingsStore);
   readonly tools = AGENT_TOOLS;
   readonly mix = mix;
 
   private defaultProject = this.ui.spawning()?.project ?? null;
 
   readonly projectId = signal<string>(this.defaultProject || this.projects.all()[0].id);
-  readonly toolId = signal<Agent["tool"]>("claude");
+  readonly toolId = signal<Agent["tool"]>(this.initialTool());
   readonly name = signal("");
   readonly prompt = signal("");
 
@@ -180,10 +182,33 @@ export class SpawnModalComponent implements AfterViewInit {
     () => this.name().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "—",
   );
 
-  readonly model = signal<string>(this.currentTool().models[0]);
-  readonly effort = signal<string | null>(this.currentTool().effort ? "high" : null);
+  readonly model = signal<string>(this.prefillModel(this.currentTool()));
+  readonly effort = signal<string | null>(this.prefillEffort(this.currentTool()));
   // the backend guarantees a git project has ≥1 branch ("main"); take the first.
   readonly branch = signal<string>(this.project().branches?.[0] ?? "");
+
+  // ---- settings prefill (defaultTool / toolModel / toolEffort) ----
+  /** The settings defaultTool when it names a DETECTED tool; the hardcoded
+   *  default ("claude") otherwise — "" means nothing was ever saved. */
+  private initialTool(): Agent["tool"] {
+    const id = this.settingsStore.settings().defaultTool;
+    const known = AGENT_TOOLS.some((t) => t.id === id);
+    return known && this.runtime.toolAvailable(id) ? (id as Agent["tool"]) : "claude";
+  }
+  /** Per-tool settings model override while it's still in the curated list
+   *  (a stale persisted id must not produce an unselectable <option>);
+   *  otherwise the tool's first curated model — the old hardcoded default. */
+  private prefillModel(tool: AgentTool): string {
+    const m = effectiveModel(this.settingsStore.settings(), tool.id);
+    return tool.models.includes(m) ? m : tool.models[0];
+  }
+  /** Per-tool settings effort override when valid; "high" (the old hardcoded
+   *  default) otherwise; null for tools without effort levels. */
+  private prefillEffort(tool: AgentTool): string | null {
+    if (!tool.effort) return null;
+    const e = effectiveEffort(this.settingsStore.settings(), tool.id);
+    return tool.effort.includes(e) ? e : "high";
+  }
 
   private promptEl = viewChild<ElementRef<HTMLTextAreaElement>>("promptEl");
 
@@ -198,8 +223,9 @@ export class SpawnModalComponent implements AfterViewInit {
   setTool(id: Agent["tool"]) {
     this.toolId.set(id);
     const tool = this.currentTool();
-    this.model.set(tool.models[0]);
-    this.effort.set(tool.effort ? "high" : null);
+    // switching tool applies THAT tool's settings defaults (or the curated ones)
+    this.model.set(this.prefillModel(tool));
+    this.effort.set(this.prefillEffort(tool));
   }
   submit(start: boolean) {
     if (!this.name().trim() || !this.branch()) return;

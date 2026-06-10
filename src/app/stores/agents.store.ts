@@ -36,8 +36,10 @@ export class AgentsStore {
     },
   });
 
+  private readonly loadPromise: Promise<void>;
+
   constructor() {
-    void this.init();
+    this.loadPromise = this.init();
   }
   private async init() {
     try {
@@ -46,6 +48,19 @@ export class AgentsStore {
     } catch {
       // backend unavailable — start empty
     }
+  }
+
+  /** Resolves once the initial agent list landed (or the load failed and the
+   *  store stays empty) — the auto-resume flow awaits this before matching ids. */
+  ready(): Promise<void> {
+    return this.loadPromise;
+  }
+
+  /** Ids of the agents that were running when the app last shut down. ONE-SHOT:
+   *  the backend drains its snapshot on read, so a frontend reload can't
+   *  relaunch the same agents twice. */
+  interrupted(): Promise<string[]> {
+    return this.bridge.invoke<string[]>(Commands.AgentsInterrupted);
   }
 
   // ---- mutations: invoke only; the store updates from agent:// events ----
