@@ -12,6 +12,9 @@ export type SchedulerTerminal = { write(data: string, callback?: () => void): vo
 
 type WriteOptions = {
   visible: boolean;
+  /** Per-terminal "buffer advanced" notification (latest registration wins) —
+   *  fires after xterm parses any drained/direct chunk for this terminal. NOT a
+   *  per-write ack: after a backlog drop it fires for the warning chunk too. */
   onParsed?: () => void;
   onBacklogDropped?: () => void;
 };
@@ -64,12 +67,12 @@ function totalQueuedChars(): number {
   return n;
 }
 
-function bumpStats(patch: Partial<TerminalSchedulerStats>): void {
+function bumpStats(adjust?: (s: TerminalSchedulerStats) => Partial<TerminalSchedulerStats>): void {
   stats.update((s) => {
     const queuedChars = totalQueuedChars();
     return {
       ...s,
-      ...patch,
+      ...(adjust ? adjust(s) : undefined),
       queuedChars,
       peakQueuedChars: Math.max(s.peakQueuedChars, queuedChars),
     };
@@ -117,7 +120,7 @@ function drain(): void {
       entry.dropped = false;
     }
   }
-  bumpStats({ drainedWrites: stats().drainedWrites + drained });
+  bumpStats((s) => ({ drainedWrites: s.drainedWrites + drained }));
   scheduleDrain(DRAIN_INTERVAL_MS);
 }
 
@@ -137,7 +140,7 @@ export function writeScheduled(
     } catch {
       // disposed terminal — a late chunk racing dispose() is not an error
     }
-    bumpStats({ directWrites: stats().directWrites + 1 });
+    bumpStats((s) => ({ directWrites: s.directWrites + 1 }));
     return;
   }
   let entry = queues.get(id);
@@ -163,13 +166,11 @@ export function writeScheduled(
     entry.chunks = [BACKLOG_WARNING];
     entry.queuedChars = BACKLOG_WARNING.length;
     entry.dropped = true;
-    bumpStats({
-      droppedBacklogs: stats().droppedBacklogs + (notify ? 1 : 0),
-    });
+    bumpStats((s) => ({ droppedBacklogs: s.droppedBacklogs + (notify ? 1 : 0) }));
     if (notify) entry.onBacklogDropped?.();
     return;
   }
-  bumpStats({});
+  bumpStats();
 }
 
 /** Synchronously hand the whole queued backlog to xterm (visibility resume,
@@ -190,7 +191,7 @@ export function flushTerminalQueue(id: string): void {
     clearTimeout(drainTimer);
     drainTimer = null;
   }
-  bumpStats({});
+  bumpStats();
 }
 
 /** Drop an agent's queued output without writing (terminal disposal). */
@@ -200,7 +201,7 @@ export function discardTerminalQueue(id: string): void {
     clearTimeout(drainTimer);
     drainTimer = null;
   }
-  bumpStats({});
+  bumpStats();
 }
 
 export function resetTerminalSchedulerForTests(): void {

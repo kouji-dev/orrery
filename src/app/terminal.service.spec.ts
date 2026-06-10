@@ -2,6 +2,7 @@ import { Injector, runInInjectionContext } from "@angular/core";
 import { describe, expect, it } from "vitest";
 import { AgentsStore } from "./stores/agents.store";
 import { TerminalService } from "./terminal.service";
+import { flushTerminalQueue } from "./terminal-output-scheduler";
 
 // TerminalService only calls AgentsStore from xterm event handlers (input/resize),
 // none of which fire during a write/tail test — a bare stub is enough. We build it
@@ -19,9 +20,11 @@ function makeService(): TerminalService {
   return runInInjectionContext(injector, () => new TerminalService());
 }
 
-// `write`'s callback fires once a chunk is fully parsed; a trailing empty write
-// flushes the queue so the buffer is current before we read tail().
+// `write` routes through the shared scheduler; an unattached terminal counts as
+// hidden, so drain its queue first, then chain an empty write whose callback
+// fires once xterm has parsed everything before it.
 function flush(svc: TerminalService, id: string): Promise<void> {
+  flushTerminalQueue(id);
   return new Promise((r) => {
     // @ts-expect-error reach the underlying term to chain a flush callback
     svc["handle"](id).term.write("", () => r());
