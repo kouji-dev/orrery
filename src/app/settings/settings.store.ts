@@ -182,6 +182,18 @@ export class SettingsStore {
     }, SETTINGS_SAVE_DEBOUNCE_MS);
   }
 
+  /** Flush a pending debounced write NOW. Modal close and update-install must
+   *  not lose the trailing edit: the app can quit inside the 300ms window, and
+   *  the backend reads the DB (not our signal) at spawn/install time. */
+  flush(): void {
+    if (this.saveTimer === null) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    void this.bridge
+      .invoke(Commands.SettingsSet, { settings: this.settings() })
+      .catch(() => this.ui.flash("saving settings failed"));
+  }
+
   // ---- modal open/close ----
   openModal(section: SettingsSection = "updates"): void {
     this.openSection.set(section);
@@ -189,6 +201,7 @@ export class SettingsStore {
   }
   closeModal(): void {
     this.open.set(false);
+    this.flush();
   }
 
   // ---- updates ----
@@ -217,6 +230,7 @@ export class SettingsStore {
   async install(): Promise<void> {
     if (this.installing()) return;
     this.installing.set(true);
+    this.flush(); // the installer may exit the process — persist edits first
     try {
       await this.bridge.invoke(Commands.UpdateInstall, { channel: this.settings().channel });
     } catch {

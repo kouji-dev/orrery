@@ -871,6 +871,14 @@ export class SettingsModalComponent {
     this.modelOpen.set(false);
   }
   close(): void {
+    // A pending danger confirm means "Everything" was applied optimistically
+    // but never confirmed — closing (Esc / backdrop / Cancel / Done) must not
+    // leave the bypass enabled silently. Same revert as the confirm's Cancel.
+    const c = this.confirm();
+    if (c) {
+      this.store.setMap("autoApprove", c.tool, c.prev);
+      this.confirm.set(null);
+    }
     this.store.closeModal();
   }
   /** Esc closes the model combo first, then the modal. */

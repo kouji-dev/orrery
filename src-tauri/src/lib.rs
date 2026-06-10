@@ -202,7 +202,6 @@ pub fn run() {
             cost::commands::system_cost,
             appicon::set_window_icon,
             update::update_check,
-            update::update_perform,
             update::update_install,
         ])
         .build(tauri::generate_context!())

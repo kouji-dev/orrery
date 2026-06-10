@@ -3,7 +3,7 @@ import { AgentNotification, NotificationKind, SettingsEvents } from "../models";
 import { SettingsStore } from "../settings/settings.store";
 import { NotificationStore } from "../stores/notifications.store";
 import { UiStore } from "../ui/ui.store";
-import { playNotificationSound } from "./notification-sound";
+import { playNotificationSound, primeNotificationAudioOnGesture } from "./notification-sound";
 
 type NotificationPlugin = typeof import("@tauri-apps/plugin-notification");
 
@@ -47,6 +47,12 @@ export class NotificationAlertService {
   /** Lazy one-time OS-notification permission request (cached per app run). */
   private permission: Promise<boolean> | null = null;
   private actionsWired = false;
+
+  constructor() {
+    // WebView2 autoplay policy: an off-gesture AudioContext stays suspended and
+    // the first cue would be silent — arm it on the user's first interaction.
+    primeNotificationAudioOnGesture();
+  }
 
   /** Gate + raise. Returns the pushed notification, or null when the event is
    *  toggled off or the store de-duped it (same agent+kind still pending) — in

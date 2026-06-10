@@ -106,8 +106,9 @@ pub async fn update_check(
     Ok(info)
 }
 
-/// Download + install from `channel` (default stable) — the settings dialog's
-/// "Install & relaunch". Same Windows hand-off semantics as [`update_perform`].
+/// Download + install from `channel` (default stable) — both the settings
+/// dialog's "Install & relaunch" and the launch-screen auto-update path.
+/// On Windows a successful install never returns (hands off + exits).
 #[tauri::command]
 pub async fn update_install(
     app: AppHandle,
@@ -115,13 +116,6 @@ pub async fn update_install(
     timeout_ms: Option<u64>,
 ) -> Result<(), String> {
     perform(app, channel, timeout_ms).await
-}
-
-/// Legacy alias of [`update_install`] on the stable channel — the launch-screen
-/// updater still invokes `update_perform`; drop once the frontend (T2) switches.
-#[tauri::command]
-pub async fn update_perform(app: AppHandle, timeout_ms: Option<u64>) -> Result<(), String> {
-    perform(app, None, timeout_ms).await
 }
 
 /// Download (signature-verified by the plugin) and install the available update,
@@ -136,15 +130,15 @@ async fn perform(
     timeout_ms: Option<u64>,
 ) -> Result<(), String> {
     log::info!(
-        "update_perform: starting (channel={})",
+        "update_install: starting (channel={})",
         channel.as_deref().unwrap_or("stable")
     );
     let updater = build_updater(&app, channel.as_deref(), timeout_ms)?;
     let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
-        log::info!("update_perform: nothing to install (up to date)");
+        log::info!("update_install: nothing to install (up to date)");
         return Err("no update available".into());
     };
-    log::info!("update_perform: installing {}", update.version);
+    log::info!("update_install: installing {}", update.version);
 
     let mut downloaded: u64 = 0;
     let bytes = update
@@ -161,17 +155,17 @@ async fn perform(
         .await
         .map_err(|e| e.to_string())?;
 
-    log::info!("update_perform: downloaded {} bytes", bytes.len());
+    log::info!("update_install: downloaded {} bytes", bytes.len());
 
     // Per-machine MSI on Windows takes our elevated path (which exits the process);
     // everything else (per-user NSIS, non-Windows) uses the plugin's own installer.
     #[cfg(windows)]
     {
         if is_msi(&bytes) {
-            log::info!("update_perform: per-machine MSI → elevated install");
+            log::info!("update_install: per-machine MSI → elevated install");
             return install_msi_elevated(&app, &update.version, &bytes);
         }
-        log::info!("update_perform: not an MSI → plugin installer (NSIS/per-user)");
+        log::info!("update_install: not an MSI → plugin installer (NSIS/per-user)");
     }
 
     update.install(&bytes).map_err(|e| e.to_string())?;

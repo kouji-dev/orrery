@@ -60,6 +60,24 @@ function context(): AudioContext | null {
 /** Drop the shared context — tests swap the mocked AudioContext between cases. */
 export function resetNotificationAudio(): void {
   shared = null;
+  primed = false;
+}
+
+let primed = false;
+
+/** Prime the shared context on the FIRST user gesture. WebView2's autoplay
+ *  policy keeps an off-gesture AudioContext suspended — without this, the first
+ *  cue (e.g. from an auto-resumed agent) is silent. One pair of once-listeners,
+ *  self-removing. Idempotent. */
+export function primeNotificationAudioOnGesture(doc: Document = document): void {
+  if (primed) return;
+  primed = true;
+  const prime = () => {
+    const ctx = context();
+    if (ctx?.state === "suspended") void ctx.resume?.()?.catch?.(() => {});
+  };
+  doc.addEventListener("pointerdown", prime, { once: true, capture: true });
+  doc.addEventListener("keydown", prime, { once: true, capture: true });
 }
 
 /**
@@ -73,8 +91,13 @@ export function playNotificationSound(name: string, volume: number): void {
   if (!tones || vol <= 0) return;
   const ctx = context();
   if (!ctx) return;
-  // an autoplay-suspended context produces silence — nudge it (best-effort)
-  if (ctx.state === "suspended") void ctx.resume?.()?.catch?.(() => {});
+  // An autoplay-suspended context can't play THIS cue: scheduling into it would
+  // make every queued tone burst together on a later resume. Nudge it for the
+  // next cue and drop this one (the gesture primer usually prevents this).
+  if (ctx.state === "suspended") {
+    void ctx.resume?.()?.catch?.(() => {});
+    return;
+  }
   const t0 = ctx.currentTime;
   const master = vol * vol;
   for (const tone of tones) {

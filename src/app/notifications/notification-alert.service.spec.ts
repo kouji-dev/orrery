@@ -19,6 +19,7 @@ const sound = vi.hoisted(() => ({ playNotificationSound: vi.fn() }));
 vi.mock("./notification-sound", () => ({
   playNotificationSound: sound.playNotificationSound,
   resetNotificationAudio: vi.fn(),
+  primeNotificationAudioOnGesture: vi.fn(),
 }));
 
 const win = vi.hoisted(() => ({
