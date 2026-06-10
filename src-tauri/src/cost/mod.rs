@@ -130,8 +130,15 @@ pub fn read_total() -> Option<f64> {
 
 #[cfg(windows)]
 fn run_ccusage() -> Option<std::process::Output> {
+    use std::os::windows::process::CommandExt;
     let mut cmd = crate::core::proc::cmd("cmd");
     cmd.args(["/C", "npx", "ccusage", "daily", "--json"]);
+    // Cost is pure housekeeping — the node transcript scan must lose every CPU
+    // contest against the UI and agents. Flags REPLACE (see core::proc), so
+    // NO_WINDOW must be restated.
+    cmd.creation_flags(
+        crate::core::proc::CREATE_NO_WINDOW | crate::core::proc::BELOW_NORMAL_PRIORITY_CLASS,
+    );
     cmd.output().ok()
 }
 

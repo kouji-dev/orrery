@@ -84,12 +84,13 @@ pub fn run() {
                 shared_sampler.warm_up(); // first sample's cpu% would otherwise be 0
                 let mut tick: u32 = 0;
                 loop {
-                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    std::thread::sleep(std::time::Duration::from_secs(5));
                     tick = tick.wrapping_add(1);
-                    // Why adaptive: even the scoped refresh costs real syscalls;
-                    // with no agent running the gauge barely moves — sample every
-                    // 4th tick (12s) and return to 3s within one tick of an agent
-                    // starting.
+                    // Why adaptive: even the scoped refresh costs real syscalls,
+                    // and resource gauges are the LEAST important computation in
+                    // the app — they must never compete with agents or the UI.
+                    // 5s while agents run, every 4th tick (20s) when idle; back
+                    // to 5s within one tick of an agent starting.
                     let active = metrics_app
                         .try_state::<RuntimeService>()
                         .is_some_and(|rt| rt.any_running());

@@ -80,7 +80,7 @@ export const Events = {
   AgentStatus: 'agent://status',
   /** Action-carrying activity from a pre-tool hook (e.g. "Bash: npm test"). */
   AgentActivity: 'agent://activity',
-  /** Fresh cpu/memory snapshot for the app + every running agent (pushed every 3s). */
+  /** Fresh cpu/memory snapshot for the app + every running agent (pushed every 5s while agents run, 20s idle). */
   SystemMetrics: 'system://metrics',
   /** Global Claude cost total from ccusage (pushed every 5 minutes). */
   SystemCost: 'system://cost',

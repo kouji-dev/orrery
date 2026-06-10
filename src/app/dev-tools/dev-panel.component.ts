@@ -18,7 +18,9 @@ import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { PerfStore, PerfRow, PERF_WINDOW_MS } from "../perf/perf.store";
 import { setSchedulerStatsEnabled, terminalSchedulerStats } from "../terminal-output-scheduler";
-import { Agent, AgentStatus, Project } from "../models";
+import { MetricsStore } from "../metrics/metrics.store";
+import { DevPanelStore } from "./dev-panel.store";
+import { Agent, AgentStatus, ProcMetric, Project } from "../models";
 
 type Sort = { key: string; dir: number };
 
@@ -38,8 +40,8 @@ type Sort = { key: string; dir: number };
   encapsulation: ViewEncapsulation.None,
   imports: [IconComponent, StatusDotComponent, ToolBadgeComponent],
   template: `
-    <button class="dvc-fab" [class.on]="open()" title="Dev console" aria-label="Dev console" (click)="open.set(!open())">
-      @if (!open()) { <span class="dvc-pulse"></span> }
+    <button class="dvc-fab" [class.on]="open()" [title]="alertCount() ? 'Dev console · ' + alertCount() + ' perf alert' + (alertCount() > 1 ? 's' : '') : 'Dev console'" aria-label="Dev console" (click)="open.set(!open())">
+      @if (alertCount() > 0) { <span class="dvc-badge tnum">{{ alertCount() }}</span> }
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3l2.5-6 4 13 3-9 1.5 2H21" /></svg>
     </button>
 
@@ -51,6 +53,7 @@ type Sort = { key: string; dir: number };
             <button class="dvc-tab" [class.on]="tab() === 'perf'" (click)="tab.set('perf')"><app-icon name="spark" size="sm" />Perf</button>
             <button class="dvc-tab" [class.on]="tab() === 'agents'" (click)="tab.set('agents')"><app-icon name="agent" size="sm" />Agents<span class="dvc-cnt">{{ agents().length }}</span></button>
             <button class="dvc-tab" [class.on]="tab() === 'projects'" (click)="tab.set('projects')"><app-icon name="box" size="sm" />Projects<span class="dvc-cnt">{{ projects().length }}</span></button>
+            <button class="dvc-tab" [class.on]="tab() === 'resources'" (click)="tab.set('resources')"><app-icon name="cpu" size="sm" />Resources<span class="dvc-cnt">{{ procs().length }}</span></button>
           </div>
           <span class="dvc-live on"><span class="dvc-ld"></span>live</span>
           <span class="dvc-sp"></span>
@@ -76,8 +79,8 @@ type Sort = { key: string; dir: number };
                 </tr></thead>
                 <tbody>
                   @for (s of sortedPerf(); track s.cmd) {
-                    <tr class="dvc-row" [class.open]="openCmd() === s.cmd" [class.stale]="s.stale" (click)="dev && openCmd.set(openCmd() === s.cmd ? null : s.cmd)">
-                      <td><span class="dvc-lead">@if (dev) { <svg class="dvc-tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg> }<span class="dvc-nm">{{ s.cmd }}</span>@if (s.stale) { <span class="dvc-stale">(stale)</span> }</span></td>
+                    <tr class="dvc-row" [class.open]="openCmd() === s.cmd" [class.stale]="s.stale" (click)="openCmd.set(openCmd() === s.cmd ? null : s.cmd)">
+                      <td><span class="dvc-lead"><svg class="dvc-tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg><span class="dvc-nm">{{ s.cmd }}</span>@if (s.stale) { <span class="dvc-stale">(stale)</span> }</span></td>
                       <td class="tnum" style="color:var(--ink-2)">{{ s.calls10s }}</td>
                       <td [class]="'dvc-lat ' + lat(s.avgRt) + ' tnum'"><span class="v">{{ ms(s.avgRt) }}</span></td>
                       <td [class]="'dvc-lat ' + lat(s.avgExec) + ' tnum'"><span class="v">{{ ms(s.avgExec) }}</span></td>
@@ -91,7 +94,7 @@ type Sort = { key: string; dir: number };
                         </svg>
                       </td>
                     </tr>
-                    @if (openCmd() === s.cmd && dev) {
+                    @if (openCmd() === s.cmd) {
                       <tr class="dvc-detail"><td [attr.colspan]="PCOLS.length"><div class="dvc-din">
                         <div class="dvc-dh"><span class="lbl">recent · {{ s.cmd }}</span><span class="dvc-ds tnum"><span>p95 <b>{{ ms(s.p95Rt) }}</b></span><span>max <b>{{ ms(s.maxRt) }}</b></span><span>overhead <b>{{ ovh(s.overhead) }}</b></span></span></div>
                         <div class="dvc-calls">
@@ -113,7 +116,7 @@ type Sort = { key: string; dir: number };
                 <span class="dvc-hint"><span class="dvc-ld"></span>listening for invokes…</span>
               </div>
             }
-            @if (hasCalls() && dev) {
+            @if (hasCalls()) {
               <div class="dvc-feed">
                 <button class="dvc-fh" [class.open]="feedOpen()" (click)="feedOpen.set(!feedOpen())">
                   <svg class="dvc-tw" [class.open]="feedOpen()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
@@ -216,6 +219,69 @@ type Sort = { key: string; dir: number };
             </table>
             </div>
           }
+
+          <!-- ── RESOURCES ── -->
+          @if (tab() === 'resources') {
+            @if (procs().length) {
+              <div class="dvc-res-top">
+                <div class="dvc-gauge">
+                  <div class="g-top">
+                    <span class="g-lab"><app-icon name="cpu" size="sm" />CPU</span>
+                    <span class="g-val tnum">{{ totalCpu().toFixed(1) }}<small>%</small></span>
+                  </div>
+                  <div class="dvc-gbar"><i [style.width.%]="barClamp(totalCpu())" [style.background]="latColor(gaugeCpuC())"></i></div>
+                  <span class="g-sub tnum">{{ coresUsed() }} of {{ cores() }} cores · {{ procs().length }} processes</span>
+                </div>
+                <div class="dvc-gauge">
+                  <div class="g-top">
+                    <span class="g-lab"><app-icon name="database" size="sm" />Memory</span>
+                    <span class="g-val tnum">{{ memGb() }}<small> GB</small></span>
+                  </div>
+                  <div class="dvc-gbar"><i [style.width.%]="barClamp(memPct())" [style.background]="latColor(gaugeMemC())"></i></div>
+                  <span class="g-sub tnum">{{ memPct().toFixed(1) }}% of {{ sysGb() }} GB · {{ agentProcCount() }} agent {{ agentProcCount() === 1 ? 'process' : 'processes' }}</span>
+                </div>
+              </div>
+              <div class="dvc-scroll">
+              <table class="dvc-tbl">
+                <thead><tr>
+                  @for (c of RCOLS; track c[0]) {
+                    <th [class.srt]="rSort().key === c[0]" [style.cursor]="c[0] === 'trend' ? 'default' : null" (click)="c[0] !== 'trend' && clickRSort(c[0])">{{ c[1] }}@if (rSort().key === c[0]) { <span class="dvc-arr">{{ rSort().dir < 0 ? '▼' : '▲' }}</span> }</th>
+                  }
+                </tr></thead>
+                <tbody>
+                  @for (p of sortedProcs(); track p.id) {
+                    <tr class="dvc-row" style="cursor:default">
+                      <td><span class="dvc-lead">
+                        @if (agentOf(p.id); as ag) {
+                          <span class="dvc-kind" style="background:transparent"><app-tool-badge [tool]="ag.tool" [size]="17" /></span>
+                        } @else {
+                          <span class="dvc-kind core"><app-icon name="cpu" size="sm" [px]="11" /></span>
+                        }
+                        <span class="dvc-nm">{{ p.label }}</span>
+                        <span class="dvc-dim" style="font-size:10px">{{ p.id === 'app' ? 'app · rust core + webview' : 'agent · ' + (agentOf(p.id)?.tool ?? 'subtree') }}</span>
+                      </span></td>
+                      <td [class]="'dvc-lat ' + cpuC(p.cpu) + ' tnum'"><span class="v">{{ p.cpu.toFixed(1) }}%</span></td>
+                      <td class="dvc-spk">
+                        <svg [attr.width]="54" [attr.height]="16" style="display:block">
+                          <polyline [attr.points]="sparkPoints(cpuHistOf(p.id), 54)" fill="none" [attr.stroke]="latColor(cpuC(p.cpu))" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.9" />
+                        </svg>
+                      </td>
+                      <td [class]="'dvc-lat ' + memC(p.memBytes) + ' tnum'"><span class="v">{{ fmtMem(p.memBytes) }}</span></td>
+                      <td class="tnum" style="color:var(--ink-3)">{{ uptimeOf(p.id) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              </div>
+            } @else {
+              <div class="dvc-empty">
+                <div class="dvc-ring"><app-icon name="cpu" /></div>
+                <h4>No metrics yet</h4>
+                <p>Per-process CPU and memory populate from the backend's resource sweep — lowest-priority by design, so the first sample can take a few seconds.</p>
+                <span class="dvc-hint"><span class="dvc-ld"></span>waiting for the first sweep…</span>
+              </div>
+            }
+          }
         </div>
 
         <footer class="dvc-foot">
@@ -238,16 +304,23 @@ type Sort = { key: string; dir: number };
             <span class="tnum">{{ projects().length }} projects · {{ agents().length }} worktrees</span>
             <span class="dvc-sp"></span><span class="tnum">live state</span>
           }
+          @if (tab() === 'resources') {
+            <span class="dvc-leg"><span class="dvc-sw g"></span>idle</span>
+            <span class="dvc-leg"><span class="dvc-sw a"></span>busy</span>
+            <span class="dvc-leg"><span class="dvc-sw r"></span>hot</span>
+            <span class="dvc-sp"></span>
+            <span class="tnum">app {{ appCpu().toFixed(1) }}% · {{ procs().length }} procs · {{ totalCpu().toFixed(1) }}% / {{ cores() }} cores · {{ memGb() }} GB</span>
+          }
         </footer>
       </section>
     }
   `,
   styles: [
     `
-.dvcon{--lat-g:#35e0a1;--lat-a:#f5c451;--lat-r:#ff5d7a;
+.dvcon,.dvc-fab{--lat-g:#35e0a1;--lat-a:#f5c451;--lat-r:#ff5d7a;
   --lat-g-bg:rgba(53,224,161,.08);--lat-a-bg:rgba(245,196,81,.13);--lat-r-bg:rgba(255,93,122,.18);
   --lat-r-ring:rgba(255,93,122,.4);}
-[data-theme="light"] .dvcon{--lat-g:#0a8f5e;--lat-a:#a9700f;--lat-r:#d6304e;
+[data-theme="light"] .dvcon,[data-theme="light"] .dvc-fab{--lat-g:#0a8f5e;--lat-a:#a9700f;--lat-r:#d6304e;
   --lat-g-bg:rgba(10,143,94,.09);--lat-a-bg:rgba(169,112,15,.13);--lat-r-bg:rgba(214,48,78,.14);
   --lat-r-ring:rgba(214,48,78,.34);}
 .dvc-fab{position:relative;width:44px;height:44px;border-radius:13px;
@@ -257,7 +330,7 @@ type Sort = { key: string; dir: number };
 .dvc-fab:hover{transform:translateY(-2px);color:var(--ink);border-color:rgba(var(--accent-rgb),.5);}
 .dvc-fab.on{color:var(--accent);border-color:rgba(var(--accent-rgb),.6);box-shadow:var(--shadow),0 0 18px -6px rgba(var(--accent-rgb),.7);}
 .dvc-fab svg{width:19px;height:19px;}
-.dvc-fab .dvc-pulse{position:absolute;top:7px;right:7px;width:7px;height:7px;border-radius:50%;background:#ff5d7a;animation:dvcpulse 1.6s ease-in-out infinite;}
+.dvc-fab .dvc-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--lat-r);color:#fff;font-size:10px;font-weight:700;line-height:1;display:grid;place-items:center;border:2px solid var(--panel);font-variant-numeric:tabular-nums;animation:dvcpulse 1.8s ease-in-out infinite;}
 @keyframes dvcpulse{0%{box-shadow:0 0 0 0 rgba(255,93,122,.5);}70%{box-shadow:0 0 0 7px rgba(255,93,122,0);}100%{box-shadow:0 0 0 0 rgba(255,93,122,0);}}
 .dvcon{position:fixed;right:18px;bottom:92px;z-index:91;width:720px;max-width:calc(100vw - 32px);
   max-height:calc(100vh - 148px);display:flex;flex-direction:column;overflow:hidden;
@@ -378,6 +451,19 @@ type Sort = { key: string; dir: number };
 .dvc-empty p{font-size:11.5px;color:var(--ink-4);max-width:300px;line-height:1.55;}
 .dvc-hint{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;color:var(--ink-3);}
 .dvc-hint .dvc-ld{animation:dvcblink 1.5s ease-in-out infinite;}
+.dvc-res-top{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:13px;border-bottom:1px solid var(--hair);}
+.dvc-gauge{background:var(--panel-2);border:1px solid var(--hair);border-radius:10px;padding:11px 12px;display:flex;flex-direction:column;gap:7px;}
+.dvc-gauge .g-top{display:flex;align-items:baseline;gap:8px;}
+.dvc-gauge .g-lab{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);display:inline-flex;align-items:center;gap:6px;}
+.dvc-gauge .g-lab svg{width:12px;height:12px;color:var(--ink-4);}
+.dvc-gauge .g-val{font-family:var(--font-disp);font-size:21px;font-weight:600;color:var(--ink);letter-spacing:-.02em;margin-left:auto;}
+.dvc-gauge .g-val small{font-size:11px;color:var(--ink-3);font-weight:500;margin-left:1px;}
+.dvc-gbar{height:6px;border-radius:4px;background:var(--hair);overflow:hidden;}
+.dvc-gbar>i{display:block;height:100%;border-radius:4px;transition:width .5s cubic-bezier(.3,.8,.3,1);}
+.dvc-gauge .g-sub{font-size:9.5px;color:var(--ink-4);}
+.dvc-kind{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:4px;flex:none;}
+.dvc-kind svg{width:11px;height:11px;}
+.dvc-kind.core{color:var(--accent);background:color-mix(in oklch,var(--accent),transparent 84%);}
 .dvc-foot{flex:none;display:flex;align-items:center;gap:14px;padding:8px 13px;border-top:1px solid var(--hair);background:var(--panel-2);font-size:10px;color:var(--ink-3);}
 .dvc-leg{display:flex;align-items:center;gap:6px;}
 .dvc-sw{width:9px;height:9px;border-radius:3px;}
@@ -401,16 +487,21 @@ export class DevPanelComponent implements OnDestroy {
   });
   private readonly runtime = inject(AgentRuntimeService);
   private readonly projectsStore = inject(ProjectsStore);
+  private readonly metricsStore = inject(MetricsStore);
+  private readonly panel = inject(DevPanelStore);
   private readonly host = inject(ElementRef<HTMLElement>);
 
+  /** Build tier — metadata for perf exports only; the panel shows everything in prod too. */
   readonly dev = isDevMode();
-  /** Panel visibility; a constructor effect mirrors it into the scheduler
-   *  stats gate (collect only while the panel is open). */
-  readonly open = signal(false);
-  readonly tab = signal<"perf" | "agents" | "projects">("perf");
+  /** Panel visibility + active tab live in DevPanelStore so other surfaces
+   *  (status-bar cpu/mem readout) can deep-link; a constructor effect mirrors
+   *  visibility into the scheduler stats gate. */
+  readonly open = this.panel.open;
+  readonly tab = this.panel.tab;
   readonly sort = signal<Sort>({ key: "rt", dir: -1 });
   readonly aSort = signal<Sort>({ key: "status", dir: 1 });
   readonly pSort = signal<Sort>({ key: "name", dir: 1 });
+  readonly rSort = signal<Sort>({ key: "cpu", dir: -1 });
   readonly openCmd = signal<string | null>(null);
   readonly openAg = signal<string | null>(null);
   readonly openPr = signal<string | null>(null);
@@ -424,6 +515,7 @@ export class DevPanelComponent implements OnDestroy {
   readonly PCOLS: [string, string][] = [["cmd", "command"], ["calls", "calls/10s"], ["rt", "avg RT"], ["exec", "avg exec"], ["overhead", "overhead"], ["p95", "p95"], ["max", "max"], ["err", "err%"], ["spark", "trend"]];
   readonly ACOLS: [string, string][] = [["name", "agent"], ["status", "status"], ["tool", "tool"], ["project", "project"], ["branch", "branch"], ["commits", "c"], ["elapsed", "elapsed"], ["progress", "prog"]];
   readonly PRCOLS: [string, string][] = [["name", "project"], ["id", "id"], ["head", "head"], ["branch", "default"], ["branches", "branches"], ["agents", "agents"], ["files", "files"]];
+  readonly RCOLS: [string, string][] = [["name", "process"], ["cpu", "cpu %"], ["trend", "trend"], ["mem", "memory"], ["uptime", "uptime"]];
 
   private tickIv?: ReturnType<typeof setInterval>;
   private copiedTo?: ReturnType<typeof setTimeout>;
@@ -431,6 +523,17 @@ export class DevPanelComponent implements OnDestroy {
   constructor() {
     // gate the terminal write-scheduler stats collector on panel visibility
     effect(() => setSchedulerStatsEnabled(this.open()));
+    // accumulate per-subtree cpu history from every metrics push (ring of 20)
+    // so the Resources trend column has data the moment the tab opens
+    effect(() => {
+      const m = this.metricsStore.metrics();
+      if (!m) return;
+      this.cpuHist.update((prev) => {
+        const next: Record<string, number[]> = {};
+        for (const p of m.procs) next[p.id] = [...(prev[p.id] ?? []), p.cpu].slice(-20);
+        return next;
+      });
+    });
     // age out the 10s window while the panel is open
     this.tickIv = setInterval(() => {
       if (this.open() && this.tab() === "perf") this.perf.tick();
@@ -475,8 +578,10 @@ export class DevPanelComponent implements OnDestroy {
     if (!rows.length) return "0 commands · 0 calls";
     const calls = rows.reduce((a, r) => a + r.calls10s, 0);
     const slow = rows.filter((r) => r.avgRt != null && r.avgRt > 100).length;
-    return `${rows.length} commands · ${calls} calls/10s · ${slow} >100ms` + (this.dev ? "" : " · prod (aggregates only)");
+    return `${rows.length} commands · ${calls} calls/10s · ${slow} >100ms`;
   });
+  /** Commands currently breaching budget (>100ms avg RT or erroring) — the FAB badge. */
+  readonly alertCount = computed(() => this.perf.rows().filter((r) => !r.stale && (r.errPct > 0 || (r.avgRt != null && r.avgRt > 100))).length);
   clickPerfSort(k: string) {
     this.sort.update((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: k === "cmd" ? 1 : -1 }));
   }
@@ -523,9 +628,9 @@ export class DevPanelComponent implements OnDestroy {
   latColor(c: string): string {
     return c === "r" ? "var(--lat-r)" : c === "a" ? "var(--lat-a)" : "var(--lat-g)";
   }
-  sparkPoints(data: number[]): string {
+  sparkPoints(data: number[], w = 58): string {
     if (!data.length) return "";
-    const w = 58, h = 16, max = Math.max(...data, 1);
+    const h = 16, max = Math.max(...data, 1);
     const step = data.length > 1 ? w / (data.length - 1) : w;
     return data.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * (h - 2) - 1).toFixed(2)}`).join(" ");
   }
@@ -609,5 +714,75 @@ export class DevPanelComponent implements OnDestroy {
   }
   needsIn(id: string): number {
     return this.agentsIn(id).filter((a) => this.attn(a)).length;
+  }
+
+  // ── resources ──
+  private readonly appStart = performance.timeOrigin;
+  /** Per-subtree cpu history (last 20 pushes) — fed by the constructor effect. */
+  private readonly cpuHist = signal<Record<string, number[]>>({});
+
+  readonly procs = computed(() => this.metricsStore.metrics()?.procs ?? []);
+  readonly totalCpu = computed(() => this.metricsStore.metrics()?.totalCpu ?? 0);
+  readonly cores = computed(() => this.metricsStore.metrics()?.cores ?? 1);
+  readonly coresUsed = computed(() => ((this.totalCpu() / 100) * this.cores()).toFixed(2));
+  readonly memGb = computed(() => ((this.metricsStore.metrics()?.totalMemBytes ?? 0) / 2 ** 30).toFixed(2));
+  readonly sysGb = computed(() => Math.round((this.metricsStore.metrics()?.sysMemBytes ?? 0) / 2 ** 30));
+  readonly memPct = computed(() => {
+    const m = this.metricsStore.metrics();
+    return m?.sysMemBytes ? (m.totalMemBytes / m.sysMemBytes) * 100 : 0;
+  });
+  readonly agentProcCount = computed(() => this.procs().filter((p) => p.id !== "app").length);
+  readonly appCpu = computed(() => this.procs().find((p) => p.id === "app")?.cpu ?? 0);
+  readonly gaugeCpuC = computed(() => (this.totalCpu() < 30 ? "g" : this.totalCpu() < 70 ? "a" : "r"));
+  readonly gaugeMemC = computed(() => (this.memPct() < 25 ? "g" : this.memPct() < 50 ? "a" : "r"));
+  readonly sortedProcs = computed<ProcMetric[]>(() => {
+    const arr = this.procs().slice();
+    const { key, dir } = this.rSort();
+    arr.sort((a, b) => {
+      if (key === "name") return a.label < b.label ? -dir : dir;
+      if (key === "mem") return (a.memBytes - b.memBytes) * dir;
+      if (key === "uptime") return (this.uptimeSec(a.id) - this.uptimeSec(b.id)) * dir;
+      return (a.cpu - b.cpu) * dir;
+    });
+    return arr;
+  });
+  clickRSort(k: string) {
+    this.rSort.update((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: k === "name" ? 1 : -1 }));
+  }
+  /** Rows are machine-relative subtree shares (already ÷cores), so the mock's
+   *  per-process 30/70 bands compress: one full core on a 10-core box reads 10%. */
+  cpuC(v: number): string {
+    return v < 10 ? "g" : v < 30 ? "a" : "r";
+  }
+  /** Rows are subtree rollups (the app row includes its WebView2 children), so
+   *  the bands sit above the mock's single-process 300/600 MB. */
+  memC(bytes: number): string {
+    const mb = bytes / 2 ** 20;
+    return mb < 512 ? "g" : mb < 1536 ? "a" : "r";
+  }
+  barClamp(v: number): number {
+    return Math.min(100, Math.max(2, v));
+  }
+  agentOf(id: string): Agent | undefined {
+    return id === "app" ? undefined : this.agents().find((a) => a.id === id);
+  }
+  cpuHistOf(id: string): number[] {
+    return this.cpuHist()[id] ?? [];
+  }
+  private uptimeSec(id: string): number {
+    return id === "app" ? Math.floor((Date.now() - this.appStart) / 1000) : this.runtime.elapsedFor(id);
+  }
+  uptimeOf(id: string): string {
+    const s = this.uptimeSec(id);
+    return s > 0 ? this.fmtDur(s) : "—";
+  }
+  /** Human-readable bytes: B / KB / MB / GB, one decimal above KB. */
+  fmtMem(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${Math.round(kb)} KB`;
+    const mb = kb / 1024;
+    if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    return `${(mb / 1024).toFixed(1)} GB`;
   }
 }

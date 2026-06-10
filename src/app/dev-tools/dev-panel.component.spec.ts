@@ -13,6 +13,8 @@ import {
   terminalSchedulerStats,
   writeScheduled,
 } from "../terminal-output-scheduler";
+import { MetricsStore } from "../metrics/metrics.store";
+import { SystemMetrics } from "../models";
 import { DevPanelComponent } from "./dev-panel.component";
 
 function row(p: Partial<PerfRow> & { cmd: string }): PerfRow {
@@ -58,13 +60,14 @@ class ToolBadgeStub {}
 /** Real TestBed render (not a bare `new`): this is what catches a non-callable
  *  `open` — the template invokes `open()` and the constructor needs a proper
  *  injection context for the stats-gate effect. */
-function setup(rows: PerfRow[] = []): ComponentFixture<DevPanelComponent> {
+function setup(rows: PerfRow[] = [], metrics: SystemMetrics | null = null): ComponentFixture<DevPanelComponent> {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       { provide: PerfStore, useValue: { rows: signal(rows), tick() {}, clear() {} } },
       { provide: AgentRuntimeService, useValue: { agents: signal([]), elapsedFor: () => 0 } },
       { provide: ProjectsStore, useValue: { all: signal([]) } },
+      { provide: MetricsStore, useValue: { metrics: signal(metrics) } },
     ],
   });
   TestBed.overrideComponent(DevPanelComponent, {
@@ -120,6 +123,86 @@ describe("DevPanelComponent open gate", () => {
     fixture.destroy();
     writeScheduled("a1", term, "x", { visible: true });
     expect(direct()).toBe(0);
+  });
+});
+
+describe("DevPanelComponent resources tab", () => {
+  const SNAP: SystemMetrics = {
+    totalCpu: 12.4,
+    totalMemBytes: 3 * 2 ** 30,
+    sysMemBytes: 16 * 2 ** 30,
+    cores: 10,
+    procs: [
+      { id: "app", label: "Orrery", cpu: 4.2, memBytes: 800 * 2 ** 20 },
+      { id: "ag-1", label: "refactor-auth", cpu: 8.2, memBytes: 2200 * 2 ** 20 },
+    ],
+  };
+
+  it("renders gauges and one row per process subtree", () => {
+    const fixture = setup([], SNAP);
+    const el: HTMLElement = fixture.nativeElement;
+    (el.querySelector(".dvc-fab") as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (Array.from(el.querySelectorAll(".dvc-tab")).find((b) => b.textContent?.includes("Resources")) as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(el.querySelectorAll(".dvc-gauge").length).toBe(2);
+    expect(el.textContent).toContain("12.4");
+    expect(el.textContent).toContain("of 10 cores");
+    const rows = el.querySelectorAll(".dvc-tbl tbody tr");
+    expect(rows.length).toBe(2);
+    expect(el.textContent).toContain("Orrery");
+    expect(el.textContent).toContain("refactor-auth");
+  });
+
+  it("shows the empty state before the first metrics push", () => {
+    const fixture = setup([], null);
+    const el: HTMLElement = fixture.nativeElement;
+    (el.querySelector(".dvc-fab") as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (Array.from(el.querySelectorAll(".dvc-tab")).find((b) => b.textContent?.includes("Resources")) as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(el.querySelector(".dvc-empty")).not.toBeNull();
+    expect(el.textContent).toContain("No metrics yet");
+  });
+
+  it("color-codes machine-relative subtree cpu/mem bands", () => {
+    const cmp = setup().componentInstance;
+    expect(cmp.cpuC(4)).toBe("g");
+    expect(cmp.cpuC(15)).toBe("a");
+    expect(cmp.cpuC(35)).toBe("r");
+    expect(cmp.memC(100 * 2 ** 20)).toBe("g");
+    expect(cmp.memC(800 * 2 ** 20)).toBe("a");
+    expect(cmp.memC(2 * 2 ** 30)).toBe("r");
+  });
+});
+
+describe("DevPanelComponent alert badge + ungated perf", () => {
+  it("badges the FAB with the count of breaching commands, hidden when clean", () => {
+    const clean = setup([row({ cmd: "ok", calls10s: 5, avgRt: 9 })]);
+    expect((clean.nativeElement as HTMLElement).querySelector(".dvc-badge")).toBeNull();
+    TestBed.resetTestingModule();
+    resetTerminalSchedulerForTests();
+
+    const bad = setup([
+      row({ cmd: "slow", calls10s: 2, avgRt: 140 }),
+      row({ cmd: "erring", calls10s: 3, avgRt: 8, errPct: 1.2 }),
+      row({ cmd: "frozen", calls10s: 0, avgRt: 500, stale: true }), // stale rows don't alert
+    ]);
+    const badge = (bad.nativeElement as HTMLElement).querySelector(".dvc-badge");
+    expect(badge?.textContent).toBe("2");
+  });
+
+  it("perf row expand and the recent-calls feed render without a dev-tier gate", () => {
+    const fixture = setup([row({ cmd: "agent_input", calls10s: 4, avgRt: 9, recent: [{ ts: Date.now(), ms: 9, ok: true }] })]);
+    const el: HTMLElement = fixture.nativeElement;
+    (el.querySelector(".dvc-fab") as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(el.querySelector(".dvc-feed")).not.toBeNull(); // feed: previously dev-only
+    (el.querySelector(".dvc-row") as HTMLTableRowElement).click();
+    fixture.detectChanges();
+    expect(el.querySelector(".dvc-detail")).not.toBeNull(); // expand: previously dev-only
   });
 });
 

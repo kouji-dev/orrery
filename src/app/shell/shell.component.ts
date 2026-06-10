@@ -79,11 +79,10 @@ declare const ngDevMode: boolean | undefined;
     `
       /* One fixed, bottom-right, vertical flex container for the floating action
          buttons (Tweaks + DevConsole/Perf). The DevConsole renders in EVERY build
-         (prod included — the perf spec's prod tier: aggregates live in-memory and
-         the in-app panel is their only surface); the panel itself trims the
-         dev-only extras (recent-calls feed, row expand) via isDevMode(). The Perf
-         FAB renders last, so it sits at the bottom (the corner) and Tweaks stacks
-         above it. */
+         with NO tier trimming — feed, row expand, and the Resources tab show in
+         prod too (aggregates live in-memory and the in-app panel is their only
+         surface). The Perf FAB renders last, so it sits at the bottom (the
+         corner) and Tweaks stacks above it. */
       .anchor-rail {
         position: fixed;
         right: 18px;

@@ -22,6 +22,12 @@ use std::process::Command;
 #[cfg(windows)]
 pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// Windows `BELOW_NORMAL_PRIORITY_CLASS`: schedule the child below interactive
+/// work. For housekeeping children (ccusage) that must never compete with the
+/// UI or agent processes for CPU.
+#[cfg(windows)]
+pub const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+
 /// Build a [`Command`] that will never flash a console window on Windows.
 /// The only sanctioned `Command` constructor in this codebase.
 pub fn cmd(program: impl AsRef<OsStr>) -> Command {

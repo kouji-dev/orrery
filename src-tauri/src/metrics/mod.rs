@@ -8,14 +8,14 @@ use uuid::Uuid;
 
 pub mod commands;
 
-/// One-shot freshness window: the push loop refreshes every 3s while agents
+/// One-shot freshness window: the push loop refreshes every 5s while agents
 /// run, so a snapshot at most one period old is as good as a fresh sweep.
-pub const SNAPSHOT_FRESH: Duration = Duration::from_secs(3);
+pub const SNAPSHOT_FRESH: Duration = Duration::from_secs(5);
 
 /// Scoped refreshes between full discovery sweeps. Scoped refreshes only touch
 /// pids already known to belong to our subtrees, so brand-new children (agent
 /// tools spawn workers constantly) are invisible until the next full sweep —
-/// discovery lag = DISCOVERY_EVERY × cadence (3 s active → ~30 s; 12 s idle → ~120 s).
+/// discovery lag = DISCOVERY_EVERY × cadence (5 s active → ~50 s; 20 s idle → ~200 s).
 const DISCOVERY_EVERY: u32 = 10;
 
 /// One subtree's roll-up: an agent's process tree, or the app's own tree.
@@ -38,6 +38,10 @@ pub struct ProcMetric {
 pub struct SystemMetrics {
     pub total_cpu: f32,
     pub total_mem_bytes: u64,
+    /// Machine RAM in bytes — the denominator for the UI's memory gauge.
+    pub sys_mem_bytes: u64,
+    /// Logical core count — the denominator already applied to the cpu rows.
+    pub cores: u32,
     pub procs: Vec<ProcMetric>,
 }
 
@@ -86,6 +90,9 @@ impl MetricsSampler {
     /// ticks use `refresh_scoped` and only fall back here for discovery.
     pub fn refresh(&mut self) {
         self.scoped_streak = 0;
+        // total machine RAM is static — refreshing it on the (rare) full sweep
+        // keeps `total_memory()` valid for every scoped tick in between
+        self.sys.refresh_memory();
         self.sys.refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
@@ -148,6 +155,8 @@ impl MetricsSampler {
         SystemMetrics {
             total_cpu: procs.iter().map(|p| p.cpu).sum(),
             total_mem_bytes: procs.iter().map(|p| p.mem_bytes).sum(),
+            sys_mem_bytes: self.sys.total_memory(),
+            cores: self.cpu_count as u32,
             procs,
         }
     }
@@ -525,6 +534,8 @@ mod tests {
         let mut m = SystemMetrics {
             total_cpu: 0.0,
             total_mem_bytes: 0,
+            sys_mem_bytes: 0,
+            cores: 1,
             procs: vec![
                 ProcMetric {
                     id: "app".into(),
@@ -606,6 +617,8 @@ mod tests {
         let snap = SystemMetrics {
             total_cpu: 1.5,
             total_mem_bytes: 42,
+            sys_mem_bytes: 0,
+            cores: 1,
             procs: vec![],
         };
         shared.put_snapshot(snap.clone());

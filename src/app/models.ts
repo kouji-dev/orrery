@@ -244,10 +244,10 @@ export interface ContextMenuState {
   items: MenuItem[];
 }
 
-// ---- system metrics (status-bar cpu/memory monitor) ----
-// One subtree's roll-up: the app's own tree ("app"/"orrery") or an agent's
-// (uuid string / agent name). cpu is a percent (may exceed 100 on multi-core);
-// memBytes is resident bytes.
+// ---- system metrics (status-bar gauge + dev-panel Resources tab) ----
+// One subtree's roll-up: the app's own tree ("app"/"Orrery") or an agent's
+// (uuid string / agent name). cpu is machine-relative percent (already divided
+// by the core count, like Task Manager); memBytes is resident bytes.
 export interface ProcMetric {
   id: string;
   label: string;
@@ -255,12 +255,14 @@ export interface ProcMetric {
   memBytes: number;
 }
 
-// A whole snapshot pushed on `system://metrics` every 3s. Totals are the SUM of
-// the rows — cpu%/memory used by orrery + its agents ONLY (not machine-wide).
-// totalCpu is machine-relative (a share of all logical cores, like Task Manager).
+// A whole snapshot pushed on `system://metrics` (5s while agents run, 20s idle).
+// Totals are the SUM of the rows — cpu%/memory used by orrery + its agents ONLY
+// (not machine-wide). sysMemBytes/cores are the machine denominators for gauges.
 export interface SystemMetrics {
   totalCpu: number;
   totalMemBytes: number;
+  sysMemBytes: number;
+  cores: number;
   procs: ProcMetric[];
 }
 

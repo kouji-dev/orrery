@@ -4,9 +4,10 @@ import { SystemMetrics } from "../models";
 
 /**
  * Live cpu/memory snapshot for the app + every running agent. The backend pushes
- * a fresh `system://metrics` payload every 3s; this store just mirrors the latest
- * one into a signal the status-bar gauge reads. Stays null until the first push
- * (or the optional initial synchronous fetch) arrives.
+ * a fresh `system://metrics` payload (5s while agents run, 20s idle — resource
+ * gauges are deliberately the least-priority computation); this store mirrors the
+ * latest one into a signal the status-bar gauge and the dev-panel Resources tab
+ * read. Stays null until the first push (or the initial fetch) arrives.
  */
 @Injectable({ providedIn: "root" })
 export class MetricsStore {
