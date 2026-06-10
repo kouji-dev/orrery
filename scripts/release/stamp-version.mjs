@@ -13,6 +13,16 @@ export function setCargoVersion(content, version) {
   return content.replace(/^version = "[^"]*"/m, `version = "${version}"`);
 }
 
+/** Update the app's OWN entry in Cargo.lock (name = "<crate>" → next version
+ *  line). Without this a local bump leaves the lockfile stale and the next
+ *  `cargo build` dirties the tree. */
+export function setLockVersion(content, crate, version) {
+  return content.replace(
+    new RegExp(`(name = "${crate}"\\r?\\nversion = )"[^"]*"`),
+    `$1"${version}"`,
+  );
+}
+
 // CLI: node scripts/release/stamp-version.mjs <version>
 // Use pathToFileURL so the main-module check matches on Windows too (a bare
 // `file://${argv[1]}` yields `file://C:\…`, which never equals the canonical
@@ -27,5 +37,6 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     writeFileSync(f, setJsonVersion(readFileSync(f, 'utf8'), version));
   }
   writeFileSync('src-tauri/Cargo.toml', setCargoVersion(readFileSync('src-tauri/Cargo.toml', 'utf8'), version));
+  writeFileSync('src-tauri/Cargo.lock', setLockVersion(readFileSync('src-tauri/Cargo.lock', 'utf8'), 'orrery', version));
   console.log(`stamped version ${version}`);
 }

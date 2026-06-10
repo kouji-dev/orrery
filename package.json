@@ -1,6 +1,6 @@
 {
   "name": "orrery",
-  "version": "0.1.1",
+  "version": "0.1.17",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -10,7 +10,9 @@
     "dev": "tauri dev",
     "test": "vitest run",
     "perf:noise": "node tools/perf-smoke/noise.mjs",
-    "perf:assert": "node tools/perf-smoke/assert.mjs"
+    "perf:assert": "node tools/perf-smoke/assert.mjs",
+    "release": "node scripts/release/bump.mjs release",
+    "release:patch": "node scripts/release/bump.mjs patch"
   },
   "private": true,
   "dependencies": {
