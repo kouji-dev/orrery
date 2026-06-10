@@ -23,8 +23,10 @@ import { appendPtyTail } from "../utils";
  * Surrogate-safe trim: when a single oversized chunk is sliced at the cap
  * boundary the implementation ensures the cut never falls between a surrogate
  * pair (U+D800–U+DFFF) and never leaves a partial leading ESC sequence at the
- * new start. The scan is bounded (≤ a small constant number of code units), so
- * the overall push path remains O(1)-ish.
+ * new start — a CSI sequence straddling the cut is kept WHOLE (the cut moves
+ * back to its ESC), so the retained length may exceed the cap by at most the
+ * 64-code-unit scan window. The scan is bounded (≤ a small constant number of
+ * code units), so the overall push path remains O(1)-ish.
  */
 export interface PtyTailBuffer {
   /** Append a raw chunk — O(1), no parsing. Oldest raw code units drop past the cap. */
@@ -40,39 +42,37 @@ export interface PtyTailBuffer {
 const DEFAULT_CAP_UNITS = 64 * 1024;
 
 /**
- * Advance `offset` past the end of an incomplete ANSI/VT escape sequence that
- * begins at `s[offset]`. Returns the adjusted offset.
+ * Whether the escape sequence beginning at `s[offset]` terminates strictly
+ * before `end` (i.e. lies entirely inside `s[offset..end)`).
  *
- * The caller guarantees that s[offset] === '\x1b'. If the escape looks
- * complete (e.g. ESC alone, or ESC followed by a character that is not '[',
- * '(' etc.) it is left as-is. Only incomplete CSI sequences (ESC [ … not yet
- * terminated by a final byte in 0x40-0x7E) are skipped. Scan is bounded to
- * avoid large strings: we look at most 64 code units forward.
+ * The caller guarantees that s[offset] === '\x1b'. Only CSI sequences (ESC [
+ * … terminated by a final byte in 0x40–0x7E) can span a cut; single-character
+ * escapes (ESC alone, ESC followed by a non-'[' byte) are always treated as
+ * complete. Scan is bounded to avoid large strings: we look at most 64 code
+ * units forward.
  */
-function skipIncompleteEsc(s: string, offset: number): number {
-  if (s.charCodeAt(offset) !== 0x1b) return offset;
-  const next = s.charCodeAt(offset + 1);
+function escCompletesBefore(s: string, offset: number, end: number): boolean {
   // ESC [ — CSI sequence; final byte is 0x40–0x7E
-  if (next === 0x5b /* '[' */) {
-    const limit = Math.min(s.length, offset + 64);
-    for (let i = offset + 2; i < limit; i++) {
-      const c = s.charCodeAt(i);
-      if (c >= 0x40 && c <= 0x7e) return offset; // sequence is complete — keep it
-    }
-    // Sequence is incomplete (no final byte in window) — skip past ESC
-    return offset + 1;
+  if (s.charCodeAt(offset + 1) !== 0x5b /* '[' */) return true;
+  const limit = Math.min(end, offset + 64);
+  for (let i = offset + 2; i < limit; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0x40 && c <= 0x7e) return true; // final byte before `end`
   }
-  // Single-character escapes (ESC alone, ESC followed by a non-[ byte) are
-  // always "complete" from a splitting perspective — leave them intact.
-  return offset;
+  // No final byte before `end` — the sequence straddles it (or is
+  // unterminated within the bounded window).
+  return false;
 }
 
 /**
  * Given a string `s` and a desired cut point `cut` (code-unit index), return
  * a safe cut point that:
  *   1. Does not split a UTF-16 surrogate pair.
- *   2. Does not leave the remaining tail starting with an incomplete ESC
- *      sequence that was split by the cut.
+ *   2. Does not split an ESC sequence: if a CSI sequence straddles the cut,
+ *      the cut moves back to its ESC so the retained slice keeps the WHOLE
+ *      sequence. When the terminator lies beyond the cut the retained
+ *      sequence is complete and valid; the retained length may exceed the
+ *      cap by at most the 64-code-unit scan window, which is fine.
  *
  * The returned value is always ≤ `cut`. Scan is bounded to a small constant.
  */
@@ -89,17 +89,15 @@ function safeCutPoint(s: string, cut: number): number {
   const scanStart = Math.max(0, pos - 64);
   for (let i = pos - 1; i >= scanStart; i--) {
     if (s.charCodeAt(i) === 0x1b) {
-      // There's an ESC at position i. Check whether the sequence it starts is
-      // complete within s[i..pos-1] (i.e., entirely in the part we are
-      // discarding). If the scan says it's incomplete the sequence bleeds into
-      // the tail, so move pos forward past it to avoid a partial leading escape
-      // in the retained slice.
-      const adjusted = skipIncompleteEsc(s, i);
-      if (adjusted > i) {
-        // sequence was incomplete — the retained portion starts after the ESC
-        pos = i + 1;
-      }
-      break; // only care about the last ESC before the cut
+      // There's an ESC at position i. If the sequence it starts is complete
+      // within s[i..pos) (entirely in the part we are discarding) the cut
+      // stands. Otherwise the sequence bleeds across the cut, so move the cut
+      // back to the ESC: the retained slice keeps the WHOLE sequence rather
+      // than a headless `[params…` fragment. If its terminator lies beyond
+      // the cut the retained sequence is complete and valid; the bounded
+      // overshoot past the cap (≤ the 64-CU scan window) is acceptable.
+      if (!escCompletesBefore(s, i, pos)) pos = i;
+      break; // only the last ESC before the cut can straddle it
     }
   }
 
@@ -107,11 +105,9 @@ function safeCutPoint(s: string, cut: number): number {
 }
 
 export function createPtyTailBuffer(
-  opts: { capBytes?: number; capUnits?: number; fold?: typeof appendPtyTail } = {},
+  opts: { capUnits?: number; fold?: typeof appendPtyTail } = {},
 ): PtyTailBuffer {
-  // Accept the legacy capBytes name (treated as code units for back-compat) or
-  // the new capUnits name; capUnits wins if both are supplied.
-  const capUnits = opts.capUnits ?? opts.capBytes ?? DEFAULT_CAP_UNITS;
+  const capUnits = opts.capUnits ?? DEFAULT_CAP_UNITS;
   const fold = opts.fold ?? appendPtyTail;
   const bufs = new Map<string, { raw: string[]; units: number; folded: string[] }>();
 

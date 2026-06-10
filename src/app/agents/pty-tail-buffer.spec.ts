@@ -107,6 +107,10 @@ describe("createPtyTailBuffer", () => {
      * A "partial ESC at the seam" means the joined output begins with ESC
      * immediately followed by '[' but the sequence has no final byte — which
      * would happen if the cut sliced through an ESC[… sequence.
+     *
+     * It ALSO fails when the output starts with a headless CSI body — the
+     * ESC was cut away but `[params…` leaked into the fold as visible text
+     * (e.g. "[1234" or "[38;5;123m…"), which a start-with-ESC check misses.
      */
     function assertNoLoneSurrogatesOrPartialEsc(lines: string[]) {
       const joined = lines.join("\n");
@@ -139,6 +143,17 @@ describe("createPtyTailBuffer", () => {
         }
         expect(hasFinal, "output starts with an incomplete CSI escape sequence").toBe(true);
       }
+
+      // No headless CSI body at the seam: a '[' followed only by parameter
+      // bytes to end-of-line ("[1234"), or by parameter bytes and a CSI final
+      // byte ("[38;5;123m…"), means the cut stripped an ESC and leaked the
+      // rest of its sequence into the visible text. Requires ≥1 parameter
+      // byte before a final so legit text like "[INFO]" never trips it.
+      const first = lines[0] ?? "";
+      expect(
+        /^\[(?:[0-9;?]+[ -/]*[@-~]|[0-9;?]*$)/.test(first),
+        `output starts with a headless CSI body: ${JSON.stringify(first)}`,
+      ).toBe(false);
     }
 
     it("surrogate pair straddling the trim cut is not split", () => {
@@ -159,22 +174,62 @@ describe("createPtyTailBuffer", () => {
       assertNoLoneSurrogatesOrPartialEsc(result);
     });
 
-    it("incomplete ESC sequence at the trim cut is not leaked into output", () => {
-      // Build a chunk where an ESC[ sequence straddles the trim boundary so
-      // that without the safe-cut logic the retained suffix would begin with
-      // an incomplete/partial CSI sequence.
-      // Layout (10 CU): "abcd" (4) + ESC (1) + "[" (1) + "12" (2) + "m\n" (2)
-      // capUnits = 6 → cut = 4; without the fix the retained part starts with ESC[12m\n
-      // which IS a complete sequence — so let's make an incomplete one:
-      // Layout (10 CU): "abcd" (4) + ESC (1) + "[" (1) + "12" (2) + "34" (2)  ← no final byte
-      // capUnits = 6 → cut = 4; retained = ESC[1234  — incomplete CSI, no final byte.
+    it("unterminated CSI at the trim cut keeps its ESC in the retained slice", () => {
+      // Layout (10 CU): "abcd" (4) + ESC (1) + "[" (1) + "1234" (4) — NO CSI
+      // final byte anywhere. capUnits = 5 → cut = 5, which lands on the '[':
+      // a naive cut (or one that "skips past" the ESC) retains a headless
+      // "[1234". The safe cut must move back to the ESC so the retained raw
+      // slice keeps the whole (still-unterminated) sequence intact, ESC and
+      // all. Asserted at the RAW level via a capturing fold, because
+      // appendPtyTail itself drops a dangling ESC either way.
       const chunk = "abcd" + "\x1b" + "[" + "1234"; // 10 CU, no CSI final byte
       expect(chunk.length).toBe(10);
-      const buf = createPtyTailBuffer({ capUnits: 6 }); // cut = 10 - 6 = 4
+      const captured: string[] = [];
+      const buf = createPtyTailBuffer({
+        capUnits: 5, // cut = 10 - 5 = 5 → on the '[' just after the ESC
+        fold: (prev, c) => {
+          captured.push(c);
+          return prev;
+        },
+      });
+      buf.push("a", chunk);
+      buf.tail("a");
+      // ESC retained with its body (1-CU overshoot past the cap is fine).
+      expect(captured.join("")).toBe("\x1b[1234");
+    });
+
+    it("cut landing mid-CSI keeps the whole escape from ESC at the seam", () => {
+      // Oversized chunk where the trim cut lands inside "\x1b[38;5;123m"
+      // (between the ESC and the final 'm'). The retained slice must start
+      // with the COMPLETE sequence: its terminator lies beyond the cut, so
+      // backing the cut up to the ESC yields a valid sequence at the cost of
+      // a bounded (≤64-CU) overshoot past the cap.
+      const seq = "\x1b[38;5;123m"; // 11 CU; starts at index 10 below
+      const chunk = "0123456789" + seq + "colored tail\n"; // 34 CU
+      expect(chunk.length).toBe(34);
+
+      // Raw-level: capture exactly what survives the trim.
+      const captured: string[] = [];
+      const raw = createPtyTailBuffer({
+        capUnits: 18, // cut = 34 - 18 = 16 → mid-params, inside "38;5;123"
+        fold: (prev, c) => {
+          captured.push(c);
+          return prev;
+        },
+      });
+      raw.push("a", chunk);
+      raw.tail("a");
+      const retained = captured.join("");
+      expect(retained.startsWith(seq)).toBe(true);
+      expect(retained).toBe(seq + "colored tail\n");
+
+      // Fold-level: the complete sequence is consumed by the folder, so the
+      // visible tail is clean — no "8;5;123m"/"[38;5;123m" text leakage.
+      const buf = createPtyTailBuffer({ capUnits: 18 });
       buf.push("a", chunk);
       const result = buf.tail("a");
-      // The output must not begin with an incomplete CSI sequence.
       assertNoLoneSurrogatesOrPartialEsc(result);
+      expect(result).toEqual(["colored tail", ""]);
     });
 
     it("complete ESC sequence that ends exactly at cut boundary is preserved", () => {
