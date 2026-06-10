@@ -180,6 +180,36 @@ describe("NotificationAlertService — master osNotifications + native toasts", 
   });
 });
 
+describe("NotificationAlertService — settings test preview", () => {
+  it("fires toast + cue even when FOCUSED, without touching the in-app feed", async () => {
+    hasFocus.mockReturnValue(true);
+    const { svc, store } = setup({ soundName: "Glass", volume: 40 });
+    svc.preview();
+    await flush();
+    expect(store.pending()).toHaveLength(0); // no fake feed entry
+    expect(sound.playNotificationSound).toHaveBeenCalledWith("Glass", 40);
+    expect(plugin.sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Test notification", extra: { agentId: "" } }),
+    );
+  });
+
+  it("master OFF: preview is a no-op (nothing to demo)", async () => {
+    const { svc } = setup({ osNotifications: false });
+    svc.preview();
+    await flush();
+    expect(plugin.sendNotification).not.toHaveBeenCalled();
+    expect(sound.playNotificationSound).not.toHaveBeenCalled();
+  });
+
+  it("sound OFF: preview toasts without a cue", async () => {
+    const { svc } = setup({ sound: false });
+    svc.preview();
+    await flush();
+    expect(plugin.sendNotification).toHaveBeenCalled();
+    expect(sound.playNotificationSound).not.toHaveBeenCalled();
+  });
+});
+
 describe("NotificationAlertService — sound cues", () => {
   it("plays the configured cue at the configured volume when raised (sound + master on)", () => {
     const { svc } = setup({ soundName: "Glass", volume: 40 });

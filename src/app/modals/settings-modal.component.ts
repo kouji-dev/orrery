@@ -24,6 +24,7 @@ import {
 } from "../settings/settings.store";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
+import { NotificationAlertService } from "../notifications/notification-alert.service";
 import { VersionService } from "../shared/version.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -614,6 +615,9 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
                     <ng-container row-help>Notification tone and loudness.</ng-container>
                     <div style="display:flex;align-items:center;gap:10px">
                       <app-set-select [value]="s.soundName" [options]="soundOptions" (changed)="store.set({ soundName: $event })" />
+                      <button type="button" class="set-play" (click)="previewCue()" title="Send a test notification" aria-label="Send a test notification">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z" /></svg>
+                      </button>
                       <app-icon name="volume" size="sm" color="var(--ink-4)" />
                       <input type="range" class="set-slider" min="0" max="100" [value]="s.volume" (input)="store.set({ volume: +$any($event.target).value })" />
                       <span class="tnum" style="font-size:11px;color:var(--ink-3);width:30px;text-align:right">{{ s.volume }}%</span>
@@ -786,6 +790,13 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
 .set-btn-danger:hover{filter:brightness(1.08);}
 .set-btn-danger svg{width:13px;height:13px;}
 
+/* ── cue preview ── */
+.set-play{width:26px;height:26px;flex:none;display:grid;place-items:center;border-radius:7px;
+  border:1px solid var(--hair);background:var(--panel-2);color:var(--ink-3);cursor:pointer;transition:all .12s;}
+.set-play:hover{color:var(--accent);border-color:color-mix(in oklch,var(--accent),transparent 50%);
+  background:color-mix(in oklch,var(--accent),transparent 90%);}
+.set-play svg{width:11px;height:11px;}
+
 /* ── slider (volume) ── */
 .set-slider{appearance:none;-webkit-appearance:none;width:128px;height:4px;border-radius:999px;
   background:var(--hair-2);outline:none;cursor:pointer;}
@@ -818,6 +829,13 @@ export class SettingsModalComponent {
   readonly runtime = inject(AgentRuntimeService);
   readonly version = inject(VersionService);
   private readonly bridge = inject(BRIDGE);
+  private readonly alerts = inject(NotificationAlertService);
+
+  /** "Play" on the Cue & volume row: a full test notification (toast + cue)
+   *  exactly as the current settings would deliver a real one. */
+  previewCue(): void {
+    this.alerts.preview();
+  }
 
   readonly tools = AGENT_TOOLS;
   readonly sections = SECTIONS;

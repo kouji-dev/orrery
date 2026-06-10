@@ -69,10 +69,29 @@ export class NotificationAlertService {
     return note;
   }
 
-  private async toast(note: AgentNotification): Promise<void> {
+  /** Settings-dialog "play" button: simulate a real alert with the CURRENT
+   *  settings — cue at the set volume plus a native toast. Skips the in-app
+   *  feed (no fake pending entries) and the focused-window suppression (the
+   *  user is by definition focused while clicking; they want to SEE it). */
+  preview(): void {
+    const s = this.settings.settings();
+    if (!s.osNotifications) return; // master off = in-app only; nothing to demo
+    if (s.sound) playNotificationSound(s.soundName, s.volume);
+    void this.toast(
+      {
+        agentId: "",
+        title: "Test notification",
+        detail: "This is how an agent alert will look (and sound).",
+        kind: "done",
+      } as unknown as AgentNotification,
+      { bypassFocus: true },
+    );
+  }
+
+  private async toast(note: AgentNotification, opts?: { bypassFocus?: boolean }): Promise<void> {
     const s = this.settings.settings();
     const focused = typeof document !== "undefined" && document.hasFocus();
-    if (focused && !(note.kind === "permission" && s.remoteApproval)) return;
+    if (!opts?.bypassFocus && focused && !(note.kind === "permission" && s.remoteApproval)) return;
     try {
       const m = await this.loadPlugin();
       if (!(await this.ensurePermission(m))) return;
