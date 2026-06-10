@@ -101,6 +101,226 @@ describe("appendPtyTail", () => {
   });
 });
 
+// ---- differential tests: run-tokenized impl vs the original char-per-token
+// reference implementation (verbatim copy of appendPtyTail before the
+// "tokenize in runs" rewrite). Outputs must be identical on every input.
+const REF_TOKEN_RE =
+  /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]|[\s\S]/g;
+const REF_CSI_RE = /^\x1b\[([0-9;?]*)([@-~])$/;
+function refStripUnactionable(s: string): string {
+  return s.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/g, "");
+}
+function appendPtyTailReference(prev: string[], chunk: string, max = 60): string[] {
+  const lines = prev.length ? prev.slice() : [""];
+  let row = lines.length - 1;
+  let col = lines[row].length;
+
+  const ensureRow = () => {
+    if (row < 0) row = 0;
+    while (lines.length <= row) lines.push("");
+  };
+  const writeAt = (text: string) => {
+    ensureRow();
+    const line = lines[row];
+    const head = col <= line.length ? line.slice(0, col) : line.padEnd(col);
+    lines[row] = head + text + line.slice(col + text.length);
+    col += text.length;
+  };
+
+  const tokens = refStripUnactionable(chunk).match(REF_TOKEN_RE) ?? [];
+  for (const tok of tokens) {
+    if (tok === "\n") {
+      row += 1;
+      col = 0;
+      ensureRow();
+      continue;
+    }
+    if (tok === "\r") {
+      col = 0;
+      continue;
+    }
+    if (tok === "\t") {
+      writeAt("  ");
+      continue;
+    }
+    if (tok.length === 1) {
+      if (tok >= " ") writeAt(tok);
+      continue;
+    }
+    const m = REF_CSI_RE.exec(tok);
+    if (!m) continue;
+    const params = m[1];
+    const final = m[2];
+    const n = parseInt(params, 10);
+    switch (final) {
+      case "A":
+        row = Math.max(0, row - (isNaN(n) ? 1 : n));
+        break;
+      case "B":
+        row += isNaN(n) ? 1 : n;
+        ensureRow();
+        break;
+      case "G":
+        col = isNaN(n) ? 0 : Math.max(0, n - 1);
+        break;
+      case "H":
+      case "f": {
+        const [r, c] = params.split(";");
+        row = r ? Math.max(0, parseInt(r, 10) - 1) : 0;
+        col = c ? Math.max(0, parseInt(c, 10) - 1) : 0;
+        ensureRow();
+        break;
+      }
+      case "K":
+        ensureRow();
+        if (params === "1") lines[row] = " ".repeat(col) + lines[row].slice(col);
+        else if (params === "2") lines[row] = "";
+        else lines[row] = lines[row].slice(0, col);
+        break;
+      case "J":
+        if (params === "2" || params === "3") {
+          lines.length = 0;
+          lines.push("");
+          row = 0;
+          col = 0;
+        } else if (params === "1") {
+          for (let i = 0; i < row; i++) lines[i] = "";
+          ensureRow();
+          lines[row] = lines[row].slice(col);
+        } else {
+          ensureRow();
+          lines[row] = lines[row].slice(0, col);
+          lines.length = row + 1;
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return lines.length > max ? lines.slice(lines.length - max) : lines;
+}
+
+describe("appendPtyTail — differential vs char-per-token reference", () => {
+  const both = (prev: string[], chunk: string, max?: number) => {
+    const next = appendPtyTail(prev, chunk, max);
+    const ref = appendPtyTailReference(prev, chunk, max);
+    expect(next).toEqual(ref);
+    return next;
+  };
+
+  it("matches on CR overwrite (progress bars)", () => {
+    both([], "downloading 10%\rdownloading 50%\rdone        ");
+    both(["partial"], "\rOVER");
+    both([], "long first paint\rshort");
+  });
+
+  it("matches on backspace, including at column 0", () => {
+    both([], "\x08abc"); // backspace with nothing before it
+    both([], "ab\x08\x08X"); // backspaces mid-typing
+    both(["row"], "\r\x08\x08tail"); // CR to col 0 then backspaces
+  });
+
+  it("matches on ANSI color mid-line", () => {
+    both([], "plain \x1b[31mred\x1b[0m plain again");
+    both([], "\x1b[1;32m✓\x1b[0m built \x1b[2m(2.3s)\x1b[0m\n");
+    both(["existing"], "\x1b[33mwarn:\x1b[0m thing happened");
+  });
+
+  it("matches on \\r\\n mixes", () => {
+    both([], "a\r\nb\r\nc");
+    both([], "line one\r\r\nline two\r\n");
+    both(["seed"], "\r\n\r\nafter blanks");
+  });
+
+  it("matches on long line append across chunks", () => {
+    const longLine = "x".repeat(2000);
+    const a = both([], longLine);
+    both(a, "y".repeat(500));
+    both(a, "\rrewound" + "z".repeat(100));
+  });
+
+  it("matches on writes past the line end (cursor padding)", () => {
+    both(["hi"], "\x1b[10Gpadded"); // col 10 on a 2-char line
+    both(["a", "b"], "\x1b[2;20HZZ"); // row 2, col 20 on a 1-char line
+    both([], "\x1b[5Bdropped down"); // cursor down creates rows
+  });
+
+  it("matches on erase / clear / cursor-up repaints", () => {
+    both(["frame line 1", "frame line 2"], "\x1b[2J\x1b[Hnew frame\n");
+    both(["Building", "⠋ spinner"], "\x1b[1A\x1b[2KBuilt");
+    both(["long progress text"], "\rdone\x1b[K");
+    both(["abcdef"], "\r\x1b[3C…"); // unknown CSI (C) is a no-op in both
+    both(["abcdef"], "\x1b[1K tail"); // erase to start
+    both(["top", "mid", "bot"], "\x1b[2;2H\x1b[J"); // erase to end of screen
+    both(["top", "mid", "bot"], "\x1b[2;2H\x1b[1J"); // erase to start of screen
+  });
+
+  it("matches on OSC titles, 2-char escapes, stray ESC and DEL", () => {
+    both([], "\x1b]0;window title\x07visible");
+    both([], "\x1b]0;t\x1b\\visible");
+    both([], "before\x1bMafter"); // 2-char escape (RI) stripped
+    both([], "dangling \x1b"); // lone trailing ESC dropped
+    both([], "del\x7fchar kept"); // DEL is >= \x20 and written by both
+    both([], "tab\there\tend");
+  });
+
+  it("matches on max-line capping", () => {
+    both([], "1\n2\n3\n4\n5\n6\n7", 3);
+    both(["a", "b", "c"], "d\ne\nf\ng", 4);
+  });
+
+  it("matches on deterministic pseudo-random mixed streams, fed chunk-by-chunk", () => {
+    // simple LCG so the stream is reproducible
+    let seed = 0x2026_0610;
+    const rnd = (n: number) => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed % n;
+    };
+    const pieces = [
+      "lorem ", "ipsum", "\n", "\r", "\r\n", "\t", "\x08", "\x07", "✓ ", "⠋",
+      "\x1b[31m", "\x1b[0m", "\x1b[2K", "\x1b[K", "\x1b[1A", "\x1b[2B",
+      "\x1b[5G", "\x1b[2;3H", "\x1b[H", "\x1b[2J", "\x1b[J", "\x1b]0;t\x07",
+      "\x1bM", "\x1b", "x".repeat(40), "0123456789",
+    ];
+    let next: string[] = [];
+    let ref: string[] = [];
+    for (let chunk = 0; chunk < 200; chunk++) {
+      let s = "";
+      const parts = 1 + rnd(8);
+      for (let i = 0; i < parts; i++) s += pieces[rnd(pieces.length)];
+      next = appendPtyTail(next, s, 20);
+      ref = appendPtyTailReference(ref, s, 20);
+      expect(next).toEqual(ref);
+    }
+  });
+});
+
+describe("appendPtyTail — perf sanity", () => {
+  it("folds a 100KB plain chunk well under a generous bound", () => {
+    // ~100KB of plain text in 80-col lines — the common "agent prints a lot"
+    // shape. Run-tokenization makes this O(tokens); the old per-char fold was
+    // O(chars × line length). Generous bound to stay flake-free on CI.
+    const line = "the quick brown fox jumps over the lazy dog 0123456789 abcdef\n";
+    const chunk = line.repeat(Math.ceil(100_000 / line.length));
+    const t0 = performance.now();
+    const out = appendPtyTail([], chunk);
+    const elapsed = performance.now() - t0;
+    expect(out.length).toBe(60); // capped at default max
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it("folds a 100KB single-line chunk (no newlines) quickly too", () => {
+    // worst case for the old impl: one ever-growing line. With runs this is a
+    // handful of splices, not 100k whole-line rebuilds.
+    const chunk = ("z".repeat(5000) + "\x1b[31m").repeat(20);
+    const t0 = performance.now();
+    const out = appendPtyTail([], chunk);
+    const elapsed = performance.now() - t0;
+    expect(out).toEqual(["z".repeat(100_000)]);
+    expect(elapsed).toBeLessThan(500);
+  });
+});
+
 describe("detectTitleStatus", () => {
   it("reads a braille spinner as working", () => {
     expect(detectTitleStatus("⠋ ~/proj")).toBe("working");
