@@ -50,6 +50,14 @@ export const Commands = {
   SystemMetrics: 'system_metrics',
   SystemCost: 'system_cost',
   SetWindowIcon: 'set_window_icon',
+  SettingsGet: 'settings_get',
+  SettingsSet: 'settings_set',
+  /** Channel-aware update check → `{version,date,notes} | null` (legacy shape: a
+   *  bare version string). */
+  UpdateCheck: 'update_check',
+  /** Channel-aware download + install + relaunch (may never resolve on Windows —
+   *  the installer exits the process). */
+  UpdateInstall: 'update_install',
 } as const;
 
 /** One agent's coalesced PTY output inside a multiplexed `agent://output`

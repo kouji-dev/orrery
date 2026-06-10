@@ -38,6 +38,7 @@ import {
   Layers,
   LayoutGrid,
   Link,
+  Lock,
   MessageSquare,
   Moon,
   Network,
@@ -52,6 +53,7 @@ import {
   Rows2,
   Search,
   Server,
+  Settings,
   Shield,
   Sparkle,
   Sparkles,
@@ -59,6 +61,7 @@ import {
   Sun,
   Terminal,
   Trash2,
+  Volume2,
   X,
   Zap,
 } from "lucide-angular";
@@ -128,6 +131,9 @@ const LUCIDE: Record<string, LucideIconData> = {
   splitRow: Rows2,
   panelLeft: PanelLeft,
   swap: ArrowLeftRight,
+  settings: Settings,
+  lock: Lock,
+  volume: Volume2,
 };
 
 @Component({

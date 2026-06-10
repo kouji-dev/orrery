@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ContextMenuComponent } from '../context-menu/context-menu.component';
 import { AddProjectModalComponent } from '../modals/add-project-modal.component';
+import { SettingsModalComponent } from '../modals/settings-modal.component';
 import { SpawnModalComponent } from '../modals/spawn-modal.component';
+import { SettingsStore } from '../settings/settings.store';
 import { UiStore } from '../ui/ui.store';
 import { OverviewComponent } from '../overview/overview.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -28,6 +30,7 @@ declare const ngDevMode: boolean | undefined;
     StatusBarComponent,
     SpawnModalComponent,
     AddProjectModalComponent,
+    SettingsModalComponent,
     ContextMenuComponent,
     TweaksPanelComponent,
     DevPanelComponent,
@@ -69,6 +72,9 @@ declare const ngDevMode: boolean | undefined;
     @if (ui.addingProject()) {
       <app-add-project-modal />
     }
+    @if (settings.open()) {
+      <app-settings-modal />
+    }
     <app-context-menu />
     <div class="anchor-rail">
       <app-tweaks-panel />
@@ -102,4 +108,5 @@ declare const ngDevMode: boolean | undefined;
 })
 export class ShellComponent {
   readonly ui = inject(UiStore);
+  readonly settings = inject(SettingsStore);
 }

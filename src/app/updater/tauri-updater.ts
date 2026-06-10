@@ -20,11 +20,19 @@ export class TauriUpdater implements Updater {
     return typeof (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== 'undefined';
   }
 
-  async check(timeoutMs: number): Promise<UpdateHandle | null> {
-    const version = await invoke<string | null>('update_check', { timeoutMs });
-    if (!version) return null;
+  async check(timeoutMs: number, channel?: string): Promise<UpdateHandle | null> {
+    // The channel-aware backend returns `{version,date,notes}`; the older shape
+    // was a bare version string. Tolerate both so this works across the T1
+    // rollout (a Tauri command simply ignores args it doesn't declare).
+    const payload: Record<string, unknown> = channel ? { timeoutMs, channel } : { timeoutMs };
+    const res = await invoke<string | { version: string; date?: string | null; notes?: string | null } | null>(
+      'update_check',
+      payload,
+    );
+    if (!res) return null;
+    const meta = typeof res === 'string' ? { version: res } : res;
     return {
-      version,
+      ...meta,
       downloadAndInstall: async (onProgress) => {
         // Rust emits cumulative download progress while fetching the installer.
         const unlisten = await listen<{ downloaded: number; total: number | null }>(
@@ -35,8 +43,9 @@ export class TauriUpdater implements Updater {
           // On Windows this never resolves on success: `update_perform` hands off
           // to the installer (elevated for a per-machine MSI) and exits the
           // process. It rejects only on a pre-install failure (network / signature
-          // / no update), which the caller treats as "no update".
-          await invoke('update_perform', { timeoutMs });
+          // / no update), which the caller treats as "no update". Same payload as
+          // the check, so a channel-aware backend installs from the same channel.
+          await invoke('update_perform', payload);
         } finally {
           unlisten();
         }

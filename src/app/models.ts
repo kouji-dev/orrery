@@ -273,3 +273,59 @@ export interface CostSnapshot {
   currency: string;
   available: boolean;
 }
+
+// ---- app settings ----
+// ONE JSON document persisted by the backend (`settings_get` / `settings_set`),
+// serde camelCase with defaults on every field — this mirrors the Rust
+// `Settings` struct exactly (src-tauri/src/settings/model.rs).
+export type UpdateChannel = "stable" | "beta";
+export type UpdatePolicy = "auto" | "notify" | "manual";
+export type AutoApprovePolicy = "off" | "allowlist" | "everything";
+
+/** Which notification kinds are raised at all (off = the alert is not raised). */
+export interface SettingsEvents {
+  finished: boolean;
+  question: boolean;
+  permission: boolean;
+  error: boolean;
+}
+
+export interface Settings {
+  /** Update channel: stable | beta. */
+  channel: UpdateChannel;
+  /** Startup update behavior: auto (install) | notify (check only) | manual (no check). */
+  updatePolicy: UpdatePolicy;
+  /** Spawn-modal prefill tool id; "" = none saved (spawn keeps its hardcoded default). */
+  defaultTool: string;
+  /** Per-tool model prefill (tool id → model id). Absent key = the curated default. */
+  toolModel: Record<string, string>;
+  /** Per-tool effort prefill (tool id → effort). Absent key = the tool default. */
+  toolEffort: Record<string, string>;
+  /** Branch name template; tokens: {name} (worktree slug), {tool}, {date} (MMDD). */
+  branchTemplate: string;
+  /** Absolute dir new worktrees are created under; "" = the built-in app-data root. */
+  worktreeRoot: string;
+  /** Relaunch agents that were running when the app last quit/crashed. */
+  autoResume: boolean;
+  /** Per-tool permission policy. Absent key = "off" (the tool's own flow). */
+  autoApprove: Record<string, AutoApprovePolicy>;
+  /** Permission prompts raise a native toast even when the app is unfocused. */
+  remoteApproval: boolean;
+  /** Master toggle: also fire native OS toasts (off = in-app only). */
+  osNotifications: boolean;
+  events: SettingsEvents;
+  /** Play a sound cue when a notification fires. */
+  sound: boolean;
+  /** "Ping" | "Chime" | "Pop" | "Glass" | "Submarine". */
+  soundName: string;
+  /** 0–100. */
+  volume: number;
+}
+
+/** An available app update as resolved by `update_check` (date/notes optional —
+ *  older backends returned a bare version string). */
+export interface UpdateInfo {
+  version: string;
+  date?: string | null;
+  notes?: string | null;
+}

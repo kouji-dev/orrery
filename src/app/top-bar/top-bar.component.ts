@@ -12,6 +12,7 @@ import { Agent, MenuItem, Tab } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
+import { SettingsStore } from "../settings/settings.store";
 import { DragService } from "../shared/drag.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -146,6 +147,9 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
           <button class="btn ghost-hair" (click)="ui.toggleTheme()" title="Toggle theme" style="padding:5px 8px">
             <app-icon [name]="ui.tweaks().theme === 'dark' ? 'sun' : 'moon'" size="sm" />
           </button>
+          <button class="btn ghost-hair" (click)="settings.openModal()" title="Settings" aria-label="Settings" style="padding:5px 8px">
+            <app-icon name="settings" size="sm" />
+          </button>
         </div>
 
         <!-- window controls (borderless titlebar) -->
@@ -158,6 +162,7 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
 })
 export class TopBarComponent implements AfterViewInit, OnDestroy {
   readonly ui = inject(UiStore);
+  readonly settings = inject(SettingsStore);
   readonly runtime = inject(AgentRuntimeService);
   readonly projects = inject(ProjectActionsService);
   readonly agentActions = inject(AgentActionsService);

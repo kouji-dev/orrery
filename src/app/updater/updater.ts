@@ -5,9 +5,12 @@ import { InjectionToken } from '@angular/core';
 export type UpdateOutcome = 'no-update' | 'updating';
 
 /** A pending update. `downloadAndInstall` reports bytes via `onProgress`
- *  (`total` is null when the server sends no content-length). */
+ *  (`total` is null when the server sends no content-length). `date`/`notes`
+ *  are optional release metadata for the Settings → Updates card. */
 export interface UpdateHandle {
   version: string;
+  date?: string | null;
+  notes?: string | null;
   downloadAndInstall(onProgress: (downloaded: number, total: number | null) => void): Promise<void>;
 }
 
@@ -15,8 +18,9 @@ export interface UpdateHandle {
 export interface Updater {
   /** True only when running inside the Tauri webview. */
   isAvailable(): boolean;
-  /** Resolve an available update, or null. Rejects/throws on transport errors. */
-  check(timeoutMs: number): Promise<UpdateHandle | null>;
+  /** Resolve an available update on `channel` (omitted = the backend default,
+   *  stable), or null. Rejects/throws on transport errors. */
+  check(timeoutMs: number, channel?: string): Promise<UpdateHandle | null>;
   /** Restart the app (does not return in a real Tauri process). */
   relaunch(): Promise<void>;
 }

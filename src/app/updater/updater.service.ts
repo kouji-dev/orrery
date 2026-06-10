@@ -1,4 +1,5 @@
 import { inject, Injectable, signal } from '@angular/core';
+import { SettingsStore } from '../settings/settings.store';
 import { UPDATER, UpdateOutcome } from './updater';
 
 const CHECK_TIMEOUT_MS = 10_000;
@@ -23,19 +24,36 @@ interface Attempt {
 @Injectable({ providedIn: 'root' })
 export class UpdaterService {
   private readonly updater = inject(UPDATER);
+  private readonly settings = inject(SettingsStore);
 
   /** Human-readable phase shown on the loading screen. */
   readonly status = signal('');
   /** Download progress 0..1 (0 while indeterminate). */
   readonly progress = signal(0);
 
-  /** Best-effort: any failure resolves `no-update` so boot is never blocked. */
+  /** Best-effort: any failure resolves `no-update` so boot is never blocked.
+   *
+   *  The settings `updatePolicy` branches the startup flow:
+   *  - `manual`: no startup check at all;
+   *  - `notify`: check on the configured channel, surface the result in the
+   *    settings modal (update card + nav dot), but never install;
+   *  - `auto` (default): today's behavior — check, install, relaunch, with the
+   *    tight-loop guard below. The dev-skip stays in `updater.isAvailable()`. */
   async run(): Promise<UpdateOutcome> {
     if (!this.updater.isAvailable()) return 'no-update';
+    const { updatePolicy, channel } = await this.settings.ready();
+    if (updatePolicy === 'manual') return 'no-update';
     try {
-      const update = await this.updater.check(CHECK_TIMEOUT_MS);
+      const update = await this.updater.check(CHECK_TIMEOUT_MS, channel);
       if (!update) {
         this.setAttempt(null); // we're up to date — forget any prior attempt
+        return 'no-update';
+      }
+      // Whatever happens next (notify / loop-guard / install), make the update
+      // discoverable in Settings → Updates.
+      this.settings.noteUpdate({ version: update.version, date: update.date, notes: update.notes });
+      if (updatePolicy === 'notify') {
+        this.status.set(`update ${update.version} available`);
         return 'no-update';
       }
       // Loop guard: we tried this exact version moments ago yet it's still on offer
