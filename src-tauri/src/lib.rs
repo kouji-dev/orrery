@@ -78,8 +78,20 @@ pub fn run() {
                 let app_pid = std::process::id();
                 let mut sampler = metrics::MetricsSampler::new();
                 sampler.refresh(); // warm-up: first sample's cpu% would otherwise be 0
+                let mut tick: u32 = 0;
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(3));
+                    tick = tick.wrapping_add(1);
+                    // Why adaptive: the whole-machine process sweep costs ~60ms;
+                    // at 3s that is ~2% of a core forever. With no agent running
+                    // the gauge barely moves — sample every 4th tick (12s) and
+                    // return to 3s within one tick of an agent starting.
+                    let active = metrics_app
+                        .try_state::<RuntimeService>()
+                        .is_some_and(|rt| rt.any_running());
+                    if !active && tick % 4 != 0 {
+                        continue;
+                    }
                     // timed so the recurring sweep shows in the perf table —
                     // its cost is otherwise invisible (only the one-shot
                     // command path was measured) and it's a steady-state
@@ -111,12 +123,14 @@ pub fn run() {
             std::thread::spawn(move || {
                 use tauri::Emitter;
                 loop {
-                    // timed: the startup command path measured ~3s exec (npx
-                    // resolution + node + full transcript scan) — this row
-                    // proves what the recurring cycle costs in steady state.
+                    // timed: measured ~2.2s per cycle (npx resolution + node +
+                    // full transcript scan). At the old 60s period that was
+                    // ~3.7% of a core forever — a daily cost total does not
+                    // need minute freshness, so 5 minutes. First emit is still
+                    // immediate (loop body runs before the first sleep).
                     let snap = crate::perf::timed("system_cost_push", cost::snapshot);
                     let _ = cost_app.emit("system://cost", snap);
-                    std::thread::sleep(std::time::Duration::from_secs(60));
+                    std::thread::sleep(std::time::Duration::from_secs(300));
                 }
             });
 

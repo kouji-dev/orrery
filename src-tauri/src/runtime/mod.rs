@@ -54,6 +54,12 @@ impl RuntimeService {
         self.procs.lock().unwrap().contains_key(&id)
     }
 
+    /// True when at least one agent PTY is alive — drives the adaptive metrics
+    /// cadence (full process sweeps are only worth their cost while agents run).
+    pub fn any_running(&self) -> bool {
+        !self.procs.lock().unwrap().is_empty()
+    }
+
     /// `(id, pid)` for every running agent that has a captured child pid. Used by
     /// the metrics push loop to sample each agent's process subtree. Agents whose
     /// `pid` was never captured (None) are skipped.
@@ -500,6 +506,17 @@ mod tests {
             !svc.is_running(id),
             "stop() must remove the entry so the agent is restartable"
         );
+    }
+
+    #[test]
+    fn any_running_tracks_the_proc_map() {
+        let svc = RuntimeService::new();
+        assert!(!svc.any_running(), "empty map → nothing running");
+        let id = Uuid::new_v4();
+        svc.procs.lock().unwrap().insert(id, fake_proc());
+        assert!(svc.any_running(), "one live proc → running");
+        svc.stop(id);
+        assert!(!svc.any_running(), "stop drains the map");
     }
 
     #[test]
