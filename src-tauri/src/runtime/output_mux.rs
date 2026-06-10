@@ -227,7 +227,9 @@ mod tests {
 
     #[test]
     fn flood_is_paced_to_at_most_one_emit_per_frame_and_loses_nothing() {
-        let (mux, emitted, h) = run(Duration::from_millis(40));
+        let frame = Duration::from_millis(40);
+        let (mux, emitted, h) = run(frame);
+        let start = Instant::now();
         let mut sent = String::new();
         for i in 0..50 {
             let piece = format!("c{i};");
@@ -237,10 +239,22 @@ mod tests {
         }
         mux.shutdown();
         h.join().unwrap();
+        // Bound the emit count from MEASURED elapsed, not the nominal ~200ms:
+        // under full-suite parallel load the 4ms sleeps stretch (timer
+        // granularity + thread starvation), so more frames legitimately pass
+        // and pacing legitimately allows more emits. Consecutive paced emits
+        // are >= frame apart, so the hard cap is floor(elapsed/frame)
+        // + 1 (immediate first emit) + 1 (unpaced shutdown final drain);
+        // +2 extra slack.
+        let elapsed = start.elapsed();
+        let max_emits = (elapsed.as_millis() / frame.as_millis()) as usize + 4;
         let log = emitted.lock().unwrap();
         assert!(
-            log.len() <= 8,
-            "~200ms / 40ms frame → ≤ ~5 emits (+slack), got {}",
+            log.len() <= max_emits,
+            "{}ms elapsed / {}ms frame → ≤ {} emits, got {}",
+            elapsed.as_millis(),
+            frame.as_millis(),
+            max_emits,
             log.len()
         );
         assert!(log.len() >= 2, "a flood spans multiple frames: {}", log.len());
