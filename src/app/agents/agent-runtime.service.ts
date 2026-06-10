@@ -20,6 +20,7 @@ import {
   isPermissionPrompt,
   TitleStatus,
 } from "../utils";
+import { createPtyTailCoalescer } from "./pty-tail-coalescer";
 
 /**
  * The live runtime layer for agents: a per-agent overlay of transient metrics
@@ -95,6 +96,19 @@ export class AgentRuntimeService {
     return AgentRuntimeService.HOOK_TOOLS.has(tool);
   }
 
+  // liveLogs is a Record-signal — one publish per chunk wakes every consumer.
+  // The coalescer batches all agents' chunks into one publish per 80ms.
+  private tailCoalescer = createPtyTailCoalescer((byAgent) => {
+    this.liveLogs.update((m) => {
+      const next = { ...m };
+      for (const [id, chunk] of byAgent) {
+        const prev = (next[id] || []).map((l) => l.s);
+        next[id] = appendPtyTail(prev, chunk).map((s) => ({ t: "out" as const, s }));
+      }
+      return next;
+    });
+  });
+
   constructor() {
     // detect installed CLI tools once
     void this.agentsStore
@@ -154,15 +168,13 @@ export class AgentRuntimeService {
       .onActivity((id, detail, event, kind) => this.pushActivity(id, detail, event, kind))
       .catch(() => {});
 
-    // stream output: raw bytes → xterm, plain-text tail → liveLogs (mini-term)
+    // stream output: raw bytes → xterm (scheduler-paced), plain-text tail →
+    // liveLogs via the coalescer (one publish per 80ms, not per chunk)
     void this.agentsStore
       .onOutput((id, chunk) => {
         this.lastOutputAt[id] = Date.now();
         this.terminals.write(id, chunk);
-        this.liveLogs.update((m) => {
-          const prev = (m[id] || []).map((l) => l.s);
-          return { ...m, [id]: appendPtyTail(prev, chunk).map((s) => ({ t: "out" as const, s })) };
-        });
+        this.tailCoalescer.push(id, chunk);
       })
       .catch(() => {});
     void this.agentsStore
