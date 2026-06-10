@@ -225,6 +225,9 @@ type Sort = { key: string; dir: number };
             <span class="dvc-sp"></span>
             <span class="tnum">{{ perfSummary() }}</span>
             <span class="tnum" title="terminal write scheduler: queued chars · peak · dropped backlogs">term {{ termStats().queuedChars }} · pk {{ termStats().peakQueuedChars }} · drop {{ termStats().droppedBacklogs }}</span>
+            @if (ptyLine()) {
+              <span class="tnum" title="batched PTY output: throughput · emit rate · avg batch size">{{ ptyLine() }}</span>
+            }
           }
           @if (tab() === 'agents') {
             <span class="tnum">{{ agents().length }} agents · <span style="color:var(--st-running)">{{ cnt('running') }} running</span> · <span style="color:var(--st-blocked)">{{ cnt('blocked') }} need you</span> · {{ cnt('waiting') + cnt('queued') }} waiting · {{ cnt('done') }} done</span>
@@ -383,6 +386,16 @@ export class DevPanelComponent implements OnDestroy {
   readonly perf = inject(PerfStore);
   /** Live terminal write-scheduler counters (PTY pipeline visibility). */
   readonly termStats = terminalSchedulerStats;
+  /** Batched-PTY throughput line: KB/s · emit rate · avg batch size. Volume is
+   *  what batching optimizes, so rate alone (calls/10s) undersells the row. */
+  readonly ptyLine = computed(() => {
+    const r = this.perf.rows().find((x) => x.cmd === "agent_output_emit");
+    if (!r?.bytes10s || !r.calls10s) return null;
+    const kbs = r.bytes10s / 10 / 1024;
+    const rate = Math.round(r.calls10s / 10);
+    const batch = Math.round(r.bytes10s / r.calls10s);
+    return `pty ${kbs >= 100 ? Math.round(kbs) : kbs.toFixed(1)} KB/s · ${rate} ev/s · ${batch} B/batch`;
+  });
   private readonly runtime = inject(AgentRuntimeService);
   private readonly projectsStore = inject(ProjectsStore);
   private readonly host = inject(ElementRef<HTMLElement>);

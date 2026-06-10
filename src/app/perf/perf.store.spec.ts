@@ -48,6 +48,16 @@ describe("PerfStore", () => {
     expect(r.avgExec).toBe(0.1);
   });
 
+  it("passes backend byte volume through for throughput rows", () => {
+    const s = new PerfStore();
+    s.setExec([
+      { cmd: "agent_output_emit", calls10s: 900, bytes10s: 1_024_000, avgMs: 0.1, p95Ms: 0.2, maxMs: 0.5 },
+      { cmd: "agent_scan", calls10s: 3, avgMs: 40, p95Ms: 80, maxMs: 120 },
+    ]);
+    expect(row(s, "agent_output_emit")!.bytes10s).toBe(1_024_000);
+    expect(row(s, "agent_scan")!.bytes10s).toBeNull(); // latency-only rows stay null
+  });
+
   it("leaves exec/overhead null until a stat is pushed", () => {
     const s = new PerfStore();
     s.record("file_read", 7, true);

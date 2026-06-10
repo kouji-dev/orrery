@@ -20,6 +20,8 @@ export interface ExecAgg {
   cmd: string;
   /** backend 10s call rate — the only rate source for push/emit rows that have no frontend invokes. */
   calls10s: number;
+  /** payload bytes in the window — only for rows that record volume (batched PTY emits). */
+  bytes10s?: number;
   avgMs: number;
   p95Ms: number;
   maxMs: number;
@@ -36,6 +38,8 @@ export interface PerfRow {
   avgExec: number | null;
   /** round-trip − exec, i.e. IPC overhead. null until exec is known. */
   overhead: number | null;
+  /** window payload bytes (throughput rows only — batched PTY emits). */
+  bytes10s: number | null;
   /** recent round-trip values for the sparkline (oldest→newest). */
   hist: number[];
   /** most-recent calls first, for the expand detail. */
@@ -119,6 +123,7 @@ export class PerfStore {
         errPct: ring.length ? (ring.filter((s) => !s.ok).length / ring.length) * 100 : 0,
         avgExec,
         overhead: avgRt != null && avgExec != null ? avgRt - avgExec : null,
+        bytes10s: ex?.bytes10s ?? null,
         hist: ring.slice(-HIST).map((s) => s.ms),
         recent: ring.slice(-RECENT).reverse(),
       });

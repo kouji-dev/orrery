@@ -156,7 +156,10 @@ impl RuntimeService {
                 16 * 1024,
                 move |chunk, seq| {
                     // timed so the emit RATE shows up as a perf-table row —
-                    // `agent_output_emit` calls/10s is the batching proof
+                    // `agent_output_emit` calls/10s is the batching proof; the
+                    // volume sample turns it into a throughput row (bytes/s,
+                    // avg batch size) in the dev panel.
+                    crate::perf::record_volume("agent_output_emit", chunk.len() as u64);
                     crate::perf::timed("agent_output_emit", || {
                         let _ = app_out.emit(
                             "agent://output",
