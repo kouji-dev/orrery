@@ -6,6 +6,7 @@ import {
   OnDestroy,
   ViewEncapsulation,
   computed,
+  effect,
   inject,
   isDevMode,
   signal,
@@ -403,22 +404,9 @@ export class DevPanelComponent implements OnDestroy {
   private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly dev = isDevMode();
-  /** open signal — setting it also gates the scheduler stats collector. */
-  readonly open = (() => {
-    const s = signal(false);
-    return {
-      ...s,
-      set(v: boolean) {
-        s.set(v);
-        setSchedulerStatsEnabled(v);
-      },
-      update(fn: (v: boolean) => boolean) {
-        const next = fn(s());
-        s.set(next);
-        setSchedulerStatsEnabled(next);
-      },
-    };
-  })();
+  /** Panel visibility; a constructor effect mirrors it into the scheduler
+   *  stats gate (collect only while the panel is open). */
+  readonly open = signal(false);
   readonly tab = signal<"perf" | "agents" | "projects">("perf");
   readonly sort = signal<Sort>({ key: "rt", dir: -1 });
   readonly aSort = signal<Sort>({ key: "status", dir: 1 });
@@ -441,6 +429,8 @@ export class DevPanelComponent implements OnDestroy {
   private copiedTo?: ReturnType<typeof setTimeout>;
 
   constructor() {
+    // gate the terminal write-scheduler stats collector on panel visibility
+    effect(() => setSchedulerStatsEnabled(this.open()));
     // age out the 10s window while the panel is open
     this.tickIv = setInterval(() => {
       if (this.open() && this.tab() === "perf") this.perf.tick();
