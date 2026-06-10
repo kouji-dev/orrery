@@ -11,13 +11,27 @@ import { flushTerminalQueue } from "./terminal-output-scheduler";
 const stubStore = {
   input: () => Promise.resolve(),
   resize: () => Promise.resolve(),
+  focus: () => Promise.resolve(),
 } as unknown as AgentsStore;
 
-function makeService(): TerminalService {
+function makeService(store: AgentsStore = stubStore): TerminalService {
   const injector = Injector.create({
-    providers: [{ provide: AgentsStore, useValue: stubStore }],
+    providers: [{ provide: AgentsStore, useValue: store }],
   });
   return runInInjectionContext(injector, () => new TerminalService());
+}
+
+/** Service whose AgentsStore records every agent_focus invoke. */
+function makeFocusSpy(): { svc: TerminalService; calls: Array<string | null> } {
+  const calls: Array<string | null> = [];
+  const store = {
+    ...stubStore,
+    focus: (id: string | null) => {
+      calls.push(id);
+      return Promise.resolve();
+    },
+  } as unknown as AgentsStore;
+  return { svc: makeService(store), calls };
 }
 
 // `write` routes through the shared scheduler; an unattached terminal counts as
@@ -51,5 +65,50 @@ describe("TerminalService.tail", () => {
     svc.write("b", "one\r\ntwo\r\n\r\nthree\r\nfour\r\n");
     await flush(svc, "b");
     expect(svc.tail("b", 2)).toEqual(["three", "four"]);
+  });
+});
+
+// The backend mux drains the FOCUSED agent every frame and holds everyone
+// else to a slow cadence, so TerminalService must tell it which terminal the
+// user is in — exactly once per CHANGE (the xterm focus event re-fires on
+// every click into an already-focused terminal; flapping invokes would just
+// burn IPC). setFocused is the single funnel the xterm focus listener,
+// exit() and dispose() all feed.
+describe("TerminalService focus → agent_focus", () => {
+  it("invokes once per change, not once per focus event", () => {
+    const { svc, calls } = makeFocusSpy();
+    // @ts-expect-error reach the private funnel the xterm focus listener calls
+    svc["setFocused"]("a");
+    // @ts-expect-error same terminal re-focused — must NOT re-invoke
+    svc["setFocused"]("a");
+    expect(calls).toEqual(["a"]);
+    // @ts-expect-error switching terminals is a change — one more invoke
+    svc["setFocused"]("b");
+    expect(calls).toEqual(["a", "b"]);
+  });
+
+  it("clears focus when the focused agent's process exits", () => {
+    const { svc, calls } = makeFocusSpy();
+    svc.write("a", "x"); // materialize the terminal
+    // @ts-expect-error private funnel
+    svc["setFocused"]("a");
+    svc.exit("a");
+    expect(calls).toEqual(["a", null]);
+    // an exit for an agent that is NOT focused must not touch it
+    svc.write("b", "x");
+    svc.exit("b");
+    expect(calls).toEqual(["a", null]);
+  });
+
+  it("clears focus when the focused terminal is disposed — and only then", () => {
+    const { svc, calls } = makeFocusSpy();
+    svc.write("a", "x");
+    svc.write("b", "x");
+    // @ts-expect-error private funnel
+    svc["setFocused"]("a");
+    svc.dispose("b"); // some OTHER terminal going away must not release focus
+    expect(calls).toEqual(["a"]);
+    svc.dispose("a");
+    expect(calls).toEqual(["a", null]);
   });
 });

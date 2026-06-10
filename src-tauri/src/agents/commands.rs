@@ -369,6 +369,17 @@ pub fn agent_decide(
     })
 }
 
+/// Tell the output mux which agent's terminal is focused (`None` = none): the
+/// focused agent's PTY output drains every ~16ms frame (typing echo stays
+/// snappy) while unfocused agents coalesce losslessly at a ~150ms cadence.
+#[tauri::command(async)]
+pub fn agent_focus(rt: State<'_, RuntimeService>, id: Option<Uuid>) -> AppResult<()> {
+    crate::perf::timed("agent_focus", || {
+        rt.focus(id);
+        Ok(())
+    })
+}
+
 /// Resize the agent's PTY to match the visible terminal (cols × rows).
 #[tauri::command(async)]
 pub fn agent_resize(

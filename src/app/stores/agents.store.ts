@@ -156,6 +156,12 @@ export class AgentsStore {
   resize(id: string, rows: number, cols: number): Promise<void> {
     return this.bridge.invoke(Commands.AgentResize, { id, rows, cols });
   }
+  /** Tell the backend output mux which agent's terminal is focused (null =
+   *  none): the focused agent's output ships every ~16ms frame (typing echo
+   *  stays snappy); everyone else coalesces at a slower ~150ms cadence. */
+  focus(id: string | null): Promise<void> {
+    return this.bridge.invoke(Commands.AgentFocus, { id });
+  }
   /** Subscribe to streamed process output. The backend multiplexes EVERY
    *  agent's PTY output into one `agent://output` event per ~16ms frame; the
    *  payload is an array with one coalesced `{id, chunk, seq}` entry per agent

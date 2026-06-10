@@ -181,6 +181,7 @@ pub fn run() {
             agents::commands::agent_deny,
             agents::commands::agent_decide,
             agents::commands::agent_resize,
+            agents::commands::agent_focus,
             agents::commands::detect_tools,
             metrics::commands::system_metrics,
             cost::commands::system_cost,

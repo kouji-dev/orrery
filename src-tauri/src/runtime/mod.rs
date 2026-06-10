@@ -308,6 +308,14 @@ impl RuntimeService {
         }
     }
 
+    /// Mark which agent's terminal is focused in the UI (`None` = none). The
+    /// output mux drains the focused agent every frame (keystroke echo stays
+    /// snappy) and holds everyone else to the slow ~150ms cadence — see
+    /// `output_mux::set_focus`.
+    pub fn focus(&self, id: Option<Uuid>) {
+        mux().set_focus(id.map(|u| u.to_string()));
+    }
+
     /// Feed keystrokes from the UI terminal into the agent's PTY stdin.
     ///
     /// The procs-map lock is held only long enough to clone the per-agent

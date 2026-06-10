@@ -20,6 +20,8 @@ interface TermHandle {
   ro?: ResizeObserver;
   /** WebGL renderer is loaded once, after the terminal is first opened in the DOM. */
   webglLoaded?: boolean;
+  /** Focus listener is hooked once, after the terminal first has a textarea (post-open). */
+  focusHooked?: boolean;
 }
 
 const MONO =
@@ -64,6 +66,21 @@ export class TerminalService implements OnDestroy {
   }
   private bumpRevision(id: string) {
     this.revSignal(id).update((n) => n + 1);
+  }
+
+  // The agent whose xterm last GAINED focus — i.e. the terminal the user types
+  // in. The backend output mux drains that agent every ~16ms frame (keystroke
+  // echo needs the fast path) and holds everyone else to a ~150ms cadence, so
+  // we tell it on every change. Tracks the last value actually sent: gains are
+  // invoked once per change (no flapping on repeated focus of the same
+  // terminal), and it is cleared only when the focused agent's process exits
+  // or its terminal is disposed — NOT on blur, so the visible terminal keeps
+  // the fast path while the user works elsewhere in the app.
+  private sentFocusId: string | null = null;
+  private setFocused(id: string | null) {
+    if (id === this.sentFocusId) return;
+    this.sentFocusId = id;
+    void this.agents.focus(id).catch(() => {});
   }
 
   // Per-agent live search result { index (0-based, -1 = none), count } — bumped by
@@ -216,6 +233,9 @@ export class TerminalService implements OnDestroy {
   exit(id: string) {
     flushTerminalQueue(id); // queued output lands before the exit notice
     this.handles.get(id)?.term.write("\r\n\x1b[2m▪ process exited\x1b[0m\r\n");
+    // the focused agent stopped → release the mux fast path (clicking back
+    // into the terminal after a restart re-claims it via the focus listener)
+    if (this.sentFocusId === id) this.setFocused(null);
   }
 
   /** A dim, non-output hint (e.g. idle state) without faking program output. */
@@ -274,6 +294,14 @@ export class TerminalService implements OnDestroy {
     } else if (h.term.element.parentElement !== el) {
       el.replaceChildren(h.term.element); // move our instance in, evicting any prior one
     }
+    // xterm gains focus → tell the backend mux so this agent's output rides
+    // the per-frame fast path. The textarea only exists once opened, so the
+    // listener is hooked here (once per terminal); the focus() call below
+    // fires it for the initial attach too.
+    if (!h.focusHooked && h.term.textarea) {
+      h.focusHooked = true;
+      h.term.textarea.addEventListener("focus", () => this.setFocused(id));
+    }
     flushTerminalQueue(id); // catch up on output that queued while hidden
     this.loadWebgl(h); // needs a canvas — only safe once the terminal is in the DOM
     this.refit(h);
@@ -295,6 +323,7 @@ export class TerminalService implements OnDestroy {
   dispose(id: string) {
     const h = this.handles.get(id);
     if (!h) return;
+    if (this.sentFocusId === id) this.setFocused(null); // gone → release the fast path
     h.ro?.disconnect();
     discardTerminalQueue(id);
     this.revs.delete(id);

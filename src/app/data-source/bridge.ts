@@ -45,6 +45,7 @@ export const Commands = {
   AgentDeny: 'agent_deny',
   AgentDecide: 'agent_decide',
   AgentResize: 'agent_resize',
+  AgentFocus: 'agent_focus',
   DetectTools: 'detect_tools',
   SystemMetrics: 'system_metrics',
   SystemCost: 'system_cost',
