@@ -2,7 +2,7 @@ import { effect, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS, ORG, WORKTREE_ROOT } from "../data";
 import { ContextMenuState, MenuItem, Tab, Tweaks, VizMode } from "../models";
 import { hexRgb } from "../utils";
-import { dropAgent, group, leaf, PaneNode, PaneView, treeAgentIds } from "../workspace/pane-model";
+import { dropAgent, group, leaf, PaneNode, PaneView, setAgentView, treeAgentIds } from "../workspace/pane-model";
 
 const TWEAK_DEFAULTS: Tweaks = {
   theme: "dark",
@@ -110,6 +110,13 @@ export class UiStore {
     );
     if (existing) {
       this.activeTab.set(existing.id);
+      // An EXPLICIT pane request must win in the reused tab too — without this,
+      // "Review diff" on a notification silently landed on the agent's terminal
+      // whenever its tab already existed. Bare openAgent(id) calls (sidebar,
+      // overview) pass no pane and keep whatever view the user had open.
+      if (pane !== undefined) {
+        this.paneRoots.update((m) => ({ ...m, [existing.id]: setAgentView(m[existing.id], agentId, view) }));
+      }
       return;
     }
     const id = this.newTabId();

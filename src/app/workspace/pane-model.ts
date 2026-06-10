@@ -101,6 +101,27 @@ export function leafAgentOf(node: PaneNode, paneId: string): string | null {
   return r;
 }
 
+/** Show `view` for `agentId`: no-op when one of its leaves already does (the
+ *  user's layout wins); otherwise its first leaf switches view in place. */
+export function setAgentView(node: PaneNode, agentId: string, view: PaneView): PaneNode {
+  let satisfied = false;
+  let targetId: string | null = null;
+  const walk = (n: PaneNode) => {
+    if (n.type === "leaf") {
+      if (n.agentId === agentId) {
+        if (n.view === view) satisfied = true;
+        else targetId ??= n.id;
+      }
+    } else {
+      walk(n.a);
+      walk(n.b);
+    }
+  };
+  walk(node);
+  if (satisfied || targetId === null) return node;
+  return patchLeaf(node, targetId, { view });
+}
+
 /** Remove every leaf showing `agentId`; each one's sibling takes the split's place. */
 export function dropAgent(node: PaneNode, agentId: string): PaneNode {
   if (node.type === "leaf") return node;
