@@ -72,20 +72,24 @@ pub fn run() {
             // subtree (cpu%/mem) every 3s and emit `system://metrics`. sysinfo
             // derives per-process cpu% from the delta between two refreshes, so we
             // warm up with one refresh before the loop, then refresh+emit each tick.
+            // Sampler + last snapshot live in shared managed state so the one-shot
+            // `system_metrics` command reuses the warm sampler / fresh snapshot
+            // instead of paying a cold double-sweep + sleep per call.
+            let shared_sampler = metrics::SharedSampler::new();
+            app.manage(shared_sampler.clone());
             let metrics_app = app.handle().clone();
             std::thread::spawn(move || {
                 use tauri::{Emitter, Manager};
                 let app_pid = std::process::id();
-                let mut sampler = metrics::MetricsSampler::new();
-                sampler.refresh(); // warm-up: first sample's cpu% would otherwise be 0
+                shared_sampler.warm_up(); // first sample's cpu% would otherwise be 0
                 let mut tick: u32 = 0;
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(3));
                     tick = tick.wrapping_add(1);
-                    // Why adaptive: the whole-machine process sweep costs ~60ms;
-                    // at 3s that is ~2% of a core forever. With no agent running
-                    // the gauge barely moves — sample every 4th tick (12s) and
-                    // return to 3s within one tick of an agent starting.
+                    // Why adaptive: even the scoped refresh costs real syscalls;
+                    // with no agent running the gauge barely moves — sample every
+                    // 4th tick (12s) and return to 3s within one tick of an agent
+                    // starting.
                     let active = metrics_app
                         .try_state::<RuntimeService>()
                         .is_some_and(|rt| rt.any_running());
@@ -97,16 +101,15 @@ pub fn run() {
                     // command path was measured) and it's a steady-state
                     // baseline-CPU suspect.
                     crate::perf::timed("system_metrics_push", || {
-                        sampler.refresh();
                         let (Some(runtime), Some(agents)) = (
                             metrics_app.try_state::<RuntimeService>(),
                             metrics_app.try_state::<AgentService>(),
                         ) else {
                             return; // services not ready yet (shouldn't happen post-setup)
                         };
-                        let m = metrics::commands::sample_with_labels(
-                            &sampler, app_pid, &runtime, &agents,
-                        );
+                        let pids = runtime.pids();
+                        let labels = metrics::commands::agent_labels(&agents);
+                        let m = shared_sampler.refresh_and_sample(app_pid, &pids, &labels);
                         let _ = metrics_app.emit("system://metrics", m);
                     });
                 }
@@ -116,10 +119,13 @@ pub fn run() {
             perf::spawn_push_loop(app.handle().clone());
             perf::spawn_ui_probe(app.handle().clone()); // UI-thread queue-delay gauge (ui_thread_lag row)
 
-            // Cost push loop: every 60s shell out to `ccusage` and emit the global
-            // total on `system://cost`. Slow-moving, so 60s (vs metrics' 3s) keeps
-            // node-spawn cost negligible. `available:false` is emitted when ccusage
-            // can't run — the UI hides the readout.
+            // Cost push loop: shell out to `ccusage` and emit the global total on
+            // `system://cost`. `available:false` is emitted when ccusage can't run
+            // — the UI hides the readout. The snapshot is cached in shared managed
+            // state (CostCache) so the one-shot `system_cost` command and this
+            // loop never run two node processes for the same 5-minute window.
+            let cost_cache = cost::CostCache::new();
+            app.manage(cost_cache.clone());
             let cost_app = app.handle().clone();
             std::thread::spawn(move || {
                 use tauri::Emitter;
@@ -128,8 +134,11 @@ pub fn run() {
                     // full transcript scan). At the old 60s period that was
                     // ~3.7% of a core forever — a daily cost total does not
                     // need minute freshness, so 5 minutes. First emit is still
-                    // immediate (loop body runs before the first sleep).
-                    let snap = crate::perf::timed("system_cost_push", cost::snapshot);
+                    // immediate (loop body runs before the first sleep) — and
+                    // deduped against the startup one-shot via the cache.
+                    let snap = crate::perf::timed("system_cost_push", || {
+                        cost_cache.get(cost::COST_FRESH)
+                    });
                     let _ = cost_app.emit("system://cost", snap);
                     std::thread::sleep(std::time::Duration::from_secs(300));
                 }
