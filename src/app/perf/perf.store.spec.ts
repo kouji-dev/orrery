@@ -66,7 +66,7 @@ describe("PerfStore", () => {
     expect(r.overhead).toBeNull();
   });
 
-  it("decays calls/10s to the window but keeps the ring's latency profile", () => {
+  it("windows latency stats so stale bursts age out of avg/p95/max", () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
     const s = new PerfStore();
@@ -75,8 +75,41 @@ describe("PerfStore", () => {
     s.record("old", 8, true);
     const r = row(s, "old")!;
     expect(r.calls10s).toBe(1); // rate: only the fresh call is in-window
-    expect(r.avgRt).toBe(29); // latency: ring keeps both → (50 + 8) / 2
+    expect(r.avgRt).toBe(8); // latency: windowed too — the 50ms relic is gone
+    expect(r.maxRt).toBe(8);
+    expect(r.stale).toBe(false);
+  });
+
+  it("falls back to the lifetime ring and flags stale when the window is empty", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const s = new PerfStore();
+    s.record("idle", 50, true);
+    s.record("idle", 10, true);
+    vi.setSystemTime(20_000); // both samples aged out
+    s.tick();
+    const r = row(s, "idle")!;
+    expect(r.calls10s).toBe(0);
+    expect(r.avgRt).toBe(30); // fallback: whole ring → (50 + 10) / 2
     expect(r.maxRt).toBe(50);
+    expect(r.stale).toBe(true); // panel dims the frozen values
+  });
+
+  it("backend-only rows inherit staleness from the exec push", () => {
+    const s = new PerfStore();
+    s.setExec([
+      { cmd: "fresh_emit", calls10s: 10, avgMs: 1, p95Ms: 2, maxMs: 3, stale: false },
+      { cmd: "idle_emit", calls10s: 0, avgMs: 1, p95Ms: 2, maxMs: 3, stale: true },
+    ]);
+    expect(row(s, "fresh_emit")!.stale).toBe(false);
+    expect(row(s, "idle_emit")!.stale).toBe(true);
+  });
+
+  it("a fresh round-trip keeps a row live even when the exec agg is stale", () => {
+    const s = new PerfStore();
+    s.record("c", 5, true);
+    s.setExec([{ cmd: "c", calls10s: 0, avgMs: 4, p95Ms: 6, maxMs: 9, stale: true }]);
+    expect(row(s, "c")!.stale).toBe(false);
   });
 
   it("clear() empties everything", () => {

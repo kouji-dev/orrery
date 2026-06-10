@@ -15,6 +15,8 @@ function row(p: Partial<PerfRow> & { cmd: string }): PerfRow {
     errPct: p.errPct ?? 0,
     avgExec: p.avgExec ?? null,
     overhead: p.overhead ?? null,
+    bytes10s: p.bytes10s ?? null,
+    stale: p.stale ?? false,
     hist: p.hist ?? [],
     recent: p.recent ?? [],
   };

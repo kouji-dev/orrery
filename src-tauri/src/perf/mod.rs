@@ -52,6 +52,9 @@ pub struct CmdExec {
     /// (e.g. batched PTY emits, where throughput matters more than latency).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bytes10s: Option<u64>,
+    /// No sample in the 10s window — the latency values are the lifetime-ring
+    /// fallback (frozen history), not current behavior. The dev panel dims these.
+    pub stale: bool,
 }
 
 static STATS: OnceLock<Mutex<HashMap<&'static str, CmdAgg>>> = OnceLock::new();
@@ -68,15 +71,7 @@ fn now_ms() -> u128 {
 
 /// Record one exec sample. O(1).
 pub fn record(cmd: &'static str, elapsed: Duration) {
-    let now = now_ms();
-    let mut m = stats().lock().unwrap();
-    let agg = m.entry(cmd).or_default();
-    agg.samples
-        .push((now, elapsed.as_micros().min(u32::MAX as u128) as u32));
-    if agg.samples.len() > RING {
-        agg.samples.remove(0);
-    }
-    bump_bucket(agg, now, 1, 0);
+    record_io(cmd, elapsed, 0);
 }
 
 /// Record payload bytes for one emission — the throughput dimension for
@@ -88,6 +83,21 @@ pub fn record_volume(cmd: &'static str, bytes: u64) {
     bump_bucket(agg, now, 0, bytes);
 }
 
+/// Record one emission's wall time AND payload bytes under a single STATS
+/// lock — the batched PTY flush path calls this up to ~125/s per agent, where
+/// the old `record_volume` + `timed` pair locked the registry twice. O(1).
+pub fn record_io(cmd: &'static str, elapsed: Duration, bytes: u64) {
+    let now = now_ms();
+    let mut m = stats().lock().unwrap();
+    let agg = m.entry(cmd).or_default();
+    agg.samples
+        .push((now, elapsed.as_micros().min(u32::MAX as u128) as u32));
+    if agg.samples.len() > RING {
+        agg.samples.remove(0);
+    }
+    bump_bucket(agg, now, 1, bytes);
+}
+
 /// Run `f`, recording its wall time under `cmd` — the command wrappers use this.
 pub fn timed<T>(cmd: &'static str, f: impl FnOnce() -> T) -> T {
     let t = Instant::now();
@@ -96,8 +106,10 @@ pub fn timed<T>(cmd: &'static str, f: impl FnOnce() -> T) -> T {
     out
 }
 
-/// Current per-command aggregates: whole ring for latency (so a row keeps its
-/// profile while idle), 10s window for the call rate.
+/// Current per-command aggregates: latency AND call rate over the 10s window —
+/// lifetime latency let idle rows flash frozen startup-burst values forever.
+/// Rows with no in-window sample fall back to the whole ring (so the profile
+/// stays visible) but are flagged `stale` so the UI dims them instead of lying.
 pub fn snapshot() -> Vec<CmdExec> {
     let m = stats().lock().unwrap();
     let now = now_ms();
@@ -108,8 +120,17 @@ pub fn snapshot() -> Vec<CmdExec> {
             let mut ms: Vec<f64> = agg
                 .samples
                 .iter()
+                .filter(|(ts, _)| now.saturating_sub(*ts) < WINDOW_MS)
                 .map(|(_, us)| *us as f64 / 1000.0)
                 .collect();
+            let stale = ms.is_empty();
+            if stale {
+                ms = agg
+                    .samples
+                    .iter()
+                    .map(|(_, us)| *us as f64 / 1000.0)
+                    .collect();
+            }
             ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
             let (calls10s, bytes10s) = agg
                 .buckets
@@ -124,6 +145,7 @@ pub fn snapshot() -> Vec<CmdExec> {
                 p95_ms: ms[p95_idx],
                 max_ms: *ms.last().unwrap(),
                 bytes10s: (bytes10s > 0).then_some(bytes10s),
+                stale,
             }
         })
         .collect()
@@ -144,6 +166,18 @@ pub fn spawn_push_loop<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
             use tauri::Emitter;
             let _ = app.emit("perf://stats", &snap);
         }
+    });
+}
+
+/// Sample the Win32 UI-thread queue delay every 1s: post a no-op closure to
+/// the main thread and record how long it sat in the message queue. A direct
+/// gauge of event-loop saturation (the `ui_thread_lag` perf row) — round-trip
+/// timings only show this bottleneck indirectly.
+pub fn spawn_ui_probe<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_secs(1));
+        let sent = Instant::now();
+        let _ = app.run_on_main_thread(move || record("ui_thread_lag", sent.elapsed()));
     });
 }
 
@@ -212,6 +246,48 @@ mod tests {
         let row = snap.iter().find(|r| r.cmd == "t_vol").unwrap();
         assert_eq!(row.calls10s, 300, "exact count above the latency-ring cap");
         assert_eq!(row.bytes10s, Some(30_000), "window byte volume summed");
+    }
+
+    #[test]
+    fn record_io_counts_latency_and_bytes_in_one_call() {
+        let _serial = serial();
+        record_io("t_io", Duration::from_millis(2), 512);
+        record_io("t_io", Duration::from_millis(4), 512);
+        let snap = snapshot();
+        let row = snap.iter().find(|r| r.cmd == "t_io").unwrap();
+        assert_eq!(row.calls10s, 2, "one call bumps the bucket once");
+        assert_eq!(row.bytes10s, Some(1024), "bytes land in the same bucket");
+        assert!(row.avg_ms >= 2.0, "latency sample recorded too");
+        assert!(!row.stale);
+    }
+
+    #[test]
+    fn stale_rows_fall_back_to_the_lifetime_ring() {
+        let _serial = serial();
+        // inject samples older than the window straight into the registry —
+        // record() always stamps "now", which can never be out-of-window
+        let old = now_ms() - WINDOW_MS - 5_000;
+        {
+            let mut m = stats().lock().unwrap();
+            let agg = m.entry("t_stale").or_default();
+            agg.samples.push((old, 3_000)); // 3ms
+            agg.samples.push((old + 1, 5_000)); // 5ms
+        }
+        let snap = snapshot();
+        let row = snap.iter().find(|r| r.cmd == "t_stale").unwrap();
+        assert!(row.stale, "no in-window sample → stale");
+        assert_eq!(row.avg_ms, 4.0, "fallback latency comes from the whole ring");
+        assert_eq!(row.max_ms, 5.0);
+        // a fresh sample flips the row live and window stats exclude the relics
+        record("t_stale", Duration::from_millis(9));
+        let snap = snapshot();
+        let row = snap.iter().find(|r| r.cmd == "t_stale").unwrap();
+        assert!(!row.stale);
+        assert!(
+            row.avg_ms >= 9.0,
+            "window avg {} excludes the old 3/5ms samples",
+            row.avg_ms
+        );
     }
 
     #[test]

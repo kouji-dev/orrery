@@ -161,17 +161,18 @@ impl RuntimeService {
                 std::time::Duration::from_millis(8),
                 16 * 1024,
                 move |chunk, seq| {
-                    // timed so the emit RATE shows up as a perf-table row —
-                    // `agent_output_emit` calls/10s is the batching proof; the
-                    // volume sample turns it into a throughput row (bytes/s,
-                    // avg batch size) in the dev panel.
-                    crate::perf::record_volume("agent_output_emit", chunk.len() as u64);
-                    crate::perf::timed("agent_output_emit", || {
-                        let _ = app_out.emit(
-                            "agent://output",
-                            serde_json::json!({ "id": out_id, "chunk": chunk, "seq": seq }),
-                        );
-                    });
+                    // record_io: emit RATE + VOLUME land as one perf-table row
+                    // (`agent_output_emit` calls/10s is the batching proof,
+                    // bytes make it a throughput row) under a single STATS
+                    // lock — the old record_volume+timed pair locked twice
+                    // per flush.
+                    let bytes = chunk.len() as u64;
+                    let t = std::time::Instant::now();
+                    let _ = app_out.emit(
+                        "agent://output",
+                        serde_json::json!({ "id": out_id, "chunk": chunk, "seq": seq }),
+                    );
+                    crate::perf::record_io("agent_output_emit", t.elapsed(), bytes);
                 },
             );
         });

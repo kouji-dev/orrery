@@ -114,6 +114,7 @@ pub fn run() {
 
             // Perf exec-aggregate push loop (perf://stats every 2s; see src/perf).
             perf::spawn_push_loop(app.handle().clone());
+            perf::spawn_ui_probe(app.handle().clone()); // UI-thread queue-delay gauge (ui_thread_lag row)
 
             // Cost push loop: every 60s shell out to `ccusage` and emit the global
             // total on `system://cost`. Slow-moving, so 60s (vs metrics' 3s) keeps

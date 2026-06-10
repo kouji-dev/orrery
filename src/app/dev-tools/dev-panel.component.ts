@@ -75,8 +75,8 @@ type Sort = { key: string; dir: number };
                 </tr></thead>
                 <tbody>
                   @for (s of sortedPerf(); track s.cmd) {
-                    <tr class="dvc-row" [class.open]="openCmd() === s.cmd" (click)="dev && openCmd.set(openCmd() === s.cmd ? null : s.cmd)">
-                      <td><span class="dvc-lead">@if (dev) { <svg class="dvc-tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg> }<span class="dvc-nm">{{ s.cmd }}</span></span></td>
+                    <tr class="dvc-row" [class.open]="openCmd() === s.cmd" [class.stale]="s.stale" (click)="dev && openCmd.set(openCmd() === s.cmd ? null : s.cmd)">
+                      <td><span class="dvc-lead">@if (dev) { <svg class="dvc-tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg> }<span class="dvc-nm">{{ s.cmd }}</span>@if (s.stale) { <span class="dvc-stale">(stale)</span> }</span></td>
                       <td class="tnum" style="color:var(--ink-2)">{{ s.calls10s }}</td>
                       <td [class]="'dvc-lat ' + lat(s.avgRt) + ' tnum'"><span class="v">{{ ms(s.avgRt) }}</span></td>
                       <td [class]="'dvc-lat ' + lat(s.avgExec) + ' tnum'"><span class="v">{{ ms(s.avgExec) }}</span></td>
@@ -304,6 +304,8 @@ type Sort = { key: string; dir: number };
 .dvc-row{cursor:pointer;transition:background .1s;}
 .dvc-row:hover{background:var(--panel-2);}
 .dvc-row.open{background:var(--panel-2);}
+.dvc-row.stale{opacity:.45;}
+.dvc-stale{color:var(--ink-4);font-size:10px;flex:none;}
 .dvc-tw{width:11px;height:11px;flex:none;color:var(--ink-4);transition:transform .15s;}
 .dvc-row.open .dvc-tw{transform:rotate(90deg);color:var(--accent);}
 .dvc-lead{display:flex;align-items:center;gap:8px;color:var(--ink);font-weight:500;}

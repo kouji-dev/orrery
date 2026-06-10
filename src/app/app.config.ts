@@ -11,6 +11,7 @@ import { BRIDGE } from "./data-source/bridge";
 import { TauriBridge } from "./data-source/tauri-bridge";
 import { InstrumentedBridge } from "./data-source/instrumented-bridge";
 import { PerfStore } from "./perf/perf.store";
+import { startLongTaskProbe } from "./perf/longtask-probe";
 import { UPDATER } from "./updater/updater";
 import { TauriUpdater } from "./updater/tauri-updater";
 
@@ -21,7 +22,15 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     // Real backend only — data comes from the Tauri/SQLite layer. The bridge is
     // wrapped to time every command round-trip into the PerfStore (DevTools).
-    { provide: BRIDGE, useFactory: () => new InstrumentedBridge(new TauriBridge(), inject(PerfStore)) },
+    // The longtask probe rides along: main-thread stalls → js_longtask row.
+    {
+      provide: BRIDGE,
+      useFactory: () => {
+        const perf = inject(PerfStore);
+        startLongTaskProbe(perf);
+        return new InstrumentedBridge(new TauriBridge(), perf);
+      },
+    },
     { provide: UPDATER, useFactory: () => new TauriUpdater() },
   ],
 };

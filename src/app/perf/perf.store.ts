@@ -25,6 +25,8 @@ export interface ExecAgg {
   avgMs: number;
   p95Ms: number;
   maxMs: number;
+  /** backend had no exec sample in the window — latency values are lifetime fallback. */
+  stale?: boolean;
 }
 
 /** One row in the perf table — round-trip (frontend) merged with exec (backend). */
@@ -40,6 +42,8 @@ export interface PerfRow {
   overhead: number | null;
   /** window payload bytes (throughput rows only — batched PTY emits). */
   bytes10s: number | null;
+  /** no latency sample in the window — values shown are fallback history (dimmed in the panel). */
+  stale: boolean;
   /** recent round-trip values for the sparkline (oldest→newest). */
   hist: number[];
   /** most-recent calls first, for the expand detail. */
@@ -104,11 +108,12 @@ export class PerfStore {
     const out: PerfRow[] = [];
     for (const cmd of cmds) {
       const ring = this.rings.get(cmd) ?? [];
-      // calls/10s is a RATE → only the 10s window. Latency stats use the whole
-      // ring (recent samples) so the row keeps its profile while idle instead of
-      // blanking out the moment the window empties.
+      // calls/10s is a RATE → only the 10s window. Latency stats use the same
+      // window — lifetime values let idle rows flash a frozen startup burst
+      // forever. An empty window falls back to the whole ring (profile stays
+      // visible) but flags the row `stale` so the panel dims it.
       const win = ring.filter((s) => s.ts > now - PERF_WINDOW_MS);
-      const ms = ring.map((s) => s.ms).sort((a, b) => a - b);
+      const ms = (win.length ? win : ring).map((s) => s.ms).sort((a, b) => a - b);
       const ex = exec.get(cmd);
       const avgRt = ms.length ? ms.reduce((a, b) => a + b, 0) / ms.length : null;
       const avgExec = ex ? ex.avgMs : null;
@@ -124,6 +129,9 @@ export class PerfStore {
         avgExec,
         overhead: avgRt != null && avgExec != null ? avgRt - avgExec : null,
         bytes10s: ex?.bytes10s ?? null,
+        // stale when every latency source the row has is out-of-window: a
+        // fresh round-trip OR a fresh exec sample keeps the row live.
+        stale: win.length === 0 && (ex ? (ex.stale ?? false) : ring.length > 0),
         hist: ring.slice(-HIST).map((s) => s.ms),
         recent: ring.slice(-RECENT).reverse(),
       });
