@@ -112,6 +112,33 @@ describe("PerfStore", () => {
     expect(row(s, "c")!.stale).toBe(false);
   });
 
+  it("windows errPct to the 10s window so stale errors age out", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const s = new PerfStore();
+    // 2 errors recorded in the past
+    s.record("cmd_e", 5, false);
+    s.record("cmd_e", 5, false);
+    vi.setSystemTime(11_000); // those samples are now outside the window
+    // 1 fresh success — errPct must be 0 over the current window
+    s.record("cmd_e", 5, true);
+    const r = row(s, "cmd_e")!;
+    expect(r.errPct).toBe(0);
+  });
+
+  it("falls back errPct to the lifetime ring when the window is empty (stale)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const s = new PerfStore();
+    s.record("cmd_stale_err", 5, false);
+    s.record("cmd_stale_err", 5, true);
+    vi.setSystemTime(20_000); // window empty
+    s.tick();
+    const r = row(s, "cmd_stale_err")!;
+    expect(r.stale).toBe(true);
+    expect(r.errPct).toBeCloseTo(50); // fallback: 1 error / 2 lifetime samples
+  });
+
   it("clear() empties everything", () => {
     const s = new PerfStore();
     s.record("c", 5, true);

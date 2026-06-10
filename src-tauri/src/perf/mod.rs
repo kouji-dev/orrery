@@ -74,15 +74,6 @@ pub fn record(cmd: &'static str, elapsed: Duration) {
     record_io(cmd, elapsed, 0);
 }
 
-/// Record payload bytes for one emission — the throughput dimension for
-/// push/emit rows whose cost is volume, not round-trip latency. O(1).
-pub fn record_volume(cmd: &'static str, bytes: u64) {
-    let now = now_ms();
-    let mut m = stats().lock().unwrap();
-    let agg = m.entry(cmd).or_default();
-    bump_bucket(agg, now, 0, bytes);
-}
-
 /// Record one emission's wall time AND payload bytes under a single STATS
 /// lock — the batched PTY flush path calls this up to ~125/s per agent, where
 /// the old `record_volume` + `timed` pair locked the registry twice. O(1).
@@ -239,8 +230,7 @@ mod tests {
         // batched PTY emits exceed the 128-sample latency ring by an order of
         // magnitude — counts and byte volume must come from exact buckets
         for _ in 0..300 {
-            record("t_vol", Duration::from_micros(10));
-            record_volume("t_vol", 100);
+            record_io("t_vol", Duration::from_micros(10), 100);
         }
         let snap = snapshot();
         let row = snap.iter().find(|r| r.cmd == "t_vol").unwrap();

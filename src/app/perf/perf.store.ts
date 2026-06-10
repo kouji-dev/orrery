@@ -125,7 +125,7 @@ export class PerfStore {
         avgRt,
         p95Rt: ms.length ? percentile(ms, 0.95) : null,
         maxRt: ms.length ? ms[ms.length - 1] : null,
-        errPct: ring.length ? (ring.filter((s) => !s.ok).length / ring.length) * 100 : 0,
+        errPct: win.length ? (win.filter((s) => !s.ok).length / win.length) * 100 : (ring.length ? (ring.filter((s) => !s.ok).length / ring.length) * 100 : 0),
         avgExec,
         overhead: avgRt != null && avgExec != null ? avgRt - avgExec : null,
         bytes10s: ex?.bytes10s ?? null,
