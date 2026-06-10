@@ -46,6 +46,17 @@ impl AgentAdapter for ClaudeAdapter {
         ])
     }
 
+    // autoApprove "everything" → `--dangerously-skip-permissions` (Claude Code's
+    // documented skip-all-permission-prompts flag). "off"/"allowlist" add nothing:
+    // off keeps Claude's own prompt flow, and allowlist defers to the user's own
+    // `~/.claude/settings.json` permissions (orrery ships no allowlist editor).
+    fn auto_approve_args(&self, policy: &str) -> Vec<String> {
+        match policy {
+            "everything" => vec!["--dangerously-skip-permissions".into()],
+            _ => Vec::new(),
+        }
+    }
+
     // Claude Code's permission prompt is a numbered/arrow SELECT list, not a
     // literal y/n: "1. Yes  2. Yes, don't ask again  3. No" (verified via the
     // docs — option count varies, e.g. some prompts show "2. Yes, and allow …").

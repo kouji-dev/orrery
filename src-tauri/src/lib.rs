@@ -14,6 +14,7 @@ mod metrics;
 mod perf;
 mod projects;
 mod runtime;
+mod settings;
 mod update;
 mod watch;
 
@@ -36,15 +37,25 @@ pub fn run() {
             let git = GitService::new();
             // projects table is created first so agents can reference it later
             let project_service = ProjectService::new(pool.clone(), git.clone());
+            // settings live in the same DB; the agent service consults them at
+            // spawn time (branch template + worktree root)
+            let settings_service = settings::SettingsService::new(pool.clone());
             let worktree_root = app
                 .path()
                 .app_data_dir()
                 .expect("no app data dir")
                 .join("worktrees");
-            let agent_service = AgentService::new(pool, git, worktree_root);
+            let agent_service =
+                AgentService::new(pool, git, worktree_root, settings_service.clone());
+            // Snapshot in-flight agents BEFORE reconciling: reset_running flips
+            // them to idle, and the auto-resume flow (agents_interrupted, a
+            // one-shot drain) needs to know who was interrupted by the restart.
+            let interrupted = agent_service.running_ids().unwrap_or_default();
             // reconcile stale state from a previous run (crash/force-quit): no PTY
             // process survives a restart, so any in-flight agent drops to idle.
             let _ = agent_service.reset_running();
+            app.manage(crate::agents::service::InterruptedAgents::new(interrupted));
+            app.manage(settings_service);
             app.manage(project_service);
             app.manage(agent_service);
             app.manage(crate::watch::WatchService::new());
@@ -183,12 +194,16 @@ pub fn run() {
             agents::commands::agent_decide,
             agents::commands::agent_resize,
             agents::commands::agent_focus,
+            agents::commands::agents_interrupted,
             agents::commands::detect_tools,
+            settings::commands::settings_get,
+            settings::commands::settings_set,
             metrics::commands::system_metrics,
             cost::commands::system_cost,
             appicon::set_window_icon,
             update::update_check,
             update::update_perform,
+            update::update_install,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -24,31 +24,104 @@
 
 use std::time::Duration;
 
+use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::{Updater, UpdaterExt};
 
-/// Build a configured updater — endpoints + pubkey come from `tauri.conf.json` —
-/// honoring the caller's check timeout when given.
-fn build_updater(app: &AppHandle, timeout_ms: Option<u64>) -> Result<Updater, String> {
+/// What a check found, for the settings dialog's update card.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateInfo {
+    pub version: String,
+    /// Publish date as reported by the manifest (RFC3339-ish), when present.
+    pub date: Option<String>,
+    /// Release notes (the manifest's `notes` body), when present.
+    pub notes: Option<String>,
+}
+
+/// The beta manifest lives next to the stable one in the SAME release repo:
+/// `latest.json` → `latest-beta.json` (see the settings plan; the release
+/// pipeline that publishes it is a follow-up). Derived from the configured
+/// stable URL rather than hard-coded so a repo move stays a one-line
+/// `tauri.conf.json` change.
+fn beta_url(stable: &str) -> String {
+    stable.replace("latest.json", "latest-beta.json")
+}
+
+/// First configured updater endpoint from `tauri.conf.json` (the stable URL).
+fn configured_endpoint(app: &AppHandle) -> Option<String> {
+    app.config()
+        .plugins
+        .0
+        .get("updater")?
+        .get("endpoints")?
+        .get(0)?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// Build a configured updater. Endpoints + pubkey come from `tauri.conf.json`;
+/// a `channel` of `"beta"` overrides the endpoint to the repo's
+/// `latest-beta.json` (same pubkey — beta artifacts are signed with the same
+/// key). `None`/`"stable"`/anything else keeps the configured stable endpoint,
+/// so an unrecognized channel value degrades safely.
+fn build_updater(
+    app: &AppHandle,
+    channel: Option<&str>,
+    timeout_ms: Option<u64>,
+) -> Result<Updater, String> {
     let mut builder = app.updater_builder();
     if let Some(ms) = timeout_ms {
         builder = builder.timeout(Duration::from_millis(ms));
     }
+    if channel.is_some_and(|c| c.eq_ignore_ascii_case("beta")) {
+        let stable = configured_endpoint(app).ok_or("no updater endpoint configured")?;
+        let beta = tauri::Url::parse(&beta_url(&stable)).map_err(|e| e.to_string())?;
+        builder = builder.endpoints(vec![beta]).map_err(|e| e.to_string())?;
+    }
     builder.build().map_err(|e| e.to_string())
 }
 
-/// Resolve an available update; return its version (or `None` when up to date). The
-/// frontend uses this version for its loop-guard before committing to an install.
+/// Resolve an available update on `channel` (default stable); `None` when up to
+/// date. The frontend uses `version` for its loop-guard before committing to an
+/// install, and `date`/`notes` for the settings dialog's update card.
 #[tauri::command]
 pub async fn update_check(
     app: AppHandle,
+    channel: Option<String>,
     timeout_ms: Option<u64>,
-) -> Result<Option<String>, String> {
-    let updater = build_updater(&app, timeout_ms)?;
+) -> Result<Option<UpdateInfo>, String> {
+    let updater = build_updater(&app, channel.as_deref(), timeout_ms)?;
     let update = updater.check().await.map_err(|e| e.to_string())?;
-    let version = update.map(|u| u.version);
-    log::info!("update_check: available={version:?}");
-    Ok(version)
+    let info = update.map(|u| UpdateInfo {
+        version: u.version,
+        date: u.date.map(|d| d.to_string()),
+        notes: u.body,
+    });
+    log::info!(
+        "update_check: channel={} available={:?}",
+        channel.as_deref().unwrap_or("stable"),
+        info.as_ref().map(|i| &i.version)
+    );
+    Ok(info)
+}
+
+/// Download + install from `channel` (default stable) — the settings dialog's
+/// "Install & relaunch". Same Windows hand-off semantics as [`update_perform`].
+#[tauri::command]
+pub async fn update_install(
+    app: AppHandle,
+    channel: Option<String>,
+    timeout_ms: Option<u64>,
+) -> Result<(), String> {
+    perform(app, channel, timeout_ms).await
+}
+
+/// Legacy alias of [`update_install`] on the stable channel — the launch-screen
+/// updater still invokes `update_perform`; drop once the frontend (T2) switches.
+#[tauri::command]
+pub async fn update_perform(app: AppHandle, timeout_ms: Option<u64>) -> Result<(), String> {
+    perform(app, None, timeout_ms).await
 }
 
 /// Download (signature-verified by the plugin) and install the available update,
@@ -57,10 +130,16 @@ pub async fn update_check(
 /// On Windows this does NOT return on success — it hands off to the installer and
 /// exits the process; it returns `Err` only on a pre-install failure (no update /
 /// network / bad signature), which the caller treats as "no update".
-#[tauri::command]
-pub async fn update_perform(app: AppHandle, timeout_ms: Option<u64>) -> Result<(), String> {
-    log::info!("update_perform: starting");
-    let updater = build_updater(&app, timeout_ms)?;
+async fn perform(
+    app: AppHandle,
+    channel: Option<String>,
+    timeout_ms: Option<u64>,
+) -> Result<(), String> {
+    log::info!(
+        "update_perform: starting (channel={})",
+        channel.as_deref().unwrap_or("stable")
+    );
+    let updater = build_updater(&app, channel.as_deref(), timeout_ms)?;
     let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
         log::info!("update_perform: nothing to install (up to date)");
         return Err("no update available".into());
@@ -178,6 +257,27 @@ fn relaunch_script(msi: &std::path::Path, exe: &std::path::Path) -> String {
          \"$(Get-Date -Format o) relaunch\" | Out-File -Append -Encoding utf8 $l; \
          Start-Process -FilePath '{exe}'"
     )
+}
+
+#[cfg(test)]
+mod channel_tests {
+    use super::*;
+
+    #[test]
+    fn beta_url_swaps_manifest_name_in_same_repo() {
+        assert_eq!(
+            beta_url("https://github.com/kouji-dev/orrery-releases/releases/latest/download/latest.json"),
+            "https://github.com/kouji-dev/orrery-releases/releases/latest/download/latest-beta.json"
+        );
+    }
+
+    #[test]
+    fn beta_url_without_manifest_name_is_passthrough() {
+        // a custom endpoint not named latest.json stays untouched (the updater
+        // will just check the same manifest — safe, never a broken URL)
+        let url = "https://example.com/updates.json";
+        assert_eq!(beta_url(url), url);
+    }
 }
 
 #[cfg(all(test, windows))]

@@ -36,6 +36,17 @@ impl AgentAdapter for CursorAdapter {
         v
     }
 
+    // autoApprove "everything" → `--force` (cursor-agent's documented
+    // run-without-confirmations flag). "off"/"allowlist" add nothing: off keeps
+    // cursor's own confirm flow, and allowlist defers to the user's own cursor
+    // permission config (orrery ships no allowlist editor).
+    fn auto_approve_args(&self, policy: &str) -> Vec<String> {
+        match policy {
+            "everything" => vec!["--force".into()],
+            _ => Vec::new(),
+        }
+    }
+
     // cursor-agent's interactive permission prompt keys are not stably
     // documented, so we keep the best-effort y/n default for ALLOW and use Esc
     // for DENY (Esc reliably cancels a select/confirm prompt). Revisit once the

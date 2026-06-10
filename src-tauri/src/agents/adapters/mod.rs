@@ -105,6 +105,21 @@ pub trait AgentAdapter: Send + Sync {
         true
     }
 
+    /// Extra spawn args for the user's per-tool auto-approve policy
+    /// (`"off" | "allowlist" | "everything"` — see `Settings::auto_approve`).
+    ///
+    /// Default: NO extra flags, for every policy. That is deliberate:
+    /// * `"off"` — the tool's own permission flow runs untouched.
+    /// * `"allowlist"` — orrery has no allowlist editor (removed from the
+    ///   dialog), so "allowlist" means "the tool's own config IS the
+    ///   allowlist"; the launch is identical to `"off"`.
+    /// * `"everything"` — only tools with a real skip-permissions flag
+    ///   override (claude / codex / cursor); a tool without one (gemini)
+    ///   honestly ignores the policy rather than faking it.
+    fn auto_approve_args(&self, _policy: &str) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Best-effort PTY keystrokes that APPROVE the tool's current permission
     /// prompt. These are typed straight into the agent's PTY stdin — a stop-gap
     /// until real decision-forwarding over hooks lands. The default is a plain
@@ -330,6 +345,40 @@ mod tests {
     }
 
     #[test]
+    fn auto_approve_everything_maps_to_each_tools_bypass_flag() {
+        let expect: &[(&str, &[&str])] = &[
+            ("claude", &["--dangerously-skip-permissions"]),
+            ("codex", &["--dangerously-bypass-approvals-and-sandbox"]),
+            ("cursor", &["--force"]),
+            ("gemini", &[]), // no bypass wired — approval stays in gemini's TUI
+        ];
+        for (tool, flags) in expect {
+            let a = adapter_for(tool).unwrap();
+            assert_eq!(
+                a.auto_approve_args("everything"),
+                flags.to_vec(),
+                "{tool} 'everything' flags"
+            );
+        }
+    }
+
+    // "off" and "allowlist" launch every tool with its OWN permission flow — no
+    // extra flags (orrery has no allowlist editor; the tool's config is the
+    // allowlist). Unknown policies are treated like "off".
+    #[test]
+    fn auto_approve_off_and_allowlist_add_no_flags() {
+        for tool in ["claude", "codex", "cursor", "gemini"] {
+            let a = adapter_for(tool).unwrap();
+            for policy in ["off", "allowlist", "", "future-policy"] {
+                assert!(
+                    a.auto_approve_args(policy).is_empty(),
+                    "{tool} policy '{policy}' must add nothing"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn permission_keys_per_tool_are_correct_as_best_known() {
         // Claude / Gemini permission prompts are numbered SELECTs: allow = "1"+Enter,
         // deny = Esc. Codex / Cursor keep the best-effort y/n allow with Esc deny.
@@ -416,6 +465,8 @@ mod tests {
         // resume_argv defaults to None (no resume-by-id flow) → no resume command.
         assert_eq!(Bare.resume_argv("abc"), None);
         assert!(Bare.build_resume_command("abc").is_none());
+        // auto_approve_args defaults to no flags — even for "everything".
+        assert!(Bare.auto_approve_args("everything").is_empty());
     }
 
     #[test]

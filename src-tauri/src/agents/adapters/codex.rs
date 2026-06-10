@@ -41,6 +41,20 @@ impl AgentAdapter for CodexAdapter {
         v
     }
 
+    // autoApprove "everything" → `--dangerously-bypass-approvals-and-sandbox`.
+    // NOT verifiable from this adapter file (nothing here names a bypass flag);
+    // the flag is per the codex CLI's own docs/`--help` (alias `--yolo`), which
+    // pair approval bypass with sandbox bypass in one switch — codex has no
+    // approvals-only skip. Conservative: any other/unknown policy adds nothing,
+    // and "allowlist" defers to the user's own `~/.codex/config.toml` approval
+    // policy (orrery ships no allowlist editor).
+    fn auto_approve_args(&self, policy: &str) -> Vec<String> {
+        match policy {
+            "everything" => vec!["--dangerously-bypass-approvals-and-sandbox".into()],
+            _ => Vec::new(),
+        }
+    }
+
     // Codex's interactive approval prompt is a SELECT list, but its exact key
     // mapping is not stably documented across versions, so we keep the
     // best-effort y/n default for ALLOW and use Esc for DENY (Esc reliably

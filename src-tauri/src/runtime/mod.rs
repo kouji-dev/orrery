@@ -133,6 +133,11 @@ impl RuntimeService {
     /// (`AgentAdapter::resume_argv`), the tool is relaunched into that CLI session
     /// (e.g. `claude --resume <id>`) and the prompt is never re-sent. Otherwise it
     /// falls back to the normal launch (honoring `send_prompt`).
+    ///
+    /// `approve_policy` is the user's per-tool autoApprove setting ("off" |
+    /// "allowlist" | "everything") — mapped to the tool's skip-permissions flag
+    /// by its adapter (see `AgentAdapter::auto_approve_args`).
+    #[allow(clippy::too_many_arguments)]
     pub fn start<R: Runtime>(
         &self,
         app: AppHandle<R>,
@@ -142,6 +147,7 @@ impl RuntimeService {
         send_prompt: bool,
         hooks: Option<&HookEnv>,
         resume_session: Option<&str>,
+        approve_policy: &str,
     ) -> Result<(), String> {
         let id = agent.id;
         if self.is_running(id) {
@@ -164,7 +170,13 @@ impl RuntimeService {
             })
             .map_err(|e| e.to_string())?;
 
-        let cmd = tool_command(&agent.tool, &agent.task, send_prompt, resume_session);
+        let cmd = tool_command(
+            &agent.tool,
+            &agent.task,
+            send_prompt,
+            resume_session,
+            approve_policy,
+        );
         // Resolve argv[0] to something CreateProcessW can actually launch (Windows):
         // see resolve_program_command. No-op elsewhere.
         let mut cmd = resolve_program_command(cmd);
@@ -390,19 +402,36 @@ fn kill_proc(p: &mut Proc) {
 /// and the prompt is never sent. Otherwise the normal launch is built: the task
 /// prompt is passed only on the first launch (`send_prompt`); resumes open the
 /// tool bare. Unknown tools fall back to invoking the id verbatim.
+///
+/// `approve_policy` appends the adapter's auto-approve flags ("everything" →
+/// the tool's skip-permissions flag; anything else → none) on BOTH the normal
+/// and the resume launch — the policy is a property of the agent run, not of
+/// how the session was entered. Unknown tools get no flags (no adapter knows
+/// their CLI).
 fn tool_command(
     tool: &str,
     task: &str,
     send_prompt: bool,
     resume_session: Option<&str>,
+    approve_policy: &str,
 ) -> CommandBuilder {
     let adapter = crate::agents::adapters::adapter_for(tool);
+    let approve_args = adapter
+        .as_ref()
+        .map(|a| a.auto_approve_args(approve_policy))
+        .unwrap_or_default();
+    let with_approve = |mut cmd: CommandBuilder| {
+        for a in &approve_args {
+            cmd.arg(a);
+        }
+        cmd
+    };
 
     // Prefer a resume-by-id launch when a session id is present AND the adapter
     // supports it (no prompt — the session continues from where it left off).
     if let (Some(id), Some(adapter)) = (resume_session, adapter.as_ref()) {
         if let Some(cmd) = adapter.build_resume_command(id) {
-            return cmd;
+            return with_approve(cmd);
         }
     }
 
@@ -412,7 +441,7 @@ fn tool_command(
         None
     };
     match adapter {
-        Some(adapter) => adapter.build_command(prompt),
+        Some(adapter) => with_approve(adapter.build_command(prompt)),
         None => {
             let mut c = CommandBuilder::new(tool);
             if let Some(t) = prompt {
@@ -547,41 +576,71 @@ mod tests {
     // (claude) builds `claude --resume <id>` and NEVER appends the task prompt,
     // even when send_prompt is true. We assert the argv straight off CommandBuilder
     // (no PTY spawned).
-    #[test]
-    fn tool_command_resume_builds_claude_resume_without_prompt() {
-        let cmd = tool_command("claude", "fix the bug", true, Some("sess-123"));
-        let argv: Vec<String> = cmd
-            .get_argv()
+    fn argv_of(cmd: &CommandBuilder) -> Vec<String> {
+        cmd.get_argv()
             .iter()
             .map(|s| s.to_string_lossy().to_string())
-            .collect();
-        assert_eq!(argv, vec!["claude", "--resume", "sess-123"]);
+            .collect()
+    }
+
+    #[test]
+    fn tool_command_resume_builds_claude_resume_without_prompt() {
+        let cmd = tool_command("claude", "fix the bug", true, Some("sess-123"), "off");
+        assert_eq!(argv_of(&cmd), vec!["claude", "--resume", "sess-123"]);
     }
 
     // Without a resume session id, the normal launch is built: claude + the task
     // prompt on the first launch (send_prompt true).
     #[test]
     fn tool_command_normal_launch_sends_prompt_on_first_run() {
-        let cmd = tool_command("claude", "fix the bug", true, None);
-        let argv: Vec<String> = cmd
-            .get_argv()
-            .iter()
-            .map(|s| s.to_string_lossy().to_string())
-            .collect();
-        assert_eq!(argv, vec!["claude", "fix the bug"]);
+        let cmd = tool_command("claude", "fix the bug", true, None, "off");
+        assert_eq!(argv_of(&cmd), vec!["claude", "fix the bug"]);
     }
 
     // A resume session id for a tool WITHOUT a resume-by-id flow (gemini) falls
     // back to the normal launch (no prompt on a resume — send_prompt false).
     #[test]
     fn tool_command_resume_falls_back_when_adapter_has_no_resume() {
-        let cmd = tool_command("gemini", "fix the bug", false, Some("sess-123"));
-        let argv: Vec<String> = cmd
-            .get_argv()
-            .iter()
-            .map(|s| s.to_string_lossy().to_string())
-            .collect();
-        assert_eq!(argv, vec!["gemini"], "no resume_argv → bare launch");
+        let cmd = tool_command("gemini", "fix the bug", false, Some("sess-123"), "off");
+        assert_eq!(argv_of(&cmd), vec!["gemini"], "no resume_argv → bare launch");
+    }
+
+    // autoApprove "everything" appends the adapter's bypass flag AFTER the normal
+    // argv — on the fresh launch AND on a resume (the policy belongs to the run,
+    // not the entry path). "off"/"allowlist" leave the argv untouched.
+    #[test]
+    fn tool_command_appends_auto_approve_flag_for_everything() {
+        let cmd = tool_command("claude", "fix the bug", true, None, "everything");
+        assert_eq!(
+            argv_of(&cmd),
+            vec!["claude", "fix the bug", "--dangerously-skip-permissions"]
+        );
+        let cmd = tool_command("claude", "fix the bug", true, Some("sess-123"), "everything");
+        assert_eq!(
+            argv_of(&cmd),
+            vec![
+                "claude",
+                "--resume",
+                "sess-123",
+                "--dangerously-skip-permissions"
+            ],
+            "resume launches honor the policy too"
+        );
+    }
+
+    #[test]
+    fn tool_command_off_and_allowlist_add_no_flags() {
+        for policy in ["off", "allowlist"] {
+            let cmd = tool_command("claude", "fix the bug", true, None, policy);
+            assert_eq!(
+                argv_of(&cmd),
+                vec!["claude", "fix the bug"],
+                "policy '{policy}' must not alter the launch"
+            );
+        }
+        // gemini has no bypass wired — "everything" is honestly a no-op for it.
+        let cmd = tool_command("gemini", "t", false, None, "everything");
+        assert_eq!(argv_of(&cmd), vec!["gemini"]);
     }
 
     #[test]

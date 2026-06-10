@@ -7,10 +7,11 @@ use crate::core::events::{emit_entity, Change};
 use crate::hooks::{hook_binary, HookBridge};
 use crate::projects::service::ProjectService;
 use crate::runtime::RuntimeService;
+use crate::settings::SettingsService;
 use crate::watch::WatchService;
 
 use super::model::{Agent, AgentSpawnRequest, AgentUpdateRequest};
-use super::service::AgentService;
+use super::service::{AgentService, InterruptedAgents};
 
 #[tauri::command(async)]
 pub fn agent_list(svc: State<'_, AgentService>) -> AppResult<Vec<Agent>> {
@@ -227,6 +228,7 @@ pub fn agent_start<R: Runtime>(
     app: AppHandle<R>,
     rt: State<'_, RuntimeService>,
     svc: State<'_, AgentService>,
+    settings: State<'_, SettingsService>,
     bridge: State<'_, HookBridge>,
     id: Uuid,
     rows: u16,
@@ -235,6 +237,15 @@ pub fn agent_start<R: Runtime>(
 ) -> AppResult<()> {
     crate::perf::timed("agent_start", || {
         let agent = svc.get(id)?;
+        // per-tool autoApprove policy → the adapter's skip-permissions flag
+        // ("off" when unset/unreadable — the tool's own flow is the safe default)
+        let approve_policy = settings
+            .get()
+            .unwrap_or_default()
+            .auto_approve
+            .get(&agent.tool)
+            .cloned()
+            .unwrap_or_else(|| "off".into());
         // resume-into-session only when asked AND a session id was captured
         let resume_session = if resume.unwrap_or(false) {
             agent.session_id.clone()
@@ -262,6 +273,7 @@ pub fn agent_start<R: Runtime>(
             send_prompt,
             hook_env.as_ref(),
             resume_session.as_deref(),
+            &approve_policy,
         )
         .map_err(AppError::Other)?;
         if send_prompt {
@@ -429,6 +441,15 @@ pub fn agent_dir(
             &path,
         ))
     })
+}
+
+/// Ids of the agents that were in-flight when the app launched — captured at
+/// startup BEFORE `reset_running` dropped them to idle (see lib.rs setup).
+/// ONE-SHOT: the snapshot is drained on first read, so the auto-resume flow
+/// can't relaunch the same agents twice (e.g. on a frontend reload).
+#[tauri::command(async)]
+pub fn agents_interrupted(state: State<'_, InterruptedAgents>) -> AppResult<Vec<Uuid>> {
+    crate::perf::timed("agents_interrupted", || Ok(state.drain()))
 }
 
 /// Detection of which CLI coding agents are installed — delegated to the adapter

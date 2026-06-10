@@ -37,6 +37,10 @@ impl AgentAdapter for GeminiAdapter {
         v
     }
 
+    // autoApprove: gemini inherits the trait default (NO flags for any policy)
+    // per the settings plan — its bypass mode is not wired here; approval stays
+    // in gemini's own TUI even when the user picks "everything".
+
     // Gemini CLI's tool-confirmation is a numbered/arrow SELECT, not a literal
     // y/n: "1. Yes, allow once  2. Yes, allow always  …  No, suggest changes
     // (esc)". ALLOW: "1" + Enter (option 1 is the one-time "Yes, allow once").

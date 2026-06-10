@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
@@ -7,6 +8,7 @@ use crate::core::database::DB;
 use crate::core::errors::{AgentError, AppError, AppResult, DbError};
 use crate::git::service::{FileChange, GitService};
 use crate::projects::model::CommitView;
+use crate::settings::SettingsService;
 
 use super::model::{Agent, AgentRecord, AgentSpawnRequest, AgentUpdateRequest};
 
@@ -15,14 +17,18 @@ pub struct AgentService {
     db: DB,
     git: GitService,
     worktree_root: PathBuf,
+    /// Consulted at spawn time for the branch template + worktree root. Shares
+    /// the same DB; injected so tests can stage settings before spawning.
+    settings: SettingsService,
 }
 
 impl AgentService {
-    pub fn new(db: DB, git: GitService, worktree_root: PathBuf) -> Self {
+    pub fn new(db: DB, git: GitService, worktree_root: PathBuf, settings: SettingsService) -> Self {
         let svc = Self {
             db,
             git,
             worktree_root,
+            settings,
         };
         svc.init_schema();
         svc
@@ -50,6 +56,27 @@ impl AgentService {
         } else {
             slug
         }
+    }
+
+    /// Where new worktrees go: the user's configured root when it is a usable
+    /// absolute directory, else the ctor root (app-data/worktrees). "Usable"
+    /// means absolute AND creatable — a relative path, a dead drive letter, or a
+    /// permission wall must degrade to the known-good default, not fail spawn.
+    fn effective_worktree_root(&self, setting: &str) -> PathBuf {
+        let s = setting.trim();
+        if s.is_empty() {
+            return self.worktree_root.clone();
+        }
+        let p = PathBuf::from(s);
+        if !p.is_absolute() {
+            log::warn!("worktreeRoot '{s}' is not absolute — using the default root");
+            return self.worktree_root.clone();
+        }
+        if let Err(e) = std::fs::create_dir_all(&p) {
+            log::warn!("worktreeRoot '{s}' unusable ({e}) — using the default root");
+            return self.worktree_root.clone();
+        }
+        p
     }
 
     fn name_exists_in_project(&self, project_id: Uuid, name: &str) -> AppResult<bool> {
@@ -147,13 +174,15 @@ impl AgentService {
         }
         let id = Uuid::new_v4();
         let wt_name = Self::worktree_name(&req.name, &id);
-        let branch = format!("agent/{wt_name}");
+        // settings are best-effort consumers: a read failure falls back to
+        // defaults (the historical branch shape + ctor root), never blocks spawn.
+        let prefs = self.settings.get().unwrap_or_default();
+        let branch = branch_from_template(&prefs.branch_template, &wt_name, &req.tool, &mmdd_now());
+        let root = self.effective_worktree_root(&prefs.worktree_root);
         // flat: worktrees/<name>. Only disambiguate on a real cross-project name clash.
-        let mut wt_path = self.worktree_root.join(&wt_name);
+        let mut wt_path = root.join(&wt_name);
         if wt_path.exists() {
-            wt_path = self
-                .worktree_root
-                .join(format!("{}-{}", wt_name, &id.to_string()[..6]));
+            wt_path = root.join(format!("{}-{}", wt_name, &id.to_string()[..6]));
         }
 
         // best-effort: only real git projects get a worktree
@@ -385,6 +414,25 @@ impl AgentService {
         Ok(())
     }
 
+    /// Ids of agents currently marked in-flight (running/blocked/waiting).
+    /// Read at launch BEFORE [`reset_running`] flips them to idle — these are
+    /// the interrupted agents the auto-resume flow may relaunch.
+    pub fn running_ids(&self) -> AppResult<Vec<Uuid>> {
+        let raw: Vec<String> = {
+            let c = self.db.lock().unwrap();
+            let mut stmt = c
+                .prepare(
+                    "SELECT id FROM agents WHERE status IN ('running', 'blocked', 'waiting')",
+                )
+                .map_err(DbError::Sqlite)?;
+            let rows = stmt.query_map([], |r| r.get(0)).map_err(DbError::Sqlite)?;
+            rows.collect::<Result<_, _>>().map_err(DbError::Sqlite)?
+        };
+        raw.into_iter()
+            .map(|s| Uuid::parse_str(&s).map_err(|e| AppError::Other(e.to_string())))
+            .collect()
+    }
+
     /// Reconcile stale state after a crash/restart: no PTY process can be alive
     /// right after launch, so any agent left mid-flight drops back to idle.
     pub fn reset_running(&self) -> AppResult<usize> {
@@ -539,6 +587,101 @@ impl AgentService {
     }
 }
 
+/// One-shot snapshot of the agents that were in-flight when the app launched
+/// (captured BEFORE `reset_running` dropped them to idle). Managed state; the
+/// `agents_interrupted` command drains it, so auto-resume fires at most once
+/// per app run — a later call (HMR, second window) gets an empty list and
+/// can't double-relaunch anything.
+pub struct InterruptedAgents(Mutex<Vec<Uuid>>);
+
+impl InterruptedAgents {
+    pub fn new(ids: Vec<Uuid>) -> Self {
+        Self(Mutex::new(ids))
+    }
+
+    /// Take the snapshot, leaving it empty.
+    pub fn drain(&self) -> Vec<Uuid> {
+        std::mem::take(&mut self.0.lock().unwrap())
+    }
+}
+
+/// Expand the user's branch template and sanitize the result into a git-safe
+/// ref name. Tokens: `{name}` → the worktree slug, `{tool}` → the tool id,
+/// `{date}` → MMDD. An empty template, or one whose expansion sanitizes away
+/// to nothing, falls back to the historical `agent/{slug}` shape — a bad
+/// setting must never block spawning.
+fn branch_from_template(template: &str, wt_name: &str, tool: &str, date: &str) -> String {
+    let t = template.trim();
+    let t = if t.is_empty() { "agent/{name}" } else { t };
+    let raw = t
+        .replace("{name}", wt_name)
+        .replace("{tool}", tool)
+        .replace("{date}", date);
+    let cleaned = sanitize_branch(&raw);
+    if cleaned.is_empty() {
+        format!("agent/{wt_name}")
+    } else {
+        cleaned
+    }
+}
+
+/// Reduce arbitrary input to a name `git check-ref-format` accepts: only
+/// `[A-Za-z0-9._/-]` survive (everything else → `-`), `..` never appears, no
+/// component starts/ends with `.` or `-` or ends in `.lock`, and empty
+/// components (leading/trailing/double slashes) are dropped. Can return ""
+/// (caller falls back).
+fn sanitize_branch(raw: &str) -> String {
+    let mapped: String = raw
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    mapped
+        .split('/')
+        .map(|comp| {
+            let mut c = comp.replace("..", "-");
+            if let Some(stripped) = c.strip_suffix(".lock") {
+                c = stripped.to_string();
+            }
+            c.trim_matches(|ch| ch == '.' || ch == '-').to_string()
+        })
+        .filter(|c| !c.is_empty())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Today as MMDD for the `{date}` token. UTC — a branch date tag doesn't
+/// justify a timezone dependency, and UTC is stable across machines.
+fn mmdd_now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let (_, m, d) = civil_from_days((secs / 86_400) as i64);
+    format!("{m:02}{d:02}")
+}
+
+/// Days-since-1970-01-01 → (year, month, day). Howard Hinnant's public-domain
+/// `civil_from_days` algorithm — exact for the proleptic Gregorian calendar,
+/// no date crate needed.
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -547,9 +690,17 @@ mod tests {
 
     // a unique, persistent worktree root per service (tests don't clean it — temp dir)
     fn svc() -> AgentService {
-        let db: DB = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        svc_with_settings().0
+    }
+
+    /// The service plus a handle to ITS settings (same DB) so tests can stage
+    /// branchTemplate / worktreeRoot before spawning.
+    fn svc_with_settings() -> (AgentService, SettingsService) {
+        let db: DB = Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()));
         let wt_root = std::env::temp_dir().join(format!("orrery-wt-{}", Uuid::new_v4()));
-        AgentService::new(db, GitService::new(), wt_root)
+        let settings = SettingsService::new(db.clone());
+        let svc = AgentService::new(db, GitService::new(), wt_root, settings.clone());
+        (svc, settings)
     }
 
     // a non-git path so spawn skips real worktree creation
@@ -720,6 +871,168 @@ mod tests {
         let a = s.spawn(req(Uuid::new_v4(), "rm"), &nogit()).unwrap();
         s.remove(a.id, None).unwrap();
         assert_eq!(s.list().unwrap().len(), 0);
+    }
+
+    // ---- branch template expansion ----
+
+    #[test]
+    fn branch_template_expands_name_tool_date_tokens() {
+        assert_eq!(
+            branch_from_template("{name}/{tool}/{date}", "fix_login", "claude", "0611"),
+            "fix_login/claude/0611"
+        );
+    }
+
+    #[test]
+    fn branch_template_empty_falls_back_to_agent_name() {
+        assert_eq!(
+            branch_from_template("", "fix_login", "claude", "0611"),
+            "agent/fix_login"
+        );
+        assert_eq!(
+            branch_from_template("   ", "fix_login", "claude", "0611"),
+            "agent/fix_login"
+        );
+    }
+
+    #[test]
+    fn branch_template_sanitizes_unsafe_characters() {
+        // spaces/!/~ map to '-', '..' collapses, component edges are trimmed
+        assert_eq!(
+            branch_from_template("feat {name}!", "fix_login", "claude", "0611"),
+            "feat-fix_login"
+        );
+        assert_eq!(
+            branch_from_template("{name}..{tool}", "fix_login", "claude", "0611"),
+            "fix_login-claude"
+        );
+        // empty components (leading/trailing/double slashes) are dropped
+        assert_eq!(
+            branch_from_template("/x//{name}/", "fix_login", "claude", "0611"),
+            "x/fix_login"
+        );
+        // a `.lock` component suffix is invalid for a ref — stripped
+        assert_eq!(
+            branch_from_template("{name}.lock", "fix_login", "claude", "0611"),
+            "fix_login"
+        );
+    }
+
+    #[test]
+    fn branch_template_unsalvageable_falls_back() {
+        // expands to nothing but separators/invalid chars → historical shape
+        assert_eq!(
+            branch_from_template("///", "fix_login", "claude", "0611"),
+            "agent/fix_login"
+        );
+        assert_eq!(
+            branch_from_template("!!!", "fix_login", "claude", "0611"),
+            "agent/fix_login"
+        );
+    }
+
+    #[test]
+    fn spawn_uses_persisted_branch_template() {
+        let (s, settings) = svc_with_settings();
+        let mut prefs = crate::settings::Settings::default();
+        prefs.branch_template = "{tool}/{name}".into();
+        settings.set(&prefs).unwrap();
+        let a = s.spawn(req(Uuid::new_v4(), "fix login"), &nogit()).unwrap();
+        assert_eq!(a.branch, "claude/fix_login", "template-driven branch");
+    }
+
+    #[test]
+    fn spawn_expands_date_token_as_mmdd() {
+        let (s, settings) = svc_with_settings();
+        let mut prefs = crate::settings::Settings::default();
+        prefs.branch_template = "agent/{name}/{date}".into();
+        settings.set(&prefs).unwrap();
+        let a = s.spawn(req(Uuid::new_v4(), "dated"), &nogit()).unwrap();
+        let date = a.branch.rsplit('/').next().unwrap();
+        assert_eq!(date.len(), 4, "MMDD: {}", a.branch);
+        assert!(date.chars().all(|c| c.is_ascii_digit()), "{}", a.branch);
+        let mm: u32 = date[..2].parse().unwrap();
+        let dd: u32 = date[2..].parse().unwrap();
+        assert!((1..=12).contains(&mm), "month in range: {}", a.branch);
+        assert!((1..=31).contains(&dd), "day in range: {}", a.branch);
+    }
+
+    #[test]
+    fn civil_from_days_matches_known_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(10_957), (2000, 1, 1));
+        assert_eq!(civil_from_days(11_017), (2000, 3, 1), "leap year 2000");
+        assert_eq!(civil_from_days(19_723), (2024, 1, 1));
+    }
+
+    // ---- worktree root consumption ----
+
+    #[test]
+    fn spawn_uses_configured_absolute_worktree_root() {
+        let (s, settings) = svc_with_settings();
+        let custom = tempfile::tempdir().unwrap();
+        let mut prefs = crate::settings::Settings::default();
+        prefs.worktree_root = custom.path().to_string_lossy().to_string();
+        settings.set(&prefs).unwrap();
+        let a = s.spawn(req(Uuid::new_v4(), "rooted"), &nogit()).unwrap();
+        assert!(
+            Path::new(&a.worktree).starts_with(custom.path()),
+            "worktree under the configured root: {}",
+            a.worktree
+        );
+    }
+
+    #[test]
+    fn spawn_falls_back_to_ctor_root_for_relative_or_empty_setting() {
+        for bad in ["", "   ", "not/absolute"] {
+            let (s, settings) = svc_with_settings();
+            let mut prefs = crate::settings::Settings::default();
+            prefs.worktree_root = bad.into();
+            settings.set(&prefs).unwrap();
+            let a = s.spawn(req(Uuid::new_v4(), "fb"), &nogit()).unwrap();
+            assert!(
+                Path::new(&a.worktree).starts_with(&s.worktree_root),
+                "'{bad}' must fall back to the ctor root: {}",
+                a.worktree
+            );
+        }
+    }
+
+    // ---- interrupted-agents snapshot ----
+
+    #[test]
+    fn running_ids_reports_inflight_before_reset() {
+        let s = svc();
+        let run = s.spawn(req(Uuid::new_v4(), "run"), &nogit()).unwrap();
+        let wait = s.spawn(req(Uuid::new_v4(), "wait"), &nogit()).unwrap();
+        let idle = s.spawn(req(Uuid::new_v4(), "idle"), &nogit()).unwrap();
+        let upd = |st: &str| AgentUpdateRequest {
+            status: Some(st.into()),
+            task: None,
+            model: None,
+            name: None,
+        };
+        s.update(run.id, upd("running")).unwrap();
+        s.update(wait.id, upd("waiting")).unwrap();
+
+        let mut ids = s.running_ids().unwrap();
+        ids.sort();
+        let mut want = vec![run.id, wait.id];
+        want.sort();
+        assert_eq!(ids, want, "running + waiting; idle excluded");
+        assert!(!ids.contains(&idle.id));
+
+        // the launch sequence: snapshot THEN reset — afterwards nothing is in-flight
+        s.reset_running().unwrap();
+        assert!(s.running_ids().unwrap().is_empty());
+    }
+
+    #[test]
+    fn interrupted_agents_drain_is_one_shot() {
+        let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
+        let state = InterruptedAgents::new(vec![a, b]);
+        assert_eq!(state.drain(), vec![a, b], "first drain yields the snapshot");
+        assert!(state.drain().is_empty(), "second drain is empty (one-shot)");
     }
 
     #[test]
