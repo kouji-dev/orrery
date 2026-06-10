@@ -23,19 +23,19 @@
 
 ## Phase 1 — The pipeline core (biggest wins)
 
-### 1. Batch PTY output at the source (Rust)
+### 1. Batch PTY output at the source (Rust) — **DONE 2026-06-10 (feat/perf-pipelines)**
 - **Current:** one event per 4KB read → under a TUI flood that's hundreds–thousands of IPC events/sec per agent, each with JSON serialization and a webview wakeup.
 - **Change:** in `runtime/mod.rs`, the reader thread accumulates into a pending `String` and flushes on either **8ms elapsed** or **16KB pending**, whichever first; flush remaining bytes before exit so `agent://exit` never overtakes output. One new `output_batcher.rs` module with unit tests (flush-on-size, flush-on-time, flush-on-drop ordering).
 - **Impact:** event rate drops to ≤~125/sec/agent regardless of throughput; this is the single biggest CPU saving for multi-agent load. Adds ≤8ms latency to echo (mitigated by #2 if noticeable).
 - **Effort:** S. **Files:** `src-tauri/src/runtime/mod.rs`, new `src-tauri/src/runtime/output_batcher.rs`.
 
-### 2. Sequence numbers on every batch
+### 2. Sequence numbers on every batch — **DONE 2026-06-10 (emitted as cumulative bytes; frontend consumption lands with #8)**
 - **Current:** none — restore/dedup impossible.
 - **Change:** per-agent monotonic `seq` (bytes written so far) added to the batch payload `{id, chunk, seq}`. Frontend stores last-seen seq per agent.
 - **Impact:** zero on its own, but it is the foundation for snapshot restore (#8) and lossy caps (#4) without duplication. Do it inside #1 — nearly free.
 - **Effort:** XS (bundled with #1).
 
-### 3. Shared renderer write scheduler
+### 3. Shared renderer write scheduler — **DONE 2026-06-10 (visibility via term.element.isConnected, not the workspace store)**
 - **Current:** `TerminalService.write()` calls `term.write()` directly for every agent. Each xterm schedules its own parse work; N flooding agents starve the focused terminal; hidden terminals parse everything at full cost.
 - **Change:** new `src/app/terminal-output-scheduler.ts`:
   - **Visible terminal:** write immediately (latency path).
@@ -44,19 +44,19 @@
 - **Impact:** typing/echo in the focused terminal stays smooth no matter how many background agents flood; hidden parse cost is spread instead of immediate. This is the core frontend win.
 - **Effort:** M. **Files:** new `terminal-output-scheduler.ts` (+ spec), `terminal.service.ts`, workspace store read.
 
-### 4. Lossy hidden-output cap (2MB) with warning
+### 4. Lossy hidden-output cap (2MB) with warning — **DONE 2026-06-10 (drops the middle, keeps warning + newest tail)**
 - **Current:** hidden queue from #3 would grow unbounded if an agent dumps 100MB while you look elsewhere; today the equivalent failure is unbounded synchronous parsing.
 - **Change:** in the scheduler, cap each hidden queue at **2MB chars / 4096 chunks**. On overflow: drop the backlog, replace with one warning line (`[skipped hidden output >2MB]`), mark the terminal **stale** (recovery flag for #8). Counters for drops (#6).
 - **Impact:** hard memory bound per terminal; the app can no longer be stalled or OOMed by a noisy background agent.
 - **Effort:** S (inside #3). **Files:** `terminal-output-scheduler.ts`.
 
-### 5. Kill no-op / per-chunk signal fanout
+### 5. Kill no-op / per-chunk signal fanout — **DONE 2026-06-10 (per-agent revision signals + 80ms liveLogs coalescer)**
 - **Current:** `revision.update((m) => ({ ...m, [id]: n+1 }))` per parsed chunk — new object identity wakes **every** subscriber (overview mini-terms, etc.) on **every** chunk of **every** agent.
 - **Change:** replace the map signal with per-agent `WritableSignal<number>` instances (`Map<string, WritableSignal<number>>`, created lazily); consumers subscribe to only their agent's signal. Coalesce bumps to at most once per drain tick for hidden terminals. Audit the split stores for the same pattern (return same reference when nothing changed).
 - **Impact:** Angular effect/CD churn during floods collapses from O(chunks × consumers) to O(visible consumers); cheap and immediate.
 - **Effort:** S. **Files:** `terminal.service.ts`, `stores/*.store.ts` audit, overview mini-term consumer.
 
-### 6. Debug counters in the hot paths
+### 6. Debug counters in the hot paths — **DONE 2026-06-10 (`agent_output_emit`/`agent_scan` perf rows; scheduler counters in dev-panel footer; backend-only rows now rate from exec `calls10s`)**
 - **Current:** DevConsole perf panel exists but has no terminal-pipeline visibility.
 - **Change:** counters on both sides, surfaced in the existing perf panel:
   - Rust: events emitted/sec, pending bytes, peak pending, batches flushed by size vs time.
@@ -88,7 +88,7 @@
 - **Impact:** no context-loss storms at high agent counts; GPU memory scales with visible panes, not total agents.
 - **Effort:** S-M. **Files:** `terminal.service.ts` (`attach`/detach + `loadWebgl`/`disposeWebgl`).
 
-### 10. Push-based git scans — make `agent_changes`/`agent_commits` *called less*, not cached
+### 10. Push-based git scans — make `agent_changes`/`agent_commits` *called less*, not cached — **DONE 2026-06-10 (feat/perf-pipelines; bonus: gitdir watch makes agent-driven commits refresh the UI — they never did before)**
 - **Current (verified):** `watch/mod.rs` emits a dumb ping (`agent://changed` {id}) after debounce; the frontend reacts by **pulling** `agent_changes` (full git2 status with line counts) for that agent — every burst, every agent, regardless of visibility or whether anything user-visible actually changed. Commits are refreshed optimistically after actions even when HEAD didn't move. Startup pulls `loadChanges` for every agent at once. The waste is the ping→pull architecture, not IPC or missing caches.
 - **Change (Rust — the watcher becomes the producer):** in the existing per-agent debounce thread (`watch/mod.rs:68-72`), instead of emitting a ping:
   1. **Scan once at the source.** Run the git2 status scan in Rust right there (global semaphore ~2-3 scans, active agent first; per-worktree serialization is free since each agent already has exactly one debounce thread).
