@@ -31,10 +31,21 @@ describe("PerfStore", () => {
   it("merges backend exec aggregates and derives overhead", () => {
     const s = new PerfStore();
     s.record("git_status", 96, true);
-    s.setExec([{ cmd: "git_status", avgMs: 91, p95Ms: 142, maxMs: 210 }]);
+    s.setExec([{ cmd: "git_status", calls10s: 0, avgMs: 91, p95Ms: 142, maxMs: 210 }]);
     const r = row(s, "git_status")!;
     expect(r.avgExec).toBe(91);
     expect(r.overhead).toBeCloseTo(96 - 91);
+    // frontend sample wins: max(1 invoke, 0 exec calls10s) = 1
+    expect(r.calls10s).toBe(1);
+  });
+
+  it("backend-only rows take their call rate from exec aggregates", () => {
+    const s = new PerfStore();
+    s.setExec([{ cmd: "agent_output_emit", calls10s: 940, avgMs: 0.1, p95Ms: 0.3, maxMs: 1.2 }]);
+    const r = row(s, "agent_output_emit")!;
+    expect(r.calls10s).toBe(940); // not 0 — no frontend invokes exist for pushes
+    expect(r.avgRt).toBeNull();
+    expect(r.avgExec).toBe(0.1);
   });
 
   it("leaves exec/overhead null until a stat is pushed", () => {
@@ -61,7 +72,7 @@ describe("PerfStore", () => {
   it("clear() empties everything", () => {
     const s = new PerfStore();
     s.record("c", 5, true);
-    s.setExec([{ cmd: "c", avgMs: 4, p95Ms: 6, maxMs: 9 }]);
+    s.setExec([{ cmd: "c", calls10s: 1, avgMs: 4, p95Ms: 6, maxMs: 9 }]);
     s.clear();
     expect(s.rows()).toEqual([]);
   });

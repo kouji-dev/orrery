@@ -395,7 +395,10 @@ pub fn agent_watch<R: Runtime>(
         let worktree = svc.get(id)?.worktree;
         let scan_svc = svc.inner().clone();
         watch.watch(app, id, std::path::PathBuf::from(worktree), move || {
-            scan_svc.scan(id)
+            // Why: scans run on the watcher thread, not in a command — timing
+            // them here is what keeps backend scan cost/rate visible in the
+            // perf table now that the frontend no longer pulls agent_changes.
+            crate::perf::timed("agent_scan", || scan_svc.scan(id))
         });
         Ok(())
     })

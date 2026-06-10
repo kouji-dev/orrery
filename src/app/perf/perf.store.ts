@@ -18,6 +18,8 @@ export interface PerfSample {
 /** Backend exec aggregate for one command, pushed on `perf://stats`. */
 export interface ExecAgg {
   cmd: string;
+  /** backend 10s call rate — the only rate source for push/emit rows that have no frontend invokes. */
+  calls10s: number;
   avgMs: number;
   p95Ms: number;
   maxMs: number;
@@ -108,7 +110,9 @@ export class PerfStore {
       const avgExec = ex ? ex.avgMs : null;
       out.push({
         cmd,
-        calls10s: win.length,
+        // Why max: frontend-invoked commands count their own round-trips, but
+        // backend-only rows (event emits, watcher scans) only the backend sees.
+        calls10s: Math.max(win.length, ex?.calls10s ?? 0),
         avgRt,
         p95Rt: ms.length ? percentile(ms, 0.95) : null,
         maxRt: ms.length ? ms[ms.length - 1] : null,
