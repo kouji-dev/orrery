@@ -114,9 +114,15 @@ export class AgentsStore {
   watch(id: string): Promise<void> {
     return this.bridge.invoke(Commands.AgentWatch, { id });
   }
-  /** Subscribe to worktree-changed events. Resolves an unsubscribe fn. */
-  onWorktreeChanged(cb: (id: string) => void): Promise<() => void> {
-    return this.bridge.on<{ id: string }>(Events.AgentChanged, (p) => cb(p.id));
+  /** Subscribe to backend worktree scan pushes — the watcher computes the
+   *  changes + HEAD oid and ships them with the notification (no pull needed). */
+  onScan(
+    cb: (p: { id: string; changes: AgentFile[]; head: string | null }) => void,
+  ): Promise<() => void> {
+    return this.bridge.on<{ id: string; changes: AgentFile[]; head: string | null }>(
+      Events.AgentChanged,
+      cb,
+    );
   }
 
   /** Launch the agent's tool process (PTY-streamed), sized to the visible terminal.

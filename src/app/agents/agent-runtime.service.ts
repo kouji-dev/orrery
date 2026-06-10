@@ -104,14 +104,13 @@ export class AgentRuntimeService {
       )
       .catch(() => {});
 
-    // Watch EVERY agent's worktree and eagerly scan only its CHANGES (cheap, and
-    // the overview badges/kanban/sidebar need them without opening the agent).
+    // Watch EVERY agent's worktree — the backend watcher runs the initial scan
+    // and pushes results (changes + HEAD), so no eager pull is needed here.
     // Tree + commits stay lazy — ensured on first open below.
     effect(() => {
       for (const a of this.agentsStore.all()) {
         if (this.watched.has(a.id)) continue;
         this.watched.add(a.id);
-        this.work.loadChanges(a.id);
         void this.agentsStore.watch(a.id).catch(() => {});
       }
     });
@@ -124,7 +123,7 @@ export class AgentRuntimeService {
       this.work.ensureCommits(ag.id);
     });
     void this.agentsStore
-      .onWorktreeChanged((id) => this.work.onWorktreeChanged(id))
+      .onScan((p) => this.work.applyScan(p.id, p.changes, p.head))
       .catch(() => {});
 
     // live agent state from the terminal title (spinner = working, ✋ = needs input)

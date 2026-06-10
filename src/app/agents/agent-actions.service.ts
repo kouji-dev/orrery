@@ -81,8 +81,8 @@ export class AgentActionsService {
       .commit(id, message, paths)
       .then(() => {
         this.ui.flash("committed in " + (ag?.name ?? id));
-        this.work.loadChanges(id);
-        this.work.refreshCommits(id);
+        // changes badge + commits feed refresh arrive via the watcher push —
+        // the commit touches the worktree's gitdir, which is watched.
         void this.projects.refreshCommits(this.projects.all().map((p) => p.id));
         if (ag) this.runtime.patchRuntime(id, { commits: ag.commits + 1 });
       })
@@ -94,7 +94,7 @@ export class AgentActionsService {
       .discard(id, paths)
       .then(() => {
         this.ui.flash("discarded changes");
-        this.work.loadChanges(id);
+        // the checkout rewrites worktree files → the watcher pushes the rescan
       })
       .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "discard failed"));
   }
