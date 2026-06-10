@@ -246,7 +246,6 @@ impl AgentService {
     /// A missing agent (mid-removal race) scans empty — its watcher is about to
     /// be dropped anyway. Composition of tested pieces; covered end-to-end by
     /// the watch integration test.
-    #[allow(dead_code)] // Why: wired up in the next commit (watch push migration)
     pub fn scan(&self, id: Uuid) -> crate::watch::ScanResult {
         let Ok(rec) = self.get(id) else {
             return crate::watch::ScanResult {

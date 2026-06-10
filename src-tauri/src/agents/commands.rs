@@ -382,7 +382,8 @@ pub fn agent_resize(
     })
 }
 
-/// Start watching an agent's worktree (replaces any previous watch); emits `agent://changed`.
+/// Start watching an agent's worktree (replaces any previous watch). The
+/// watcher scans backend-side and pushes `agent://changed` {id, changes, head}.
 #[tauri::command(async)]
 pub fn agent_watch<R: Runtime>(
     app: AppHandle<R>,
@@ -392,7 +393,10 @@ pub fn agent_watch<R: Runtime>(
 ) -> AppResult<()> {
     crate::perf::timed("agent_watch", || {
         let worktree = svc.get(id)?.worktree;
-        watch.watch(app, id, std::path::PathBuf::from(worktree));
+        let scan_svc = svc.inner().clone();
+        watch.watch(app, id, std::path::PathBuf::from(worktree), move || {
+            scan_svc.scan(id)
+        });
         Ok(())
     })
 }
