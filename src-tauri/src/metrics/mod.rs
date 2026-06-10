@@ -1,10 +1,22 @@
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use uuid::Uuid;
 
 pub mod commands;
+
+/// One-shot freshness window: the push loop refreshes every 3s while agents
+/// run, so a snapshot at most one period old is as good as a fresh sweep.
+pub const SNAPSHOT_FRESH: Duration = Duration::from_secs(3);
+
+/// Scoped refreshes between full discovery sweeps. Scoped refreshes only touch
+/// pids already known to belong to our subtrees, so brand-new children (agent
+/// tools spawn workers constantly) are invisible until the next full sweep —
+/// discovery lag = DISCOVERY_EVERY × cadence (3 s active → ~30 s; 12 s idle → ~120 s).
+const DISCOVERY_EVERY: u32 = 10;
 
 /// One subtree's roll-up: an agent's process tree, or the app's own tree.
 /// `id` is the agent uuid string (or "app"); `label` is the agent name (or "Orrery").
@@ -45,6 +57,8 @@ pub struct MetricsSampler {
     /// (100% = one full core), so we divide the subtree sum by this to get a
     /// machine-relative % that matches Task Manager.
     cpu_count: usize,
+    /// Scoped refreshes since the last full sweep (drives `DISCOVERY_EVERY`).
+    scoped_streak: u32,
 }
 
 impl Default for MetricsSampler {
@@ -61,15 +75,43 @@ impl MetricsSampler {
         Self {
             sys: System::new(),
             cpu_count,
+            scoped_streak: 0,
         }
     }
 
-    /// Refresh per-process cpu + memory. sysinfo derives cpu% from the delta
-    /// between two refreshes, so the first call after construction yields 0% cpu —
-    /// callers do one warm-up refresh before the first real sample.
+    /// Full sweep: refresh cpu + memory for EVERY process on the machine. sysinfo
+    /// derives cpu% from the delta between two refreshes, so the first call after
+    /// construction yields 0% cpu — callers do one warm-up refresh before the
+    /// first real sample. Costs hundreds of ms on a busy box, so steady-state
+    /// ticks use `refresh_scoped` and only fall back here for discovery.
     pub fn refresh(&mut self) {
+        self.scoped_streak = 0;
         self.sys.refresh_processes_specifics(
             ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing().with_cpu().with_memory(),
+        );
+    }
+
+    /// Refresh only the subtrees we report on: each root (app pid + agent pids)
+    /// plus every descendant already known from the last sweep. Falls back to a
+    /// full sweep when a root is missing from the map (fresh agent — its children
+    /// are unknown) or every `DISCOVERY_EVERY` calls (so children spawned since
+    /// the last sweep get picked up). Dead pids in the scoped list are dropped by
+    /// sysinfo (`remove_dead = true`), so the set self-cleans between sweeps.
+    pub fn refresh_scoped(&mut self, roots: &[u32]) {
+        let map = self.process_map();
+        if needs_full_sweep(roots, &map, self.scoped_streak) {
+            self.refresh();
+            return;
+        }
+        self.scoped_streak += 1;
+        let pids: Vec<Pid> = subtree_pids(roots, &map)
+            .into_iter()
+            .map(Pid::from_u32)
+            .collect();
+        self.sys.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&pids),
             true,
             ProcessRefreshKind::nothing().with_cpu().with_memory(),
         );
@@ -144,6 +186,127 @@ fn subtree_metric(
         cpu: cpu / cores,
         mem_bytes,
     }
+}
+
+/// Pure: collect `roots` plus every known descendant (the pids whose parent
+/// chain reaches a root). Roots are included even when absent from the map so a
+/// scoped refresh still adds a just-started process. Mirrors
+/// `aggregate_subtree`'s walk; kept separate so the scoped-refresh pid list is
+/// testable from synthetic data.
+fn subtree_pids(roots: &[u32], map: &HashMap<u32, ProcSample>) -> Vec<u32> {
+    let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
+    for (pid, s) in map {
+        if let Some(parent) = s.parent {
+            children.entry(parent).or_default().push(*pid);
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut stack: Vec<u32> = roots.to_vec();
+    while let Some(pid) = stack.pop() {
+        if !seen.insert(pid) {
+            continue;
+        }
+        out.push(pid);
+        if let Some(kids) = children.get(&pid) {
+            stack.extend(kids.iter().copied());
+        }
+    }
+    out
+}
+
+/// Replace each agent row's label (defaulted to the uuid string) with the
+/// agent's display name. The "app" row keeps its fixed label.
+pub fn apply_labels(metrics: &mut SystemMetrics, labels: &HashMap<Uuid, String>) {
+    for p in &mut metrics.procs {
+        if p.id == "app" {
+            continue;
+        }
+        if let Ok(uuid) = Uuid::parse_str(&p.id) {
+            if let Some(name) = labels.get(&uuid) {
+                p.label = name.clone();
+            }
+        }
+    }
+}
+
+/// Warm sampler + last labelled snapshot, shared (managed state + a clone in
+/// the push loop) between the loop and the one-shot `system_metrics` command.
+/// The loop keeps the sampler warm and the snapshot fresh; the command serves
+/// the cached snapshot when recent and otherwise does a single scoped refresh —
+/// no cold sampler init, no double sweep, no warm-up sleep on the command path.
+#[derive(Clone)]
+pub struct SharedSampler {
+    inner: Arc<Mutex<SharedState>>,
+}
+
+struct SharedState {
+    sampler: MetricsSampler,
+    snapshot: Option<(SystemMetrics, Instant)>,
+}
+
+impl Default for SharedSampler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SharedSampler {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(SharedState {
+                sampler: MetricsSampler::new(),
+                snapshot: None,
+            })),
+        }
+    }
+
+    /// One full sweep so the next sample has a cpu delta to diff against
+    /// (sysinfo's first refresh reads 0% cpu). Run once before the loop starts.
+    pub fn warm_up(&self) {
+        self.inner.lock().unwrap().sampler.refresh();
+    }
+
+    /// The cached snapshot, if one exists and is at most `max_age` old.
+    pub fn cached(&self, max_age: Duration) -> Option<SystemMetrics> {
+        let s = self.inner.lock().unwrap();
+        s.snapshot
+            .as_ref()
+            .and_then(|(m, at)| (at.elapsed() <= max_age).then(|| m.clone()))
+    }
+
+    /// One scoped refresh on the warm sampler, then sample + label the app and
+    /// agent subtrees. Caches the result for `cached` readers.
+    pub fn refresh_and_sample(
+        &self,
+        app_pid: u32,
+        pids: &[(Uuid, u32)],
+        labels: &HashMap<Uuid, String>,
+    ) -> SystemMetrics {
+        let mut s = self.inner.lock().unwrap();
+        let mut roots: Vec<u32> = Vec::with_capacity(pids.len() + 1);
+        roots.push(app_pid);
+        roots.extend(pids.iter().map(|(_, pid)| *pid));
+        s.sampler.refresh_scoped(&roots);
+        let mut m = s.sampler.sample(app_pid, pids);
+        apply_labels(&mut m, labels);
+        s.snapshot = Some((m.clone(), Instant::now()));
+        m
+    }
+
+    #[cfg(test)]
+    fn put_snapshot(&self, m: SystemMetrics) {
+        self.inner.lock().unwrap().snapshot = Some((m, Instant::now()));
+    }
+}
+
+/// Returns `true` when a full discovery sweep is required: either a root pid is
+/// absent from the current process map (fresh agent whose children are unknown),
+/// or the scoped streak has reached `DISCOVERY_EVERY` (pick up children spawned
+/// since the last sweep). Pure — no side-effects, fully unit-testable.
+fn needs_full_sweep(roots: &[u32], map: &HashMap<u32, ProcSample>, streak: u32) -> bool {
+    roots.iter().any(|r| !map.contains_key(r)) || streak >= DISCOVERY_EVERY
 }
 
 /// Pure roll-up: sum cpu% and memory over `root` and every process whose ancestry
@@ -333,5 +496,121 @@ mod tests {
         assert!((row.cpu - (21.0 / 20.0)).abs() < f32::EPSILON);
         // memory is NOT divided by cores.
         assert_eq!(row.mem_bytes, 1000 + 1100);
+    }
+
+    // The scoped-refresh pid list is the roots + every known descendant —
+    // unrelated processes (99) are excluded; that's the whole point of scoping.
+    #[test]
+    fn subtree_pids_collects_roots_and_descendants_only() {
+        let m = fixture();
+        // node 2's branch (2 + 4) plus root 10's branch (10 + 11).
+        let mut pids = subtree_pids(&[2, 10], &m);
+        pids.sort_unstable();
+        assert_eq!(pids, vec![2, 4, 10, 11]);
+    }
+
+    // A root absent from the map is still listed (a just-started process must be
+    // picked up by the scoped refresh) and overlapping roots don't duplicate.
+    #[test]
+    fn subtree_pids_keeps_unknown_roots_and_dedups() {
+        let m = fixture();
+        let mut pids = subtree_pids(&[10, 11, 555], &m);
+        pids.sort_unstable();
+        assert_eq!(pids, vec![10, 11, 555]);
+    }
+
+    #[test]
+    fn apply_labels_renames_agent_rows_only() {
+        let id = Uuid::new_v4();
+        let mut m = SystemMetrics {
+            total_cpu: 0.0,
+            total_mem_bytes: 0,
+            procs: vec![
+                ProcMetric {
+                    id: "app".into(),
+                    label: "Orrery".into(),
+                    cpu: 0.0,
+                    mem_bytes: 0,
+                },
+                ProcMetric {
+                    id: id.to_string(),
+                    label: id.to_string(),
+                    cpu: 0.0,
+                    mem_bytes: 0,
+                },
+            ],
+        };
+        let labels: HashMap<Uuid, String> = [(id, "nova".to_string())].into();
+        apply_labels(&mut m, &labels);
+        assert_eq!(m.procs[0].label, "Orrery");
+        assert_eq!(m.procs[1].label, "nova");
+    }
+
+    // --- needs_full_sweep predicate ------------------------------------------
+
+    // An unknown root (not in the process map) always forces a full sweep,
+    // regardless of streak position.
+    #[test]
+    fn sweep_predicate_unknown_root_forces_full_sweep() {
+        let m = fixture();
+        // pid 999 is not in fixture — unknown root → must sweep.
+        assert!(needs_full_sweep(&[999], &m, 0));
+        // Also true mid-streak.
+        assert!(needs_full_sweep(&[999], &m, 5));
+    }
+
+    // When all roots are known and the streak is below the threshold, a scoped
+    // refresh is sufficient (predicate returns false).
+    #[test]
+    fn sweep_predicate_known_roots_below_streak_is_scoped() {
+        let m = fixture();
+        // streak 0..9 with all-known roots → scoped is fine.
+        for streak in 0..DISCOVERY_EVERY {
+            assert!(
+                !needs_full_sweep(&[1, 10], &m, streak),
+                "expected scoped at streak={streak}"
+            );
+        }
+    }
+
+    // When the streak reaches DISCOVERY_EVERY the predicate flips to full-sweep
+    // so that newly-spawned children get discovered.
+    #[test]
+    fn sweep_predicate_streak_at_threshold_forces_full_sweep() {
+        let m = fixture();
+        assert!(needs_full_sweep(&[1, 10], &m, DISCOVERY_EVERY));
+        // And beyond (shouldn't normally happen, but guard anyway).
+        assert!(needs_full_sweep(&[1, 10], &m, DISCOVERY_EVERY + 1));
+    }
+
+    // After a full sweep the MetricsSampler resets scoped_streak to 0, so the
+    // next DISCOVERY_EVERY − 1 calls are scoped again.
+    #[test]
+    fn sweep_streak_resets_after_full_sweep() {
+        let mut sampler = MetricsSampler::new();
+        // Drive scoped_streak to DISCOVERY_EVERY − 1 manually via the field
+        // (we only test the reset, not real process data).
+        sampler.scoped_streak = DISCOVERY_EVERY - 1;
+        // refresh() is the full-sweep path; it must reset the streak.
+        sampler.refresh();
+        assert_eq!(sampler.scoped_streak, 0);
+    }
+
+    // The one-shot command path: a fresh snapshot is served from cache; an aged
+    // window (ZERO) misses, and an empty cache misses.
+    #[test]
+    fn shared_sampler_serves_only_fresh_snapshots() {
+        let shared = SharedSampler::new();
+        assert!(shared.cached(SNAPSHOT_FRESH).is_none());
+
+        let snap = SystemMetrics {
+            total_cpu: 1.5,
+            total_mem_bytes: 42,
+            procs: vec![],
+        };
+        shared.put_snapshot(snap.clone());
+        assert_eq!(shared.cached(SNAPSHOT_FRESH), Some(snap));
+        // an elapsed() of any real duration exceeds a ZERO freshness window.
+        assert!(shared.cached(Duration::ZERO).is_none());
     }
 }

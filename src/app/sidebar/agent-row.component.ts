@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Agent } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { DragService } from "../shared/drag.service";
 import { UiStore } from "../ui/ui.store";
@@ -36,7 +37,7 @@ import { fmtDur } from "../utils";
           <span style="width:5px;height:5px;border-radius:50%;background:var(--st-blocked);flex:none"></span>
         }
         <app-tool-badge [tool]="ag.tool" [size]="14" />
-        <span class="tnum" style="margin-left:auto;font-size:9.5px;color:var(--ink-4)">{{ ag.elapsed ? fmt(ag.elapsed) : '—' }}</span>
+        <span class="tnum" style="margin-left:auto;font-size:9.5px;color:var(--ink-4)">{{ elapsed() ? fmt(elapsed()) : '—' }}</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px;padding-left:15px">
         <app-icon name="branch" size="sm" [px]="11" color="var(--ink-4)" />
@@ -77,6 +78,10 @@ export class AgentRowComponent {
 
   readonly fmt = fmtDur;
   private work = inject(AgentWorkStore);
+  private runtime = inject(AgentRuntimeService);
+  // derived from the shared clock — only this text re-renders on a tick, the
+  // agent input (and the agents array behind it) keeps its identity
+  readonly elapsed = computed(() => this.runtime.elapsedFor(this.agent().id));
   readonly ch = computed(() => this.work.changesFor(this.agent().id));
   readonly totAdd = computed(() => this.ch().data.reduce((s, f) => s + f.add, 0));
   readonly totDel = computed(() => this.ch().data.reduce((s, f) => s + f.del, 0));

@@ -369,6 +369,17 @@ pub fn agent_decide(
     })
 }
 
+/// Tell the output mux which agent's terminal is focused (`None` = none): the
+/// focused agent's PTY output drains every ~16ms frame (typing echo stays
+/// snappy) while unfocused agents coalesce losslessly at a ~150ms cadence.
+#[tauri::command(async)]
+pub fn agent_focus(rt: State<'_, RuntimeService>, id: Option<Uuid>) -> AppResult<()> {
+    crate::perf::timed("agent_focus", || {
+        rt.focus(id);
+        Ok(())
+    })
+}
+
 /// Resize the agent's PTY to match the visible terminal (cols × rows).
 #[tauri::command(async)]
 pub fn agent_resize(
@@ -382,7 +393,8 @@ pub fn agent_resize(
     })
 }
 
-/// Start watching an agent's worktree (replaces any previous watch); emits `agent://changed`.
+/// Start watching an agent's worktree (replaces any previous watch). The
+/// watcher scans backend-side and pushes `agent://changed` {id, changes, head}.
 #[tauri::command(async)]
 pub fn agent_watch<R: Runtime>(
     app: AppHandle<R>,
@@ -392,7 +404,13 @@ pub fn agent_watch<R: Runtime>(
 ) -> AppResult<()> {
     crate::perf::timed("agent_watch", || {
         let worktree = svc.get(id)?.worktree;
-        watch.watch(app, id, std::path::PathBuf::from(worktree));
+        let scan_svc = svc.inner().clone();
+        watch.watch(app, id, std::path::PathBuf::from(worktree), move || {
+            // Why: scans run on the watcher thread, not in a command — timing
+            // them here is what keeps backend scan cost/rate visible in the
+            // perf table now that the frontend no longer pulls agent_changes.
+            crate::perf::timed("agent_scan", || scan_svc.scan(id))
+        });
         Ok(())
     })
 }

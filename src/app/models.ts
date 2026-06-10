@@ -98,6 +98,9 @@ export interface Agent {
   /** The tool's CLI session id (captured from a hook), for `--resume <id>`. */
   sessionId?: string;
   commits: number;
+  /** Persisted placeholder (the backend sends 0). LIVE elapsed is derived in
+   *  the UI from AgentRuntimeService.elapsedFor() — never patched in here, so
+   *  the clock can tick without churning agent record identities. */
   elapsed: number;
   progress: number;
   /** Live: process is producing output right now (recent PTY activity / title spinner). */
@@ -261,7 +264,7 @@ export interface SystemMetrics {
   procs: ProcMetric[];
 }
 
-// A cost snapshot pushed on `system://cost` (~every 60s). `available` is false
+// A cost snapshot pushed on `system://cost` (~every 5 minutes). `available` is false
 // when ccusage could not run — the status bar then hides the readout.
 export interface CostSnapshot {
   totalCost: number;

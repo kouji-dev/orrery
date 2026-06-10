@@ -196,7 +196,8 @@ app-root {
   /* position:relative WITHOUT z-index: stays the containing block for absolute
      descendants but does NOT create a stacking context. A z-index here would trap
      in-shell popovers (e.g. the status-bar resources popover, the workspace
-     dropdown) below the root-level fixed FABs (tweaks/dev, z-index 70). The bg
+     dropdown) below the root-level fixed FABs (tweaks/dev anchor-rail, z-index 90;
+     popovers that must beat them, like the resources popover, use 95). The bg
      layers sit at z-index:-1 so the shell still paints above them. */
   position: relative;
   height: 100vh;

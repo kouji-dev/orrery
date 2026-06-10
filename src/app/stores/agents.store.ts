@@ -1,5 +1,5 @@
 import { inject, Injectable } from "@angular/core";
-import { BRIDGE, Commands, Events } from "../data-source/bridge";
+import { AgentOutputEntry, BRIDGE, Commands, Events } from "../data-source/bridge";
 import {
   ActivityKind,
   Agent,
@@ -15,8 +15,9 @@ import { createEntityStore } from "../state/entity-store";
 
 /**
  * Backend-backed source of truth for agent identity/config/status.
- * Live runtime metrics (elapsed/working/files) are an overlay kept in
- * AgentRuntimeService and merged over these records.
+ * Live runtime metrics (working/needsInput/files) are an overlay kept in
+ * AgentRuntimeService and merged over these records; elapsed time is derived
+ * there from a shared clock (elapsedFor) and never written into the records.
  */
 @Injectable({ providedIn: "root" })
 export class AgentsStore {
@@ -114,9 +115,15 @@ export class AgentsStore {
   watch(id: string): Promise<void> {
     return this.bridge.invoke(Commands.AgentWatch, { id });
   }
-  /** Subscribe to worktree-changed events. Resolves an unsubscribe fn. */
-  onWorktreeChanged(cb: (id: string) => void): Promise<() => void> {
-    return this.bridge.on<{ id: string }>(Events.AgentChanged, (p) => cb(p.id));
+  /** Subscribe to backend worktree scan pushes — the watcher computes the
+   *  changes + HEAD oid and ships them with the notification (no pull needed). */
+  onScan(
+    cb: (p: { id: string; changes: AgentFile[]; head: string | null }) => void,
+  ): Promise<() => void> {
+    return this.bridge.on<{ id: string; changes: AgentFile[]; head: string | null }>(
+      Events.AgentChanged,
+      cb,
+    );
   }
 
   /** Launch the agent's tool process (PTY-streamed), sized to the visible terminal.
@@ -150,9 +157,18 @@ export class AgentsStore {
   resize(id: string, rows: number, cols: number): Promise<void> {
     return this.bridge.invoke(Commands.AgentResize, { id, rows, cols });
   }
-  /** Subscribe to streamed process output. */
-  onOutput(cb: (id: string, chunk: string) => void): Promise<() => void> {
-    return this.bridge.on<{ id: string; chunk: string }>(Events.AgentOutput, (p) => cb(p.id, p.chunk));
+  /** Tell the backend output mux which agent's terminal is focused (null =
+   *  none): the focused agent's output ships every ~16ms frame (typing echo
+   *  stays snappy); everyone else coalesces at a slower ~150ms cadence. */
+  focus(id: string | null): Promise<void> {
+    return this.bridge.invoke(Commands.AgentFocus, { id });
+  }
+  /** Subscribe to streamed process output. The backend multiplexes EVERY
+   *  agent's PTY output into one `agent://output` event per ~16ms frame; the
+   *  payload is an array with one coalesced `{id, chunk, seq}` entry per agent
+   *  that produced output during the frame. */
+  onOutput(cb: (entries: AgentOutputEntry[]) => void): Promise<() => void> {
+    return this.bridge.on<AgentOutputEntry[]>(Events.AgentOutput, cb);
   }
   /** Subscribe to process-exit events. */
   onExit(cb: (id: string) => void): Promise<() => void> {

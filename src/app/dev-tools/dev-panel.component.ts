@@ -6,6 +6,7 @@ import {
   OnDestroy,
   ViewEncapsulation,
   computed,
+  effect,
   inject,
   isDevMode,
   signal,
@@ -16,6 +17,7 @@ import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { PerfStore, PerfRow, PERF_WINDOW_MS } from "../perf/perf.store";
+import { setSchedulerStatsEnabled, terminalSchedulerStats } from "../terminal-output-scheduler";
 import { Agent, AgentStatus, Project } from "../models";
 
 type Sort = { key: string; dir: number };
@@ -74,8 +76,8 @@ type Sort = { key: string; dir: number };
                 </tr></thead>
                 <tbody>
                   @for (s of sortedPerf(); track s.cmd) {
-                    <tr class="dvc-row" [class.open]="openCmd() === s.cmd" (click)="dev && openCmd.set(openCmd() === s.cmd ? null : s.cmd)">
-                      <td><span class="dvc-lead">@if (dev) { <svg class="dvc-tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg> }<span class="dvc-nm">{{ s.cmd }}</span></span></td>
+                    <tr class="dvc-row" [class.open]="openCmd() === s.cmd" [class.stale]="s.stale" (click)="dev && openCmd.set(openCmd() === s.cmd ? null : s.cmd)">
+                      <td><span class="dvc-lead">@if (dev) { <svg class="dvc-tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg> }<span class="dvc-nm">{{ s.cmd }}</span>@if (s.stale) { <span class="dvc-stale">(stale)</span> }</span></td>
                       <td class="tnum" style="color:var(--ink-2)">{{ s.calls10s }}</td>
                       <td [class]="'dvc-lat ' + lat(s.avgRt) + ' tnum'"><span class="v">{{ ms(s.avgRt) }}</span></td>
                       <td [class]="'dvc-lat ' + lat(s.avgExec) + ' tnum'"><span class="v">{{ ms(s.avgExec) }}</span></td>
@@ -148,7 +150,7 @@ type Sort = { key: string; dir: number };
                     <td><span class="dvc-pchip"><span class="dvc-pn">{{ proj(ag.projectId).name }}</span><span class="dvc-pi" [style.background]="'color-mix(in oklch,' + proj(ag.projectId).color + ',transparent 82%)'"><app-icon [name]="proj(ag.projectId).icon" size="sm" [px]="11" [color]="proj(ag.projectId).color" /></span></span></td>
                     <td><span class="dvc-branch">{{ ag.branch.replace('agent/', '') }}</span></td>
                     <td class="tnum">{{ ag.commits }}</td>
-                    <td class="tnum" style="color:var(--ink-3)">{{ ag.elapsed ? fmtDur(ag.elapsed) : '—' }}</td>
+                    <td class="tnum" style="color:var(--ink-3)">{{ elapsed(ag) ? fmtDur(elapsed(ag)) : '—' }}</td>
                     <td class="tnum"><span class="dvc-mtr"><i [style.width.%]="pct(ag.progress)" [style.background]="statusColor(ag.status)"></i></span>{{ pct(ag.progress) }}%</td>
                   </tr>
                   @if (openAg() === ag.id) {
@@ -223,6 +225,10 @@ type Sort = { key: string; dir: number };
             <span class="dvc-leg"><span class="dvc-sw r"></span>&gt;100ms · err</span>
             <span class="dvc-sp"></span>
             <span class="tnum">{{ perfSummary() }}</span>
+            <span class="tnum" title="terminal write scheduler: queued chars · peak · dropped backlogs">term {{ termStats().queuedChars }} · pk {{ termStats().peakQueuedChars }} · drop {{ termStats().droppedBacklogs }}</span>
+            @if (ptyLine()) {
+              <span class="tnum" title="batched PTY output: throughput · emit rate · avg batch size">{{ ptyLine() }}</span>
+            }
           }
           @if (tab() === 'agents') {
             <span class="tnum">{{ agents().length }} agents · <span style="color:var(--st-running)">{{ cnt('running') }} running</span> · <span style="color:var(--st-blocked)">{{ cnt('blocked') }} need you</span> · {{ cnt('waiting') + cnt('queued') }} waiting · {{ cnt('done') }} done</span>
@@ -299,6 +305,8 @@ type Sort = { key: string; dir: number };
 .dvc-row{cursor:pointer;transition:background .1s;}
 .dvc-row:hover{background:var(--panel-2);}
 .dvc-row.open{background:var(--panel-2);}
+.dvc-row.stale{opacity:.45;}
+.dvc-stale{color:var(--ink-4);font-size:10px;flex:none;}
 .dvc-tw{width:11px;height:11px;flex:none;color:var(--ink-4);transition:transform .15s;}
 .dvc-row.open .dvc-tw{transform:rotate(90deg);color:var(--accent);}
 .dvc-lead{display:flex;align-items:center;gap:8px;color:var(--ink);font-weight:500;}
@@ -379,11 +387,25 @@ type Sort = { key: string; dir: number };
 })
 export class DevPanelComponent implements OnDestroy {
   readonly perf = inject(PerfStore);
+  /** Live terminal write-scheduler counters (PTY pipeline visibility). */
+  readonly termStats = terminalSchedulerStats;
+  /** Batched-PTY throughput line: KB/s · emit rate · avg batch size. Volume is
+   *  what batching optimizes, so rate alone (calls/10s) undersells the row. */
+  readonly ptyLine = computed(() => {
+    const r = this.perf.rows().find((x) => x.cmd === "agent_output_emit");
+    if (!r?.bytes10s || !r.calls10s) return null;
+    const kbs = r.bytes10s / 10 / 1024;
+    const rate = Math.round(r.calls10s / 10);
+    const batch = Math.round(r.bytes10s / r.calls10s);
+    return `pty ${kbs >= 100 ? Math.round(kbs) : kbs.toFixed(1)} KB/s · ${rate} ev/s · ${batch} B/batch`;
+  });
   private readonly runtime = inject(AgentRuntimeService);
   private readonly projectsStore = inject(ProjectsStore);
   private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly dev = isDevMode();
+  /** Panel visibility; a constructor effect mirrors it into the scheduler
+   *  stats gate (collect only while the panel is open). */
   readonly open = signal(false);
   readonly tab = signal<"perf" | "agents" | "projects">("perf");
   readonly sort = signal<Sort>({ key: "rt", dir: -1 });
@@ -407,6 +429,8 @@ export class DevPanelComponent implements OnDestroy {
   private copiedTo?: ReturnType<typeof setTimeout>;
 
   constructor() {
+    // gate the terminal write-scheduler stats collector on panel visibility
+    effect(() => setSchedulerStatsEnabled(this.open()));
     // age out the 10s window while the panel is open
     this.tickIv = setInterval(() => {
       if (this.open() && this.tab() === "perf") this.perf.tick();
@@ -415,6 +439,7 @@ export class DevPanelComponent implements OnDestroy {
   ngOnDestroy() {
     clearInterval(this.tickIv);
     clearTimeout(this.copiedTo);
+    setSchedulerStatsEnabled(false);
   }
 
   @HostListener("document:keydown.escape") onEsc() {
@@ -517,6 +542,8 @@ export class DevPanelComponent implements OnDestroy {
     arr.sort((a, b) => {
       if (key === "status") return (this.SPRIO[a.status] - this.SPRIO[b.status]) * dir;
       if (key === "project") return a.projectId < b.projectId ? -dir : dir;
+      // live elapsed comes from the runtime clock, not the Agent record
+      if (key === "elapsed") return (this.elapsed(a) - this.elapsed(b)) * dir;
       const av = (a as unknown as Record<string, unknown>)[key];
       const bv = (b as unknown as Record<string, unknown>)[key];
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
@@ -526,6 +553,9 @@ export class DevPanelComponent implements OnDestroy {
   });
   clickASort(k: string) {
     this.aSort.update((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: 1 }));
+  }
+  elapsed(ag: Agent): number {
+    return this.runtime.elapsedFor(ag.id);
   }
   attn(ag: Agent): boolean {
     return ag.status === "blocked" || !!ag.needsInput || (ag.pending ?? []).some((p) => p.kind === "permission" || p.kind === "decision");

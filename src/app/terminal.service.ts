@@ -1,4 +1,4 @@
-import { inject, Injectable, OnDestroy, signal } from "@angular/core";
+import { inject, Injectable, OnDestroy, signal, WritableSignal } from "@angular/core";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { ISearchOptions, SearchAddon } from "@xterm/addon-search";
@@ -7,6 +7,11 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { ITheme, Terminal } from "@xterm/xterm";
 import { AgentsStore } from "./stores/agents.store";
+import {
+  discardTerminalQueue,
+  flushTerminalQueue,
+  writeScheduled,
+} from "./terminal-output-scheduler";
 
 interface TermHandle {
   term: Terminal;
@@ -15,6 +20,8 @@ interface TermHandle {
   ro?: ResizeObserver;
   /** WebGL renderer is loaded once, after the terminal is first opened in the DOM. */
   webglLoaded?: boolean;
+  /** Focus listener is hooked once, after the terminal first has a textarea (post-open). */
+  focusHooked?: boolean;
 }
 
 const MONO =
@@ -40,18 +47,47 @@ export class TerminalService implements OnDestroy {
     for (const h of this.handles.values()) h.term.options.theme = theme;
   }
 
-  // Per-agent revision counter, bumped AFTER xterm finishes parsing each write so
-  // the buffer is current when read. Lets signal consumers (e.g. the overview
-  // mini-term reading `tail()`) react to live terminal output.
-  private revision = signal<Record<string, number>>({});
-  /** Read-only revision map — bumps per agent id whenever its buffer changes. */
-  readonly rev = this.revision.asReadonly();
-  /** Current revision for one agent (its value changes on each parsed write). */
+  // Per-agent revision counters, bumped AFTER xterm finishes parsing each write
+  // so the buffer is current when read. Per-agent signals (not one Record map):
+  // one agent's output recomputes only ITS consumers (mini-term), not every
+  // subscriber on every chunk of every agent.
+  private revs = new Map<string, WritableSignal<number>>();
+  private revSignal(id: string): WritableSignal<number> {
+    let s = this.revs.get(id);
+    if (!s) {
+      s = signal(0);
+      this.revs.set(id, s);
+    }
+    return s;
+  }
+  /** Current revision for one agent (reactive — changes on each parsed write). */
   revOf(id: string): number {
-    return this.revision()[id] ?? 0;
+    return this.revSignal(id)();
   }
   private bumpRevision(id: string) {
-    this.revision.update((m) => ({ ...m, [id]: (m[id] ?? 0) + 1 }));
+    this.revSignal(id).update((n) => n + 1);
+  }
+
+  // The agent whose xterm last GAINED focus — i.e. the terminal the user types
+  // in. The backend output mux drains that agent every ~16ms frame (keystroke
+  // echo needs the fast path) and holds everyone else to a ~150ms cadence, so
+  // we tell it on every change. Tracks the last value actually sent: gains are
+  // invoked once per change (no flapping on repeated focus of the same
+  // terminal), and it is cleared only when the focused agent's process exits
+  // or its terminal is disposed — NOT on blur, so the visible terminal keeps
+  // the fast path while the user works elsewhere in the app.
+  private sentFocusId: string | null = null;
+  private setFocused(id: string | null) {
+    if (id === this.sentFocusId) return;
+    const prev = this.sentFocusId;
+    this.sentFocusId = id;
+    void this.agents.focus(id).catch(() => {
+      // Invoke failed — roll back the sentinel so the next call with the same
+      // id is not suppressed by the dedup guard and can retry the IPC. Only if
+      // no newer focus change was sent meanwhile: interleaved invokes settle
+      // out of order, and rolling back then would clobber the newer value.
+      if (this.sentFocusId === id) this.sentFocusId = prev;
+    });
   }
 
   // Per-agent live search result { index (0-based, -1 = none), count } — bumped by
@@ -154,11 +190,16 @@ export class TerminalService implements OnDestroy {
     return h;
   }
 
-  /** Write a raw PTY chunk to the agent's terminal (buffers even if unattached). */
+  /** Write a raw PTY chunk to the agent's terminal. Visible terminals (element
+   *  in the DOM) write direct; hidden ones go through the shared scheduler so
+   *  background floods can't starve the focused terminal or pin memory. */
   write(id: string, chunk: string) {
-    // xterm `write` is async — its callback fires once the chunk is fully parsed,
-    // so the buffer is current when `tail()` runs in the bumped revision's effect.
-    this.handle(id).term.write(chunk, () => this.bumpRevision(id));
+    const h = this.handle(id);
+    writeScheduled(id, h.term, chunk, {
+      visible: h.term.element?.isConnected === true,
+      // xterm `write` cb fires once parsed — buffer is current for tail()
+      onParsed: () => this.bumpRevision(id),
+    });
   }
 
   /**
@@ -193,15 +234,26 @@ export class TerminalService implements OnDestroy {
     if (!h) return;
     this.refit(h);
     void this.agents.resize(id, h.term.rows, h.term.cols).catch(() => {});
+    // Restart while the terminal kept DOM focus: exit() released the mux fast
+    // path, and with no blur in between the textarea's focus listener never
+    // re-fires — re-claim explicitly when we are still the active element.
+    if (h.term.textarea && document.activeElement === h.term.textarea) {
+      this.setFocused(id);
+    }
   }
 
   /** Note in the terminal view that the process ended. */
   exit(id: string) {
+    flushTerminalQueue(id); // queued output lands before the exit notice
     this.handles.get(id)?.term.write("\r\n\x1b[2m▪ process exited\x1b[0m\r\n");
+    // the focused agent stopped → release the mux fast path (clicking back
+    // into the terminal after a restart re-claims it via the focus listener)
+    if (this.sentFocusId === id) this.setFocused(null);
   }
 
   /** A dim, non-output hint (e.g. idle state) without faking program output. */
   hint(id: string, text: string) {
+    flushTerminalQueue(id);
     this.handle(id).term.write(`\x1b[2m${text}\x1b[0m\r\n`);
   }
 
@@ -255,6 +307,15 @@ export class TerminalService implements OnDestroy {
     } else if (h.term.element.parentElement !== el) {
       el.replaceChildren(h.term.element); // move our instance in, evicting any prior one
     }
+    // xterm gains focus → tell the backend mux so this agent's output rides
+    // the per-frame fast path. The textarea only exists once opened, so the
+    // listener is hooked here (once per terminal); the focus() call below
+    // fires it for the initial attach too.
+    if (!h.focusHooked && h.term.textarea) {
+      h.focusHooked = true;
+      h.term.textarea.addEventListener("focus", () => this.setFocused(id));
+    }
+    flushTerminalQueue(id); // catch up on output that queued while hidden
     this.loadWebgl(h); // needs a canvas — only safe once the terminal is in the DOM
     this.refit(h);
     const ro = new ResizeObserver(() => this.refit(h));
@@ -275,7 +336,10 @@ export class TerminalService implements OnDestroy {
   dispose(id: string) {
     const h = this.handles.get(id);
     if (!h) return;
+    if (this.sentFocusId === id) this.setFocused(null); // gone → release the fast path
     h.ro?.disconnect();
+    discardTerminalQueue(id);
+    this.revs.delete(id);
     h.term.dispose();
     this.handles.delete(id);
   }

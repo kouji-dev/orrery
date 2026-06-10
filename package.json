@@ -8,7 +8,9 @@
     "watch": "ng build --watch --configuration development",
     "tauri": "tauri",
     "dev": "tauri dev",
-    "test": "vitest run"
+    "test": "vitest run",
+    "perf:noise": "node tools/perf-smoke/noise.mjs",
+    "perf:assert": "node tools/perf-smoke/assert.mjs"
   },
   "private": true,
   "dependencies": {

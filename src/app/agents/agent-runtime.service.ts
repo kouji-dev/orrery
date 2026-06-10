@@ -3,7 +3,6 @@ import {
   ActivityKind,
   Agent,
   AgentNotification,
-  LogLine,
   PermissionQuestion,
   PermissionSuggestion,
 } from "../models";
@@ -13,20 +12,16 @@ import { AgentWorkStore } from "./agent-work.store";
 import { TerminalService } from "../terminal.service";
 import { UiStore } from "../ui/ui.store";
 import { treeAgentIds } from "../workspace/pane-model";
-import {
-  appendPtyTail,
-  detectTitleStatus,
-  isAwaitingInput,
-  isPermissionPrompt,
-  TitleStatus,
-} from "../utils";
+import { detectTitleStatus, isAwaitingInput, isPermissionPrompt, TitleStatus } from "../utils";
+import { createPtyTailBuffer } from "./pty-tail-buffer";
 
 /**
  * The live runtime layer for agents: a per-agent overlay of transient metrics
- * (elapsed / working / needsInput / worktree scans) merged over the backend
- * record, fed by the PTY output/title/exit streams. Also owns the liveness
- * tick and — for now — the heuristic that raises notifications (this detection
- * moves to the backend in a later step).
+ * (working / needsInput / worktree scans) merged over the backend record, fed
+ * by the PTY output/title/exit streams. Also owns the liveness tick, the
+ * shared elapsed clock (`now` / `elapsedFor`) and — for now — the heuristic
+ * that raises notifications (this detection moves to the backend in a later
+ * step).
  */
 @Injectable({ providedIn: "root" })
 export class AgentRuntimeService {
@@ -45,7 +40,13 @@ export class AgentRuntimeService {
       return o ? { ...a, ...o } : a;
     });
   });
-  readonly liveLogs = signal<Record<string, LogLine[]>>({});
+  // Shared wall clock for elapsed displays. Advanced by the liveness tick ONLY
+  // while at least one agent is running — and it is the ONLY thing the clock
+  // writes. elapsed is deliberately NOT patched into the runtime overlay: that
+  // rebuilt the agents array (new array + merged-object identities) every tick,
+  // re-rendering every agents() consumer ~1.25x/s and already caused one bug
+  // (diff-view refetch). Consumers derive elapsed locally via elapsedFor().
+  readonly now = signal(Date.now());
   readonly toolsAvailable = signal<Record<string, boolean>>({});
   // Per-agent ROLLING list of hook-driven activity entries — each
   // `{detail, event, kind}` where detail is the latest message content scraped
@@ -77,16 +78,23 @@ export class AgentRuntimeService {
 
   // real liveness tracking (when launched, last output) + title-derived state
   private startedAt: Record<string, number> = {};
+  // elapsed seconds captured at process exit — what elapsedFor() reports once
+  // the run is over (cleared on the next start / on dispose)
+  private finalElapsed: Record<string, number> = {};
   private lastOutputAt: Record<string, number> = {};
   private titleStatus: Record<string, TitleStatus> = {};
   private titleAt: Record<string, number> = {};
   // notification edge-tracking + user-stop flag (a stop is not "work finished")
   private prevNeedsInput: Record<string, boolean> = {};
   private stoppingByUser: Record<string, boolean> = {};
+  // liveness tick handle — started lazily when the first agent runs, cleared
+  // when the last running agent exits.  null = not currently scheduled.
+  private tickHandle: ReturnType<typeof setInterval> | null = null;
   // backend hook status (working/idle) — authoritative over PTY title parsing
   private hookState: Record<string, string> = {};
   // agents whose worktree we've already set up watching + an initial scan for
   private watched = new Set<string>();
+  private scanReady = signal(false);
 
   /** Tools driven by native blocking hooks — their permission/question signals
    *  come from the backend, so the PTY heuristic must not also raise them. */
@@ -94,6 +102,13 @@ export class AgentRuntimeService {
   private hookDriven(tool: string): boolean {
     return AgentRuntimeService.HOOK_TOOLS.has(tool);
   }
+
+  // Raw PTY tail, folded LAZILY: a chunk is just appended to a bounded
+  // per-agent ring (no parsing); appendPtyTail runs only when promptTail() is
+  // actually read — at process exit and in the needs-input heuristic for
+  // un-hooked tools (gemini). Hook-driven tools never pay for the fold while
+  // streaming.
+  private tailBuf = createPtyTailBuffer();
 
   constructor() {
     // detect installed CLI tools once
@@ -104,14 +119,15 @@ export class AgentRuntimeService {
       )
       .catch(() => {});
 
-    // Watch EVERY agent's worktree and eagerly scan only its CHANGES (cheap, and
-    // the overview badges/kanban/sidebar need them without opening the agent).
+    // Watch EVERY agent's worktree — the backend watcher runs the initial scan
+    // and pushes results (changes + HEAD), so no eager pull is needed here.
     // Tree + commits stay lazy — ensured on first open below.
     effect(() => {
+      // Why: the backend pushes an initial scan on watch registration — don't register until the onScan listener is live, or that push is lost.
+      if (!this.scanReady()) return;
       for (const a of this.agentsStore.all()) {
         if (this.watched.has(a.id)) continue;
         this.watched.add(a.id);
-        this.work.loadChanges(a.id);
         void this.agentsStore.watch(a.id).catch(() => {});
       }
     });
@@ -124,8 +140,9 @@ export class AgentRuntimeService {
       this.work.ensureCommits(ag.id);
     });
     void this.agentsStore
-      .onWorktreeChanged((id) => this.work.onWorktreeChanged(id))
-      .catch(() => {});
+      .onScan((p) => this.work.applyScan(p.id, p.changes, p.head))
+      .then(() => this.scanReady.set(true))
+      .catch(() => this.scanReady.set(true));
 
     // live agent state from the terminal title (spinner = working, ✋ = needs input)
     this.terminals.onTitle((id, title) => {
@@ -155,22 +172,33 @@ export class AgentRuntimeService {
       .onActivity((id, detail, event, kind) => this.pushActivity(id, detail, event, kind))
       .catch(() => {});
 
-    // stream output: raw bytes → xterm, plain-text tail → liveLogs (mini-term)
+    // stream output: raw bytes → xterm (scheduler-paced), and the SAME raw
+    // string into the lazy tail ring (no folding here — see tailBuf above).
+    // The payload is one multiplexed ~16ms frame: [{id, chunk, seq}, …] with
+    // one coalesced entry per agent that produced output during the frame.
     void this.agentsStore
-      .onOutput((id, chunk) => {
-        this.lastOutputAt[id] = Date.now();
-        this.terminals.write(id, chunk);
-        this.liveLogs.update((m) => {
-          const prev = (m[id] || []).map((l) => l.s);
-          return { ...m, [id]: appendPtyTail(prev, chunk).map((s) => ({ t: "out" as const, s })) };
-        });
+      .onOutput((entries) => {
+        const now = Date.now();
+        for (const { id, chunk } of entries) {
+          // Why: the mux's exit force-drain can land after agent removal —
+          // writing then would recreate (and leak) a disposed terminal.
+          if (!this.agentsStore.all().some((a) => a.id === id)) continue;
+          this.lastOutputAt[id] = now;
+          this.terminals.write(id, chunk);
+          this.tailBuf.push(id, chunk);
+        }
       })
       .catch(() => {});
     void this.agentsStore
       .onExit((id) => this.onExit(id))
       .catch(() => {});
 
-    setInterval(() => this.tick(), 800);
+    // Tick timer is started lazily on the first run transition and cleared when
+    // the last running agent exits (see ensureTicking / stopTicking below).
+    // Arm immediately if there are already running agents (app loaded mid-session).
+    if (this.agentsStore.all().some((a) => a.status === "running")) {
+      this.ensureTicking();
+    }
   }
 
   // ---- runtime overlay ----
@@ -186,6 +214,17 @@ export class AgentRuntimeService {
 
   toolAvailable(id: string): boolean {
     return this.toolsAvailable()[id] !== false;
+  }
+
+  /** Elapsed seconds for an agent, derived from the shared clock: live while
+   *  the process runs (now − startedAt), frozen at the exit-time value after
+   *  it ends, 0 before any run. Reading this subscribes to `now` — so on a
+   *  tick ONLY the elapsed text re-renders, never the agents array. */
+  elapsedFor(id: string): number {
+    const now = this.now();
+    const started = this.startedAt[id];
+    if (started === undefined) return this.finalElapsed[id] ?? 0;
+    return Math.max(0, Math.round((now - started) / 1000));
   }
 
   // ---- hook-driven activity (rolling last-10 message entries) ----
@@ -241,16 +280,26 @@ export class AgentRuntimeService {
   startProcess(id: string, opts?: { resume?: boolean }) {
     const sz = this.terminals.size(id); // open the PTY at the visible terminal's size
     this.startedAt[id] = Date.now();
+    delete this.finalElapsed[id]; // a fresh run derives elapsed from startedAt again
+    this.now.set(Date.now()); // the clock may have been parked — show 0s immediately
     delete this.titleStatus[id];
     delete this.titleAt[id];
     delete this.hookState[id];
     this.prevNeedsInput[id] = false;
     this.clearActivity(id); // a fresh run starts with an empty feed
-    this.patchRuntime(id, { elapsed: 0, working: true, needsInput: false });
+    this.patchRuntime(id, { working: true, needsInput: false });
+    this.ensureTicking(); // arm the liveness timer if it wasn't already running
     void this.agentsStore
       .start(id, sz?.rows ?? 0, sz?.cols ?? 0, opts?.resume ?? false)
       .then(() => this.terminals.syncSize(id))
-      .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "start failed"));
+      .catch((e: { message?: string }) => {
+        // The run never began — drop its startedAt (set optimistically above) so
+        // elapsedFor() doesn't count forever, and park the tick timer when this
+        // was the only would-be live run (mirrors the onExit cleanup).
+        delete this.startedAt[id];
+        if (Object.keys(this.startedAt).length === 0) this.stopTicking();
+        this.ui.flash(e?.message ?? "start failed");
+      });
   }
   stopProcess(id: string) {
     this.stoppingByUser[id] = true; // a user stop is not a "finished work" event
@@ -262,27 +311,59 @@ export class AgentRuntimeService {
     this.terminals.dispose(id);
     this.clearRuntime(id);
     this.work.dispose(id);
+    this.tailBuf.clear(id);
     delete this.startedAt[id];
+    delete this.finalElapsed[id];
     delete this.titleStatus[id];
     delete this.titleAt[id];
     delete this.hookState[id];
     delete this.prevNeedsInput[id];
+    delete this.stoppingByUser[id]; // exit may never arrive (guarded) — clear here too
     this.clearActivity(id);
     this.watched.delete(id);
   }
 
-  // ---- live tick: real elapsed + working/needsInput, plus notification edges ----
+  // ---- lazy tick timer management ----
+  /** Start the 800 ms liveness timer if it is not already running. */
+  private ensureTicking() {
+    if (this.tickHandle !== null) return;
+    this.tickHandle = setInterval(() => this.tick(), 800);
+  }
+  /** Clear the liveness timer — no-op when already stopped. */
+  private stopTicking() {
+    if (this.tickHandle === null) return;
+    clearInterval(this.tickHandle);
+    this.tickHandle = null;
+  }
+
+  // ---- live tick: working/needsInput edges + the shared elapsed clock ----
+  // Runtime state is only patched on a REAL transition, so across plain clock
+  // ticks agents() keeps its array and object identities (no consumer churn).
   private tick() {
     const now = Date.now();
+    let anyRunning = false;
     this.agents().forEach((ag) => {
       if (ag.status !== "running") return;
-      const elapsed = Math.max(0, Math.round((now - (this.startedAt[ag.id] ?? now)) / 1000));
+      anyRunning = true;
       const { working, needsInput } = this.liveState(ag, now);
-      if (ag.elapsed !== elapsed || ag.working !== working || ag.needsInput !== needsInput) {
-        this.patchRuntime(ag.id, { elapsed, working, needsInput });
+      if (ag.working !== working || ag.needsInput !== needsInput) {
+        this.patchRuntime(ag.id, { working, needsInput });
       }
       this.detectNeedsInput(ag, needsInput);
     });
+    // Use startedAt as the authoritative live-run set for the clock advance — it
+    // is always current even when the backing store's status signal hasn't caught
+    // up yet (the store only updates asynchronously via backend events).
+    const hasLiveRun = Object.keys(this.startedAt).length > 0;
+    if (anyRunning || hasLiveRun) {
+      // advance the shared clock only while something runs — elapsed displays
+      // update through elapsedFor() without touching runtime state.
+      this.now.set(now);
+    } else {
+      // Nothing running — self-clear so the JS timer doesn't keep waking 1.25×/s
+      // for no reason.  ensureTicking() re-arms it when a process starts again.
+      this.stopTicking();
+    }
   }
 
   /**
@@ -329,8 +410,22 @@ export class AgentRuntimeService {
   }
 
   private onExit(id: string) {
+    // Why: like the output path, exit can land after removeAgent (mux drain
+    // ordering) — patching the overlay / pushing the tail below would recreate
+    // (and leak) runtime + tailBuf entries for a disposed agent.
+    if (!this.agentsStore.all().some((a) => a.id === id)) return;
     this.terminals.exit(id);
+    // freeze the elapsed display at the run's final duration
+    const started = this.startedAt[id];
+    if (started !== undefined) {
+      this.finalElapsed[id] = Math.max(0, Math.round((Date.now() - started) / 1000));
+    }
     delete this.startedAt[id];
+    // Stop the liveness timer when this was the last in-flight process.
+    // startedAt is the authoritative set of live runs: if it is now empty, no
+    // ticks are needed.  The tick's own self-clear is a backstop; stopping here
+    // avoids waiting for the next 800ms boundary.
+    if (Object.keys(this.startedAt).length === 0) this.stopTicking();
     delete this.titleStatus[id];
     delete this.titleAt[id];
     delete this.hookState[id];
@@ -351,10 +446,9 @@ export class AgentRuntimeService {
       });
     }
     delete this.stoppingByUser[id];
-    this.liveLogs.update((m) => ({
-      ...m,
-      [id]: [...(m[id] || []), { t: "sys" as const, s: "▪ process exited" }],
-    }));
+    // exited marker AFTER the notification read its tail — so the "finished"
+    // detail excludes it but any later promptTail() read includes it.
+    this.tailBuf.push(id, "\r\n▪ process exited");
   }
 
   // ---- backend hook-driven needs-input signal (authoritative) ----
@@ -418,10 +512,12 @@ export class AgentRuntimeService {
     this.prevNeedsInput[ag.id] = needsInput;
   }
 
-  /** Last few non-empty terminal lines — the prompt context for a notification. */
+  /** Last few non-empty terminal lines — the prompt context for a notification.
+   *  This is THE read that triggers the lazy fold of buffered raw chunks. */
   promptTail(id: string): string {
-    return (this.liveLogs()[id] || [])
-      .map((l) => l.s.trim())
+    return this.tailBuf
+      .tail(id)
+      .map((s) => s.trim())
       .filter((s) => s.length > 0)
       .slice(-5)
       .join("\n");

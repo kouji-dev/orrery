@@ -14,8 +14,8 @@ export type CommitsEntry = Loadable<Commit[]> & { hasMore: boolean };
  * Per-agent worktree data (git status / branch commits / file tree) as keyed
  * Loadable maps, SEPARATE from the Agent records so one agent's reload never
  * re-renders the others' consumers (entry reference identity is preserved for
- * untouched ids). `idle` means "never requested" — unknown, not empty. Lazy:
- * changes load eagerly per agent at startup; tree/commits on first agent open.
+ * untouched ids). `idle` means "never requested" — unknown, not empty.
+ * Changes arrive as backend watcher pushes (applyScan); tree/commits stay lazy — on first agent open.
  */
 @Injectable({ providedIn: "root" })
 export class AgentWorkStore {
@@ -29,6 +29,8 @@ export class AgentWorkStore {
   private changesGen: Record<string, number> = {};
   private commitsGen: Record<string, number> = {};
   private treesGen: Record<string, number> = {};
+  // last pushed HEAD oid per agent — commits refresh only when it moves
+  private lastHead: Record<string, string | null> = {};
 
   changesFor(id: string): Loadable<AgentFile[]> {
     return this.changesMap()[id] ?? IDLE;
@@ -136,10 +138,16 @@ export class AgentWorkStore {
     });
   }
 
-  /** Watcher event: this agent's worktree changed. Changes always reload
-   *  (eager data feeding the always-visible badges); tree only if loaded. */
-  onWorktreeChanged(id: string): void {
-    this.loadChanges(id);
+  /** Backend watcher push: adopt the scanned changes; commits refresh only when
+   *  HEAD actually moved (and the feed was ever opened); tree reloads only when
+   *  previously loaded. Replaces the old ping → pull (`onWorktreeChanged`). */
+  applyScan(id: string, changes: AgentFile[], head: string | null): void {
+    // supersede any in-flight pull so its late resolve can't stomp fresher push data
+    this.changesGen[id] = (this.changesGen[id] ?? 0) + 1;
+    this.patch(this.changesMap, id, { status: "ready", data: changes });
+    const moved = id in this.lastHead && this.lastHead[id] !== head;
+    this.lastHead[id] = head;
+    if (moved) this.refreshCommits(id);
     if (this.treeFor(id).status !== "idle") this.loadTree(id);
   }
 
@@ -155,6 +163,7 @@ export class AgentWorkStore {
     delete this.changesGen[id];
     delete this.commitsGen[id];
     delete this.treesGen[id];
+    delete this.lastHead[id];
   }
 
   /** Single-key update — untouched ids keep their entry references. */

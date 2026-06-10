@@ -64,12 +64,16 @@ export function stripAnsi(s: string): string {
   return s.replace(ANSI_RE, "");
 }
 
-// A single ANSI/escape token (CSI / OSC / 2-char) OR one plain character. We
-// walk the chunk token-by-token so the cursor/erase CSI sequences can be acted
-// on (not just deleted) — a deleted clear-screen would otherwise leave a TUI's
-// previous frame stacked on top of the new one, which is the garbage we're
-// trying to avoid in the preview.
-const TOKEN_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]|[\s\S]/g;
+// A single ANSI/escape token (CSI / OSC / 2-char), a RUN of plain printable
+// characters, or one stray control character. We walk the chunk token-by-token
+// so the cursor/erase CSI sequences can be acted on (not just deleted) — a
+// deleted clear-screen would otherwise leave a TUI's previous frame stacked on
+// top of the new one, which is the garbage we're trying to avoid in the
+// preview. Printable text (anything >= \x20, which can never start an escape)
+// is consumed as one greedy run so a flush costs O(tokens), not O(chars ×
+// line length); controls (\n \r \t …) fall through to the single-char arm.
+const TOKEN_RE =
+  /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]|[^\x00-\x1f]+|[\s\S]/g;
 // A CSI sequence captured into [, params, final] so we can interpret it.
 const CSI_RE = /^\x1b\[([0-9;?]*)([@-~])$/;
 
@@ -100,10 +104,12 @@ export function appendPtyTail(prev: string[], chunk: string, max = 60): string[]
     if (row < 0) row = 0;
     while (lines.length <= row) lines.push("");
   };
+  // Splice a whole run of text into the current line at the cursor in one
+  // operation (overwrite-in-place, padding with spaces if the cursor is past
+  // the line end). Equivalent to writing the run char-by-char, but O(line).
   const writeAt = (text: string) => {
     ensureRow();
     const line = lines[row];
-    // overwrite-in-place (pad with spaces if the cursor is past the line end)
     const head = col <= line.length ? line.slice(0, col) : line.padEnd(col);
     lines[row] = head + text + line.slice(col + text.length);
     col += text.length;
@@ -111,25 +117,24 @@ export function appendPtyTail(prev: string[], chunk: string, max = 60): string[]
 
   const tokens = stripUnactionable(chunk).match(TOKEN_RE) ?? [];
   for (const tok of tokens) {
-    if (tok === "\n") {
-      row += 1;
-      col = 0;
-      ensureRow();
-      continue;
+    if (tok.charCodeAt(0) !== 0x1b) {
+      // plain text run or a single stray control char (runs never contain
+      // controls — the run arm of TOKEN_RE excludes \x00-\x1f)
+      if (tok === "\n") {
+        row += 1;
+        col = 0;
+        ensureRow();
+      } else if (tok === "\r") {
+        col = 0;
+      } else if (tok === "\t") {
+        writeAt("  ");
+      } else if (tok >= " ") {
+        writeAt(tok); // whole printable run, one splice
+      }
+      continue; // drop remaining stray control chars (\x07, \x08, …)
     }
-    if (tok === "\r") {
-      col = 0;
-      continue;
-    }
-    if (tok === "\t") {
-      writeAt("  ");
-      continue;
-    }
-    if (tok.length === 1) {
-      if (tok >= " ") writeAt(tok);
-      continue; // drop remaining stray control chars
-    }
-    // multi-char: a CSI we may need to act on (others stripped upstream)
+    // ESC-led: a CSI we may need to act on (others stripped upstream; a lone
+    // dangling ESC falls through the exec below and is dropped, as before)
     const m = CSI_RE.exec(tok);
     if (!m) continue;
     const params = m[1];

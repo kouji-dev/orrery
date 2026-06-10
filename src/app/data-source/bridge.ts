@@ -45,11 +45,23 @@ export const Commands = {
   AgentDeny: 'agent_deny',
   AgentDecide: 'agent_decide',
   AgentResize: 'agent_resize',
+  AgentFocus: 'agent_focus',
   DetectTools: 'detect_tools',
   SystemMetrics: 'system_metrics',
   SystemCost: 'system_cost',
   SetWindowIcon: 'set_window_icon',
 } as const;
+
+/** One agent's coalesced PTY output inside a multiplexed `agent://output`
+ *  frame. The event payload is an ARRAY of these — the backend mux emits one
+ *  event per ~16ms frame TOTAL, carrying an entry per agent that produced
+ *  output, with that agent's chunks coalesced. `seq` is the agent's cumulative
+ *  emitted-byte count (monotonic per agent — the snapshot-dedup foundation). */
+export interface AgentOutputEntry {
+  id: string;
+  chunk: string;
+  seq: number;
+}
 
 export const Events = {
   ProjectCreated: 'project://created',
@@ -70,7 +82,7 @@ export const Events = {
   AgentActivity: 'agent://activity',
   /** Fresh cpu/memory snapshot for the app + every running agent (pushed every 3s). */
   SystemMetrics: 'system://metrics',
-  /** Global Claude cost total from ccusage (pushed every 60s). */
+  /** Global Claude cost total from ccusage (pushed every 5 minutes). */
   SystemCost: 'system://cost',
   /** Per-command backend exec aggregates (pushed every 2s; dev + prod). */
   PerfStats: 'perf://stats',

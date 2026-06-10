@@ -81,6 +81,9 @@ export class AgentActionsService {
       .commit(id, message, paths)
       .then(() => {
         this.ui.flash("committed in " + (ag?.name ?? id));
+        // Optimistic instant refresh for the EXPLICIT user action — the watcher
+        // push follows (debounce ≥200ms + scan) and supersedes via the store's
+        // gen guards; without this the badge/feed feedback lags the click.
         this.work.loadChanges(id);
         this.work.refreshCommits(id);
         void this.projects.refreshCommits(this.projects.all().map((p) => p.id));
@@ -94,6 +97,7 @@ export class AgentActionsService {
       .discard(id, paths)
       .then(() => {
         this.ui.flash("discarded changes");
+        // optimistic instant refresh; the watcher push follows and supersedes
         this.work.loadChanges(id);
       })
       .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "discard failed"));

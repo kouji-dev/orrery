@@ -276,7 +276,13 @@ export class DiffViewComponent {
   readonly fdir = fileDir;
   readonly stateLabel = fileStateLabel;
 
-  readonly changes = computed(() => this.work.changesFor(this.agent().id).data);
+  // Why id, not the Agent object: runtime.agents() re-creates agent objects on
+  // every overlay patch (working/needsInput transitions while running), so
+  // anything keyed on agent() identity re-fires for free. The id string is
+  // stable — computed memoization stops the churn here for everything downstream.
+  private readonly agentId = computed(() => this.agent().id);
+
+  readonly changes = computed(() => this.work.changesFor(this.agentId()).data);
   // the effectively-selected file: the one matching selPath, else the first
   readonly current = computed<AgentFile | undefined>(() => {
     const cs = this.changes();
@@ -355,15 +361,19 @@ export class DiffViewComponent {
   constructor() {
     // reset selection to the first file when switching agents
     effect(() => {
-      const id = this.agent().id;
+      const id = this.agentId();
       if (id !== this.lastId) {
         this.lastId = id;
         this.selPath.set(null); // current() falls back to the first changed file
       }
     });
-    // load the diff for the selected file (superseded on rapid changes)
+    // Load the diff for the selected file (superseded on rapid changes).
+    // Triggers: agent switch (id), selection change, or a refreshed changes
+    // entry (push/pull → new file objects = content may differ). Reading the
+    // id (not agent()) keeps runtime overlay patches from re-fetching the
+    // diff when nothing changed.
     effect(() => {
-      const ag = this.agent();
+      const id = this.agentId();
       const f = this.current();
       if (!f) {
         this.diff.set(null);
@@ -372,7 +382,7 @@ export class DiffViewComponent {
       const g = ++this.gen;
       this.loading.set(true);
       void this.agents
-        .diff(ag.id, f.path, f.oldPath)
+        .diff(id, f.path, f.oldPath)
         .then((d) => {
           if (this.gen === g) {
             this.diff.set(d);

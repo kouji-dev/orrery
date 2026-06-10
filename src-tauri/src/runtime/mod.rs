@@ -11,14 +11,64 @@ use crate::agents::adapters::{self, HookEnv};
 use crate::agents::model::Agent;
 
 pub mod jobobj;
+pub(crate) mod output_batcher;
+pub(crate) mod output_mux;
 
 type ProcMap = Arc<Mutex<HashMap<Uuid, Proc>>>;
+
+/// The process-wide output multiplexer all agents' batchers push into. One
+/// drain thread (started lazily by the first `start()`) turns its pending map
+/// into a single `agent://output` emit per ~16ms frame — see `output_mux`.
+static MUX: std::sync::OnceLock<Arc<output_mux::OutputMux>> = std::sync::OnceLock::new();
+
+fn mux() -> Arc<output_mux::OutputMux> {
+    MUX.get_or_init(|| Arc::new(output_mux::OutputMux::new()))
+        .clone()
+}
+
+/// Guards the drain-thread spawn. Module-level (NOT inside the generic fn —
+/// a static in a generic fn is per-monomorphization, which could start one
+/// drain thread per `R` and double-emit frames).
+static DRAIN_STARTED: std::sync::Once = std::sync::Once::new();
+
+/// Start the single global drain thread on the first agent launch. Lazy
+/// because emitting needs an `AppHandle`, which only `start()` has; `Once`
+/// because there must be exactly one emitter no matter how many agents launch.
+fn ensure_drain_thread<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    DRAIN_STARTED.call_once(move || {
+        let mux = mux();
+        std::thread::spawn(move || {
+            mux.drain_loop(std::time::Duration::from_millis(16), move |frame| {
+                emit_output_frame(&app, frame);
+            });
+        });
+    });
+}
+
+/// Emit one multiplexed `agent://output` frame (array payload — one coalesced
+/// entry per agent) and record its perf row. record_io: emit RATE + VOLUME
+/// land as one perf-table row (`agent_output_emit` calls/10s ≤ ~625 — one per
+/// 16ms frame regardless of agent count — is the mux's proof, bytes make it a
+/// throughput row) under a single STATS lock.
+fn emit_output_frame<R: Runtime>(app: &AppHandle<R>, frame: Vec<output_mux::OutputEntry>) {
+    let bytes: u64 = frame.iter().map(|e| e.chunk.len() as u64).sum();
+    let t = std::time::Instant::now();
+    let _ = app.emit("agent://output", &frame);
+    crate::perf::record_io("agent_output_emit", t.elapsed(), bytes);
+}
 
 /// Runs agent CLI tools in their worktrees over a PTY and streams their output.
 pub struct RuntimeService {
     // Shared with each agent's WAIT thread so the thread can remove its own
-    // entry once the child exits (for ANY reason). Removing the entry drops
-    // `master` + `writer`, closing the PTY and letting the reader thread end.
+    // entry once the child exits (for ANY reason). Removing the entry drops the
+    // entry's `master` + `writer` Arcs, closing the PTY and letting the reader
+    // thread end (an in-flight write/resize may keep its own handle alive a
+    // beat longer — the close then happens when that call returns).
+    //
+    // LOCK RULE: this map's lock is held ONLY for map ops (insert/remove/
+    // lookup/pids/is_running) — never across PTY I/O. Blocking I/O happens
+    // under the per-agent `writer`/`master` locks after cloning the Arc.
     procs: ProcMap,
 }
 
@@ -30,10 +80,14 @@ struct Proc {
     // process group even though the `Child` itself moved to the wait thread.
     #[cfg_attr(not(unix), allow(dead_code))]
     pid: Option<u32>,
-    // keep the master alive so the PTY stays open + drives resize
-    master: Box<dyn portable_pty::MasterPty + Send>,
-    // stdin channel into the PTY (xterm keystrokes land here)
-    writer: Mutex<Box<dyn Write + Send>>,
+    // keep the master alive so the PTY stays open + drives resize. Arc'd behind
+    // its OWN lock so resize() can run the (blocking) ConPTY resize without
+    // holding the procs-map lock — one wedged agent pipe must never stall
+    // agent_input/agent_resize/is_running/pids for every other agent.
+    master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
+    // stdin channel into the PTY (xterm keystrokes land here). Per-agent Arc'd
+    // lock for the same reason as `master` — write_all/flush can block.
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
 }
 
 impl Default for RuntimeService {
@@ -51,6 +105,12 @@ impl RuntimeService {
 
     pub fn is_running(&self, id: Uuid) -> bool {
         self.procs.lock().unwrap().contains_key(&id)
+    }
+
+    /// True when at least one agent PTY is alive — drives the adaptive metrics
+    /// cadence (full process sweeps are only worth their cost while agents run).
+    pub fn any_running(&self) -> bool {
+        !self.procs.lock().unwrap().is_empty()
     }
 
     /// `(id, pid)` for every running agent that has a captured child pid. Used by
@@ -135,22 +195,41 @@ impl RuntimeService {
         let killer = child.clone_killer();
         let pid = child.process_id();
 
-        // stream stdout/stderr → `agent://output` on a background thread. This
-        // thread DOES NOT emit `agent://exit`; it just ends cleanly once the
-        // master is dropped (when the wait thread removes the proc from the map).
-        let app_out = app.clone();
+        // stream stdout/stderr → batcher → global mux → `agent://output`.
+        // The batcher thread coalesces reads into ≤4ms / ≥16KB UTF-8-safe
+        // chunks tagged with a cumulative byte seq (snapshot-dedup
+        // foundation) and pushes them into the process-wide mux; the mux's
+        // single drain thread emits ONE array-payload event per ~16ms frame
+        // for ALL agents (see `output_mux` — each emit is a Win32 UI-thread
+        // job, so per-agent emits made every invoke slower as agents scaled).
+        // The batcher window dropped 8ms → 4ms: it no longer paces the IPC
+        // (the mux frame does), it only bounds chunk size + fixes multibyte
+        // chars split across read boundaries (from_utf8_lossy per read
+        // corrupted them).
+        // Neither thread emits `agent://exit`; both end once the master is
+        // dropped (reader read fails → sender drops → batcher final-flushes).
+        ensure_drain_thread(&app);
         let out_id = id.to_string();
+        let mux_out = mux();
+        let (batch_tx, batch_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        let batcher = std::thread::spawn(move || {
+            output_batcher::batch_loop(
+                batch_rx,
+                std::time::Duration::from_millis(4),
+                16 * 1024,
+                move |chunk, seq| mux_out.push(&out_id, chunk, seq),
+            );
+        });
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        let chunk = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let _ = app_out.emit(
-                            "agent://output",
-                            serde_json::json!({ "id": out_id, "chunk": chunk }),
-                        );
+                        // batcher gone (shutdown) → stop reading
+                        if batch_tx.send(buf[..n].to_vec()).is_err() {
+                            break;
+                        }
                     }
                 }
             }
@@ -161,8 +240,8 @@ impl RuntimeService {
             Proc {
                 killer,
                 pid,
-                master: pair.master,
-                writer: Mutex::new(writer),
+                master: Arc::new(Mutex::new(pair.master)),
+                writer: Arc::new(Mutex::new(writer)),
             },
         );
 
@@ -176,12 +255,26 @@ impl RuntimeService {
         let procs = Arc::clone(&self.procs);
         let app_exit = app.clone();
         let exit_id = id.to_string();
+        let mux_exit = mux();
         std::thread::spawn(move || {
             let _ = child.wait();
             // Remove our own entry if it's still present. stop()/stop_all() may
             // have already removed it (and killed us) — either way the map ends
-            // up without this id, so `is_running()` is false afterwards.
-            procs.lock().unwrap().remove(&id);
+            // up without this id, so `is_running()` is false afterwards. Bind
+            // the removed entry so its drop (ConPTY teardown — a blocking OS
+            // call) happens AFTER the map guard is released, never under it.
+            let removed = procs.lock().unwrap().remove(&id);
+            drop(removed);
+            // Removing the entry dropped `master`, so the reader hits EOF and
+            // the batcher final-flushes into the mux, then returns. Join it so
+            // EVERYTHING this agent printed is queued, then force-drain the
+            // agent's pending ahead of `agent://exit` — otherwise its tail
+            // would sit in the mux until the next frame and land AFTER exit.
+            // This also cleans the agent's mux entry on stop/remove.
+            let _ = batcher.join();
+            if let Some(entry) = mux_exit.take(&exit_id) {
+                emit_output_frame(&app_exit, vec![entry]);
+            }
             let _ = app_exit.emit("agent://exit", serde_json::json!({ "id": exit_id }));
         });
 
@@ -189,7 +282,11 @@ impl RuntimeService {
     }
 
     pub fn stop(&self, id: Uuid) {
-        if let Some(mut p) = self.procs.lock().unwrap().remove(&id) {
+        // Take the entry under the map lock, but kill + drop it OUTSIDE — the
+        // child signal and the ConPTY teardown on drop are blocking OS calls,
+        // and the map lock is never held across I/O.
+        let removed = self.procs.lock().unwrap().remove(&id);
+        if let Some(mut p) = removed {
             kill_proc(&mut p);
         }
     }
@@ -198,17 +295,40 @@ impl RuntimeService {
     /// Idempotent: a second call (e.g. ExitRequested then Exit) just drains an
     /// already-empty map and does nothing.
     pub fn stop_all(&self) {
-        let mut procs = self.procs.lock().unwrap();
-        for (_, mut p) in procs.drain() {
+        // Drain under the lock, kill + drop outside it (same rule as `stop()`).
+        let drained: Vec<Proc> = self
+            .procs
+            .lock()
+            .unwrap()
+            .drain()
+            .map(|(_, p)| p)
+            .collect();
+        for mut p in drained {
             kill_proc(&mut p);
         }
     }
 
+    /// Mark which agent's terminal is focused in the UI (`None` = none). The
+    /// output mux drains the focused agent every frame (keystroke echo stays
+    /// snappy) and holds everyone else to the slow ~150ms cadence — see
+    /// `output_mux::set_focus`.
+    pub fn focus(&self, id: Option<Uuid>) {
+        mux().set_focus(id.map(|u| u.to_string()));
+    }
+
     /// Feed keystrokes from the UI terminal into the agent's PTY stdin.
+    ///
+    /// The procs-map lock is held only long enough to clone the per-agent
+    /// writer Arc; the (possibly blocking) ConPTY write/flush then runs under
+    /// the per-agent lock alone, so one wedged pipe can't stall map ops —
+    /// is_running/pids/start/stop — for every other agent.
     pub fn write(&self, id: Uuid, data: &str) -> Result<(), String> {
-        let procs = self.procs.lock().unwrap();
-        let proc = procs.get(&id).ok_or("process not running")?;
-        let mut writer = proc.writer.lock().unwrap();
+        let writer = {
+            let procs = self.procs.lock().unwrap();
+            let proc = procs.get(&id).ok_or("process not running")?;
+            Arc::clone(&proc.writer)
+        };
+        let mut writer = writer.lock().unwrap();
         writer
             .write_all(data.as_bytes())
             .map_err(|e| e.to_string())?;
@@ -216,10 +336,16 @@ impl RuntimeService {
     }
 
     /// Resize the PTY so the agent's TUI reflows to the visible terminal.
+    /// Same locking shape as `write()`: brief map lock to clone the per-agent
+    /// master Arc, then the blocking resize under the per-agent lock only.
     pub fn resize(&self, id: Uuid, rows: u16, cols: u16) -> Result<(), String> {
-        let procs = self.procs.lock().unwrap();
-        let proc = procs.get(&id).ok_or("process not running")?;
-        proc.master
+        let master = {
+            let procs = self.procs.lock().unwrap();
+            let proc = procs.get(&id).ok_or("process not running")?;
+            Arc::clone(&proc.master)
+        };
+        let master = master.lock().unwrap();
+        master
             .resize(PtySize {
                 rows,
                 cols,
@@ -475,6 +601,17 @@ mod tests {
     }
 
     #[test]
+    fn any_running_tracks_the_proc_map() {
+        let svc = RuntimeService::new();
+        assert!(!svc.any_running(), "empty map → nothing running");
+        let id = Uuid::new_v4();
+        svc.procs.lock().unwrap().insert(id, fake_proc());
+        assert!(svc.any_running(), "one live proc → running");
+        svc.stop(id);
+        assert!(!svc.any_running(), "stop drains the map");
+    }
+
+    #[test]
     fn stop_on_absent_id_is_noop() {
         let svc = RuntimeService::new();
         // Must not panic / must stay not-running for an id that was never started
@@ -491,12 +628,143 @@ mod tests {
             .openpty(PtySize::default())
             .expect("open pty");
         let writer = pair.master.take_writer().expect("take writer");
+        proc_with(pair.master, writer)
+    }
+
+    /// Like `fake_proc`, but with an injected stdin writer — lets tests stand in
+    /// a writer that blocks, mimicking a wedged ConPTY pipe.
+    fn fake_proc_with_writer(writer: Box<dyn Write + Send>) -> Proc {
+        let pair = native_pty_system()
+            .openpty(PtySize::default())
+            .expect("open pty");
+        proc_with(pair.master, writer)
+    }
+
+    fn proc_with(
+        master: Box<dyn portable_pty::MasterPty + Send>,
+        writer: Box<dyn Write + Send>,
+    ) -> Proc {
         Proc {
             killer: Box::new(NoopKiller),
             pid: None,
-            master: pair.master,
-            writer: Mutex::new(writer),
+            master: Arc::new(Mutex::new(master)),
+            writer: Arc::new(Mutex::new(writer)),
         }
+    }
+
+    /// A stdin writer that parks inside `write()` until the test releases it —
+    /// stands in for a wedged ConPTY pipe. `entered` fires once the writer is
+    /// actually blocked (i.e. the per-agent write is mid-I/O). If the test
+    /// panics first, dropping `release_tx` unparks it so threads unwind.
+    struct BlockingWriter {
+        entered: std::sync::mpsc::Sender<()>,
+        release: std::sync::mpsc::Receiver<()>,
+    }
+    impl Write for BlockingWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let _ = self.entered.send(());
+            let _ = self.release.recv(); // parked until released (or sender dropped)
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Service with one fake agent whose stdin writer parks until released.
+    /// Returns (svc, id, entered_rx, release_tx).
+    fn blocked_write_fixture() -> (
+        Arc<RuntimeService>,
+        Uuid,
+        std::sync::mpsc::Receiver<()>,
+        std::sync::mpsc::Sender<()>,
+    ) {
+        let svc = Arc::new(RuntimeService::new());
+        let id = Uuid::new_v4();
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        svc.procs.lock().unwrap().insert(
+            id,
+            fake_proc_with_writer(Box::new(BlockingWriter {
+                entered: entered_tx,
+                release: release_rx,
+            })),
+        );
+        (svc, id, entered_rx, release_tx)
+    }
+
+    // THE B6 hazard: a wedged ConPTY write on ONE agent must not stall the procs
+    // map for every agent (agent_input/agent_resize/is_running/pids). Park a
+    // write inside the injected blocking writer, then prove map ops still
+    // answer. The map ops run on a helper thread behind a timeout so a
+    // regression (map guard held across I/O) fails the test instead of hanging it.
+    #[test]
+    fn map_ops_stay_responsive_while_one_agents_write_blocks() {
+        let (svc, id, entered_rx, release_tx) = blocked_write_fixture();
+
+        let svc_w = Arc::clone(&svc);
+        let write_thread = std::thread::spawn(move || svc_w.write(id, "stuck"));
+        entered_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("write never reached the writer");
+
+        let svc_m = Arc::clone(&svc);
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = done_tx.send((svc_m.is_running(id), svc_m.any_running(), svc_m.pids()));
+        });
+        let (running, any, pids) = done_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("map ops stalled behind a blocked per-agent write");
+        assert!(running, "agent stays in the map while its write is stuck");
+        assert!(any);
+        assert!(pids.is_empty(), "fake proc has no captured pid");
+
+        release_tx.send(()).expect("release the parked writer");
+        write_thread
+            .join()
+            .unwrap()
+            .expect("the parked write completes once released");
+    }
+
+    // Exit/stop soundness during in-flight I/O: stop() removes the entry while a
+    // write still holds the per-agent writer. The Arc keeps the handle alive so
+    // the in-flight write completes; a SUBSEQUENT write errors exactly like a
+    // never-started agent.
+    #[test]
+    fn stop_during_blocked_write_is_sound_and_later_write_errors() {
+        let (svc, id, entered_rx, release_tx) = blocked_write_fixture();
+
+        let svc_w = Arc::clone(&svc);
+        let write_thread = std::thread::spawn(move || svc_w.write(id, "stuck"));
+        entered_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("write never reached the writer");
+
+        // stop() takes only the map lock + signals the killer — it must never
+        // need the per-agent writer lock. Timeout so a deadlock fails fast.
+        let svc_s = Arc::clone(&svc);
+        let (stopped_tx, stopped_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            svc_s.stop(id);
+            let _ = stopped_tx.send(());
+        });
+        stopped_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("stop() deadlocked against the blocked write");
+        assert!(!svc.is_running(id), "stop removed the entry");
+
+        release_tx.send(()).expect("release the parked writer");
+        write_thread
+            .join()
+            .unwrap()
+            .expect("in-flight write finishes against the Arc-kept writer");
+
+        assert_eq!(
+            svc.write(id, "after"),
+            Err("process not running".into()),
+            "post-stop writes fail like an unknown agent"
+        );
     }
 
     #[derive(Debug)]
