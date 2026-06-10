@@ -60,8 +60,6 @@ fn flush(
 /// whichever comes first. `seq` passed to `emit` is the cumulative count of
 /// UTF-8 bytes emitted — the dedup foundation for snapshot recovery.
 /// Returns when the sender side disconnects, after a final lossy flush.
-#[allow(dead_code)]
-// Why: wired up in the next commit
 pub fn batch_loop(
     rx: Receiver<Vec<u8>>,
     window: Duration,
@@ -168,7 +166,11 @@ mod tests {
         let (tx, emitted, h) = run(Duration::from_secs(10), 8); // window never fires
         tx.send(b"0123456789".to_vec()).unwrap(); // 10 ≥ 8 → immediate flush
         std::thread::sleep(Duration::from_millis(120));
-        assert_eq!(emitted.lock().unwrap().len(), 1, "size flush, no window wait");
+        assert_eq!(
+            emitted.lock().unwrap().len(),
+            1,
+            "size flush, no window wait"
+        );
         assert_eq!(emitted.lock().unwrap()[0].0, "0123456789");
         drop(tx);
         h.join().unwrap();
@@ -180,7 +182,10 @@ mod tests {
         let e = "é".as_bytes(); // [0xC3, 0xA9]
         tx.send(vec![e[0]]).unwrap();
         std::thread::sleep(Duration::from_millis(120)); // window fires — must hold the partial char
-        assert!(emitted.lock().unwrap().is_empty(), "partial char must not emit");
+        assert!(
+            emitted.lock().unwrap().is_empty(),
+            "partial char must not emit"
+        );
         tx.send(vec![e[1]]).unwrap();
         std::thread::sleep(Duration::from_millis(120));
         {

@@ -136,22 +136,46 @@ impl RuntimeService {
         let killer = child.clone_killer();
         let pid = child.process_id();
 
-        // stream stdout/stderr → `agent://output` on a background thread. This
-        // thread DOES NOT emit `agent://exit`; it just ends cleanly once the
-        // master is dropped (when the wait thread removes the proc from the map).
+        // stream stdout/stderr → batcher → `agent://output`. The batcher thread
+        // coalesces reads into ≤8ms / ≥16KB flushes before IPC and tags each
+        // flush with a cumulative byte seq (snapshot-dedup foundation).
+        // Why: per-read emits (≤4KB) cost one JSON serialization + webview
+        // wakeup each — hundreds/sec under agent floods. Batching caps the
+        // event rate at ~125/sec per agent regardless of throughput, and the
+        // batcher's UTF-8 boundary handling fixes multibyte chars split across
+        // read boundaries (from_utf8_lossy per read corrupted them).
+        // Neither thread emits `agent://exit`; both end once the master is
+        // dropped (reader read fails → sender drops → batcher final-flushes).
         let app_out = app.clone();
         let out_id = id.to_string();
+        let (batch_tx, batch_rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        std::thread::spawn(move || {
+            output_batcher::batch_loop(
+                batch_rx,
+                std::time::Duration::from_millis(8),
+                16 * 1024,
+                move |chunk, seq| {
+                    // timed so the emit RATE shows up as a perf-table row —
+                    // `agent_output_emit` calls/10s is the batching proof
+                    crate::perf::timed("agent_output_emit", || {
+                        let _ = app_out.emit(
+                            "agent://output",
+                            serde_json::json!({ "id": out_id, "chunk": chunk, "seq": seq }),
+                        );
+                    });
+                },
+            );
+        });
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        let chunk = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let _ = app_out.emit(
-                            "agent://output",
-                            serde_json::json!({ "id": out_id, "chunk": chunk }),
-                        );
+                        // batcher gone (shutdown) → stop reading
+                        if batch_tx.send(buf[..n].to_vec()).is_err() {
+                            break;
+                        }
                     }
                 }
             }
