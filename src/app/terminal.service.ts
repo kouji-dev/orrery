@@ -79,8 +79,13 @@ export class TerminalService implements OnDestroy {
   private sentFocusId: string | null = null;
   private setFocused(id: string | null) {
     if (id === this.sentFocusId) return;
+    const prev = this.sentFocusId;
     this.sentFocusId = id;
-    void this.agents.focus(id).catch(() => {});
+    void this.agents.focus(id).catch(() => {
+      // Invoke failed — roll back the sentinel so the next call with the same
+      // id is not suppressed by the dedup guard and can retry the IPC.
+      this.sentFocusId = prev;
+    });
   }
 
   // Per-agent live search result { index (0-based, -1 = none), count } — bumped by

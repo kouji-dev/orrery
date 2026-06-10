@@ -100,6 +100,47 @@ describe("TerminalService focus → agent_focus", () => {
     expect(calls).toEqual(["a", null]);
   });
 
+  it("retries sending focus after a failed invoke — dedup does not suppress the retry", async () => {
+    let rejectNext = false;
+    const calls: Array<string | null> = [];
+    const store = {
+      ...stubStore,
+      focus: (id: string | null) => {
+        calls.push(id);
+        if (rejectNext) {
+          rejectNext = false;
+          return Promise.reject(new Error("ipc error"));
+        }
+        return Promise.resolve();
+      },
+    } as unknown as AgentsStore;
+    const svc = makeService(store);
+
+    // First call succeeds — sentFocusId is now "a".
+    // @ts-expect-error private
+    svc["setFocused"]("a");
+    await Promise.resolve();
+    expect(calls).toEqual(["a"]);
+
+    // Simulates a different focus then back — sentFocusId temporarily "b" then
+    // we call with "a" again which should fail.
+    rejectNext = true;
+    // @ts-expect-error private
+    svc["setFocused"]("b"); // sentFocusId → "b", focus("b") rejects → rolls back to "a"
+    // let the rejection handler run
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // sentFocusId should have been rolled back to "a" (prev before the failed call)
+    // @ts-expect-error read the private field
+    expect(svc["sentFocusId"]).toBe("a");
+
+    // Now "b" can be retried (dedup won't block it, since sentFocusId ≠ "b")
+    // @ts-expect-error
+    svc["setFocused"]("b");
+    expect(calls).toEqual(["a", "b", "b"]);
+  });
+
   it("clears focus when the focused terminal is disposed — and only then", () => {
     const { svc, calls } = makeFocusSpy();
     svc.write("a", "x");

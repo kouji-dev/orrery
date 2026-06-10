@@ -87,6 +87,9 @@ export class AgentRuntimeService {
   // notification edge-tracking + user-stop flag (a stop is not "work finished")
   private prevNeedsInput: Record<string, boolean> = {};
   private stoppingByUser: Record<string, boolean> = {};
+  // liveness tick handle — started lazily when the first agent runs, cleared
+  // when the last running agent exits.  null = not currently scheduled.
+  private tickHandle: ReturnType<typeof setInterval> | null = null;
   // backend hook status (working/idle) — authoritative over PTY title parsing
   private hookState: Record<string, string> = {};
   // agents whose worktree we've already set up watching + an initial scan for
@@ -190,7 +193,12 @@ export class AgentRuntimeService {
       .onExit((id) => this.onExit(id))
       .catch(() => {});
 
-    setInterval(() => this.tick(), 800);
+    // Tick timer is started lazily on the first run transition and cleared when
+    // the last running agent exits (see ensureTicking / stopTicking below).
+    // Arm immediately if there are already running agents (app loaded mid-session).
+    if (this.agentsStore.all().some((a) => a.status === "running")) {
+      this.ensureTicking();
+    }
   }
 
   // ---- runtime overlay ----
@@ -280,6 +288,7 @@ export class AgentRuntimeService {
     this.prevNeedsInput[id] = false;
     this.clearActivity(id); // a fresh run starts with an empty feed
     this.patchRuntime(id, { working: true, needsInput: false });
+    this.ensureTicking(); // arm the liveness timer if it wasn't already running
     void this.agentsStore
       .start(id, sz?.rows ?? 0, sz?.cols ?? 0, opts?.resume ?? false)
       .then(() => this.terminals.syncSize(id))
@@ -306,6 +315,19 @@ export class AgentRuntimeService {
     this.watched.delete(id);
   }
 
+  // ---- lazy tick timer management ----
+  /** Start the 800 ms liveness timer if it is not already running. */
+  private ensureTicking() {
+    if (this.tickHandle !== null) return;
+    this.tickHandle = setInterval(() => this.tick(), 800);
+  }
+  /** Clear the liveness timer — no-op when already stopped. */
+  private stopTicking() {
+    if (this.tickHandle === null) return;
+    clearInterval(this.tickHandle);
+    this.tickHandle = null;
+  }
+
   // ---- live tick: working/needsInput edges + the shared elapsed clock ----
   // Runtime state is only patched on a REAL transition, so across plain clock
   // ticks agents() keeps its array and object identities (no consumer churn).
@@ -321,9 +343,19 @@ export class AgentRuntimeService {
       }
       this.detectNeedsInput(ag, needsInput);
     });
-    // advance the shared clock only while something runs — elapsed displays
-    // update through elapsedFor() without touching runtime state.
-    if (anyRunning) this.now.set(now);
+    // Use startedAt as the authoritative live-run set for the clock advance — it
+    // is always current even when the backing store's status signal hasn't caught
+    // up yet (the store only updates asynchronously via backend events).
+    const hasLiveRun = Object.keys(this.startedAt).length > 0;
+    if (anyRunning || hasLiveRun) {
+      // advance the shared clock only while something runs — elapsed displays
+      // update through elapsedFor() without touching runtime state.
+      this.now.set(now);
+    } else {
+      // Nothing running — self-clear so the JS timer doesn't keep waking 1.25×/s
+      // for no reason.  ensureTicking() re-arms it when a process starts again.
+      this.stopTicking();
+    }
   }
 
   /**
@@ -377,6 +409,11 @@ export class AgentRuntimeService {
       this.finalElapsed[id] = Math.max(0, Math.round((Date.now() - started) / 1000));
     }
     delete this.startedAt[id];
+    // Stop the liveness timer when this was the last in-flight process.
+    // startedAt is the authoritative set of live runs: if it is now empty, no
+    // ticks are needed.  The tick's own self-clear is a backstop; stopping here
+    // avoids waiting for the next 800ms boundary.
+    if (Object.keys(this.startedAt).length === 0) this.stopTicking();
     delete this.titleStatus[id];
     delete this.titleAt[id];
     delete this.hookState[id];
