@@ -16,6 +16,7 @@ import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { PerfStore, PerfRow, PERF_WINDOW_MS } from "../perf/perf.store";
+import { terminalSchedulerStats } from "../terminal-output-scheduler";
 import { Agent, AgentStatus, Project } from "../models";
 
 type Sort = { key: string; dir: number };
@@ -223,6 +224,7 @@ type Sort = { key: string; dir: number };
             <span class="dvc-leg"><span class="dvc-sw r"></span>&gt;100ms · err</span>
             <span class="dvc-sp"></span>
             <span class="tnum">{{ perfSummary() }}</span>
+            <span class="tnum" title="terminal write scheduler: queued chars · peak · dropped backlogs">term {{ termStats().queuedChars }} · pk {{ termStats().peakQueuedChars }} · drop {{ termStats().droppedBacklogs }}</span>
           }
           @if (tab() === 'agents') {
             <span class="tnum">{{ agents().length }} agents · <span style="color:var(--st-running)">{{ cnt('running') }} running</span> · <span style="color:var(--st-blocked)">{{ cnt('blocked') }} need you</span> · {{ cnt('waiting') + cnt('queued') }} waiting · {{ cnt('done') }} done</span>
@@ -379,6 +381,8 @@ type Sort = { key: string; dir: number };
 })
 export class DevPanelComponent implements OnDestroy {
   readonly perf = inject(PerfStore);
+  /** Live terminal write-scheduler counters (PTY pipeline visibility). */
+  readonly termStats = terminalSchedulerStats;
   private readonly runtime = inject(AgentRuntimeService);
   private readonly projectsStore = inject(ProjectsStore);
   private readonly host = inject(ElementRef<HTMLElement>);
