@@ -12,8 +12,51 @@ use crate::agents::model::Agent;
 
 pub mod jobobj;
 pub(crate) mod output_batcher;
+pub(crate) mod output_mux;
 
 type ProcMap = Arc<Mutex<HashMap<Uuid, Proc>>>;
+
+/// The process-wide output multiplexer all agents' batchers push into. One
+/// drain thread (started lazily by the first `start()`) turns its pending map
+/// into a single `agent://output` emit per ~16ms frame — see `output_mux`.
+static MUX: std::sync::OnceLock<Arc<output_mux::OutputMux>> = std::sync::OnceLock::new();
+
+fn mux() -> Arc<output_mux::OutputMux> {
+    MUX.get_or_init(|| Arc::new(output_mux::OutputMux::new()))
+        .clone()
+}
+
+/// Guards the drain-thread spawn. Module-level (NOT inside the generic fn —
+/// a static in a generic fn is per-monomorphization, which could start one
+/// drain thread per `R` and double-emit frames).
+static DRAIN_STARTED: std::sync::Once = std::sync::Once::new();
+
+/// Start the single global drain thread on the first agent launch. Lazy
+/// because emitting needs an `AppHandle`, which only `start()` has; `Once`
+/// because there must be exactly one emitter no matter how many agents launch.
+fn ensure_drain_thread<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    DRAIN_STARTED.call_once(move || {
+        let mux = mux();
+        std::thread::spawn(move || {
+            mux.drain_loop(std::time::Duration::from_millis(16), move |frame| {
+                emit_output_frame(&app, frame);
+            });
+        });
+    });
+}
+
+/// Emit one multiplexed `agent://output` frame (array payload — one coalesced
+/// entry per agent) and record its perf row. record_io: emit RATE + VOLUME
+/// land as one perf-table row (`agent_output_emit` calls/10s ≤ ~625 — one per
+/// 16ms frame regardless of agent count — is the mux's proof, bytes make it a
+/// throughput row) under a single STATS lock.
+fn emit_output_frame<R: Runtime>(app: &AppHandle<R>, frame: Vec<output_mux::OutputEntry>) {
+    let bytes: u64 = frame.iter().map(|e| e.chunk.len() as u64).sum();
+    let t = std::time::Instant::now();
+    let _ = app.emit("agent://output", &frame);
+    crate::perf::record_io("agent_output_emit", t.elapsed(), bytes);
+}
 
 /// Runs agent CLI tools in their worktrees over a PTY and streams their output.
 pub struct RuntimeService {
@@ -142,38 +185,29 @@ impl RuntimeService {
         let killer = child.clone_killer();
         let pid = child.process_id();
 
-        // stream stdout/stderr → batcher → `agent://output`. The batcher thread
-        // coalesces reads into ≤8ms / ≥16KB flushes before IPC and tags each
-        // flush with a cumulative byte seq (snapshot-dedup foundation).
-        // Why: per-read emits (≤4KB) cost one JSON serialization + webview
-        // wakeup each — hundreds/sec under agent floods. Batching caps the
-        // event rate at ~125/sec per agent regardless of throughput, and the
-        // batcher's UTF-8 boundary handling fixes multibyte chars split across
-        // read boundaries (from_utf8_lossy per read corrupted them).
+        // stream stdout/stderr → batcher → global mux → `agent://output`.
+        // The batcher thread coalesces reads into ≤4ms / ≥16KB UTF-8-safe
+        // chunks tagged with a cumulative byte seq (snapshot-dedup
+        // foundation) and pushes them into the process-wide mux; the mux's
+        // single drain thread emits ONE array-payload event per ~16ms frame
+        // for ALL agents (see `output_mux` — each emit is a Win32 UI-thread
+        // job, so per-agent emits made every invoke slower as agents scaled).
+        // The batcher window dropped 8ms → 4ms: it no longer paces the IPC
+        // (the mux frame does), it only bounds chunk size + fixes multibyte
+        // chars split across read boundaries (from_utf8_lossy per read
+        // corrupted them).
         // Neither thread emits `agent://exit`; both end once the master is
         // dropped (reader read fails → sender drops → batcher final-flushes).
-        let app_out = app.clone();
+        ensure_drain_thread(&app);
         let out_id = id.to_string();
+        let mux_out = mux();
         let (batch_tx, batch_rx) = std::sync::mpsc::channel::<Vec<u8>>();
-        std::thread::spawn(move || {
+        let batcher = std::thread::spawn(move || {
             output_batcher::batch_loop(
                 batch_rx,
-                std::time::Duration::from_millis(8),
+                std::time::Duration::from_millis(4),
                 16 * 1024,
-                move |chunk, seq| {
-                    // record_io: emit RATE + VOLUME land as one perf-table row
-                    // (`agent_output_emit` calls/10s is the batching proof,
-                    // bytes make it a throughput row) under a single STATS
-                    // lock — the old record_volume+timed pair locked twice
-                    // per flush.
-                    let bytes = chunk.len() as u64;
-                    let t = std::time::Instant::now();
-                    let _ = app_out.emit(
-                        "agent://output",
-                        serde_json::json!({ "id": out_id, "chunk": chunk, "seq": seq }),
-                    );
-                    crate::perf::record_io("agent_output_emit", t.elapsed(), bytes);
-                },
+                move |chunk, seq| mux_out.push(&out_id, chunk, seq),
             );
         });
         std::thread::spawn(move || {
@@ -211,12 +245,23 @@ impl RuntimeService {
         let procs = Arc::clone(&self.procs);
         let app_exit = app.clone();
         let exit_id = id.to_string();
+        let mux_exit = mux();
         std::thread::spawn(move || {
             let _ = child.wait();
             // Remove our own entry if it's still present. stop()/stop_all() may
             // have already removed it (and killed us) — either way the map ends
             // up without this id, so `is_running()` is false afterwards.
             procs.lock().unwrap().remove(&id);
+            // Removing the entry dropped `master`, so the reader hits EOF and
+            // the batcher final-flushes into the mux, then returns. Join it so
+            // EVERYTHING this agent printed is queued, then force-drain the
+            // agent's pending ahead of `agent://exit` — otherwise its tail
+            // would sit in the mux until the next frame and land AFTER exit.
+            // This also cleans the agent's mux entry on stop/remove.
+            let _ = batcher.join();
+            if let Some(entry) = mux_exit.take(&exit_id) {
+                emit_output_frame(&app_exit, vec![entry]);
+            }
             let _ = app_exit.emit("agent://exit", serde_json::json!({ "id": exit_id }));
         });
 

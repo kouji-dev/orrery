@@ -1,5 +1,5 @@
 import { inject, Injectable } from "@angular/core";
-import { BRIDGE, Commands, Events } from "../data-source/bridge";
+import { AgentOutputEntry, BRIDGE, Commands, Events } from "../data-source/bridge";
 import {
   ActivityKind,
   Agent,
@@ -156,9 +156,12 @@ export class AgentsStore {
   resize(id: string, rows: number, cols: number): Promise<void> {
     return this.bridge.invoke(Commands.AgentResize, { id, rows, cols });
   }
-  /** Subscribe to streamed process output. */
-  onOutput(cb: (id: string, chunk: string) => void): Promise<() => void> {
-    return this.bridge.on<{ id: string; chunk: string }>(Events.AgentOutput, (p) => cb(p.id, p.chunk));
+  /** Subscribe to streamed process output. The backend multiplexes EVERY
+   *  agent's PTY output into one `agent://output` event per ~16ms frame; the
+   *  payload is an array with one coalesced `{id, chunk, seq}` entry per agent
+   *  that produced output during the frame. */
+  onOutput(cb: (entries: AgentOutputEntry[]) => void): Promise<() => void> {
+    return this.bridge.on<AgentOutputEntry[]>(Events.AgentOutput, cb);
   }
   /** Subscribe to process-exit events. */
   onExit(cb: (id: string) => void): Promise<() => void> {

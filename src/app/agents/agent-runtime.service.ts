@@ -173,15 +173,20 @@ export class AgentRuntimeService {
       .catch(() => {});
 
     // stream output: raw bytes → xterm (scheduler-paced), plain-text tail →
-    // liveLogs via the coalescer (one publish per 80ms, not per chunk)
+    // liveLogs via the coalescer (one publish per 80ms, not per chunk).
+    // The payload is one multiplexed ~16ms frame: [{id, chunk, seq}, …] with
+    // one coalesced entry per agent that produced output during the frame.
     void this.agentsStore
-      .onOutput((id, chunk) => {
-        // Why: the batcher's final flush can land after agent removal —
-        // writing then would recreate (and leak) a disposed terminal.
-        if (!this.agentsStore.all().some((a) => a.id === id)) return;
-        this.lastOutputAt[id] = Date.now();
-        this.terminals.write(id, chunk);
-        this.tailCoalescer.push(id, chunk);
+      .onOutput((entries) => {
+        const now = Date.now();
+        for (const { id, chunk } of entries) {
+          // Why: the mux's exit force-drain can land after agent removal —
+          // writing then would recreate (and leak) a disposed terminal.
+          if (!this.agentsStore.all().some((a) => a.id === id)) continue;
+          this.lastOutputAt[id] = now;
+          this.terminals.write(id, chunk);
+          this.tailCoalescer.push(id, chunk);
+        }
       })
       .catch(() => {});
     void this.agentsStore

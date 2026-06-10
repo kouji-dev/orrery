@@ -51,6 +51,17 @@ export const Commands = {
   SetWindowIcon: 'set_window_icon',
 } as const;
 
+/** One agent's coalesced PTY output inside a multiplexed `agent://output`
+ *  frame. The event payload is an ARRAY of these — the backend mux emits one
+ *  event per ~16ms frame TOTAL, carrying an entry per agent that produced
+ *  output, with that agent's chunks coalesced. `seq` is the agent's cumulative
+ *  emitted-byte count (monotonic per agent — the snapshot-dedup foundation). */
+export interface AgentOutputEntry {
+  id: string;
+  chunk: string;
+  seq: number;
+}
+
 export const Events = {
   ProjectCreated: 'project://created',
   ProjectUpdated: 'project://updated',
