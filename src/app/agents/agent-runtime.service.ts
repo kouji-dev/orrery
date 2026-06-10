@@ -3,7 +3,6 @@ import {
   ActivityKind,
   Agent,
   AgentNotification,
-  LogLine,
   PermissionQuestion,
   PermissionSuggestion,
 } from "../models";
@@ -13,14 +12,8 @@ import { AgentWorkStore } from "./agent-work.store";
 import { TerminalService } from "../terminal.service";
 import { UiStore } from "../ui/ui.store";
 import { treeAgentIds } from "../workspace/pane-model";
-import {
-  appendPtyTail,
-  detectTitleStatus,
-  isAwaitingInput,
-  isPermissionPrompt,
-  TitleStatus,
-} from "../utils";
-import { createPtyTailCoalescer } from "./pty-tail-coalescer";
+import { detectTitleStatus, isAwaitingInput, isPermissionPrompt, TitleStatus } from "../utils";
+import { createPtyTailBuffer } from "./pty-tail-buffer";
 
 /**
  * The live runtime layer for agents: a per-agent overlay of transient metrics
@@ -46,7 +39,6 @@ export class AgentRuntimeService {
       return o ? { ...a, ...o } : a;
     });
   });
-  readonly liveLogs = signal<Record<string, LogLine[]>>({});
   readonly toolsAvailable = signal<Record<string, boolean>>({});
   // Per-agent ROLLING list of hook-driven activity entries — each
   // `{detail, event, kind}` where detail is the latest message content scraped
@@ -97,18 +89,12 @@ export class AgentRuntimeService {
     return AgentRuntimeService.HOOK_TOOLS.has(tool);
   }
 
-  // liveLogs is a Record-signal — one publish per chunk wakes every consumer.
-  // The coalescer batches all agents' chunks into one publish per 80ms.
-  private tailCoalescer = createPtyTailCoalescer((byAgent) => {
-    this.liveLogs.update((m) => {
-      const next = { ...m };
-      for (const [id, chunk] of byAgent) {
-        const prev = (next[id] || []).map((l) => l.s);
-        next[id] = appendPtyTail(prev, chunk).map((s) => ({ t: "out" as const, s }));
-      }
-      return next;
-    });
-  });
+  // Raw PTY tail, folded LAZILY: a chunk is just appended to a bounded
+  // per-agent ring (no parsing); appendPtyTail runs only when promptTail() is
+  // actually read — at process exit and in the needs-input heuristic for
+  // un-hooked tools (gemini). Hook-driven tools never pay for the fold while
+  // streaming.
+  private tailBuf = createPtyTailBuffer();
 
   constructor() {
     // detect installed CLI tools once
@@ -172,8 +158,8 @@ export class AgentRuntimeService {
       .onActivity((id, detail, event, kind) => this.pushActivity(id, detail, event, kind))
       .catch(() => {});
 
-    // stream output: raw bytes → xterm (scheduler-paced), plain-text tail →
-    // liveLogs via the coalescer (one publish per 80ms, not per chunk).
+    // stream output: raw bytes → xterm (scheduler-paced), and the SAME raw
+    // string into the lazy tail ring (no folding here — see tailBuf above).
     // The payload is one multiplexed ~16ms frame: [{id, chunk, seq}, …] with
     // one coalesced entry per agent that produced output during the frame.
     void this.agentsStore
@@ -185,7 +171,7 @@ export class AgentRuntimeService {
           if (!this.agentsStore.all().some((a) => a.id === id)) continue;
           this.lastOutputAt[id] = now;
           this.terminals.write(id, chunk);
-          this.tailCoalescer.push(id, chunk);
+          this.tailBuf.push(id, chunk);
         }
       })
       .catch(() => {});
@@ -285,6 +271,7 @@ export class AgentRuntimeService {
     this.terminals.dispose(id);
     this.clearRuntime(id);
     this.work.dispose(id);
+    this.tailBuf.clear(id);
     delete this.startedAt[id];
     delete this.titleStatus[id];
     delete this.titleAt[id];
@@ -352,8 +339,6 @@ export class AgentRuntimeService {
   }
 
   private onExit(id: string) {
-    // land any ≤80ms pending tail before the exit notice + notification read it
-    this.tailCoalescer.flush();
     this.terminals.exit(id);
     delete this.startedAt[id];
     delete this.titleStatus[id];
@@ -376,10 +361,9 @@ export class AgentRuntimeService {
       });
     }
     delete this.stoppingByUser[id];
-    this.liveLogs.update((m) => ({
-      ...m,
-      [id]: [...(m[id] || []), { t: "sys" as const, s: "▪ process exited" }],
-    }));
+    // exited marker AFTER the notification read its tail — so the "finished"
+    // detail excludes it but any later promptTail() read includes it.
+    this.tailBuf.push(id, "\r\n▪ process exited");
   }
 
   // ---- backend hook-driven needs-input signal (authoritative) ----
@@ -443,10 +427,12 @@ export class AgentRuntimeService {
     this.prevNeedsInput[ag.id] = needsInput;
   }
 
-  /** Last few non-empty terminal lines — the prompt context for a notification. */
+  /** Last few non-empty terminal lines — the prompt context for a notification.
+   *  This is THE read that triggers the lazy fold of buffered raw chunks. */
   promptTail(id: string): string {
-    return (this.liveLogs()[id] || [])
-      .map((l) => l.s.trim())
+    return this.tailBuf
+      .tail(id)
+      .map((s) => s.trim())
       .filter((s) => s.length > 0)
       .slice(-5)
       .join("\n");
