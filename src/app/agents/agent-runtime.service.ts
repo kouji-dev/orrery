@@ -88,6 +88,7 @@ export class AgentRuntimeService {
   private hookState: Record<string, string> = {};
   // agents whose worktree we've already set up watching + an initial scan for
   private watched = new Set<string>();
+  private scanReady = signal(false);
 
   /** Tools driven by native blocking hooks — their permission/question signals
    *  come from the backend, so the PTY heuristic must not also raise them. */
@@ -122,6 +123,8 @@ export class AgentRuntimeService {
     // and pushes results (changes + HEAD), so no eager pull is needed here.
     // Tree + commits stay lazy — ensured on first open below.
     effect(() => {
+      // Why: the backend pushes an initial scan on watch registration — don't register until the onScan listener is live, or that push is lost.
+      if (!this.scanReady()) return;
       for (const a of this.agentsStore.all()) {
         if (this.watched.has(a.id)) continue;
         this.watched.add(a.id);
@@ -138,7 +141,8 @@ export class AgentRuntimeService {
     });
     void this.agentsStore
       .onScan((p) => this.work.applyScan(p.id, p.changes, p.head))
-      .catch(() => {});
+      .then(() => this.scanReady.set(true))
+      .catch(() => this.scanReady.set(true));
 
     // live agent state from the terminal title (spinner = working, ✋ = needs input)
     this.terminals.onTitle((id, title) => {
@@ -172,6 +176,9 @@ export class AgentRuntimeService {
     // liveLogs via the coalescer (one publish per 80ms, not per chunk)
     void this.agentsStore
       .onOutput((id, chunk) => {
+        // Why: the batcher's final flush can land after agent removal —
+        // writing then would recreate (and leak) a disposed terminal.
+        if (!this.agentsStore.all().some((a) => a.id === id)) return;
         this.lastOutputAt[id] = Date.now();
         this.terminals.write(id, chunk);
         this.tailCoalescer.push(id, chunk);
@@ -340,6 +347,8 @@ export class AgentRuntimeService {
   }
 
   private onExit(id: string) {
+    // land any ≤80ms pending tail before the exit notice + notification read it
+    this.tailCoalescer.flush();
     this.terminals.exit(id);
     delete this.startedAt[id];
     delete this.titleStatus[id];

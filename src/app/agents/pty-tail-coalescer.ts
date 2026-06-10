@@ -7,7 +7,7 @@
 export function createPtyTailCoalescer(
   flush: (byAgent: Map<string, string>) => void,
   intervalMs = 80,
-): { push: (id: string, chunk: string) => void; dispose: () => void } {
+): { push: (id: string, chunk: string) => void; flush: () => void; dispose: () => void } {
   let pending = new Map<string, string>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   const fire = (): void => {
@@ -20,6 +20,10 @@ export function createPtyTailCoalescer(
     push(id, chunk) {
       pending.set(id, (pending.get(id) ?? "") + chunk);
       timer ??= setTimeout(fire, intervalMs);
+    },
+    flush() {
+      if (timer !== null) clearTimeout(timer);
+      fire();
     },
     dispose() {
       if (timer !== null) clearTimeout(timer);

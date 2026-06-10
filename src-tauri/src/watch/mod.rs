@@ -92,41 +92,59 @@ impl WatchService {
     ) {
         let mut guard = self.watchers.lock().unwrap();
         guard.remove(&id); // drop previous watcher → stops it (+ ends its scan thread)
-        if !path.is_dir() {
-            return;
-        }
 
-        // The notify handler is on the OS callback thread — keep it trivial: just
-        // forward a tick. The dedicated thread debounces, scans, and pushes.
-        let (tx, rx) = std::sync::mpsc::channel::<()>();
-        let handler = move |res: notify::Result<notify::Event>| {
-            if res.is_ok() {
-                let _ = tx.send(());
+        // Why: even when fs watching cannot start (missing dir, watcher error),
+        // push one scan so the UI gets a definitive state — otherwise the
+        // changes badge would stay unknown forever.
+        let register = || -> Option<(notify::RecommendedWatcher, std::sync::mpsc::Receiver<()>)> {
+            if !path.is_dir() {
+                return None;
             }
-        };
-        let Ok(mut watcher) = notify::recommended_watcher(handler) else {
-            return;
-        };
-        if watcher.watch(&path, RecursiveMode::Recursive).is_err() {
-            return;
-        }
-        // Why: a linked worktree's gitdir (HEAD, index, refs) lives under the
-        // MAIN repo's .git/worktrees/<name>/ — a commit or checkout touches only
-        // that dir, so without watching it an agent's own `git commit` would
-        // never refresh the changes badge or commits feed. A plain repo's .git
-        // sits inside `path` and is already covered by the recursive watch.
-        if let Ok(repo) = git2::Repository::open(&path) {
-            let gitdir = repo.path().to_path_buf();
-            if !gitdir.starts_with(&path) {
-                let _ = watcher.watch(&gitdir, RecursiveMode::Recursive);
-            }
-        }
-        guard.insert(id, watcher);
 
-        let scan_lock = Arc::clone(&self.scan_lock);
-        std::thread::spawn(move || {
-            scan_loop(rx, SETTLE, MAX_BURST, scan_lock, scan, emit);
-        });
+            // The notify handler is on the OS callback thread — keep it trivial: just
+            // forward a tick. The dedicated thread debounces, scans, and pushes.
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+            let handler = move |res: notify::Result<notify::Event>| {
+                if res.is_ok() {
+                    let _ = tx.send(());
+                }
+            };
+            let Ok(mut watcher) = notify::recommended_watcher(handler) else {
+                return None;
+            };
+            if watcher.watch(&path, RecursiveMode::Recursive).is_err() {
+                return None;
+            }
+            // Why: a linked worktree's gitdir (HEAD, index, refs) lives under the
+            // MAIN repo's .git/worktrees/<name>/ — a commit or checkout touches only
+            // that dir, so without watching it an agent's own `git commit` would
+            // never refresh the changes badge or commits feed. A plain repo's .git
+            // sits inside `path` and is already covered by the recursive watch.
+            if let Ok(repo) = git2::Repository::open(&path) {
+                let gitdir = repo.path().to_path_buf();
+                if !gitdir.starts_with(&path) {
+                    let _ = watcher.watch(&gitdir, RecursiveMode::Recursive);
+                }
+            }
+            Some((watcher, rx))
+        };
+
+        match register() {
+            None => {
+                // Registration failed — emit one definitive scan so the UI is not stale.
+                let mut emit = emit;
+                std::thread::spawn(move || {
+                    emit(scan());
+                });
+            }
+            Some((watcher, rx)) => {
+                guard.insert(id, watcher);
+                let scan_lock = Arc::clone(&self.scan_lock);
+                std::thread::spawn(move || {
+                    scan_loop(rx, SETTLE, MAX_BURST, scan_lock, scan, emit);
+                });
+            }
+        }
     }
 
     /// Stop watching one agent's worktree (e.g. when it is removed).
@@ -291,6 +309,33 @@ mod tests {
         drop(scans);
         drop(tx);
         h.join().unwrap();
+    }
+
+    #[test]
+    fn missing_worktree_still_pushes_one_scan() {
+        let emitted: Arc<Mutex<Vec<ScanResult>>> = Arc::new(Mutex::new(Vec::new()));
+        let e = emitted.clone();
+        let svc = WatchService::new();
+        svc.watch_with_emit(
+            Uuid::new_v4(),
+            PathBuf::from("Z:/definitely/not/a/dir"),
+            || ScanResult {
+                changes: Vec::new(),
+                head: None,
+            },
+            move |s| e.lock().unwrap().push(s),
+        );
+        for _ in 0..50 {
+            if !emitted.lock().unwrap().is_empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(
+            emitted.lock().unwrap().len(),
+            1,
+            "one definitive scan despite no watcher"
+        );
     }
 
     #[test]

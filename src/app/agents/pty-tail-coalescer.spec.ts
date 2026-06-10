@@ -29,6 +29,17 @@ describe("createPtyTailCoalescer", () => {
     expect(flushes[1].get("a")).toBe("2");
   });
 
+  it("flush publishes pending immediately and cancels the timer", () => {
+    const flushes: Map<string, string>[] = [];
+    const c = createPtyTailCoalescer((b) => flushes.push(b), 80);
+    c.push("a", "now");
+    c.flush();
+    expect(flushes.length).toBe(1);
+    expect(flushes[0].get("a")).toBe("now");
+    vi.advanceTimersByTime(1000);
+    expect(flushes.length).toBe(1); // timer cancelled, no double publish
+  });
+
   it("dispose drops pending without flushing", () => {
     const flushes: Map<string, string>[] = [];
     const c = createPtyTailCoalescer((b) => flushes.push(b), 80);
