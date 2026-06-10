@@ -89,7 +89,10 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
         </span>
       }
 
-      <!-- bottom-right cpu/memory gauge; click → popover anchored ABOVE the bar -->
+      <!-- bottom-right cpu/memory gauge; click → popover anchored ABOVE the bar.
+           z-index 95 > the anchor-rail's 90 (Tweaks/DevConsole FABs sit in the
+           same corner and come later in the DOM, so equal z would paint them
+           over the open popover) -->
       <span style="position:relative;display:flex">
         <button
           type="button"
@@ -114,7 +117,7 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
         @if (open()) {
           <div
             class="rise"
-            style="position:absolute;bottom:100%;right:0;margin-bottom:8px;z-index:90;width:max-content;min-width:268px;max-width:min(92vw,420px);background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));overflow:hidden"
+            style="position:absolute;bottom:100%;right:0;margin-bottom:8px;z-index:95;width:max-content;min-width:268px;max-width:min(92vw,420px);background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));overflow:hidden"
           >
             <div
               style="display:flex;justify-content:space-between;align-items:center;padding:9px 11px;border-bottom:1px solid var(--hair);font-size:11px;color:var(--ink-2)"
