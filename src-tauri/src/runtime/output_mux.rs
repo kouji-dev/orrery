@@ -30,6 +30,11 @@ struct State {
     /// agent id → (coalesced chunk, last seq). BTreeMap so a frame's entry
     /// order is deterministic.
     pending: BTreeMap<String, (String, u64)>,
+    /// True while the drain thread has taken a frame out of `pending` but its
+    /// emit has not finished — the drained-but-unemitted window. `take()`
+    /// waits this out so the exit path can't emit `agent://exit` while the
+    /// agent's tail frame is still in flight.
+    draining: bool,
     shutdown: bool,
 }
 
@@ -61,17 +66,21 @@ impl OutputMux {
     /// this to force-drain an agent ahead of its `agent://exit` so no queued
     /// output event lands after the exit; it doubles as the stop/remove
     /// cleanup (the entry is gone either way).
+    ///
+    /// Waits out any in-flight drain emit first: the drain thread emits with
+    /// the lock RELEASED (pushers must never block on UI-thread emit latency),
+    /// so without the wait this could return while the agent's tail frame is
+    /// drained-but-unemitted — and `agent://exit` would beat the tail.
     pub fn take(&self, id: &str) -> Option<OutputEntry> {
-        self.state
-            .lock()
-            .unwrap()
-            .pending
-            .remove(id)
-            .map(|(chunk, seq)| OutputEntry {
-                id: id.to_string(),
-                chunk,
-                seq,
-            })
+        let mut st = self.state.lock().unwrap();
+        while st.draining {
+            st = self.cv.wait(st).unwrap();
+        }
+        st.pending.remove(id).map(|(chunk, seq)| OutputEntry {
+            id: id.to_string(),
+            chunk,
+            seq,
+        })
     }
 
     /// End the drain loop: it final-drains whatever is pending, emits it, and
@@ -105,9 +114,12 @@ impl OutputMux {
                 }
                 if st.shutdown {
                     let batch = Self::drain(&mut st);
-                    drop(st);
                     if !batch.is_empty() {
+                        st.draining = true;
+                        drop(st);
                         emit(batch);
+                        self.state.lock().unwrap().draining = false;
+                        self.cv.notify_all();
                     }
                     return;
                 }
@@ -120,14 +132,23 @@ impl OutputMux {
                     std::thread::sleep(frame - since);
                 }
             }
+            // Open the draining window BEFORE unlocking, emit with the lock
+            // released (pushers stay non-blocking), then close it and wake any
+            // take() parked on the window.
             let batch = {
                 let mut st = self.state.lock().unwrap();
-                Self::drain(&mut st)
+                let b = Self::drain(&mut st);
+                if !b.is_empty() {
+                    st.draining = true;
+                }
+                b
             };
             // Empty only if take() raced everything away — nothing to emit.
             if !batch.is_empty() {
                 emit(batch);
                 last_emit = Some(Instant::now());
+                self.state.lock().unwrap().draining = false;
+                self.cv.notify_all();
             }
         }
     }
@@ -243,6 +264,44 @@ mod tests {
         );
         assert_eq!(mux.take("a"), None, "second take finds nothing — exit emits once");
         assert_eq!(mux.take("b"), Some(entry("b", "keep", 3)), "other agents untouched");
+    }
+
+    /// The exit-path race: drain_loop takes pending under lock, UNLOCKS, then
+    /// emits. If the exit path's take() lands inside that drained-but-unemitted
+    /// window and returns immediately, `agent://exit` goes out while the tail
+    /// frame is still in flight — output after exit. take() must WAIT for the
+    /// in-flight emit to finish.
+    #[test]
+    fn take_waits_for_in_flight_drain_emit_so_no_chunk_lands_after_it() {
+        let mux = Arc::new(OutputMux::new());
+        let log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (m, l) = (mux.clone(), log.clone());
+        let h = std::thread::spawn(move || {
+            m.drain_loop(Duration::from_millis(1), move |batch| {
+                let _ = started_tx.send(());
+                // Slow UI-thread emit: the tail frame is in flight, undelivered.
+                std::thread::sleep(Duration::from_millis(100));
+                let mut l = l.lock().unwrap();
+                for e in batch {
+                    l.push(format!("delivered:{}", e.id));
+                }
+            });
+        });
+        mux.push("a", "tail".into(), 1);
+        // Once the emit closure has started, "a" is already drained out of
+        // pending (draining window open) but NOT yet delivered.
+        started_rx.recv().unwrap();
+        let taken = mux.take("a"); // exit path: must block until the emit lands
+        log.lock().unwrap().push("take_returned".into());
+        assert_eq!(taken, None, "tail was in the drained frame — nothing left over");
+        assert_eq!(
+            *log.lock().unwrap(),
+            vec!["delivered:a".to_string(), "take_returned".to_string()],
+            "no chunk may be delivered after take() returned — exit would beat the tail"
+        );
+        mux.shutdown();
+        h.join().unwrap();
     }
 
     #[test]
