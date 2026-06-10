@@ -1,31 +1,44 @@
 name: Release
 
-# Normal path: `pnpm release` / `pnpm release:patch` locally (scripts/release/
-# bump.mjs) commits the stamped version and pushes a `vX.Y.Z` tag — that tag
-# triggers this workflow, and the version comes from the tag name. The manual
-# dispatch (typed version) remains as an escape hatch for re-runs.
+# Two equivalent entry points, no version is ever typed:
+#  - local:  `pnpm release` / `pnpm release:patch` (scripts/release/bump.mjs)
+#    stamps + commits + tags; the pushed `vX.Y.Z` tag triggers this workflow.
+#  - manual: dispatch with a release/patch SELECT — the workflow runs the same
+#    bump.mjs on main (auto-detecting the current version from package.json),
+#    pushes the bump commit + tag, and builds it. (The GITHUB_TOKEN tag push
+#    does not re-trigger this workflow, so there is no double run.)
+# The built/published version always comes from the checked-out package.json.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
-      version:
-        description: "Release version, e.g. 0.2.0 (no leading v)"
+      bump:
+        description: "What to ship"
         required: true
-        type: string
+        type: choice
+        options: [patch, release]
+        default: patch
       notes:
         description: "Release notes (optional)"
         required: false
         type: string
 
 permissions:
-  contents: read
+  contents: write # dispatch path pushes the bump commit + tag back to main
 
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      notes: ${{ steps.notes.outputs.notes }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # full history + tags: the auto release notes are the commit list
+          # since the previous v* tag (and bump.mjs needs the tags to range)
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -38,16 +51,31 @@ jobs:
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
-      - name: Resolve version (dispatch input, or the pushed vX.Y.Z tag)
+      - name: Bump version (dispatch only — same script as `pnpm release`)
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          node scripts/release/bump.mjs ${{ inputs.bump }}
+      - name: Resolve version (auto-detected from package.json)
         id: ver
         shell: pwsh
         run: |
-          $v = "${{ inputs.version }}"
-          if (-not $v) { $v = "${{ github.ref_name }}".TrimStart("v") }
-          if (-not $v) { Write-Error "no version (dispatch without input?)"; exit 1 }
+          $v = node -p "require('./package.json').version"
+          if ("${{ github.event_name }}" -eq "push") {
+            $tag = "${{ github.ref_name }}".TrimStart("v")
+            if ($tag -ne $v) { Write-Error "tag v$tag != package.json $v — bump with pnpm release[:patch]"; exit 1 }
+          }
           "version=$v" >> $env:GITHUB_OUTPUT
-      - name: Stamp version (idempotent on tag builds — the bump commit already carries it)
-        run: node scripts/release/stamp-version.mjs ${{ steps.ver.outputs.version }}
+      - name: Auto release notes (commits since the previous release, no merges)
+        id: notes
+        shell: pwsh
+        run: |
+          $notes = (node scripts/release/notes.mjs) -join "`n"
+          Add-Content $env:GITHUB_OUTPUT "notes<<NOTES_EOF"
+          Add-Content $env:GITHUB_OUTPUT $notes
+          Add-Content $env:GITHUB_OUTPUT "NOTES_EOF"
       - name: Build Tauri app with signed updater artifacts
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -80,28 +108,32 @@ jobs:
         with:
           name: release-files
           path: artifacts
-      - name: Resolve version (dispatch input, or the pushed vX.Y.Z tag)
-        id: ver
+      # Typed dispatch notes win; otherwise the auto commit list; otherwise the
+      # plain title. Multiline-safe: env + --notes-file, never inline quoting.
+      - name: Resolve notes
+        env:
+          TYPED: ${{ inputs.notes }}
+          AUTO: ${{ needs.build.outputs.notes }}
         run: |
-          v="${{ inputs.version }}"
-          [ -z "$v" ] && v="${GITHUB_REF_NAME#v}"
-          [ -z "$v" ] && { echo "no version" >&2; exit 1; }
-          echo "version=$v" >> "$GITHUB_OUTPUT"
+          NOTES="$TYPED"
+          [ -z "$NOTES" ] && NOTES="$AUTO"
+          [ -z "$NOTES" ] && NOTES="Orrery v${{ needs.build.outputs.version }}"
+          printf '%s\n' "$NOTES" > notes.md
       - name: Build latest.json
         run: >
           node scripts/release/make-latest-json.mjs
-          --version ${{ steps.ver.outputs.version }}
+          --version ${{ needs.build.outputs.version }}
           --dir artifacts
           --out artifacts/latest.json
           --repo kouji-dev/orrery-releases
-          --notes "${{ inputs.notes }}"
+          --notes "$(cat notes.md)"
       - name: Create release in orrery-releases
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: >
-          gh release create "v${{ steps.ver.outputs.version }}"
+          gh release create "v${{ needs.build.outputs.version }}"
           --repo kouji-dev/orrery-releases
           --target main
-          --title "v${{ steps.ver.outputs.version }}"
-          --notes "${{ inputs.notes != '' && inputs.notes || format('Orrery v{0}', steps.ver.outputs.version) }}"
+          --title "v${{ needs.build.outputs.version }}"
+          --notes-file notes.md
           artifacts/*-setup.exe artifacts/*.msi artifacts/latest.json

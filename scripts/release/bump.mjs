@@ -38,9 +38,21 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   execFileSync('node', ['scripts/release/stamp-version.mjs', next], { stdio: 'inherit' });
   git('add', 'package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock');
   git('commit', '-m', `release: v${next}`);
-  git('tag', `v${next}`);
+  // Annotated tag carrying the auto notes (commits since the previous release,
+  // merges skipped) — CI regenerates the same list for the release body.
+  const notes = execFileSync('node', ['scripts/release/notes.mjs']).toString().trim();
+  git('tag', '-a', `v${next}`, '-m', notes || `Orrery v${next}`);
+  if (notes) console.log(`release notes:\n${notes}`);
   if (push) {
-    git('push', 'origin', 'HEAD', `refs/tags/v${next}`);
+    // actions/checkout detaches HEAD — fall back to the CI ref name there so
+    // the bump commit lands on the real branch, not an unqualified HEAD push.
+    let branch = out('rev-parse', '--abbrev-ref', 'HEAD');
+    if (branch === 'HEAD') branch = process.env.GITHUB_REF_NAME ?? '';
+    if (!branch) {
+      console.error('detached HEAD and no GITHUB_REF_NAME — push the commit + tag yourself');
+      process.exit(1);
+    }
+    git('push', 'origin', `HEAD:refs/heads/${branch}`, `refs/tags/v${next}`);
     console.log(`v${next} pushed — the Release workflow is building it`);
   } else {
     console.log(`v${next} committed + tagged (not pushed)`);

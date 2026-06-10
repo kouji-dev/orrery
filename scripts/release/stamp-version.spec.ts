@@ -31,6 +31,14 @@ describe('setLockVersion', () => {
   });
 });
 
+describe('buildNotes', () => {
+  it('bullets subjects, dropping release-bump commits and blanks', async () => {
+    // @ts-expect-error — plain ESM build script, no type declarations
+    const { buildNotes } = await import('./notes.mjs');
+    expect(buildNotes(['feat: a', 'release: v0.2.0', '', 'fix: b'])).toBe('- feat: a\n- fix: b');
+  });
+});
+
 describe('nextVersion', () => {
   it('release bumps the minor and zeroes the patch', () => {
     expect(nextVersion('0.1.17', 'release')).toBe('0.2.0');
