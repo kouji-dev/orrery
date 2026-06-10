@@ -15,7 +15,7 @@ pub const SNAPSHOT_FRESH: Duration = Duration::from_secs(3);
 /// Scoped refreshes between full discovery sweeps. Scoped refreshes only touch
 /// pids already known to belong to our subtrees, so brand-new children (agent
 /// tools spawn workers constantly) are invisible until the next full sweep —
-/// at the loop's 3s tick this bounds discovery lag to ~30s.
+/// discovery lag = DISCOVERY_EVERY × cadence (3 s active → ~30 s; 12 s idle → ~120 s).
 const DISCOVERY_EVERY: u32 = 10;
 
 /// One subtree's roll-up: an agent's process tree, or the app's own tree.
@@ -101,8 +101,7 @@ impl MetricsSampler {
     /// sysinfo (`remove_dead = true`), so the set self-cleans between sweeps.
     pub fn refresh_scoped(&mut self, roots: &[u32]) {
         let map = self.process_map();
-        let unknown_root = roots.iter().any(|r| !map.contains_key(r));
-        if unknown_root || self.scoped_streak >= DISCOVERY_EVERY {
+        if needs_full_sweep(roots, &map, self.scoped_streak) {
             self.refresh();
             return;
         }
@@ -300,6 +299,14 @@ impl SharedSampler {
     fn put_snapshot(&self, m: SystemMetrics) {
         self.inner.lock().unwrap().snapshot = Some((m, Instant::now()));
     }
+}
+
+/// Returns `true` when a full discovery sweep is required: either a root pid is
+/// absent from the current process map (fresh agent whose children are unknown),
+/// or the scoped streak has reached `DISCOVERY_EVERY` (pick up children spawned
+/// since the last sweep). Pure — no side-effects, fully unit-testable.
+fn needs_full_sweep(roots: &[u32], map: &HashMap<u32, ProcSample>, streak: u32) -> bool {
+    roots.iter().any(|r| !map.contains_key(r)) || streak >= DISCOVERY_EVERY
 }
 
 /// Pure roll-up: sum cpu% and memory over `root` and every process whose ancestry
@@ -537,6 +544,56 @@ mod tests {
         apply_labels(&mut m, &labels);
         assert_eq!(m.procs[0].label, "Orrery");
         assert_eq!(m.procs[1].label, "nova");
+    }
+
+    // --- needs_full_sweep predicate ------------------------------------------
+
+    // An unknown root (not in the process map) always forces a full sweep,
+    // regardless of streak position.
+    #[test]
+    fn sweep_predicate_unknown_root_forces_full_sweep() {
+        let m = fixture();
+        // pid 999 is not in fixture — unknown root → must sweep.
+        assert!(needs_full_sweep(&[999], &m, 0));
+        // Also true mid-streak.
+        assert!(needs_full_sweep(&[999], &m, 5));
+    }
+
+    // When all roots are known and the streak is below the threshold, a scoped
+    // refresh is sufficient (predicate returns false).
+    #[test]
+    fn sweep_predicate_known_roots_below_streak_is_scoped() {
+        let m = fixture();
+        // streak 0..9 with all-known roots → scoped is fine.
+        for streak in 0..DISCOVERY_EVERY {
+            assert!(
+                !needs_full_sweep(&[1, 10], &m, streak),
+                "expected scoped at streak={streak}"
+            );
+        }
+    }
+
+    // When the streak reaches DISCOVERY_EVERY the predicate flips to full-sweep
+    // so that newly-spawned children get discovered.
+    #[test]
+    fn sweep_predicate_streak_at_threshold_forces_full_sweep() {
+        let m = fixture();
+        assert!(needs_full_sweep(&[1, 10], &m, DISCOVERY_EVERY));
+        // And beyond (shouldn't normally happen, but guard anyway).
+        assert!(needs_full_sweep(&[1, 10], &m, DISCOVERY_EVERY + 1));
+    }
+
+    // After a full sweep the MetricsSampler resets scoped_streak to 0, so the
+    // next DISCOVERY_EVERY − 1 calls are scoped again.
+    #[test]
+    fn sweep_streak_resets_after_full_sweep() {
+        let mut sampler = MetricsSampler::new();
+        // Drive scoped_streak to DISCOVERY_EVERY − 1 manually via the field
+        // (we only test the reset, not real process data).
+        sampler.scoped_streak = DISCOVERY_EVERY - 1;
+        // refresh() is the full-sweep path; it must reset the streak.
+        sampler.refresh();
+        assert_eq!(sampler.scoped_streak, 0);
     }
 
     // The one-shot command path: a fresh snapshot is served from cache; an aged
