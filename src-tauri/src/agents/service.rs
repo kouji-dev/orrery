@@ -242,6 +242,25 @@ impl AgentService {
         Ok(self.git.status(Path::new(&rec.worktree)))
     }
 
+    /// One worktree scan for the watcher push: working-tree changes + HEAD oid.
+    /// A missing agent (mid-removal race) scans empty — its watcher is about to
+    /// be dropped anyway. Composition of tested pieces; covered end-to-end by
+    /// the watch integration test.
+    #[allow(dead_code)] // Why: wired up in the next commit (watch push migration)
+    pub fn scan(&self, id: Uuid) -> crate::watch::ScanResult {
+        let Ok(rec) = self.get(id) else {
+            return crate::watch::ScanResult {
+                changes: Vec::new(),
+                head: None,
+            };
+        };
+        let p = Path::new(&rec.worktree);
+        crate::watch::ScanResult {
+            changes: self.git.status(p),
+            head: self.git.head_oid(p),
+        }
+    }
+
     /// Commit selected paths (or all when empty) in the agent's worktree.
     pub fn commit(&self, id: Uuid, message: &str, paths: &[String]) -> AppResult<String> {
         let rec = self.record(id)?;

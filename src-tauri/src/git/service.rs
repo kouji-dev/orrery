@@ -490,6 +490,17 @@ impl GitService {
         Some((branch, short))
     }
 
+    /// Full HEAD oid hex, or None for an unborn HEAD / non-repo. Cheap (one ref
+    /// read) — callers use it to detect "did HEAD move" without walking history.
+    pub fn head_oid(&self, path: &Path) -> Option<String> {
+        Repository::open(path)
+            .ok()?
+            .head()
+            .ok()?
+            .target()
+            .map(|o| o.to_string())
+    }
+
     /// Push `branch` to `remote` using the system `git` CLI (so the OS credential
     /// helper handles auth — the one place we shell out instead of using git2,
     /// because libgit2 push needs manual credential callbacks). Errors carry git's
@@ -515,6 +526,20 @@ impl GitService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn head_oid_none_unborn_then_moves_on_commit() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        assert!(svc.head_oid(dir.path()).is_none(), "unborn HEAD");
+        commit_file(dir.path(), "a.txt", "first");
+        let h1 = svc.head_oid(dir.path()).unwrap();
+        commit_file(dir.path(), "b.txt", "second");
+        let h2 = svc.head_oid(dir.path()).unwrap();
+        assert_ne!(h1, h2, "HEAD moves on commit");
+        assert_eq!(h2.len(), 40, "full oid hex, not short sha");
+    }
 
     #[test]
     fn detect_then_init_then_detect() {
