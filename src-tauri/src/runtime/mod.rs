@@ -11,6 +11,7 @@ use crate::agents::adapters::{self, HookEnv};
 use crate::agents::model::Agent;
 
 pub mod jobobj;
+pub(crate) mod output_batcher;
 
 type ProcMap = Arc<Mutex<HashMap<Uuid, Proc>>>;
 
