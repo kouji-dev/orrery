@@ -83,8 +83,10 @@ export class TerminalService implements OnDestroy {
     this.sentFocusId = id;
     void this.agents.focus(id).catch(() => {
       // Invoke failed — roll back the sentinel so the next call with the same
-      // id is not suppressed by the dedup guard and can retry the IPC.
-      this.sentFocusId = prev;
+      // id is not suppressed by the dedup guard and can retry the IPC. Only if
+      // no newer focus change was sent meanwhile: interleaved invokes settle
+      // out of order, and rolling back then would clobber the newer value.
+      if (this.sentFocusId === id) this.sentFocusId = prev;
     });
   }
 
@@ -232,6 +234,12 @@ export class TerminalService implements OnDestroy {
     if (!h) return;
     this.refit(h);
     void this.agents.resize(id, h.term.rows, h.term.cols).catch(() => {});
+    // Restart while the terminal kept DOM focus: exit() released the mux fast
+    // path, and with no blur in between the textarea's focus listener never
+    // re-fires — re-claim explicitly when we are still the active element.
+    if (h.term.textarea && document.activeElement === h.term.textarea) {
+      this.setFocused(id);
+    }
   }
 
   /** Note in the terminal view that the process ended. */

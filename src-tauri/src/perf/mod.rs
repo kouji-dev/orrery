@@ -163,7 +163,9 @@ pub fn spawn_push_loop<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
 /// Sample the Win32 UI-thread queue delay every 1s: post a no-op closure to
 /// the main thread and record how long it sat in the message queue. A direct
 /// gauge of event-loop saturation (the `ui_thread_lag` perf row) — round-trip
-/// timings only show this bottleneck indirectly.
+/// timings only show this bottleneck indirectly. The 1Hz wakeup while idle is
+/// deliberate: the probe must keep sampling to be trustworthy, and one no-op
+/// post/second is noise next to the queue traffic it exists to measure.
 pub fn spawn_ui_probe<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(1));

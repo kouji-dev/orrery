@@ -100,21 +100,6 @@ function setup(agents: Agent[]): AgentRuntimeService {
 }
 
 describe("AgentRuntimeService — idle tick timer gating", () => {
-  it("does not schedule a tick when no agents are running at construction", () => {
-    // idle agent at boot — timer must not fire at all
-    setup([makeAgent({ id: "i1", tool: "claude", status: "idle" })]);
-    const t0 = Date.now();
-    vi.advanceTimersByTime(4000);
-    // now() must stay at construction-time value — no tick, no clock advance
-    // (we can't read now() here without subscribing, so we verify via side effects:
-    // the idle test in the clock suite already covers now() parking; this suite
-    // verifies the timer itself never fires by confirming setInterval was not kept)
-    // Proxy: if the timer IS running, terminals.write (called from onOutput) would
-    // still be 0 here — instead we assert via the notifications mock never being
-    // called for a tick-only run.
-    expect(notifications.push).not.toHaveBeenCalled();
-  });
-
   it("starts ticking when an agent transitions to running", () => {
     const svc = setup([makeAgent({ id: "a1", tool: "claude", status: "idle" })]);
     const t0 = svc.now();
@@ -135,6 +120,20 @@ describe("AgentRuntimeService — idle tick timer gating", () => {
     exit("a1");
     vi.advanceTimersByTime(4000); // timer must have been cleared — clock stays frozen
     expect(svc.now()).toBe(tBeforeExit);
+  });
+
+  it("parks the timer and drops startedAt when start() fails", async () => {
+    const svc = setup([makeAgent({ id: "f1", tool: "claude", status: "idle" })]);
+    const store = TestBed.inject(AgentsStore) as unknown as {
+      start: ReturnType<typeof vi.fn>;
+    };
+    store.start.mockImplementation(() => Promise.reject({ message: "worktree not found" }));
+    svc.startProcess("f1");
+    await vi.advanceTimersByTimeAsync(0); // let the rejection's catch run
+    const tFrozen = svc.now();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(svc.now()).toBe(tFrozen); // timer parked again — no live run remains
+    expect(svc.elapsedFor("f1")).toBe(0); // startedAt dropped — nothing counts up
   });
 
   it("restarts ticking when a new process starts after all have exited", () => {

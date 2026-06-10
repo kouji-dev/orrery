@@ -264,7 +264,7 @@ export interface SystemMetrics {
   procs: ProcMetric[];
 }
 
-// A cost snapshot pushed on `system://cost` (~every 60s). `available` is false
+// A cost snapshot pushed on `system://cost` (~every 5 minutes). `available` is false
 // when ccusage could not run — the status bar then hides the readout.
 export interface CostSnapshot {
   totalCost: number;

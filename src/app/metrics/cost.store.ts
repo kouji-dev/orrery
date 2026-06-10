@@ -4,7 +4,7 @@ import { CostSnapshot } from "../models";
 
 /**
  * Global Claude cost total from ccusage. The backend pushes a fresh
- * `system://cost` payload every 60s; this store mirrors the latest into a signal
+ * `system://cost` payload every 5 minutes; this store mirrors the latest into a signal
  * the status bar reads. Null until the first push / initial fetch. When the
  * payload's `available` is false (ccusage couldn't run) the status bar hides it.
  */

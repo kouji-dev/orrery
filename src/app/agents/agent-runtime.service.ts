@@ -292,7 +292,14 @@ export class AgentRuntimeService {
     void this.agentsStore
       .start(id, sz?.rows ?? 0, sz?.cols ?? 0, opts?.resume ?? false)
       .then(() => this.terminals.syncSize(id))
-      .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "start failed"));
+      .catch((e: { message?: string }) => {
+        // The run never began — drop its startedAt (set optimistically above) so
+        // elapsedFor() doesn't count forever, and park the tick timer when this
+        // was the only would-be live run (mirrors the onExit cleanup).
+        delete this.startedAt[id];
+        if (Object.keys(this.startedAt).length === 0) this.stopTicking();
+        this.ui.flash(e?.message ?? "start failed");
+      });
   }
   stopProcess(id: string) {
     this.stoppingByUser[id] = true; // a user stop is not a "finished work" event
@@ -311,6 +318,7 @@ export class AgentRuntimeService {
     delete this.titleAt[id];
     delete this.hookState[id];
     delete this.prevNeedsInput[id];
+    delete this.stoppingByUser[id]; // exit may never arrive (guarded) — clear here too
     this.clearActivity(id);
     this.watched.delete(id);
   }
@@ -402,6 +410,10 @@ export class AgentRuntimeService {
   }
 
   private onExit(id: string) {
+    // Why: like the output path, exit can land after removeAgent (mux drain
+    // ordering) — patching the overlay / pushing the tail below would recreate
+    // (and leak) runtime + tailBuf entries for a disposed agent.
+    if (!this.agentsStore.all().some((a) => a.id === id)) return;
     this.terminals.exit(id);
     // freeze the elapsed display at the run's final duration
     const started = this.startedAt[id];

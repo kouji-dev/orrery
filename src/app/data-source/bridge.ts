@@ -82,7 +82,7 @@ export const Events = {
   AgentActivity: 'agent://activity',
   /** Fresh cpu/memory snapshot for the app + every running agent (pushed every 3s). */
   SystemMetrics: 'system://metrics',
-  /** Global Claude cost total from ccusage (pushed every 60s). */
+  /** Global Claude cost total from ccusage (pushed every 5 minutes). */
   SystemCost: 'system://cost',
   /** Per-command backend exec aggregates (pushed every 2s; dev + prod). */
   PerfStats: 'perf://stats',
