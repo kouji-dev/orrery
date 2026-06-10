@@ -80,16 +80,23 @@ pub fn run() {
                 sampler.refresh(); // warm-up: first sample's cpu% would otherwise be 0
                 loop {
                     std::thread::sleep(std::time::Duration::from_secs(3));
-                    sampler.refresh();
-                    let (Some(runtime), Some(agents)) = (
-                        metrics_app.try_state::<RuntimeService>(),
-                        metrics_app.try_state::<AgentService>(),
-                    ) else {
-                        continue; // services not ready yet (shouldn't happen post-setup)
-                    };
-                    let m =
-                        metrics::commands::sample_with_labels(&sampler, app_pid, &runtime, &agents);
-                    let _ = metrics_app.emit("system://metrics", m);
+                    // timed so the recurring sweep shows in the perf table —
+                    // its cost is otherwise invisible (only the one-shot
+                    // command path was measured) and it's a steady-state
+                    // baseline-CPU suspect.
+                    crate::perf::timed("system_metrics_push", || {
+                        sampler.refresh();
+                        let (Some(runtime), Some(agents)) = (
+                            metrics_app.try_state::<RuntimeService>(),
+                            metrics_app.try_state::<AgentService>(),
+                        ) else {
+                            return; // services not ready yet (shouldn't happen post-setup)
+                        };
+                        let m = metrics::commands::sample_with_labels(
+                            &sampler, app_pid, &runtime, &agents,
+                        );
+                        let _ = metrics_app.emit("system://metrics", m);
+                    });
                 }
             });
 
@@ -104,7 +111,10 @@ pub fn run() {
             std::thread::spawn(move || {
                 use tauri::Emitter;
                 loop {
-                    let snap = cost::snapshot();
+                    // timed: the startup command path measured ~3s exec (npx
+                    // resolution + node + full transcript scan) — this row
+                    // proves what the recurring cycle costs in steady state.
+                    let snap = crate::perf::timed("system_cost_push", cost::snapshot);
                     let _ = cost_app.emit("system://cost", snap);
                     std::thread::sleep(std::time::Duration::from_secs(60));
                 }
