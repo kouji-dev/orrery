@@ -46,15 +46,15 @@ describe('TauriUpdater.check', () => {
     expect(invoke).toHaveBeenCalledWith('update_check', { timeoutMs: 10_000 });
   });
 
-  it('forwards the channel to update_check AND update_perform when given', async () => {
+  it('forwards the channel to update_check AND update_install when given', async () => {
     vi.mocked(invoke).mockResolvedValueOnce('0.1.7'); // update_check
     vi.mocked(listen).mockResolvedValueOnce(vi.fn());
-    vi.mocked(invoke).mockResolvedValueOnce(undefined); // update_perform
+    vi.mocked(invoke).mockResolvedValueOnce(undefined); // update_install
 
     const handle = await new TauriUpdater().check(10_000, 'beta');
     expect(invoke).toHaveBeenCalledWith('update_check', { timeoutMs: 10_000, channel: 'beta' });
     await handle!.downloadAndInstall(vi.fn());
-    expect(invoke).toHaveBeenLastCalledWith('update_perform', { timeoutMs: 10_000, channel: 'beta' });
+    expect(invoke).toHaveBeenLastCalledWith('update_install', { timeoutMs: 10_000, channel: 'beta' });
   });
 
   it('normalizes the channel-aware object response (version/date/notes)', async () => {
@@ -69,18 +69,18 @@ describe('TauriUpdater.check', () => {
     expect(handle?.notes).toBe('https://example/releases');
   });
 
-  it('returns a handle whose install runs update_perform and cleans up the listener', async () => {
+  it('returns a handle whose install runs update_install and cleans up the listener', async () => {
     vi.mocked(invoke).mockResolvedValueOnce('0.1.7'); // update_check
     const unlisten = vi.fn();
     vi.mocked(listen).mockResolvedValueOnce(unlisten);
-    vi.mocked(invoke).mockResolvedValueOnce(undefined); // update_perform
+    vi.mocked(invoke).mockResolvedValueOnce(undefined); // update_install
 
     const handle = await new TauriUpdater().check(10_000);
     expect(handle?.version).toBe('0.1.7');
 
     await handle!.downloadAndInstall(vi.fn());
     expect(listen).toHaveBeenCalledWith('update://progress', expect.any(Function));
-    expect(invoke).toHaveBeenLastCalledWith('update_perform', { timeoutMs: 10_000 });
+    expect(invoke).toHaveBeenLastCalledWith('update_install', { timeoutMs: 10_000 });
     expect(unlisten).toHaveBeenCalled(); // listener removed even though install resolved
   });
 
@@ -91,7 +91,7 @@ describe('TauriUpdater.check', () => {
       emit = handler as typeof emit;
       return vi.fn();
     });
-    // update_perform: simulate the Rust side emitting a progress event mid-install.
+    // update_install: simulate the Rust side emitting a progress event mid-install.
     vi.mocked(invoke).mockImplementationOnce(async () => {
       emit({ payload: { downloaded: 512, total: 1024 } });
     });

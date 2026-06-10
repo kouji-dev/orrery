@@ -20,9 +20,10 @@ function make(updater: Partial<Updater>, settings: Partial<Settings> = {}): Made
     ...updater,
   };
   const noteUpdate = vi.fn();
-  // settingsDefaults() has updatePolicy "auto" — the pre-policy behavior.
+  // Install-path tests run under "auto" (the pre-policy behavior) unless a test
+  // passes its own policy — the REAL default is "notify" (design contract).
   const store = {
-    ready: async () => ({ ...settingsDefaults(), ...settings }),
+    ready: async () => ({ ...settingsDefaults(), updatePolicy: "auto", ...settings }),
     noteUpdate,
   } as unknown as SettingsStore;
   const injector = Injector.create({

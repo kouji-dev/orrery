@@ -72,15 +72,17 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             channel: "stable".into(),
-            update_policy: "auto".into(), // today's behavior: check + install at startup
-            default_tool: String::new(),  // spawn modal keeps its own hardcoded default
+            // Design SETTINGS_DEFAULTS are the contract (settings.jsx): notify,
+            // auto-resume on, remote approval on.
+            update_policy: "notify".into(),
+            default_tool: String::new(), // spawn modal keeps its own hardcoded default
             tool_model: BTreeMap::new(),
             tool_effort: BTreeMap::new(),
             branch_template: "agent/{name}".into(), // the historical branch shape
             worktree_root: String::new(),           // "" = ctor root (app-data/worktrees)
-            auto_resume: false,
+            auto_resume: true,
             auto_approve: BTreeMap::new(), // absent tool = "off" (tool's own flow)
-            remote_approval: false,
+            remote_approval: true,
             os_notifications: true,
             events: EventToggles::default(),
             sound: true,
@@ -119,10 +121,10 @@ mod tests {
     fn default_matches_plan_schema() {
         let s = Settings::default();
         assert_eq!(s.channel, "stable");
-        assert_eq!(s.update_policy, "auto");
+        assert_eq!(s.update_policy, "notify");
         assert_eq!(s.branch_template, "agent/{name}");
         assert_eq!(s.worktree_root, "", "empty = fall back to the ctor root");
-        assert!(!s.auto_resume);
+        assert!(s.auto_resume);
         assert!(s.auto_approve.is_empty(), "no tool defaults to bypassing");
         assert!(s.os_notifications);
         assert_eq!(s.sound_name, "Ping");
@@ -136,7 +138,7 @@ mod tests {
         let s: Settings =
             serde_json::from_str(r#"{"channel":"beta","someFutureKey":{"x":1}}"#).unwrap();
         assert_eq!(s.channel, "beta");
-        assert_eq!(s.update_policy, "auto", "missing key takes the default");
+        assert_eq!(s.update_policy, "notify", "missing key takes the default");
         assert_eq!(s.events, EventToggles::default());
     }
 

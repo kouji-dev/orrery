@@ -22,15 +22,16 @@ export type SettingsMapKey = "toolModel" | "toolEffort" | "autoApprove";
 export function settingsDefaults(): Settings {
   return {
     channel: "stable",
-    updatePolicy: "auto", // today's behavior: check + install at startup
+    // Design SETTINGS_DEFAULTS are the contract: notify / resume on / remote on.
+    updatePolicy: "notify",
     defaultTool: "", // "" = spawn modal keeps its own hardcoded default
     toolModel: {},
     toolEffort: {},
     branchTemplate: "agent/{name}",
     worktreeRoot: "", // "" = ctor root (app-data/worktrees)
-    autoResume: false,
+    autoResume: true,
     autoApprove: {}, // absent tool = "off" (the tool's own flow)
-    remoteApproval: false,
+    remoteApproval: true,
     osNotifications: true,
     events: { finished: true, question: true, permission: true, error: true },
     sound: true,

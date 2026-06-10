@@ -899,7 +899,10 @@ export class SettingsModalComponent {
   }
   openNotes(e: Event): void {
     e.preventDefault();
-    const url = this.store.updateInfo()?.notes || this.releasesUrl;
+    // `notes` is the manifest's BODY TEXT (make-latest-json.mjs), not a URL —
+    // only treat it as a link target when it actually is one.
+    const notes = this.store.updateInfo()?.notes;
+    const url = notes && /^https?:\/\//.test(notes) ? notes : this.releasesUrl;
     // window.open is blocked inside the Tauri webview — route through the opener.
     import("@tauri-apps/plugin-opener")
       .then((m) => m.openUrl(url))

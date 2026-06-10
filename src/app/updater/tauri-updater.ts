@@ -5,7 +5,7 @@ import { relaunch } from '@tauri-apps/plugin-process';
 import { Updater, UpdateHandle } from './updater';
 
 /** Real boundary over the Tauri updater. Update resolution, download, and Ed25519
- *  signature verification all run in Rust (`update_check` / `update_perform`); the
+ *  signature verification all run in Rust (`update_check` / `update_install`); the
  *  Rust side also picks the install strategy by how the app was installed — a
  *  per-user NSIS install uses the plugin's silent installer, while a per-machine
  *  MSI is upgraded via an elevated, one-UAC-prompt step that relaunches the app
@@ -40,12 +40,13 @@ export class TauriUpdater implements Updater {
           (e) => onProgress(e.payload.downloaded, e.payload.total),
         );
         try {
-          // On Windows this never resolves on success: `update_perform` hands off
+          // On Windows this never resolves on success: `update_install` hands off
           // to the installer (elevated for a per-machine MSI) and exits the
           // process. It rejects only on a pre-install failure (network / signature
           // / no update), which the caller treats as "no update". Same payload as
-          // the check, so a channel-aware backend installs from the same channel.
-          await invoke('update_perform', payload);
+          // the check, so the install pulls from the SAME channel — the legacy
+          // `update_perform` is channel-blind and must not be used here.
+          await invoke('update_install', payload);
         } finally {
           unlisten();
         }
