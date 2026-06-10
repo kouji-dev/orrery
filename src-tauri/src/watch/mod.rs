@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -101,12 +101,16 @@ impl WatchService {
                 return None;
             }
 
-            // The notify handler is on the OS callback thread — keep it trivial: just
-            // forward a tick. The dedicated thread debounces, scans, and pushes.
+            // The notify handler is on the OS callback thread — keep it cheap:
+            // drop transient git-metadata noise, forward a tick for the rest.
+            // The dedicated thread debounces, scans, and pushes.
             let (tx, rx) = std::sync::mpsc::channel::<()>();
             let handler = move |res: notify::Result<notify::Event>| {
-                if res.is_ok() {
-                    let _ = tx.send(());
+                if let Ok(event) = res {
+                    // fail open: an event with no paths still ticks the debounce
+                    if event.paths.is_empty() || event.paths.iter().any(|p| is_scan_relevant(p)) {
+                        let _ = tx.send(());
+                    }
                 }
             };
             let Ok(mut watcher) = notify::recommended_watcher(handler) else {
@@ -151,6 +155,30 @@ impl WatchService {
     pub fn unwatch(&self, id: Uuid) {
         self.watchers.lock().unwrap().remove(&id);
     }
+}
+
+/// Why: agent CLIs run git constantly; every op churns transient git metadata
+/// (index.lock create/delete, reflog appends, loose-object writes). Scanning on
+/// that noise would turn each agent git call into a full status walk — the
+/// fingerprint only suppresses the push, the scan CPU is already spent. Only
+/// git metadata that can change what a scan reports (index, HEAD, refs) earns a
+/// tick; regular worktree content always does. Segment-based so it covers both
+/// plain repos (`<wt>/.git/…`) and linked-worktree gitdirs
+/// (`….git/worktrees/<n>/…`) without path canonicalization, and fails OPEN:
+/// unrecognized shapes count as relevant.
+fn is_scan_relevant(path: &Path) -> bool {
+    let mut in_git_metadata = false;
+    for component in path.components() {
+        let segment = component.as_os_str();
+        if segment == ".git" {
+            in_git_metadata = true;
+            continue;
+        }
+        if in_git_metadata && (segment == "logs" || segment == "objects") {
+            return false;
+        }
+    }
+    !(in_git_metadata && path.extension().is_some_and(|e| e == "lock"))
 }
 
 /// Drive the scan-and-push loop: scan once at registration (the frontend's
@@ -309,6 +337,89 @@ mod tests {
         drop(scans);
         drop(tx);
         h.join().unwrap();
+    }
+
+    #[test]
+    fn scan_relevance_filters_transient_git_metadata() {
+        // transient gitdir churn (every agent `git status/add/commit`) — ignored
+        assert!(!is_scan_relevant(Path::new(
+            "/m/.git/worktrees/a/index.lock"
+        )));
+        assert!(!is_scan_relevant(Path::new("/m/.git/index.lock")));
+        assert!(!is_scan_relevant(Path::new(
+            "/m/.git/worktrees/a/logs/HEAD"
+        )));
+        assert!(!is_scan_relevant(Path::new("/m/.git/objects/ab/cdef0123")));
+        // git state that changes what a scan reports — relevant
+        assert!(is_scan_relevant(Path::new("/m/.git/worktrees/a/index")));
+        assert!(is_scan_relevant(Path::new("/m/.git/worktrees/a/HEAD")));
+        assert!(is_scan_relevant(Path::new("/m/.git/refs/heads/agent/x")));
+        // worktree content — always relevant, including lock-NAMED project files
+        assert!(is_scan_relevant(Path::new("/wt/src/main.rs")));
+        assert!(is_scan_relevant(Path::new("/wt/yarn.lock")));
+        assert!(is_scan_relevant(Path::new("/wt/Cargo.lock")));
+    }
+
+    #[test]
+    fn transient_gitdir_churn_does_not_rescan() {
+        let git = crate::git::service::GitService::new();
+        let main = tempfile::tempdir().unwrap();
+        git.init(main.path()).unwrap();
+        git.ensure_main_branch(main.path()).unwrap();
+
+        let wt_root = tempfile::tempdir().unwrap();
+        let wt = wt_root.path().join("agent_churn");
+        git.create_worktree(main.path(), "agent_churn", "agent/churn", None, &wt)
+            .unwrap();
+        let gitdir = git2::Repository::open(&wt).unwrap().path().to_path_buf();
+
+        let scans = Arc::new(AtomicUsize::new(0));
+        let scan_count = scans.clone();
+        let svc = WatchService::new();
+        svc.watch_with_emit(
+            Uuid::new_v4(),
+            wt.clone(),
+            move || {
+                scan_count.fetch_add(1, Ordering::SeqCst);
+                ScanResult {
+                    changes: Vec::new(),
+                    head: Some("h".into()),
+                }
+            },
+            |_s| {},
+        );
+
+        let wait_for_scans = |n: usize| {
+            for _ in 0..100 {
+                if scans.load(Ordering::SeqCst) >= n {
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            false
+        };
+        assert!(wait_for_scans(1), "initial scan");
+
+        // simulate agent-side git ops: index.lock create/delete cycles, reflog
+        // appends, loose-object writes — none of it changes scan output
+        for _ in 0..3 {
+            std::fs::write(gitdir.join("index.lock"), b"x").unwrap();
+            std::thread::sleep(Duration::from_millis(30));
+            let _ = std::fs::remove_file(gitdir.join("index.lock"));
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        std::fs::create_dir_all(gitdir.join("logs")).unwrap();
+        std::fs::write(gitdir.join("logs").join("HEAD"), b"reflog line\n").unwrap();
+        std::thread::sleep(Duration::from_millis(800)); // > SETTLE; debounce would fire
+        assert_eq!(
+            scans.load(Ordering::SeqCst),
+            1,
+            "transient git metadata churn must not trigger scans"
+        );
+
+        // control: a real worktree edit still scans (watcher alive, not over-filtered)
+        std::fs::write(wt.join("hello.txt"), "hi\n").unwrap();
+        assert!(wait_for_scans(2), "real content change still scans");
     }
 
     #[test]
