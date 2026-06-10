@@ -2,7 +2,7 @@ import { Injector, runInInjectionContext } from "@angular/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AgentWorkStore, COMMITS_PAGE } from "./agent-work.store";
 import { BRIDGE, Bridge, Commands } from "../data-source/bridge";
-import { Commit } from "../models";
+import { AgentFile, Commit } from "../models";
 
 function commit(sha: string): Commit {
   return { sha, msg: sha, agent: "a", when: "1m", files: 1 } as unknown as Commit;
@@ -86,18 +86,40 @@ describe("AgentWorkStore", () => {
     expect(store.changesFor("a").data[0].path).toBe("new");
   });
 
-  it("onWorktreeChanged reloads changes always, tree only when previously loaded", async () => {
-    store.onWorktreeChanged("a");
-    expect(invokes.map((i) => i.cmd)).toEqual([Commands.AgentChanges]); // no tree: idle
+  it("applyScan stores ready changes with zero bridge calls", () => {
+    store.applyScan("a", [{ path: "x", add: 1, del: 0, state: "M" as const }], "h1");
+    expect(store.changesFor("a").status).toBe("ready");
+    expect(store.changesFor("a").data[0].path).toBe("x");
+    expect(invokes.length).toBe(0);
+  });
+
+  it("applyScan reloads tree only when previously loaded", async () => {
+    store.applyScan("a", [], "h1");
+    expect(invokes.length).toBe(0); // tree idle → no pull
     store.ensureTree("a");
-    resolvers[1]!([]);
+    resolvers.shift()!([]);
     await Promise.resolve();
-    store.onWorktreeChanged("a");
-    expect(invokes.map((i) => i.cmd)).toEqual([
-      Commands.AgentChanges,
-      Commands.AgentTree,
-      Commands.AgentChanges,
-      Commands.AgentTree,
-    ]);
+    store.applyScan("a", [], "h1");
+    expect(invokes.map((i) => i.cmd)).toEqual([Commands.AgentTree, Commands.AgentTree]);
+  });
+
+  it("applyScan refreshes commits only on a HEAD move, and only when loaded", async () => {
+    store.applyScan("a", [], "h1"); // commits idle → nothing
+    store.ensureCommits("a");
+    resolvers.shift()!([commit("s1")]);
+    await Promise.resolve();
+    store.applyScan("a", [], "h1"); // same head → no refresh
+    expect(invokes.filter((i) => i.cmd === Commands.AgentCommits).length).toBe(1);
+    store.applyScan("a", [], "h2"); // head moved → refresh
+    expect(invokes.filter((i) => i.cmd === Commands.AgentCommits).length).toBe(2);
+  });
+
+  it("a late pull resolve cannot stomp fresher pushed data", async () => {
+    store.loadChanges("a");
+    const stale = resolvers.shift()!;
+    store.applyScan("a", [{ path: "pushed", add: 1, del: 0, state: "A" as const }], "h1");
+    stale([{ path: "stale", add: 9, del: 9, state: "M" as const }]);
+    await Promise.resolve();
+    expect(store.changesFor("a").data[0].path).toBe("pushed");
   });
 });
