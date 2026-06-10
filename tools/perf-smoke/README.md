@@ -7,15 +7,16 @@ Standalone load harness for Orrery PTY perf budgets.
 1. **Start app** in dev mode: `npm run dev`
 2. **Create N agents** using command:
    ```
-   node C:\Users\narut\Desktop\projects\katrix\tools\perf-smoke\noise.mjs
+   node tools/perf-smoke/noise.mjs
    ```
    Optional flags: `--bytes-per-sec 50000 --mode redraw|lines --duration-sec 60`
 3. **Run all agents**, type in one, let run for ≥10s
 4. **Export capture**: Dev Panel → perf tab → Export JSON → save as `capture.json`
 5. **Assert budgets**:
    ```
-   node tools/perf-smoke/assert.mjs capture.json
+   pnpm perf:assert capture.json
    ```
+   Or directly: `node tools/perf-smoke/assert.mjs capture.json`  
    Custom budgets: `--budgets my-budgets.json`
 
 ## Default budgets

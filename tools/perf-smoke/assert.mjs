@@ -76,12 +76,16 @@ function assertCapture(data, budgets) {
     }
   }
 
-  // errPct==0 for every non-stale row
+  // errPct==0 for every non-stale row; non-numeric counts as violation
   for (const row of rows) {
     if (row.stale) continue;
-    const pass = row.errPct === 0;
+    const n = Number(row.errPct);
+    const pass = Number.isFinite(n) && n === 0;
+    const actual = (row.errPct === null || row.errPct === undefined)
+      ? 'null/undefined'
+      : (Number.isFinite(Number(row.errPct)) ? row.errPct : `non-numeric(${row.errPct})`);
     if (!pass) failed = true;
-    results.push({ cmd: row.cmd, metric: 'errPct', budget: '==0', actual: row.errPct, pass });
+    results.push({ cmd: row.cmd, metric: 'errPct', budget: '==0', actual, pass });
   }
 
   return { results, failed };

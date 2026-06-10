@@ -3,14 +3,36 @@
 // Flags: --bytes-per-sec N, --mode lines|redraw, --duration-sec N
 
 const args = process.argv.slice(2);
+
+function usage() {
+  console.error('Usage: node noise.mjs [--bytes-per-sec N] [--mode lines|redraw] [--duration-sec N]');
+  process.exit(1);
+}
+
+function getNum(flag, def) {
+  const i = args.indexOf(flag);
+  if (i === -1) return def;
+  const raw = args[i + 1];
+  if (raw === undefined || raw.startsWith('--')) {
+    console.error(`noise: missing value for ${flag}`);
+    usage();
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n)) {
+    console.error(`noise: non-numeric value for ${flag}: ${raw}`);
+    usage();
+  }
+  return n;
+}
+
 const get = (flag, def) => {
   const i = args.indexOf(flag);
   return i !== -1 ? args[i + 1] : def;
 };
 
-const BPS       = Number(get('--bytes-per-sec',  50000));
+const BPS       = getNum('--bytes-per-sec', 50000);
 const MODE      = get('--mode',         'redraw');
-const DURATION  = Number(get('--duration-sec',   0)); // 0 = forever
+const DURATION  = getNum('--duration-sec',  0); // 0 = forever
 
 const TICK_MS   = 50;
 const ROWS      = 40;
@@ -54,6 +76,7 @@ const iv = setInterval(() => {
 
   const chunk = MODE === 'lines' ? makeLine() : makeFrame();
   // Emit only up to bytesPerTick worth per tick to pace throughput
+  // chunk is ASCII-only, so slice(0, N) counts code units == bytes
   const slice = chunk.slice(0, bytesPerTick);
   process.stdout.write(slice);
   bytesSent += Buffer.byteLength(slice, 'utf8');
