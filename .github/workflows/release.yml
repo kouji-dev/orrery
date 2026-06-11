@@ -34,17 +34,17 @@ jobs:
       version: ${{ steps.ver.outputs.version }}
       notes: ${{ steps.notes.outputs.notes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # full history + tags: the auto release notes are the commit list
           # since the previous v* tag (and bump.mjs needs the tags to range)
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
@@ -91,7 +91,7 @@ jobs:
           # MSI updater signature (per-machine installs update via the MSI). Tolerant:
           # if it's absent, make-latest-json just omits the MSI updater entry.
           Copy-Item src-tauri/target/release/bundle/msi/*.msi.sig dist-release/ -ErrorAction SilentlyContinue
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-files
           path: dist-release/
@@ -100,11 +100,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
-      - uses: actions/download-artifact@v4
+          node-version: 22
+      - uses: actions/download-artifact@v8
         with:
           name: release-files
           path: artifacts
