@@ -28,21 +28,24 @@ interface VizDef {
     TimelineViewComponent,
   ],
   template: `
-    <div style="display:flex;flex-direction:column;min-height:0;background:var(--panel-2)">
-      <!-- stat header -->
-      <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--hair);background:var(--panel)">
-        <div style="margin-right:24px">
+    <div style="display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--panel-2)">
+      <!-- stat header — the stat group and the view controls wrap to their own
+           rows when the pane is narrow, so content never widens the layout -->
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px 0;padding:14px 18px;border-bottom:1px solid var(--hair);background:var(--panel);min-width:0">
+        <div style="margin-right:24px;min-width:0">
           <h1 class="disp" style="font-size:16px;font-weight:600;letter-spacing:-0.02em">Orchestrator</h1>
           <span style="font-size:10.5px;color:var(--ink-3)">
             {{ runtime.agents().length }} agents across {{ projects.all().length }} projects · {{ ui.org }}
           </span>
         </div>
-        <app-stat-block [n]="count('running')" label="Running" color="var(--st-running)" [pulse]="true" />
-        <app-stat-block [n]="count('blocked')" label="Need you" color="var(--st-blocked)" />
-        <app-stat-block [n]="count('waiting') + count('queued')" label="Waiting" color="var(--st-waiting)" />
-        <app-stat-block [n]="count('done')" label="Done" color="var(--st-done)" />
-        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-          <div style="display:flex;gap:2px;padding:3px;background:var(--panel-2);border-radius:var(--r-md);border:1px solid var(--hair)">
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 0;min-width:0">
+          <app-stat-block [n]="count('running')" label="Running" color="var(--st-running)" [pulse]="true" />
+          <app-stat-block [n]="count('blocked')" label="Need you" color="var(--st-blocked)" />
+          <app-stat-block [n]="count('waiting') + count('queued')" label="Waiting" color="var(--st-waiting)" />
+          <app-stat-block [n]="count('done')" label="Done" color="var(--st-done)" />
+        </div>
+        <div style="margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding-left:12px">
+          <div style="display:flex;flex-wrap:wrap;gap:2px;padding:3px;background:var(--panel-2);border-radius:var(--r-md);border:1px solid var(--hair)">
             @for (v of viz; track v.key) {
               @let on = ui.viz() === v.key;
               <button
@@ -61,8 +64,9 @@ interface VizDef {
         </div>
       </div>
 
-      <!-- body -->
-      <div class="scroll-y" style="flex:1">
+      <!-- body: both axes scroll — wide views (board columns, grid cards) must
+           never force the pane (or the window) wider -->
+      <div class="scroll-y" style="flex:1;overflow-x:auto">
         @switch (ui.viz()) {
           @case ('grid') { <app-grid-view [agents]="runtime.agents()" /> }
           @case ('kanban') { <app-kanban-view [agents]="runtime.agents()" /> }

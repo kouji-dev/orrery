@@ -22,7 +22,7 @@ interface TabDef {
   imports: [IconComponent, StatusDotComponent, FilesTabComponent, InboxTabComponent, GitTabComponent],
   template: `
     @let scope = runtime.activeAgent();
-    <aside style="display:flex;flex-direction:column;min-height:0;background:var(--panel);border-left:1px solid var(--hair)">
+    <aside style="display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;background:var(--panel);border-left:1px solid var(--hair)">
       @if (scope) {
         <!-- agent header -->
         <div style="display:flex;align-items:center;gap:8px;padding:0 12px;height:38px;border-bottom:1px solid var(--hair)">

@@ -30,7 +30,7 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
   template: `
     <header
       data-tauri-drag-region
-      style="display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--hair);height:44px;position:relative;z-index:5"
+      style="display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--hair);height:44px;position:relative;z-index:5;min-width:0"
     >
       <!-- brand (also a window drag handle). Pinned to the OPEN sidebar width
            (--sidebar-w) so it lines up with the sidebar column and keeps that
@@ -50,8 +50,9 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
 
       <div class="vdiv"></div>
 
-      <!-- tabs (empty area drags the window) -->
-      <div data-tauri-drag-region style="display:flex;align-items:stretch;flex:1;min-width:0;overflow-x:auto">
+      <!-- tabs (empty area drags the window). Overflowing tabs scroll sideways —
+           the scrollbar is hidden (this is the titlebar) and the wheel pans. -->
+      <div class="tab-strip" data-tauri-drag-region (wheel)="onTabWheel($event)" style="display:flex;align-items:stretch;flex:1;min-width:0;overflow-x:auto">
         @for (tab of ui.tabs(); track tab.id) {
           @let isOrch = tab.kind === 'orchestrator';
           @let active = ui.activeTab() === tab.id;
@@ -158,7 +159,13 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
       </div>
     </header>
   `,
-  styles: [`.tab-x:hover { color: var(--ink) !important; }`],
+  styles: [
+    `
+      .tab-x:hover { color: var(--ink) !important; }
+      .tab-strip { scrollbar-width: none; }
+      .tab-strip::-webkit-scrollbar { display: none; }
+    `,
+  ],
 })
 export class TopBarComponent implements AfterViewInit, OnDestroy {
   readonly ui = inject(UiStore);
@@ -193,6 +200,17 @@ export class TopBarComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.ro?.disconnect();
+  }
+
+  /** Vertical wheel pans the tab strip sideways (trackpad deltaX already works natively). */
+  onTabWheel(e: WheelEvent) {
+    if (e.ctrlKey) return; // don't hijack zoom gestures
+    const el = e.currentTarget as HTMLElement;
+    if (el.scrollWidth <= el.clientWidth) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    }
   }
 
   tabAgentIds(tab: Tab): string[] {

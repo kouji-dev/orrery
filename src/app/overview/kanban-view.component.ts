@@ -17,7 +17,8 @@ interface Col {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [StatusDotComponent, IconComponent],
   template: `
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:18px;align-items:start;min-height:0">
+    <!-- columns keep a readable floor; past that the overview body scrolls sideways -->
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;padding:18px;align-items:start;min-height:0">
       @for (c of cols; track c.key) {
         @let items = colItems(c);
         <div style="display:flex;flex-direction:column;gap:9px">

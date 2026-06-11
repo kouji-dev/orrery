@@ -11,7 +11,7 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
           <span class="dot running" [style.background]="color()"></span>
         }
       </div>
-      <span class="up" style="font-size:9px;color:var(--ink-3)">{{ label() }}</span>
+      <span class="up" style="font-size:9px;color:var(--ink-3);white-space:nowrap">{{ label() }}</span>
     </div>
   `,
 })

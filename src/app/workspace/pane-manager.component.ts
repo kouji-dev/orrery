@@ -31,8 +31,8 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [PaneNodeComponent],
   template: `
-    <div style="display:flex;flex-direction:column;min-height:0;background:var(--panel-2)">
-      <div style="flex:1;min-height:0;padding:8px;display:flex">
+    <div style="display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--panel-2)">
+      <div style="flex:1;min-height:0;min-width:0;padding:8px;display:flex">
         @if (root(); as r) { <app-pane-node [node]="r" [ctx]="this" /> }
       </div>
     </div>
