@@ -1,23 +1,21 @@
 //! Windows-aware self-update install step.
 //!
-//! Tauri's bundled updater installs an MSI by launching `msiexec` with the
-//! ShellExecute verb `"open"` (which does NOT force elevation) in `/passive` mode,
-//! then exits. For a PER-MACHINE MSI — Orrery installs to `C:\Program Files` — that
-//! upgrade requires admin rights; when the implicit UAC step doesn't complete the
-//! new version never lands, so the app re-offers the same update every boot. That's
-//! the MSI update "loop" (see the updater-release invariants).
+//! The MSI is a PER-USER package since the custom WiX template (`wix/main.wxs`):
+//! it installs to `%LOCALAPPDATA%\Programs\Orrery` with NO elevation and NO UAC.
+//! (History: it used to be per-machine in `C:\Program Files`, which needed an
+//! elevated msiexec — the old `-Verb RunAs` relauncher. That mode is gone.)
 //!
 //! We reuse the plugin for everything that already works — endpoint/version
 //! resolution, download, and the Ed25519 signature check — and only override the
 //! final launch, branching on how the running app was installed (detected from the
 //! bytes the updater actually fetched):
-//!   * NSIS (per-user): no elevation needed, so we defer to `Update::install` — the
-//!     plugin installs silently and relaunches via NSIS `/R`.
-//!   * MSI (per-machine, Windows): we hand the verified `.msi` to a detached,
-//!     NON-elevated PowerShell that elevates ONLY `msiexec` (one UAC consent), runs
-//!     the major upgrade `/quiet`, waits for it, then relaunches the app at normal
-//!     integrity. `AUTOLAUNCHAPP` is intentionally NOT used — under the elevated
-//!     msiexec it would relaunch the app elevated, which we don't want.
+//!   * NSIS (per-user): we defer to `Update::install` — the plugin installs
+//!     silently and relaunches via NSIS `/R`.
+//!   * MSI (per-user, Windows): we hand the verified `.msi` to a detached,
+//!     non-elevated PowerShell that runs the major upgrade `/quiet`, waits for it,
+//!     then relaunches the app. The relauncher (rather than the plugin's fire-and-
+//!     forget msiexec) keeps the upgrade diagnosable (orrery-relaunch.log) and the
+//!     relaunch guaranteed even when the install fails.
 //!
 //! The two commands mirror the frontend's existing check→install flow, so the
 //! launch-screen loop-guard (localStorage) and progress UI stay unchanged.
@@ -157,15 +155,15 @@ async fn perform(
 
     log::info!("update_install: downloaded {} bytes", bytes.len());
 
-    // Per-machine MSI on Windows takes our elevated path (which exits the process);
-    // everything else (per-user NSIS, non-Windows) uses the plugin's own installer.
+    // MSI on Windows takes our detached install+relaunch path (which exits the
+    // process); everything else (NSIS, non-Windows) uses the plugin's own installer.
     #[cfg(windows)]
     {
         if is_msi(&bytes) {
-            log::info!("update_install: per-machine MSI → elevated install");
-            return install_msi_elevated(&app, &update.version, &bytes);
+            log::info!("update_install: per-user MSI → detached quiet install");
+            return install_msi(&app, &update.version, &bytes);
         }
-        log::info!("update_install: not an MSI → plugin installer (NSIS/per-user)");
+        log::info!("update_install: not an MSI → plugin installer (NSIS)");
     }
 
     update.install(&bytes).map_err(|e| e.to_string())?;
@@ -182,10 +180,10 @@ fn is_msi(bytes: &[u8]) -> bool {
 }
 
 /// Write the verified MSI to a temp file and hand off to a detached PowerShell that
-/// elevates msiexec (one UAC consent), upgrades `/quiet`, waits, then relaunches the
-/// app non-elevated — then quit so msiexec can replace our (locked) files.
+/// runs msiexec (no elevation — the package is per-user), upgrades `/quiet`, waits,
+/// then relaunches the app — then quit so msiexec can replace our (locked) files.
 #[cfg(windows)]
-fn install_msi_elevated(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<(), String> {
+fn install_msi(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     // CREATE_NO_WINDOW: the relauncher runs with a HIDDEN console — no popup during
     // the install. (History: the first attempt used DETACHED_PROCESS|CREATE_NO_WINDOW
@@ -202,7 +200,7 @@ fn install_msi_elevated(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<
     std::fs::write(&msi, bytes).map_err(|e| format!("write msi: {e}"))?;
     let exe = std::env::current_exe().map_err(|e| format!("current exe: {e}"))?;
     log::info!(
-        "install_msi_elevated: msi={} exe={} ({} bytes) — spawning elevated relauncher",
+        "install_msi: msi={} exe={} ({} bytes) — spawning detached relauncher",
         msi.display(),
         exe.display(),
         bytes.len()
@@ -221,7 +219,7 @@ fn install_msi_elevated(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<
         .spawn()
         .map_err(|e| format!("spawn updater shell: {e}"))?;
 
-    log::info!("install_msi_elevated: relauncher spawned, exiting app for msiexec");
+    log::info!("install_msi: relauncher spawned, exiting app for msiexec");
     // Quit gracefully (agent PTYs torn down via the RunEvent handler) so the running
     // exe unlocks and msiexec can replace it.
     app.exit(0);
@@ -229,10 +227,11 @@ fn install_msi_elevated(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<
 }
 
 /// The detached-PowerShell program. Single-quoted PS literals keep backslash paths
-/// intact; embedded single quotes are doubled. `-Verb RunAs` raises ONE UAC consent
-/// for msiexec only; `-Wait` blocks until the upgrade finishes; the final
-/// `Start-Process` relaunches the app at this (non-elevated) integrity. A cancelled
-/// UAC is swallowed so the app still relaunches (old version) instead of vanishing.
+/// intact; embedded single quotes are doubled. The per-user MSI needs NO elevation,
+/// so msiexec runs at normal integrity (no UAC, no `-Verb RunAs`); `-Wait` blocks
+/// until the upgrade finishes; the final `Start-Process` relaunches the app. A
+/// failed install is swallowed so the app still relaunches (old version) instead
+/// of vanishing.
 #[cfg(windows)]
 fn relaunch_script(msi: &std::path::Path, exe: &std::path::Path) -> String {
     let log = std::env::temp_dir().join("orrery-relaunch.log");
@@ -240,14 +239,14 @@ fn relaunch_script(msi: &std::path::Path, exe: &std::path::Path) -> String {
     let msi = msi.to_string_lossy().replace('\'', "''");
     let exe = exe.to_string_lossy().replace('\'', "''");
     // Each step appends to orrery-relaunch.log so a failed update is diagnosable:
-    // we see the runas exit code (0 = installed) or the cancellation/error, then the
-    // relaunch. -PassThru -Wait gives us msiexec's exit code.
+    // we see the msiexec exit code (0 = installed) or the error, then the relaunch.
+    // -PassThru -Wait gives us msiexec's exit code.
     format!(
         "$ErrorActionPreference='SilentlyContinue'; $l='{log}'; \
          \"$(Get-Date -Format o) start\" | Out-File -Append -Encoding utf8 $l; \
-         try {{ $p = Start-Process 'msiexec.exe' -Verb RunAs -Wait -PassThru -ArgumentList '/i \"{msi}\" /quiet'; \
+         try {{ $p = Start-Process 'msiexec.exe' -Wait -PassThru -ArgumentList '/i \"{msi}\" /quiet'; \
                 \"$(Get-Date -Format o) msiexec exit=$($p.ExitCode)\" | Out-File -Append -Encoding utf8 $l }} \
-         catch {{ \"$(Get-Date -Format o) runas error: $($_.Exception.Message)\" | Out-File -Append -Encoding utf8 $l }}; \
+         catch {{ \"$(Get-Date -Format o) msiexec error: $($_.Exception.Message)\" | Out-File -Append -Encoding utf8 $l }}; \
          \"$(Get-Date -Format o) relaunch\" | Out-File -Append -Encoding utf8 $l; \
          Start-Process -FilePath '{exe}'"
     )
@@ -291,13 +290,16 @@ mod tests {
     }
 
     #[test]
-    fn relaunch_script_elevates_quiet_waits_then_relaunches() {
+    fn relaunch_script_installs_quiet_unelevated_waits_then_relaunches() {
         let s = relaunch_script(
             Path::new(r"C:\Temp\Orrery_0.1.7_update.msi"),
-            Path::new(r"C:\Program Files\Orrery\Orrery.exe"),
+            Path::new(r"C:\Users\u\AppData\Local\Programs\Orrery\Orrery.exe"),
         );
-        // one elevated, quiet, awaited msiexec major-upgrade
-        assert!(s.contains("-Verb RunAs"), "elevates msiexec: {s}");
+        // one quiet, awaited msiexec major-upgrade — per-user, NO elevation / UAC
+        assert!(
+            !s.contains("-Verb RunAs"),
+            "per-user MSI must not elevate: {s}"
+        );
         assert!(s.contains("/quiet"), "silent install: {s}");
         assert!(s.contains("-Wait"), "waits for install to finish: {s}");
         assert!(s.contains("-PassThru"), "captures msiexec exit code: {s}");
@@ -306,21 +308,19 @@ mod tests {
             s.contains("Orrery_0.1.7_update.msi"),
             "msi path present: {s}"
         );
-        // relaunch happens AFTER the elevate block and must NOT ride AUTOLAUNCHAPP
-        assert!(
-            !s.contains("AUTOLAUNCHAPP"),
-            "must not elevate-relaunch: {s}"
-        );
+        // the relauncher owns the relaunch — never the MSI's AUTOLAUNCHAPP action
+        assert!(s.contains("msiexec.exe"), "runs msiexec: {s}");
+        assert!(!s.contains("AUTOLAUNCHAPP"), "relauncher relaunches: {s}");
         let relaunch_at = s
             .rfind("Start-Process -FilePath")
             .expect("relaunch present");
-        let elevate_at = s.find("-Verb RunAs").unwrap();
+        let install_at = s.find("msiexec.exe").unwrap();
         assert!(
-            relaunch_at > elevate_at,
-            "relaunch comes after elevate: {s}"
+            relaunch_at > install_at,
+            "relaunch comes after install: {s}"
         );
         assert!(
-            s.contains(r"C:\Program Files\Orrery\Orrery.exe"),
+            s.contains(r"C:\Users\u\AppData\Local\Programs\Orrery\Orrery.exe"),
             "relaunch exe: {s}"
         );
     }
