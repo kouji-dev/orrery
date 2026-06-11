@@ -444,10 +444,19 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
                         </a>
                         <div class="set-upd-act">
                           <button class="btn primary" [disabled]="store.installing()" (click)="store.install()">
-                            <app-icon name="stage" size="sm" />{{ store.installing() ? 'Installing…' : 'Install & relaunch' }}
+                            <app-icon name="stage" size="sm" />
+                            {{ !store.installing() ? 'Install & relaunch' : store.installPhase() === 'installing' ? 'Installing…' : 'Downloading ' + installPct() + '%' }}
                           </button>
                           <button class="btn ghost-hair" (click)="store.dismissUpdate()">Later</button>
                         </div>
+                        @if (store.installing()) {
+                          <div class="set-upd-bar"><i [style.width.%]="installPct()" [class.full]="store.installPhase() === 'installing'"></i></div>
+                          <div class="set-upd-stage">
+                            {{ store.installPhase() === 'installing'
+                              ? 'Handing off to the installer — Orrery restarts when it finishes'
+                              : 'Downloading v' + upd.version + ' · ' + installPct() + '%' }}
+                          </div>
+                        }
                       </div>
                     </app-set-row>
                   }
@@ -774,6 +783,13 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
 .set-upd-notes:hover{border-color:var(--accent-2);}
 .set-upd-notes svg{width:11px;height:11px;}
 .set-upd-act{display:flex;gap:8px;}
+.set-upd-bar{width:100%;height:3px;border-radius:999px;overflow:hidden;
+  background:color-mix(in oklch,var(--accent),transparent 86%);}
+.set-upd-bar i{display:block;height:100%;border-radius:999px;background:var(--accent);
+  transition:width .15s linear;}
+.set-upd-bar i.full{animation:set-upd-pulse 1.1s ease-in-out infinite;}
+@keyframes set-upd-pulse{0%,100%{opacity:1}50%{opacity:.55}}
+.set-upd-stage{font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums;}
 
 /* ── danger confirm ── */
 .set-danger{margin-top:12px;width:100%;padding:14px;border-radius:11px;display:flex;flex-direction:column;gap:11px;
@@ -922,6 +938,10 @@ export class SettingsModalComponent {
     if (m < 1) return "just now";
     if (m < 60) return `${m}m ago`;
     return `${Math.round(m / 60)}h ago`;
+  }
+  /** Download fraction as a whole percent for the update card. */
+  installPct(): number {
+    return Math.round(this.store.installProgress() * 100);
   }
   openNotes(e: Event): void {
     e.preventDefault();

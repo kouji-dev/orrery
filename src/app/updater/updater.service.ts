@@ -7,9 +7,8 @@ const CHECK_TIMEOUT_MS = 10_000;
 // we last TRIED to install and when. Lets us notice an update that installs but
 // never advances the version, so we don't reinstall it in a tight relaunch loop
 // (which would brick the app) — while still RETRYING on a genuine later restart.
-// That retry matters for the per-machine MSI path: "didn't advance" there usually
-// just means the user dismissed the one-time UAC prompt, and a permanent suppress
-// would dead-end them (no in-app way to re-trigger).
+// "Didn't advance" can still happen (e.g. the user cancelled the passive MSI's
+// progress dialog), and a permanent suppress would dead-end them.
 const ATTEMPT_KEY = 'orrery:update-attempt';
 // Suppress a re-attempt of the SAME version only within this window of the last
 // attempt — i.e. an immediate failed auto-relaunch. A restart later than this (or a
@@ -68,9 +67,17 @@ export class UpdaterService {
       // before downloadAndInstall resolves, so the marker must already be set.
       this.setAttempt({ version: update.version, ts: Date.now() });
       this.status.set(`downloading update · ${update.version}`);
-      await update.downloadAndInstall((downloaded, total) => {
-        this.progress.set(total && total > 0 ? downloaded / total : 0);
-      });
+      await update.downloadAndInstall(
+        (downloaded, total) => {
+          this.progress.set(total && total > 0 ? downloaded / total : 0);
+        },
+        () => {
+          // Download done — the installer takes over (and exits this process on
+          // Windows; the MSI shows its own native progress window from here).
+          this.progress.set(1);
+          this.status.set(`installing update · ${update.version}`);
+        },
+      );
       this.status.set('restarting');
       await this.updater.relaunch();
       return 'updating';

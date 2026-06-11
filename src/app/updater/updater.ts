@@ -5,13 +5,18 @@ import { InjectionToken } from '@angular/core';
 export type UpdateOutcome = 'no-update' | 'updating';
 
 /** A pending update. `downloadAndInstall` reports bytes via `onProgress`
- *  (`total` is null when the server sends no content-length). `date`/`notes`
- *  are optional release metadata for the Settings → Updates card. */
+ *  (`total` is null when the server sends no content-length) and fires
+ *  `onPhase("installing")` once the download is done and the installer takes
+ *  over (on Windows the process exits shortly after). `date`/`notes` are
+ *  optional release metadata for the Settings → Updates card. */
 export interface UpdateHandle {
   version: string;
   date?: string | null;
   notes?: string | null;
-  downloadAndInstall(onProgress: (downloaded: number, total: number | null) => void): Promise<void>;
+  downloadAndInstall(
+    onProgress: (downloaded: number, total: number | null) => void,
+    onPhase?: (phase: 'installing') => void,
+  ): Promise<void>;
 }
 
 /** Thin, mockable boundary over the Tauri updater/process plugins. */

@@ -20,8 +20,8 @@ function make(updater: Partial<Updater>, settings: Partial<Settings> = {}): Made
     ...updater,
   };
   const noteUpdate = vi.fn();
-  // Install-path tests run under "auto" (the pre-policy behavior) unless a test
-  // passes its own policy — the REAL default is "notify" (design contract).
+  // Install-path tests pin "auto" (also the real default since 2026-06-11)
+  // unless a test passes its own policy.
   const store = {
     ready: async () => ({ ...settingsDefaults(), updatePolicy: "auto", ...settings }),
     noteUpdate,
@@ -75,6 +75,24 @@ describe('UpdaterService.run', () => {
     expect(statusDuringDownload).toContain('1.2.0');
     expect(svc.status()).toBe('restarting');
     expect(relaunch).toHaveBeenCalledOnce();
+  });
+
+  it('shows the installing phase (full bar) when the installer takes over', async () => {
+    let statusAfterPhase = '';
+    let progressAfterPhase = 0;
+    const handle: UpdateHandle = {
+      version: '1.2.0',
+      downloadAndInstall: async (onProgress, onPhase) => {
+        onProgress(10, 100);
+        onPhase?.('installing');
+        statusAfterPhase = svc.status();
+        progressAfterPhase = svc.progress();
+      },
+    };
+    const { svc } = make({ check: async () => handle, relaunch: vi.fn(async () => {}) });
+    expect(await svc.run()).toBe('updating');
+    expect(statusAfterPhase).toBe('installing update · 1.2.0');
+    expect(progressAfterPhase).toBe(1);
   });
 
   it('swallows check errors and returns no-update', async () => {

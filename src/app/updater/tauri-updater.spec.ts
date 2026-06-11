@@ -48,7 +48,7 @@ describe('TauriUpdater.check', () => {
 
   it('forwards the channel to update_check AND update_install when given', async () => {
     vi.mocked(invoke).mockResolvedValueOnce('0.1.7'); // update_check
-    vi.mocked(listen).mockResolvedValueOnce(vi.fn());
+    vi.mocked(listen).mockResolvedValue(vi.fn()); // progress + phase listeners
     vi.mocked(invoke).mockResolvedValueOnce(undefined); // update_install
 
     const handle = await new TauriUpdater().check(10_000, 'beta');
@@ -69,10 +69,11 @@ describe('TauriUpdater.check', () => {
     expect(handle?.notes).toBe('https://example/releases');
   });
 
-  it('returns a handle whose install runs update_install and cleans up the listener', async () => {
+  it('returns a handle whose install runs update_install and cleans up the listeners', async () => {
     vi.mocked(invoke).mockResolvedValueOnce('0.1.7'); // update_check
     const unlisten = vi.fn();
-    vi.mocked(listen).mockResolvedValueOnce(unlisten);
+    const unlistenPhase = vi.fn();
+    vi.mocked(listen).mockResolvedValueOnce(unlisten).mockResolvedValueOnce(unlistenPhase);
     vi.mocked(invoke).mockResolvedValueOnce(undefined); // update_install
 
     const handle = await new TauriUpdater().check(10_000);
@@ -80,15 +81,17 @@ describe('TauriUpdater.check', () => {
 
     await handle!.downloadAndInstall(vi.fn());
     expect(listen).toHaveBeenCalledWith('update://progress', expect.any(Function));
+    expect(listen).toHaveBeenCalledWith('update://phase', expect.any(Function));
     expect(invoke).toHaveBeenLastCalledWith('update_install', { timeoutMs: 10_000 });
-    expect(unlisten).toHaveBeenCalled(); // listener removed even though install resolved
+    expect(unlisten).toHaveBeenCalled(); // listeners removed even though install resolved
+    expect(unlistenPhase).toHaveBeenCalled();
   });
 
   it('forwards cumulative download progress to onProgress', async () => {
     vi.mocked(invoke).mockResolvedValueOnce('0.1.7'); // update_check
     let emit: (e: { payload: { downloaded: number; total: number | null } }) => void = () => {};
-    vi.mocked(listen).mockImplementationOnce(async (_event, handler) => {
-      emit = handler as typeof emit;
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === 'update://progress') emit = handler as typeof emit;
       return vi.fn();
     });
     // update_install: simulate the Rust side emitting a progress event mid-install.
@@ -100,5 +103,23 @@ describe('TauriUpdater.check', () => {
     const onProgress = vi.fn();
     await handle!.downloadAndInstall(onProgress);
     expect(onProgress).toHaveBeenCalledWith(512, 1024);
+  });
+
+  it('forwards the installing phase to onPhase when the installer takes over', async () => {
+    vi.mocked(invoke).mockResolvedValueOnce('0.1.7'); // update_check
+    let emitPhase: (e: { payload: string }) => void = () => {};
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === 'update://phase') emitPhase = handler as typeof emitPhase;
+      return vi.fn();
+    });
+    // update_install: download done → Rust signals the installer handoff.
+    vi.mocked(invoke).mockImplementationOnce(async () => {
+      emitPhase({ payload: 'installing' });
+    });
+
+    const handle = await new TauriUpdater().check(10_000);
+    const onPhase = vi.fn();
+    await handle!.downloadAndInstall(vi.fn(), onPhase);
+    expect(onPhase).toHaveBeenCalledWith('installing');
   });
 });

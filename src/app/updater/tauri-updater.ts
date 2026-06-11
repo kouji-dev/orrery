@@ -6,10 +6,10 @@ import { Updater, UpdateHandle } from './updater';
 
 /** Real boundary over the Tauri updater. Update resolution, download, and Ed25519
  *  signature verification all run in Rust (`update_check` / `update_install`); the
- *  Rust side also picks the install strategy by how the app was installed — a
- *  per-user NSIS install uses the plugin's silent installer, while a per-machine
- *  MSI is upgraded via an elevated, one-UAC-prompt step that relaunches the app
- *  non-elevated. `isAvailable` checks the injected Tauri internals so the app still
+ *  Rust side also picks the install strategy by how the app was installed — NSIS
+ *  uses the plugin's silent installer, while the per-user MSI is upgraded by a
+ *  detached `/passive` msiexec (native progress window, no UAC) that relaunches
+ *  the app. `isAvailable` checks the injected Tauri internals so the app still
  *  boots under `ng serve` (plain browser). */
 export class TauriUpdater implements Updater {
   isAvailable(): boolean {
@@ -33,12 +33,16 @@ export class TauriUpdater implements Updater {
     const meta = typeof res === 'string' ? { version: res } : res;
     return {
       ...meta,
-      downloadAndInstall: async (onProgress) => {
-        // Rust emits cumulative download progress while fetching the installer.
+      downloadAndInstall: async (onProgress, onPhase) => {
+        // Rust emits cumulative download progress while fetching the installer,
+        // then a single "installing" phase event when the installer takes over.
         const unlisten = await listen<{ downloaded: number; total: number | null }>(
           'update://progress',
           (e) => onProgress(e.payload.downloaded, e.payload.total),
         );
+        const unlistenPhase = await listen<string>('update://phase', (e) => {
+          if (e.payload === 'installing') onPhase?.('installing');
+        });
         try {
           // On Windows this never resolves on success: `update_install` hands off
           // to the installer (elevated for a per-machine MSI) and exits the
@@ -49,6 +53,7 @@ export class TauriUpdater implements Updater {
           await invoke('update_install', payload);
         } finally {
           unlisten();
+          unlistenPhase();
         }
       },
     };

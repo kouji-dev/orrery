@@ -1,6 +1,6 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS } from "../data";
-import { BRIDGE, Commands } from "../data-source/bridge";
+import { BRIDGE, Commands, Events } from "../data-source/bridge";
 import { AutoApprovePolicy, Settings, SettingsEvents, UpdateInfo } from "../models";
 import { UiStore } from "../ui/ui.store";
 
@@ -22,8 +22,9 @@ export type SettingsMapKey = "toolModel" | "toolEffort" | "autoApprove";
 export function settingsDefaults(): Settings {
   return {
     channel: "stable",
-    // Design SETTINGS_DEFAULTS are the contract: notify / resume on / remote on.
-    updatePolicy: "notify",
+    // Updates install themselves by default (per-user installers — no UAC).
+    // Mirror of the backend default; changed from "notify" 2026-06-11.
+    updatePolicy: "auto",
     defaultTool: "", // "" = spawn modal keeps its own hardcoded default
     toolModel: {},
     toolEffort: {},
@@ -95,6 +96,11 @@ export class SettingsStore {
   // ---- update check/install state (shared with the startup updater flow) ----
   readonly checking = signal(false);
   readonly installing = signal(false);
+  /** Manual-install progress for the update card: download fraction 0..1. */
+  readonly installProgress = signal(0);
+  /** 'downloading' while bytes stream, 'installing' once the installer takes
+   *  over (the process exits moments later on Windows). */
+  readonly installPhase = signal<"downloading" | "installing" | null>(null);
   readonly lastCheckedAt = signal<number | null>(null);
   readonly updateInfo = signal<UpdateInfo | null>(null);
   private readonly updateDismissed = signal(false);
@@ -226,16 +232,39 @@ export class SettingsStore {
   }
 
   /** "Install & relaunch" — on Windows a successful install exits the process,
-   *  so this only ever "returns" on failure. */
+   *  so this only ever "returns" on failure. While it runs, the update card
+   *  tracks the download (update://progress) and the installer handoff
+   *  (update://phase) so the user sees more than a frozen button. */
   async install(): Promise<void> {
     if (this.installing()) return;
     this.installing.set(true);
+    this.installProgress.set(0);
+    this.installPhase.set("downloading");
     this.flush(); // the installer may exit the process — persist edits first
+    const subs: (() => void)[] = [];
     try {
+      subs.push(
+        await this.bridge.on<{ downloaded: number; total: number | null }>(
+          Events.UpdateProgress,
+          (p) => this.installProgress.set(p.total && p.total > 0 ? p.downloaded / p.total : 0),
+        ),
+      );
+      subs.push(
+        await this.bridge.on<string>(Events.UpdatePhase, (phase) => {
+          if (phase === "installing") {
+            this.installProgress.set(1);
+            this.installPhase.set("installing");
+          }
+        }),
+      );
       await this.bridge.invoke(Commands.UpdateInstall, { channel: this.settings().channel });
     } catch {
       this.ui.flash("update install failed");
       this.installing.set(false);
+      this.installPhase.set(null);
+    } finally {
+      // On success the process exits before this runs; on failure it unhooks.
+      subs.forEach((off) => off());
     }
   }
 

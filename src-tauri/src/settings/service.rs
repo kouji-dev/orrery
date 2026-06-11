@@ -147,6 +147,6 @@ mod tests {
         }
         let got = s.get().unwrap();
         assert_eq!(got.channel, "beta");
-        assert_eq!(got.update_policy, "notify", "missing keys default");
+        assert_eq!(got.update_policy, "auto", "missing keys default");
     }
 }

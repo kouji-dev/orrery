@@ -53,7 +53,7 @@ describe("SettingsStore load", () => {
     expect(s.volume).toBe(25);
     expect(s.toolModel["claude"]).toBe("opus-custom");
     // missing keys fall back to defaults
-    expect(s.updatePolicy).toBe("notify");
+    expect(s.updatePolicy).toBe("auto");
     expect(s.events.finished).toBe(true);
   });
 

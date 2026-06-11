@@ -97,6 +97,11 @@ export const Events = {
   SystemCost: 'system://cost',
   /** Per-command backend exec aggregates (pushed every 2s; dev + prod). */
   PerfStats: 'perf://stats',
+  /** Cumulative update-download bytes: `{downloaded, total|null}`. */
+  UpdateProgress: 'update://progress',
+  /** Install handoff: payload `"installing"` once the download is done and the
+   *  installer is about to take over (the process exits shortly after). */
+  UpdatePhase: 'update://phase',
 } as const;
 
 export const BRIDGE = new InjectionToken<Bridge>('BRIDGE');

@@ -12,10 +12,12 @@
 //!   * NSIS (per-user): we defer to `Update::install` — the plugin installs
 //!     silently and relaunches via NSIS `/R`.
 //!   * MSI (per-user, Windows): we hand the verified `.msi` to a detached,
-//!     non-elevated PowerShell that runs the major upgrade `/quiet`, waits for it,
-//!     then relaunches the app. The relauncher (rather than the plugin's fire-and-
-//!     forget msiexec) keeps the upgrade diagnosable (orrery-relaunch.log) and the
-//!     relaunch guaranteed even when the install fails.
+//!     non-elevated PowerShell that runs the major upgrade `/passive` (Windows
+//!     Installer's native progress window — our process must exit, so that bar is
+//!     the visible install progress), waits for it, then relaunches the app. The
+//!     relauncher (rather than the plugin's fire-and-forget msiexec) keeps the
+//!     upgrade diagnosable (orrery-relaunch.log) and the relaunch guaranteed even
+//!     when the install fails.
 //!
 //! The two commands mirror the frontend's existing check→install flow, so the
 //! launch-screen loop-guard (localStorage) and progress UI stay unchanged.
@@ -155,12 +157,16 @@ async fn perform(
 
     log::info!("update_install: downloaded {} bytes", bytes.len());
 
+    // Download is over — the installer takes over from here. The UI flips from
+    // the byte-progress bar to its "installing" state on this event.
+    let _ = app.emit("update://phase", "installing");
+
     // MSI on Windows takes our detached install+relaunch path (which exits the
     // process); everything else (NSIS, non-Windows) uses the plugin's own installer.
     #[cfg(windows)]
     {
         if is_msi(&bytes) {
-            log::info!("update_install: per-user MSI → detached quiet install");
+            log::info!("update_install: per-user MSI → detached passive install");
             return install_msi(&app, &update.version, &bytes);
         }
         log::info!("update_install: not an MSI → plugin installer (NSIS)");
@@ -180,7 +186,7 @@ fn is_msi(bytes: &[u8]) -> bool {
 }
 
 /// Write the verified MSI to a temp file and hand off to a detached PowerShell that
-/// runs msiexec (no elevation — the package is per-user), upgrades `/quiet`, waits,
+/// runs msiexec (no elevation — the package is per-user), upgrades `/passive`, waits,
 /// then relaunches the app — then quit so msiexec can replace our (locked) files.
 #[cfg(windows)]
 fn install_msi(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<(), String> {
@@ -228,10 +234,12 @@ fn install_msi(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<(), Strin
 
 /// The detached-PowerShell program. Single-quoted PS literals keep backslash paths
 /// intact; embedded single quotes are doubled. The per-user MSI needs NO elevation,
-/// so msiexec runs at normal integrity (no UAC, no `-Verb RunAs`); `-Wait` blocks
-/// until the upgrade finishes; the final `Start-Process` relaunches the app. A
-/// failed install is swallowed so the app still relaunches (old version) instead
-/// of vanishing.
+/// so msiexec runs at normal integrity (no UAC, no `-Verb RunAs`). `/passive` shows
+/// Windows Installer's own progress window during the upgrade — the app itself has
+/// to exit so msiexec can replace its files, so this native bar IS the install
+/// progress UI. `-Wait` blocks until the upgrade finishes; the final `Start-Process`
+/// relaunches the app. A failed install is swallowed so the app still relaunches
+/// (old version) instead of vanishing.
 #[cfg(windows)]
 fn relaunch_script(msi: &std::path::Path, exe: &std::path::Path) -> String {
     let log = std::env::temp_dir().join("orrery-relaunch.log");
@@ -244,7 +252,7 @@ fn relaunch_script(msi: &std::path::Path, exe: &std::path::Path) -> String {
     format!(
         "$ErrorActionPreference='SilentlyContinue'; $l='{log}'; \
          \"$(Get-Date -Format o) start\" | Out-File -Append -Encoding utf8 $l; \
-         try {{ $p = Start-Process 'msiexec.exe' -Wait -PassThru -ArgumentList '/i \"{msi}\" /quiet'; \
+         try {{ $p = Start-Process 'msiexec.exe' -Wait -PassThru -ArgumentList '/i \"{msi}\" /passive'; \
                 \"$(Get-Date -Format o) msiexec exit=$($p.ExitCode)\" | Out-File -Append -Encoding utf8 $l }} \
          catch {{ \"$(Get-Date -Format o) msiexec error: $($_.Exception.Message)\" | Out-File -Append -Encoding utf8 $l }}; \
          \"$(Get-Date -Format o) relaunch\" | Out-File -Append -Encoding utf8 $l; \
@@ -290,17 +298,20 @@ mod tests {
     }
 
     #[test]
-    fn relaunch_script_installs_quiet_unelevated_waits_then_relaunches() {
+    fn relaunch_script_installs_passive_unelevated_waits_then_relaunches() {
         let s = relaunch_script(
             Path::new(r"C:\Temp\Orrery_0.1.7_update.msi"),
             Path::new(r"C:\Users\u\AppData\Local\Programs\Orrery\Orrery.exe"),
         );
-        // one quiet, awaited msiexec major-upgrade — per-user, NO elevation / UAC
+        // one awaited msiexec major-upgrade — per-user, NO elevation / UAC
         assert!(
             !s.contains("-Verb RunAs"),
             "per-user MSI must not elevate: {s}"
         );
-        assert!(s.contains("/quiet"), "silent install: {s}");
+        // /passive = unattended with the native progress window — the visible
+        // install progress while our own process is gone
+        assert!(s.contains("/passive"), "native progress UI: {s}");
+        assert!(!s.contains("/quiet"), "must not hide install progress: {s}");
         assert!(s.contains("-Wait"), "waits for install to finish: {s}");
         assert!(s.contains("-PassThru"), "captures msiexec exit code: {s}");
         assert!(s.contains("Out-File"), "logs each step for diagnosis: {s}");
