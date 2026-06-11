@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<!-- Orrery updater banner — adapted 1:1 from the Claude Design handoff
+     ("Orrery Updater Banner.html"). One .frame filling an opaque DWM-rounded
+     window; the Rust side drives state via the window.__* functions below. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#07080d; --ink:#e8ebf2; --ink-2:#aab2c5; --ink-3:#6b7488; --ink-4:#444b5e;
+    --accent:#a855f7; --accent-2:#22d3ee; --accent-3:#ff5d9e; --danger:#ff5d6c;
+    --grad:linear-gradient(90deg,#ff5d9e,#a855f7,#22d3ee);
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --disp:'Space Grotesk',var(--mono);
+  }
+  /* The WINDOW is the frame: opaque, sized exactly 340×110 (152 when failed)
+     by the Rust side, corners rounded natively by DWM. So the frame fills the
+     viewport — no CSS radius or outer drop shadow (per-pixel transparency is
+     not available under WebView2's windowed hosting). */
+  html,body{height:100%;background:#0b0d14;overflow:hidden}
+  body{font-family:var(--mono);color:var(--ink);
+    -webkit-user-select:none;user-select:none;cursor:default}
+
+  .frame{
+    width:100%; height:100%; position:relative; overflow:hidden;
+    background:#0b0d14;
+    background-image:
+      linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px),
+      radial-gradient(70% 120% at 14% 0%,rgba(168,85,247,.17),transparent 70%);
+    background-size:22px 22px,22px 22px,100% 100%,100% 100%;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.07), inset 0 0 34px -10px rgba(168,85,247,.22);
+    padding:18px 20px;
+    display:flex; align-items:center; gap:15px;
+    transition:opacity .55s ease, transform .55s ease, box-shadow .4s ease;
+  }
+  .frame.fail{
+    box-shadow:inset 0 0 0 1px rgba(255,93,108,.16), inset 0 0 36px -10px rgba(255,93,108,.26);
+    background-image:
+      linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px),
+      radial-gradient(70% 120% at 14% 0%,rgba(255,93,108,.16),transparent 70%);
+  }
+  /* dissolve CONTENTS only — the frame stays painted dark so neither the
+     webview default background nor window teardown can flash through */
+  .frame.closing .col,.frame.closing .logo{opacity:0;transition:opacity .45s ease}
+
+  .logo{flex:0 0 auto;width:44px;height:44px;filter:drop-shadow(0 0 12px rgba(168,85,247,.42))}
+  .frame.fail .logo{filter:drop-shadow(0 0 12px rgba(255,93,108,.45)) saturate(.65)}
+  .col{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:9px}
+
+  .title{font-family:var(--disp);font-weight:600;font-size:14.5px;color:var(--ink);
+    letter-spacing:.005em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .frame.fail .title{color:#ffd8dc}
+
+  .statusrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-height:13px}
+  .status{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .frame.fail .status{color:#e89aa1;text-transform:none;letter-spacing:.02em;font-size:10.5px;white-space:normal}
+  .pct{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--ink);
+    font-variant-numeric:tabular-nums;flex:0 0 auto;display:none}
+
+  .bar{height:3px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;position:relative}
+  .bar > i{display:block;height:100%;border-radius:3px;width:0;background:var(--grad);
+    transition:width .25s linear}
+  .bar.det > i{box-shadow:0 0 10px -1px rgba(168,85,247,.6)}
+  .bar.indet::after{content:'';position:absolute;top:0;bottom:0;width:38%;border-radius:3px;
+    background:var(--grad);animation:indet 1.25s cubic-bezier(.65,0,.35,1) infinite}
+  @keyframes indet{0%{left:-40%}100%{left:100%}}
+  .bar.shim > i{width:100%;background:rgba(168,85,247,.16)}
+  .bar.shim::after{content:'';position:absolute;top:0;bottom:0;left:0;width:55%;border-radius:3px;
+    background:linear-gradient(90deg,transparent,rgba(168,85,247,.55),rgba(34,211,238,.45),transparent);
+    animation:shim 1.4s ease-in-out infinite}
+  @keyframes shim{0%{transform:translateX(-100%)}100%{transform:translateX(282%)}}
+  .bar.full > i{width:100%}
+  .bar.pulse > i{animation:barpulse 1s ease-in-out infinite}
+  @keyframes barpulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.5) saturate(1.2)}}
+  .bar.failbar > i{width:100%;background:linear-gradient(90deg,#ff5d6c,#c23252)}
+
+  .core-pulse{transform-box:fill-box;transform-origin:50% 50%;animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.92}50%{opacity:.55}}
+
+  .actions{display:none;gap:8px;margin-top:2px}
+  .frame.fail .actions{display:flex}
+  .btn{font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;border-radius:7px;
+    padding:6px 12px;cursor:pointer;border:1px solid transparent;transition:filter .12s,background .12s,border-color .12s}
+  .btn.primary{color:#1a0608;font-weight:600;
+    background:linear-gradient(180deg,#ff7a86,#e5484d);box-shadow:0 0 18px -6px rgba(255,93,108,.8)}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.ghost{background:transparent;color:var(--ink-3);border-color:rgba(255,255,255,.12)}
+  .btn.ghost:hover{color:var(--ink);border-color:rgba(255,255,255,.24);background:rgba(255,255,255,.04)}
+
+  @media (prefers-reduced-motion:reduce){
+    .bar.indet::after,.bar.shim::after,.bar.pulse > i,.core-pulse{animation:none}
+    .bar.indet > i{width:100%;background:rgba(168,85,247,.35)}
+  }
+</style>
+</head>
+<body>
+  <div class="frame" id="frame">
+    <svg class="logo" id="logo" viewBox="0 0 100 100"></svg>
+    <div class="col">
+      <div class="title" id="title">Updating Orrery</div>
+      <div class="statusrow">
+        <div class="status" id="status">preparing…</div>
+        <div class="pct" id="pct">0%</div>
+      </div>
+      <div class="bar shim" id="bar"><i id="fill"></i></div>
+      <div class="actions">
+        <button class="btn primary" id="btnRelaunch">Relaunch now</button>
+        <button class="btn ghost" id="btnLog">View log</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ---------- epicycle logo (geometry shared with the splash/design) ---------- */
+var A=22,B=13,K=-4,TAU=Math.PI*2;
+function epi(t){return [50+A*Math.cos(t)+B*Math.cos(K*t),50+A*Math.sin(t)+B*Math.sin(K*t)];}
+var EPI_D=(function(){var N=260,d="";for(var i=0;i<=N;i++){var t=i/N*TAU,p=epi(t);d+=(i?"L":"M")+p[0].toFixed(2)+" "+p[1].toFixed(2)+" ";}return d+"Z";})();
+var REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches;
+var logoRaf=null, logoTimer=null;
+
+function paintLogo(danger){
+  if(logoRaf) cancelAnimationFrame(logoRaf);
+  if(logoTimer) clearTimeout(logoTimer);
+  var grad = danger
+    ? '<stop offset="0" stop-color="#ff8a94"/><stop offset=".5" stop-color="#ff5d6c"/><stop offset="1" stop-color="#c23252"/>'
+    : '<stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/>';
+  var core = danger ? '#ff5d6c' : '#a855f7';
+  var pen = danger ? '#ff8a94' : '#22d3ee';
+  var svg=document.getElementById('logo');
+  svg.innerHTML=
+    '<defs>'+
+      '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'+grad+'</linearGradient>'+
+      '<radialGradient id="c"><stop offset="0" stop-color="#fff"/><stop offset=".42" stop-color="'+core+'"/><stop offset="1" stop-color="'+core+'" stop-opacity="0"/></radialGradient>'+
+    '</defs>'+
+    '<circle cx="50" cy="50" r="22" fill="none" stroke="#6b7488" stroke-width=".7" stroke-opacity=".3"/>'+
+    '<path id="p" d="'+EPI_D+'" fill="none" stroke="url(#g)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+
+    '<circle id="e" r="13" fill="none" stroke="#6b7488" stroke-width=".7" stroke-opacity=".4"/>'+
+    '<line id="a" stroke="'+pen+'" stroke-width="1.2" stroke-opacity=".6"/>'+
+    '<circle class="core-pulse" cx="50" cy="50" r="8.5" fill="url(#c)"/>'+
+    '<circle id="n" r="4.2" fill="'+pen+'"/>';
+  var path=svg.querySelector('#p'), L=path.getTotalLength();
+  var penC=svg.querySelector('#n'), epc=svg.querySelector('#e'), arm=svg.querySelector('#a');
+  function ease(x){return 1-Math.pow(1-x,3);}
+  function still(){
+    path.style.strokeDasharray='none'; path.style.strokeDashoffset=0;
+    epc.style.opacity=0; arm.style.opacity=0;
+    var s=epi(0); penC.setAttribute('cx',s[0]); penC.setAttribute('cy',s[1]);
+  }
+  function loop(){
+    var DUR=2000,HOLD=1100,start=performance.now();
+    path.style.strokeDasharray=L; path.style.strokeDashoffset=L;
+    epc.style.transition='none'; arm.style.transition='none'; epc.style.opacity=1; arm.style.opacity=1;
+    function frame(now){
+      var p=Math.min(1,(now-start)/DUR),e=ease(p);
+      path.style.strokeDashoffset=L*(1-e);
+      var t=e*TAU, def=[50+A*Math.cos(t),50+A*Math.sin(t)], pp=epi(t);
+      epc.setAttribute('cx',def[0]);epc.setAttribute('cy',def[1]);
+      penC.setAttribute('cx',pp[0]);penC.setAttribute('cy',pp[1]);
+      arm.setAttribute('x1',def[0]);arm.setAttribute('y1',def[1]);arm.setAttribute('x2',pp[0]);arm.setAttribute('y2',pp[1]);
+      if(p<1) logoRaf=requestAnimationFrame(frame);
+      else{ epc.style.transition=arm.style.transition='opacity .3s'; epc.style.opacity=0; arm.style.opacity=0;
+            var s=epi(0); penC.setAttribute('cx',s[0]); penC.setAttribute('cy',s[1]); logoTimer=setTimeout(loop,HOLD); }
+    }
+    logoRaf=requestAnimationFrame(frame);
+  }
+  if(REDUCED){ still(); } else { loop(); }
+}
+paintLogo(false);
+
+/* ---------- state plumbing driven from Rust ---------- */
+/* NOTE: never name a top-level var `status` — it hits the reserved
+   window.status string accessor and every write silently no-ops. */
+var frame=document.getElementById('frame'), titleEl=document.getElementById('title'),
+    statusEl=document.getElementById('status'), pct=document.getElementById('pct'),
+    bar=document.getElementById('bar'), fill=document.getElementById('fill');
+var lastPct=0, failTimer=null;
+
+function post(msg){ try{ window.ipc.postMessage(msg); }catch(e){} }
+function setBar(cls){ bar.className='bar '+cls; }
+
+window.__prepare=function(){
+  titleEl.textContent='Updating Orrery'; statusEl.textContent='preparing…';
+  setBar('shim'); pct.style.display='none';
+};
+window.__msi=function(version){
+  titleEl.textContent='Updating to v'+version; statusEl.textContent='starting installer';
+  setBar('det'); lastPct=0; fill.style.width='0%';
+  pct.style.display='block'; pct.textContent='0%';
+};
+window.__nsis=function(version){
+  titleEl.textContent='Updating to v'+version; statusEl.textContent='installing…';
+  setBar('indet'); pct.style.display='none';
+};
+/* percent only moves forward — the MSI tick source can jitter backwards */
+window.__progress=function(p,action){
+  var v=Math.max(lastPct, Math.min(100, p)); lastPct=v;
+  fill.style.width=v.toFixed(1)+'%'; pct.textContent=Math.round(v)+'%';
+  if(action) statusEl.textContent=action;
+};
+window.__restart=function(){
+  statusEl.textContent='restarting Orrery…'; pct.style.display='none';
+  setBar('full pulse'); fill.style.width='100%';
+};
+window.__close=function(){ frame.classList.add('closing'); };
+window.__fail=function(message){
+  frame.classList.add('fail');
+  paintLogo(true);
+  titleEl.textContent='Update failed';
+  pct.style.display='none'; setBar('failbar'); fill.style.width='100%';
+  var n=5;
+  function tick(){
+    statusEl.textContent=message+' · relaunching in '+n+'s';
+    if(n<=0){ statusEl.textContent=message+' · relaunching…'; post('relaunch'); return; }
+    n--; failTimer=setTimeout(tick,1000);
+  }
+  tick();
+};
+
+document.getElementById('btnRelaunch').addEventListener('click',function(){
+  if(failTimer) clearTimeout(failTimer); post('relaunch');
+});
+document.getElementById('btnLog').addEventListener('click',function(){ post('viewlog'); });
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# The branded update window (`orrery-updater.exe`). Spawned by the dying app,
+# runs from %TEMP%, silently installs the MSI (real progress via the Windows
+# Installer API) or NSIS (/S, indeterminate), then relaunches Orrery.
+# tao/wry versions track the ones already in the tauri tree (shared build cache).
+[package]
+name = "orrery-updater"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tao = "0.35"
+wry = "0.55"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_System_ApplicationInstallationAndServicing",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

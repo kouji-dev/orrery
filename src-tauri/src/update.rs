@@ -2,22 +2,20 @@
 //!
 //! The MSI is a PER-USER package since the custom WiX template (`wix/main.wxs`):
 //! it installs to `%LOCALAPPDATA%\Programs\Orrery` with NO elevation and NO UAC.
-//! (History: it used to be per-machine in `C:\Program Files`, which needed an
-//! elevated msiexec — the old `-Verb RunAs` relauncher. That mode is gone.)
 //!
 //! We reuse the plugin for everything that already works — endpoint/version
 //! resolution, download, and the Ed25519 signature check — and only override the
-//! final launch, branching on how the running app was installed (detected from the
-//! bytes the updater actually fetched):
-//!   * NSIS (per-user): we defer to `Update::install` — the plugin installs
-//!     silently and relaunches via NSIS `/R`.
-//!   * MSI (per-user, Windows): we hand the verified `.msi` to a detached,
-//!     non-elevated PowerShell that runs the major upgrade `/passive` (Windows
-//!     Installer's native progress window — our process must exit, so that bar is
-//!     the visible install progress), waits for it, then relaunches the app. The
-//!     relauncher (rather than the plugin's fire-and-forget msiexec) keeps the
-//!     upgrade diagnosable (orrery-relaunch.log) and the relaunch guaranteed even
-//!     when the install fails.
+//! final launch. On Windows BOTH installer kinds are handed to the branded
+//! updater stub (`orrery-updater.exe`, see `updater-stub/`): the app copies the
+//! stub + the verified package to %TEMP%, spawns the stub detached, and exits.
+//! The stub shows the design-system banner while installing SILENTLY —
+//!   * MSI:  in-process Windows Installer API → real 0→100% progress;
+//!   * NSIS: `<setup.exe> /S` → indeterminate bar (NSIS emits no progress) —
+//! then relaunches the app (also after a failure, so the user is never left
+//! app-less). Installer kind is detected from the downloaded bytes.
+//!
+//! If the stub cannot be staged (missing resource — e.g. dev builds) we fall
+//! back to the plugin's own installer so updates still complete.
 //!
 //! The two commands mirror the frontend's existing check→install flow, so the
 //! launch-screen loop-guard (localStorage) and progress UI stay unchanged.
@@ -161,15 +159,16 @@ async fn perform(
     // the byte-progress bar to its "installing" state on this event.
     let _ = app.emit("update://phase", "installing");
 
-    // MSI on Windows takes our detached install+relaunch path (which exits the
-    // process); everything else (NSIS, non-Windows) uses the plugin's own installer.
+    // Windows: both MSI and NSIS hand off to the branded updater stub (which
+    // exits this process). If the stub can't be staged (dev build, missing
+    // resource), fall back to the plugin's installer so the update still lands.
     #[cfg(windows)]
     {
-        if is_msi(&bytes) {
-            log::info!("update_install: per-user MSI → detached passive install");
-            return install_msi(&app, &update.version, &bytes);
+        let kind = if is_msi(&bytes) { "msi" } else { "nsis" };
+        match install_via_stub(&app, kind, &update.version, &bytes) {
+            Ok(()) => return Ok(()), // unreached on success: the app exits
+            Err(e) => log::warn!("update_install: stub unavailable ({e}) → plugin installer"),
         }
-        log::info!("update_install: not an MSI → plugin installer (NSIS)");
     }
 
     update.install(&bytes).map_err(|e| e.to_string())?;
@@ -185,79 +184,93 @@ fn is_msi(bytes: &[u8]) -> bool {
     bytes.starts_with(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])
 }
 
-/// Write the verified MSI to a temp file and hand off to a detached PowerShell that
-/// runs msiexec (no elevation — the package is per-user), upgrades `/passive`, waits,
-/// then relaunches the app — then quit so msiexec can replace our (locked) files.
+/// Stage the verified package + the branded updater stub in %TEMP%, spawn the
+/// stub detached, and exit the app so the installer can replace our files.
+/// The stub (see `updater-stub/`) shows the design-system banner, installs
+/// silently (MSI: real progress via the Windows Installer API; NSIS: `/S`),
+/// and relaunches the app — including after a failure.
 #[cfg(windows)]
-fn install_msi(app: &AppHandle, version: &str, bytes: &[u8]) -> Result<(), String> {
+fn install_via_stub(app: &AppHandle, kind: &str, version: &str, bytes: &[u8]) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
-    // CREATE_NO_WINDOW: the relauncher runs with a HIDDEN console — no popup during
-    // the install. (History: the first attempt used DETACHED_PROCESS|CREATE_NO_WINDOW
-    // and "silently failed"; the fix blamed the missing console and went visible via
-    // CREATE_NEW_CONSOLE. Re-tested empirically 2026-06-10: the actual killers were
-    // DETACHED_PROCESS — PowerShell dies at startup with NO console at all, hidden
-    // is fine — and the kill-on-close Job Object reaping the relauncher on app.exit.
-    // A CREATE_NO_WINDOW PowerShell raises UAC and completes the elevated install.)
-    // CREATE_BREAKAWAY_FROM_JOB lets it leave our kill-on-close Job Object so it
-    // outlives our exit (the job permits this via JOB_OBJECT_LIMIT_BREAKAWAY_OK).
+    use tauri::path::BaseDirectory;
+    use tauri::Manager;
+    // CREATE_BREAKAWAY_FROM_JOB lets the stub leave our kill-on-close Job Object
+    // so it outlives our exit (the job permits this via BREAKAWAY_OK) — the same
+    // battle-tested arrangement the old PowerShell relauncher used.
     const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 
-    let msi = std::env::temp_dir().join(format!("Orrery_{version}_update.msi"));
-    std::fs::write(&msi, bytes).map_err(|e| format!("write msi: {e}"))?;
+    // The stub ships as a bundled resource but must RUN from %TEMP% — the
+    // install replaces the whole app directory underneath it.
+    let stub_src = app
+        .path()
+        .resolve("binaries/orrery-updater.exe", BaseDirectory::Resource)
+        .map_err(|e| format!("resolve stub resource: {e}"))?;
+    if !stub_src.exists() {
+        return Err(format!("stub not bundled at {}", stub_src.display()));
+    }
+    let tmp = std::env::temp_dir();
+    let stub = tmp.join("orrery-updater.exe");
+    std::fs::copy(&stub_src, &stub).map_err(|e| format!("stage stub: {e}"))?;
+
+    let ext = if kind == "msi" { "msi" } else { "exe" };
+    let pkg = tmp.join(format!("Orrery_{version}_update.{ext}"));
+    std::fs::write(&pkg, bytes).map_err(|e| format!("write package: {e}"))?;
+
     let exe = std::env::current_exe().map_err(|e| format!("current exe: {e}"))?;
+    let prev = app.package_info().version.to_string();
+    let args = stub_args(kind, &pkg, &exe, version, &prev, std::process::id());
     log::info!(
-        "install_msi: msi={} exe={} ({} bytes) — spawning detached relauncher",
-        msi.display(),
-        exe.display(),
+        "install_via_stub: kind={kind} pkg={} stub={} ({} bytes)",
+        pkg.display(),
+        stub.display(),
         bytes.len()
     );
 
-    // creation_flags REPLACES the helper's default, so NO_WINDOW must be restated.
-    crate::core::proc::cmd("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            &relaunch_script(&msi, &exe),
-        ])
+    // creation_flags REPLACES the helper's default, so NO_WINDOW is restated
+    // (harmless for the GUI stub; kept so the flag set stays the proven one).
+    crate::core::proc::cmd(&stub)
+        .args(&args)
         .creation_flags(crate::core::proc::CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB)
         .spawn()
-        .map_err(|e| format!("spawn updater shell: {e}"))?;
+        .map_err(|e| format!("spawn updater stub: {e}"))?;
 
-    log::info!("install_msi: relauncher spawned, exiting app for msiexec");
-    // Quit gracefully (agent PTYs torn down via the RunEvent handler) so the running
-    // exe unlocks and msiexec can replace it.
+    log::info!("install_via_stub: stub spawned, exiting app for the installer");
+    // Quit gracefully (agent PTYs torn down via the RunEvent handler) so the
+    // running exe unlocks and the installer can replace it.
     app.exit(0);
     Ok(())
 }
 
-/// The detached-PowerShell program. Single-quoted PS literals keep backslash paths
-/// intact; embedded single quotes are doubled. The per-user MSI needs NO elevation,
-/// so msiexec runs at normal integrity (no UAC, no `-Verb RunAs`). `/passive` shows
-/// Windows Installer's own progress window during the upgrade — the app itself has
-/// to exit so msiexec can replace its files, so this native bar IS the install
-/// progress UI. `-Wait` blocks until the upgrade finishes; the final `Start-Process`
-/// relaunches the app. A failed install is swallowed so the app still relaunches
-/// (old version) instead of vanishing.
+/// The stub's command line — pure so the contract is testable. `--wait-pid` is
+/// OUR pid: the stub holds its "preparing…" state until this process is gone.
 #[cfg(windows)]
-fn relaunch_script(msi: &std::path::Path, exe: &std::path::Path) -> String {
-    let log = std::env::temp_dir().join("orrery-relaunch.log");
-    let log = log.to_string_lossy().replace('\'', "''");
-    let msi = msi.to_string_lossy().replace('\'', "''");
-    let exe = exe.to_string_lossy().replace('\'', "''");
-    // Each step appends to orrery-relaunch.log so a failed update is diagnosable:
-    // we see the msiexec exit code (0 = installed) or the error, then the relaunch.
-    // -PassThru -Wait gives us msiexec's exit code.
-    format!(
-        "$ErrorActionPreference='SilentlyContinue'; $l='{log}'; \
-         \"$(Get-Date -Format o) start\" | Out-File -Append -Encoding utf8 $l; \
-         try {{ $p = Start-Process 'msiexec.exe' -Wait -PassThru -ArgumentList '/i \"{msi}\" /passive'; \
-                \"$(Get-Date -Format o) msiexec exit=$($p.ExitCode)\" | Out-File -Append -Encoding utf8 $l }} \
-         catch {{ \"$(Get-Date -Format o) msiexec error: $($_.Exception.Message)\" | Out-File -Append -Encoding utf8 $l }}; \
-         \"$(Get-Date -Format o) relaunch\" | Out-File -Append -Encoding utf8 $l; \
-         Start-Process -FilePath '{exe}'"
-    )
+fn stub_args(
+    kind: &str,
+    package: &std::path::Path,
+    app_exe: &std::path::Path,
+    version: &str,
+    prev: &str,
+    pid: u32,
+) -> Vec<String> {
+    vec![
+        "--kind".into(),
+        kind.into(),
+        "--package".into(),
+        package.to_string_lossy().into_owned(),
+        "--app".into(),
+        app_exe.to_string_lossy().into_owned(),
+        "--version".into(),
+        version.into(),
+        "--prev".into(),
+        prev.into(),
+        "--wait-pid".into(),
+        pid.to_string(),
+        "--log".into(),
+        std::env::temp_dir()
+            .join("orrery-updater.log")
+            .to_string_lossy()
+            .into_owned(),
+    ]
 }
 
 #[cfg(test)]
@@ -298,50 +311,39 @@ mod tests {
     }
 
     #[test]
-    fn relaunch_script_installs_passive_unelevated_waits_then_relaunches() {
-        let s = relaunch_script(
-            Path::new(r"C:\Temp\Orrery_0.1.7_update.msi"),
+    fn stub_args_carry_the_full_contract() {
+        let args = stub_args(
+            "msi",
+            Path::new(r"C:\Temp\Orrery_0.3.0_update.msi"),
             Path::new(r"C:\Users\u\AppData\Local\Programs\Orrery\Orrery.exe"),
+            "0.3.0",
+            "0.2.2",
+            4242,
         );
-        // one awaited msiexec major-upgrade — per-user, NO elevation / UAC
-        assert!(
-            !s.contains("-Verb RunAs"),
-            "per-user MSI must not elevate: {s}"
-        );
-        // /passive = unattended with the native progress window — the visible
-        // install progress while our own process is gone
-        assert!(s.contains("/passive"), "native progress UI: {s}");
-        assert!(!s.contains("/quiet"), "must not hide install progress: {s}");
-        assert!(s.contains("-Wait"), "waits for install to finish: {s}");
-        assert!(s.contains("-PassThru"), "captures msiexec exit code: {s}");
-        assert!(s.contains("Out-File"), "logs each step for diagnosis: {s}");
-        assert!(
-            s.contains("Orrery_0.1.7_update.msi"),
-            "msi path present: {s}"
-        );
-        // the relauncher owns the relaunch — never the MSI's AUTOLAUNCHAPP action
-        assert!(s.contains("msiexec.exe"), "runs msiexec: {s}");
-        assert!(!s.contains("AUTOLAUNCHAPP"), "relauncher relaunches: {s}");
-        let relaunch_at = s
-            .rfind("Start-Process -FilePath")
-            .expect("relaunch present");
-        let install_at = s.find("msiexec.exe").unwrap();
-        assert!(
-            relaunch_at > install_at,
-            "relaunch comes after install: {s}"
-        );
-        assert!(
-            s.contains(r"C:\Users\u\AppData\Local\Programs\Orrery\Orrery.exe"),
-            "relaunch exe: {s}"
-        );
+        let s = args.join(" ");
+        // never any elevation anywhere in the handoff
+        assert!(!s.contains("RunAs"), "no elevation: {s}");
+        assert!(!s.contains("msiexec"), "stub uses the MSI API, not msiexec: {s}");
+        // flag/value pairs the stub's parser (updater-stub) requires
+        for (flag, val) in [
+            ("--kind", "msi"),
+            ("--package", r"C:\Temp\Orrery_0.3.0_update.msi"),
+            ("--app", r"C:\Users\u\AppData\Local\Programs\Orrery\Orrery.exe"),
+            ("--version", "0.3.0"),
+            ("--prev", "0.2.2"),
+            ("--wait-pid", "4242"),
+        ] {
+            let i = args.iter().position(|a| a == flag).unwrap_or_else(|| panic!("{flag} present"));
+            assert_eq!(args[i + 1], val, "{flag} value");
+        }
+        let i = args.iter().position(|a| a == "--log").expect("--log present");
+        assert!(args[i + 1].ends_with("orrery-updater.log"), "log path: {s}");
     }
 
     #[test]
-    fn relaunch_script_escapes_single_quotes_for_ps_literal() {
-        let s = relaunch_script(Path::new(r"C:\a'b\x.msi"), Path::new(r"C:\a'b\Orrery.exe"));
-        assert!(
-            s.contains("a''b"),
-            "single quote doubled for PS literal: {s}"
-        );
+    fn stub_args_nsis_kind_passes_through() {
+        let args = stub_args("nsis", Path::new("p.exe"), Path::new("o.exe"), "1.0.0", "0.9.9", 7);
+        let i = args.iter().position(|a| a == "--kind").unwrap();
+        assert_eq!(args[i + 1], "nsis");
     }
 }
