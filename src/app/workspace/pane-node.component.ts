@@ -98,7 +98,30 @@ import { TerminalComponent } from "./terminal.component";
             </div>
           }
 
-          <div style="flex:1"></div>
+          <!-- open-file tabs, inline beside the view toggle; scrolls with an
+               edge-fade when there are more than fit. Doubles as the flex spacer. -->
+          @if (ag) {
+            <div #fileStrip class="file-strip" (wheel)="onStripWheel($event)">
+              @for (f of lf.files ?? []; track f) {
+                @let onf = lf.view === 'file' && lf.activeFile === f;
+                <div
+                  class="file-tab"
+                  [class.on]="onf"
+                  [title]="f"
+                  [attr.data-path]="f"
+                  (click)="$event.stopPropagation(); ctx().onFileSelect(lf.id, f)"
+                >
+                  <app-icon name="file" size="sm" [px]="11" [color]="onf ? 'var(--accent)' : 'var(--ink-4)'" />
+                  <span class="fn">{{ fname(f) }}</span>
+                  <button class="fx" title="Close file" (click)="$event.stopPropagation(); ctx().onFileClose(lf.id, f)">
+                    <app-icon name="x" size="sm" [px]="10" />
+                  </button>
+                </div>
+              }
+            </div>
+          } @else {
+            <div style="flex:1"></div>
+          }
           @if (ag) {
             <button
               class="pane-btn primary"
@@ -113,29 +136,6 @@ import { TerminalComponent } from "./terminal.component";
             <button class="pane-btn" (click)="$event.stopPropagation(); ctx().onClose(lf.id)" title="Close pane"><app-icon name="x" size="sm" [px]="13" /></button>
           }
         </div>
-
-        <!-- file tab strip (files opened from the right-panel tree). Scrolls
-             sideways when space runs out — hidden scrollbar, wheel pans. -->
-        @if (ag && lf.files?.length) {
-          <div #fileStrip class="file-strip" (wheel)="onStripWheel($event)">
-            @for (f of lf.files!; track f) {
-              @let on = lf.view === 'file' && lf.activeFile === f;
-              <div
-                class="file-tab"
-                [class.on]="on"
-                [title]="f"
-                [attr.data-path]="f"
-                (click)="$event.stopPropagation(); ctx().onFileSelect(lf.id, f)"
-              >
-                <app-icon name="file" size="sm" [px]="11" [color]="on ? 'var(--accent)' : 'var(--ink-4)'" />
-                <span class="fn">{{ fname(f) }}</span>
-                <button class="fx" title="Close file" (click)="$event.stopPropagation(); ctx().onFileClose(lf.id, f)">
-                  <app-icon name="x" size="sm" [px]="10" />
-                </button>
-              </div>
-            }
-          </div>
-        }
 
         <!-- pane body -->
         <div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden">
@@ -240,17 +240,20 @@ import { TerminalComponent } from "./terminal.component";
       [data-theme="light"] .pane-btn.primary {
         color: #fff;
       }
-      /* file tab strip — must never widen the pane: tabs ellipsize and the
-         strip scrolls (scrollbar hidden; vertical wheel pans, see onStripWheel) */
+      /* open-file tabs live inline in the pane header, right after the view
+         toggle. The strip is also the flex spacer (flex:1) and scrolls
+         sideways when the tabs outgrow the space; a right edge-fade hints at
+         the overflow and a vertical wheel pans it (see onStripWheel). */
       .file-strip {
         display: flex;
-        align-items: stretch;
-        flex: none;
+        align-items: center;
+        gap: 2px;
+        flex: 1;
         min-width: 0;
         overflow-x: auto;
         scrollbar-width: none;
-        background: var(--panel);
-        border-bottom: 1px solid var(--hair);
+        -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+        mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
       }
       .file-strip::-webkit-scrollbar {
         display: none;
@@ -259,10 +262,11 @@ import { TerminalComponent } from "./terminal.component";
         flex: none;
         display: flex;
         align-items: center;
-        gap: 6px;
-        max-width: 160px;
-        padding: 4px 6px 4px 10px;
-        border-right: 1px solid var(--hair);
+        gap: 5px;
+        max-width: 150px;
+        padding: 3px 5px 3px 8px;
+        border: 1px solid transparent;
+        border-radius: 5px;
         font-family: var(--font-mono);
         font-size: 10.5px;
         color: var(--ink-3);
@@ -275,16 +279,8 @@ import { TerminalComponent } from "./terminal.component";
       }
       .file-tab.on {
         color: var(--ink);
-        background: var(--panel-2);
-      }
-      .file-tab.on::before {
-        content: "";
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: 0;
-        height: 2px;
-        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        background: var(--panel-3);
+        border-color: var(--hair);
       }
       .file-tab .fn {
         min-width: 0;
@@ -295,16 +291,21 @@ import { TerminalComponent } from "./terminal.component";
       .file-tab .fx {
         display: flex;
         flex: none;
-        padding: 2px;
+        padding: 1px;
         border: none;
         border-radius: 3px;
         background: transparent;
         color: var(--ink-4);
         cursor: pointer;
+        opacity: 0;
+      }
+      .file-tab:hover .fx,
+      .file-tab.on .fx {
+        opacity: 1;
       }
       .file-tab .fx:hover {
         color: var(--ink);
-        background: var(--panel-3);
+        background: var(--panel-2);
       }
       .pane-divider {
         position: relative;
