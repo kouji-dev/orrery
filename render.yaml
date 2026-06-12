@@ -29,12 +29,8 @@ services:
       ignoredPaths:
         - landing/README.md
 
-    # Single-page site: send everything to index.html.
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-
+    # Multi-page static site (index.html + changelog.html) — no SPA rewrite;
+    # Render serves each file directly at its own path.
     headers:
       - path: /*
         name: X-Content-Type-Options
@@ -45,6 +41,6 @@ services:
       - path: /*.html
         name: Cache-Control
         value: public, max-age=300
-      - path: /favicon.svg
+      - path: /*.js
         name: Cache-Control
-        value: public, max-age=86400
+        value: public, max-age=3600

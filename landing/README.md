@@ -1,7 +1,18 @@
-# Orrery landing page
+# Orrery landing site
 
-A zero-dependency static site (`index.html` + `styles.css` + `app.js` + `favicon.svg`).
-No build step — what's in this folder is what ships.
+Zero-dependency static site implementing the **Orrery Home** + **Changelog**
+designs from the Claude Design handoff. No build step — what's in this folder
+is what ships.
+
+| File | Purpose |
+|---|---|
+| `index.html` | Home / landing page. Self-contains the design CSS; loads the two scripts below. |
+| `home.js` | Interactions — nav, mobile menu, scroll reveals, the epicycle rosette logo, and mounting/scaling the console mock. |
+| `console-mock.js` | Data-driven, faithful static render of the app's "Orchestrator" view (the product showcase). |
+| `changelog.html` | Self-contained changelog page, populated from real Orrery releases (`git log` on `origin/main`). |
+
+Brand: Space Grotesk + JetBrains Mono, on the app's own purple `#a855f7` /
+cyan `#22d3ee` tokens. The mark is the epicycle (rosette) shared with the app splash.
 
 ## Local preview
 
@@ -10,33 +21,20 @@ No build step — what's in this folder is what ships.
 npx serve landing      # or: python -m http.server -d landing 8080
 ```
 
-Open the printed URL. The hero runs a live `<canvas>` orrery; everything is
-plain HTML/CSS/JS so opening `index.html` directly mostly works too (a local
-server is recommended so Google Fonts and module loading behave).
+## Updating the changelog
+
+`changelog.html` holds a `RELEASES` array baked from `git log`. Regenerate it at
+release time from the real tags/commits (newest first), grouped by version and
+conventional-commit type (`feat` / `fix` / `perf` / `refactor` / `chore` / `ci`).
 
 ## Deploying to Render
 
-Two pieces work together:
+Unchanged from the original setup — see `render.yaml` (repo root) and
+`.github/workflows/deploy-landing.yml`:
 
-1. **`render.yaml`** (repo root) — the Blueprint. It defines the
-   `orrery-landing` **static site** that publishes this folder. `autoDeploy`
-   is **off** and `buildFilter` is scoped to `landing/**`, so Render never
-   rebuilds for unrelated commits.
-
-2. **`.github/workflows/deploy-landing.yml`** — fires the actual redeploys via
-   the Render API using the `RENDER_API_KEY` secret. It runs **only** when
-   files under `landing/` (or the deploy infra) change. On the first run it
-   creates the service if it doesn't exist yet, then triggers and waits for
-   the deploy.
-
-### One-time setup
-
-- Add a repository secret **`RENDER_API_KEY`** (Settings → Secrets and
-  variables → Actions). Generate the key in the Render dashboard
-  (Account Settings → API Keys).
-- Optional: connect `render.yaml` as a Blueprint in the Render dashboard if
-  you prefer Render to own service creation. If you don't, the workflow
-  bootstraps the service via the API on its first run — pick one path so you
-  don't end up with two services of the same name.
-
-Pushing any change under `landing/` to `main` then redeploys automatically.
+- `render.yaml` defines the `orrery-landing` **static site** serving this
+  folder. `autoDeploy` is off; `buildFilter` is scoped to `landing/**`. It's a
+  multi-page site (no SPA rewrite), so `/` serves `index.html` and
+  `/changelog.html` serves the changelog directly.
+- The GitHub workflow fires Render API deploys via the `RENDER_API_KEY` secret,
+  **only** when files under `landing/` change.

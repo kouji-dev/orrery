@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Orrery — Changelog</title>
+<meta name="description" content="Every Orrery release, generated from the commit history — grouped by version tag and conventional-commit type." />
+<meta name="theme-color" content="#07080d" />
+<link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg/%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#07080d; --panel:#0e1018; --panel-2:#11141e; --panel-3:#161a26;
+    --hair:rgba(255,255,255,.07); --hair-2:rgba(255,255,255,.12);
+    --ink:#e8ebf2; --ink-2:#aab2c5; --ink-3:#6b7488; --ink-4:#444b5e;
+    --accent:#a855f7; --accent-2:#22d3ee;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --disp:'Space Grotesk',var(--mono);
+    --grad:linear-gradient(100deg,#ff5d9e,#a855f7,#22d3ee);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{scroll-behavior:smooth;}
+  body{background:var(--bg);color:var(--ink);font-family:var(--disp);position:relative;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+    background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);
+    background-size:38px 38px;background-attachment:fixed;}
+  body::before{content:'';position:fixed;top:0;left:0;right:0;height:560px;pointer-events:none;z-index:0;
+    background:radial-gradient(44% 100% at 50% -10%,rgba(168,85,247,.16),transparent 70%);}
+  a{color:inherit;text-decoration:none;}
+  .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .wm{font-family:var(--disp);font-weight:600;letter-spacing:-.01em;color:var(--ink);font-size:18px;} .wm .o{color:var(--accent);}
+
+  /* nav (matches home) */
+  .nav{position:sticky;top:0;z-index:50;background:rgba(8,9,14,.72);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--hair);}
+  .nav-in{max-width:1080px;margin:0 auto;padding:15px clamp(20px,5vw,48px);display:flex;align-items:center;gap:18px;}
+  .nav-brand{display:flex;align-items:center;gap:9px;}
+  .nav-links{display:flex;gap:26px;margin-left:16px;}
+  .nav-links a{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);transition:color .14s;}
+  .nav-links a:hover,.nav-links a.on{color:var(--ink);}
+  .nav-r{margin-left:auto;display:flex;align-items:center;gap:12px;}
+  .btn-dl{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border-radius:9px;font-family:var(--disp);font-weight:600;font-size:13px;
+    color:#15040d;background:linear-gradient(180deg,#cf95ff,#a855f7);box-shadow:0 0 26px -8px rgba(168,85,247,.7),inset 0 1px 0 rgba(255,255,255,.4);}
+  .btn-dl:hover{filter:brightness(1.07);}
+  .btn-dl .sub{font-family:var(--mono);font-weight:400;font-size:11px;opacity:.65;padding-left:8px;border-left:1px solid rgba(0,0,0,.22);}
+
+  /* header */
+  .cl-head{max-width:880px;margin:0 auto;padding:clamp(56px,8vw,86px) clamp(20px,5vw,48px) 0;}
+  .cl-eyebrow{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);
+    padding:6px 13px;border:1px solid var(--hair-2);border-radius:999px;background:rgba(255,255,255,.02);}
+  .cl-eyebrow .d{width:7px;height:7px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 10px 1px rgba(34,211,238,.7);}
+  .cl-h1{font-family:var(--disp);font-weight:600;font-size:clamp(38px,6vw,58px);letter-spacing:-.03em;margin-top:22px;line-height:1.02;}
+  .cl-sub{font-size:16px;line-height:1.6;color:var(--ink-2);max-width:560px;margin-top:18px;}
+  .cl-meta{font-family:var(--mono);font-size:11.5px;color:var(--ink-4);margin-top:16px;display:flex;align-items:center;gap:8px;}
+  .cl-meta code{color:var(--ink-2);}
+
+  /* releases */
+  .cl-body{max-width:880px;margin:0 auto;padding:clamp(40px,6vw,64px) clamp(20px,5vw,48px) 120px;}
+  .rel{display:grid;grid-template-columns:188px 1fr;gap:28px;padding:34px 0;border-top:1px solid var(--hair);position:relative;}
+  .rel:first-child{border-top:none;}
+  .rel-side{position:relative;}
+  .rel-ver{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .rel-tag{font-family:var(--disp);font-weight:600;font-size:24px;letter-spacing:-.01em;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .rel-badge{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.12em;padding:2px 7px;border-radius:999px;}
+  .rel-badge.beta{color:var(--accent-2);border:1px solid color-mix(in srgb,var(--accent-2) 42%,transparent);background:color-mix(in srgb,var(--accent-2) 12%,transparent);}
+  .rel-badge.dev{color:#f5c451;border:1px solid color-mix(in srgb,#f5c451 42%,transparent);background:color-mix(in srgb,#f5c451 12%,transparent);}
+  .rel-date{font-family:var(--mono);font-size:11.5px;color:var(--ink-4);margin-top:9px;}
+  .rel-tagref{font-family:var(--mono);font-size:10.5px;color:var(--ink-4);margin-top:4px;display:flex;align-items:center;gap:5px;}
+  .rel-summary{font-size:13.5px;line-height:1.55;color:var(--ink-2);margin-top:14px;max-width:230px;text-wrap:pretty;}
+  .rel-list{display:flex;flex-direction:column;}
+  .commit{display:grid;grid-template-columns:auto auto 1fr;gap:11px;align-items:baseline;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.04);}
+  .commit:last-child{border-bottom:none;}
+  .c-type{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:5px;white-space:nowrap;align-self:center;}
+  .c-type.feat{color:#22d3ee;background:rgba(34,211,238,.12);}
+  .c-type.fix{color:#34e0a1;background:rgba(52,224,161,.12);}
+  .c-type.perf{color:#c084fc;background:rgba(192,132,252,.14);}
+  .c-type.refactor{color:#a855f7;background:rgba(168,85,247,.14);}
+  .c-type.chore,.c-type.ci,.c-type.docs,.c-type.test,.c-type.build{color:#8b94a8;background:rgba(255,255,255,.05);}
+  .c-hash{font-family:var(--mono);font-size:11px;color:var(--ink-4);align-self:center;}
+  .c-msg{font-size:13.5px;line-height:1.5;color:var(--ink);text-wrap:pretty;}
+  .c-msg .scope{color:var(--accent);font-family:var(--mono);font-size:12px;}
+  .c-msg .by{color:var(--ink-4);font-family:var(--mono);font-size:11px;margin-left:6px;}
+
+  .cl-foot{max-width:880px;margin:0 auto;padding:28px clamp(20px,5vw,48px) 60px;border-top:1px solid var(--hair);
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+  .cl-foot .l{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--ink-3);}
+  .cl-foot .r{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-4);}
+
+  @media (max-width:680px){
+    .nav-links{display:none;}
+    .rel{grid-template-columns:1fr;gap:16px;}
+    .rel-summary{max-width:none;}
+    .commit{grid-template-columns:auto 1fr;}
+    .c-hash{display:none;}
+  }
+</style>
+<script>
+  (function(){
+    var A=22,B=13,K=-4,TAU=Math.PI*2,d="";
+    for(var i=0;i<=140;i++){var t=i/140*TAU;d+=(i?"L":"M")+(50+A*Math.cos(t)+B*Math.cos(K*t)).toFixed(2)+" "+(50+A*Math.sin(t)+B*Math.sin(K*t)).toFixed(2)+" ";}
+    d+="Z";
+    var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%23ff5d9e"/><stop offset=".5" stop-color="%23a855f7"/><stop offset="1" stop-color="%2322d3ee"/></linearGradient><radialGradient id="c"><stop offset="0" stop-color="%23ffffff"/><stop offset=".45" stop-color="%23a855f7"/><stop offset="1" stop-color="%23a855f7" stop-opacity="0"/></radialGradient></defs><rect width="100" height="100" rx="22" fill="%23090a0f"/><path d="'+d+'" fill="none" stroke="url(%23r)" stroke-width="5" stroke-linejoin="round"/><circle cx="50" cy="50" r="13" fill="url(%23c)"/></svg>';
+    document.getElementById("favicon").setAttribute("href","data:image/svg+xml,"+svg.replace(/#/g,"%23"));
+  })();
+</script>
+</head>
+<body>
+<header class="nav">
+  <div class="nav-in">
+    <a class="nav-brand" href="index.html">
+      <svg width="24" height="24" viewBox="0 0 100 100"><defs><linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient><radialGradient id="mc"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#a855f7"/><stop offset="1" stop-color="#a855f7" stop-opacity="0"/></radialGradient></defs><path id="mp" fill="none" stroke="url(#m)" stroke-width="6" stroke-linejoin="round"></path><circle cx="50" cy="50" r="13" fill="url(#mc)"></circle></svg>
+      <span class="wm"><span class="o">O</span>rrery</span>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html#how">How it works</a>
+      <a href="changelog.html" class="on">Changelog</a>
+    </nav>
+    <div class="nav-r">
+      <a class="btn-dl" href="https://github.com/kouji-dev/orrery-releases/releases/latest" target="_blank" rel="noopener"><span>Download</span><span class="sub">v0.2.5</span></a>
+    </div>
+  </div>
+</header>
+
+<section class="cl-head">
+  <span class="cl-eyebrow"><span class="d"></span>Release notes</span>
+  <h1 class="cl-h1">Changelog</h1>
+  <p class="cl-sub">Every Orrery release, taken straight from the commit history — grouped by version tag and conventional-commit type.</p>
+  <p class="cl-meta">parsed from <code>git log</code> · <code>origin/main</code> · <span id="relCount">5</span> releases</p>
+</section>
+
+<main class="cl-body" id="releases"></main>
+
+<footer class="cl-foot">
+  <span class="l">
+    <svg width="18" height="18" viewBox="0 0 100 100"><defs><linearGradient id="fm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><path id="fmp" fill="none" stroke="url(#fm)" stroke-width="6" stroke-linejoin="round"></path><circle cx="50" cy="50" r="13" fill="#a855f7" opacity=".5"></circle></svg>
+    Orrery
+  </span>
+  <span class="r">© 2026 Orrery · v0.2.5 · Windows 10/11</span>
+</footer>
+
+<script>
+  // epicycle path for the small marks
+  (function(){
+    var A=22,B=13,K=-4,TAU=Math.PI*2,d="";
+    for(var i=0;i<=160;i++){var t=i/160*TAU;d+=(i?"L":"M")+(50+A*Math.cos(t)+B*Math.cos(K*t)).toFixed(2)+" "+(50+A*Math.sin(t)+B*Math.sin(K*t)).toFixed(2)+" ";}
+    d+="Z";
+    ["mp","fmp"].forEach(function(id){var el=document.getElementById(id);if(el)el.setAttribute("d",d);});
+  })();
+
+  // ---- real Orrery releases, from `git log` on origin/main (regenerate at release time) ----
+  const RELEASES = [
+    { tag:"v0.2.5", channel:"beta", date:"June 13, 2026", ref:"2a626c4", summary:"Marketing site, an in-app file viewer, and a branded auto-updater.", commits:[
+      { type:"feat", hash:"54df51e", scope:"workspace", msg:"open-file tabs inline beside the diff/terminal toggle, with overflow" },
+      { type:"feat", hash:"2b9e4dd", scope:"landing",   msg:"animated landing page + Render blueprint & landing-only deploy" },
+      { type:"feat", hash:"7a8fc89", scope:"workspace", msg:"read-only file-view pane tab + pane-model wiring" },
+      { type:"feat", hash:"c99dfd1", scope:"updater",   msg:"branded update banner — silent MSI/NSIS install" },
+    ]},
+    { tag:"v0.2.3", channel:"beta", date:"June 11, 2026", ref:"61d570a", summary:"A Node 24-ready release pipeline.", commits:[
+      { type:"ci",   hash:"2334098", scope:"release", msg:"node24-ready action majors; Node 22 baseline" },
+    ]},
+    { tag:"v0.2.2", channel:"beta", date:"June 11, 2026", ref:"c257bca", summary:"Updates that install themselves, with live progress.", commits:[
+      { type:"feat", hash:"d2894d1", scope:"updater", msg:"auto-install by default + visible install progress" },
+    ]},
+    { tag:"v0.2.1", channel:"dev", date:"June 11, 2026", ref:"5d35930", summary:"Per-user install — no admin, no UAC.", commits:[
+      { type:"feat", hash:"e5aa6c6", scope:"installer", msg:"per-user MSI — no admin, no UAC, runas mode removed" },
+      { type:"fix",  hash:"52ac350", scope:"ui",        msg:"pane content scrolls/wraps instead of forcing layout width" },
+    ]},
+    { tag:"v0.2.0", channel:"dev", date:"June 10, 2026", ref:"3994e9d", summary:"Settings, notifications, the Resources panel, and a runtime perf overhaul.", commits:[
+      { type:"feat", hash:"264ebde", scope:"settings",  msg:"settings modal + store + channel-aware update flow" },
+      { type:"feat", hash:"93a1595", scope:"settings",  msg:"spawn prefill, auto-resume, notification gating + sound cues" },
+      { type:"feat", hash:"874689c", scope:"dev-panel", msg:"Resources tab from the ORCHESTRA design" },
+      { type:"feat", hash:"e3dc039", scope:"perf",      msg:"windowed truth + ui-thread / long-task probes" },
+      { type:"perf", hash:"7463f1f", scope:"runtime",   msg:"multiplex PTY output into one emit per frame" },
+      { type:"feat", hash:"c9d50e1", scope:"release",   msg:"one-word release flow + version sync" },
+    ]},
+  ];
+
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
+  const host = document.getElementById("releases");
+  document.getElementById("relCount").textContent = RELEASES.length;
+  RELEASES.forEach(function(r){
+    const rel = document.createElement("section"); rel.className = "rel";
+    const commits = r.commits.map(function(c){
+      const scope = c.scope ? '<span class="scope">'+esc(c.scope)+':</span> ' : '';
+      const by = c.by ? '<span class="by">'+esc(c.by)+'</span>' : '';
+      return '<div class="commit"><span class="c-type '+c.type+'">'+c.type+'</span>'+
+             '<span class="c-hash">'+esc(c.hash)+'</span>'+
+             '<span class="c-msg">'+scope+esc(c.msg)+by+'</span></div>';
+    }).join("");
+    rel.innerHTML =
+      '<div class="rel-side">'+
+        '<div class="rel-ver"><span class="rel-tag">'+esc(r.tag)+'</span>'+
+          '<span class="rel-badge '+r.channel+'">'+(r.channel==="beta"?"BETA":"DEV")+'</span></div>'+
+        '<div class="rel-date">'+esc(r.date)+'</div>'+
+        '<div class="rel-tagref">⎇ '+esc(r.tag)+' · '+esc(r.ref)+'</div>'+
+        '<p class="rel-summary">'+esc(r.summary)+'</p>'+
+      '</div>'+
+      '<div class="rel-list">'+commits+'</div>';
+    host.appendChild(rel);
+  });
+</script>
+</body>
+</html>
