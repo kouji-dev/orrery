@@ -44,3 +44,12 @@ Thumbs.db
 # scratch verification screenshots
 .verify/
 /Screenshot *.png
+
+# graphify artifacts (local only)
+.graphify_*
+.graphify_python/
+graphify-out/
+
+# local env & tooling
+.env
+.rtk/

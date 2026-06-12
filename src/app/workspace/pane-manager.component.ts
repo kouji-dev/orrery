@@ -6,10 +6,12 @@ import { DragService } from "../shared/drag.service";
 import { UiStore } from "../ui/ui.store";
 import { PaneNodeComponent } from "./pane-node.component";
 import {
+  closeFileInLeaf,
   countLeaves,
   DropSide,
   leaf,
   leafAgentOf,
+  openFileInLeaf,
   PaneCtx,
   patchLeaf,
   PaneView,
@@ -81,6 +83,12 @@ export class PaneManagerComponent implements PaneCtx {
   }
   onView(leafId: string, view: PaneView) {
     this.ui.setRoot(this.tabId(), (r) => patchLeaf(r, leafId, { view }));
+  }
+  onFileSelect(leafId: string, path: string) {
+    this.ui.setRoot(this.tabId(), (r) => openFileInLeaf(r, leafId, path));
+  }
+  onFileClose(leafId: string, path: string) {
+    this.ui.setRoot(this.tabId(), (r) => closeFileInLeaf(r, leafId, path));
   }
   onRatio(splitId: string, ratio: number) {
     this.ui.setRoot(this.tabId(), (r) => setRatio(r, splitId, ratio));

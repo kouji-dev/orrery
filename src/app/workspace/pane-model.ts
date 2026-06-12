@@ -3,13 +3,17 @@
 
 import { Agent, Project } from "../models";
 
-export type PaneView = "terminal" | "diff";
+export type PaneView = "terminal" | "diff" | "file";
 
 export interface PaneLeaf {
   type: "leaf";
   id: string;
   agentId: string | null;
   view: PaneView;
+  /** Open file tabs (worktree-relative paths) shown in the pane's file strip. */
+  files?: string[];
+  /** The file rendered when `view === "file"`. */
+  activeFile?: string | null;
 }
 export interface PaneSplit {
   type: "split";
@@ -122,6 +126,48 @@ export function setAgentView(node: PaneNode, agentId: string, view: PaneView): P
   return patchLeaf(node, targetId, { view });
 }
 
+/** First leaf showing `agentId` (depth-first), or null. */
+export function firstLeafOf(node: PaneNode, agentId: string): string | null {
+  if (node.type === "leaf") return node.agentId === agentId ? node.id : null;
+  return firstLeafOf(node.a, agentId) ?? firstLeafOf(node.b, agentId);
+}
+
+/** Open `path` as a file tab in leaf `id` (dedup) and make it the active view. */
+export function openFileInLeaf(node: PaneNode, id: string, path: string): PaneNode {
+  if (node.type === "leaf") {
+    if (node.id !== id) return node;
+    const files = node.files ?? [];
+    return {
+      ...node,
+      files: files.includes(path) ? files : [...files, path],
+      activeFile: path,
+      view: "file",
+    };
+  }
+  return { ...node, a: openFileInLeaf(node.a, id, path), b: openFileInLeaf(node.b, id, path) };
+}
+
+/** Close the file tab `path` in leaf `id`. If it was active, its neighbor takes
+ *  over; closing the last tab falls back to the terminal view. */
+export function closeFileInLeaf(node: PaneNode, id: string, path: string): PaneNode {
+  if (node.type === "leaf") {
+    if (node.id !== id) return node;
+    const files = node.files ?? [];
+    const idx = files.indexOf(path);
+    if (idx === -1) return node;
+    const next = files.filter((f) => f !== path);
+    if (node.activeFile !== path) return { ...node, files: next };
+    const neighbor = next[Math.min(idx, next.length - 1)] ?? null;
+    return {
+      ...node,
+      files: next,
+      activeFile: neighbor,
+      view: neighbor ? "file" : node.view === "file" ? "terminal" : node.view,
+    };
+  }
+  return { ...node, a: closeFileInLeaf(node.a, id, path), b: closeFileInLeaf(node.b, id, path) };
+}
+
 /** Remove every leaf showing `agentId`; each one's sibling takes the split's place. */
 export function dropAgent(node: PaneNode, agentId: string): PaneNode {
   if (node.type === "leaf") return node;
@@ -160,6 +206,8 @@ export interface PaneCtx {
   onClose(leafId: string): void;
   onAgent(leafId: string, agentId: string): void;
   onView(leafId: string, view: PaneView): void;
+  onFileSelect(leafId: string, path: string): void;
+  onFileClose(leafId: string, path: string): void;
   onRatio(splitId: string, ratio: number): void;
   onFocus(leafId: string): void;
   // drag-and-drop: a sidebar agent / tab dragged over a pane. dropTarget() is the

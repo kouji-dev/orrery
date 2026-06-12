@@ -2,7 +2,17 @@ import { effect, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS, ORG, WORKTREE_ROOT } from "../data";
 import { ContextMenuState, MenuItem, Tab, Tweaks, VizMode } from "../models";
 import { hexRgb } from "../utils";
-import { dropAgent, group, leaf, PaneNode, PaneView, setAgentView, treeAgentIds } from "../workspace/pane-model";
+import {
+  dropAgent,
+  firstLeafOf,
+  group,
+  leaf,
+  openFileInLeaf,
+  PaneNode,
+  PaneView,
+  setAgentView,
+  treeAgentIds,
+} from "../workspace/pane-model";
 
 const TWEAK_DEFAULTS: Tweaks = {
   theme: "dark",
@@ -242,10 +252,19 @@ export class UiStore {
     this.sidebarCompact.update((v) => !v);
   }
 
-  // ---- right-panel file tree → open the agent's diff in the workspace ----
-  // (the standalone single-file viewer tab is superseded by the pane tree)
-  openFileInWorkspace(agentId: string, _path: string) {
-    this.openAgent(agentId, "diff");
+  // ---- right-panel file tree → open the file as a tab INSIDE the agent's pane ----
+  // Each file gets its own closable tab in the pane's file strip; re-opening an
+  // already-open file just re-activates its tab.
+  openFileInWorkspace(agentId: string, path: string) {
+    this.openAgent(agentId); // ensure the agent's tab exists + is active (keeps its view)
+    const tabId = this.activeTab();
+    this.paneRoots.update((m) => {
+      const root = m[tabId];
+      if (!root) return m;
+      const leafId = firstLeafOf(root, agentId);
+      if (!leafId) return m;
+      return { ...m, [tabId]: openFileInLeaf(root, leafId, path) };
+    });
   }
 
   // ---- context menu ----

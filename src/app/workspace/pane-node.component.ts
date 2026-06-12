@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   ElementRef,
   HostListener,
   inject,
@@ -14,8 +15,9 @@ import { AgentActionsService } from "../agents/agent-actions.service";
 import { DragService } from "../shared/drag.service";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
-import { STATUS_META } from "../utils";
+import { fileName, STATUS_META } from "../utils";
 import { DiffViewComponent } from "./diff-view.component";
+import { FileViewComponent } from "./file-view.component";
 import { DropSide, PaneCtx, PaneLeaf, PaneNode, PaneSplit } from "./pane-model";
 import { TerminalComponent } from "./terminal.component";
 
@@ -28,7 +30,7 @@ import { TerminalComponent } from "./terminal.component";
 @Component({
   selector: "app-pane-node",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ToolBadgeComponent, TerminalComponent, DiffViewComponent],
+  imports: [IconComponent, ToolBadgeComponent, TerminalComponent, DiffViewComponent, FileViewComponent],
   template: `
     @if (asLeaf(); as lf) {
       @let ag = agent();
@@ -112,12 +114,37 @@ import { TerminalComponent } from "./terminal.component";
           }
         </div>
 
+        <!-- file tab strip (files opened from the right-panel tree). Scrolls
+             sideways when space runs out — hidden scrollbar, wheel pans. -->
+        @if (ag && lf.files?.length) {
+          <div #fileStrip class="file-strip" (wheel)="onStripWheel($event)">
+            @for (f of lf.files!; track f) {
+              @let on = lf.view === 'file' && lf.activeFile === f;
+              <div
+                class="file-tab"
+                [class.on]="on"
+                [title]="f"
+                [attr.data-path]="f"
+                (click)="$event.stopPropagation(); ctx().onFileSelect(lf.id, f)"
+              >
+                <app-icon name="file" size="sm" [px]="11" [color]="on ? 'var(--accent)' : 'var(--ink-4)'" />
+                <span class="fn">{{ fname(f) }}</span>
+                <button class="fx" title="Close file" (click)="$event.stopPropagation(); ctx().onFileClose(lf.id, f)">
+                  <app-icon name="x" size="sm" [px]="10" />
+                </button>
+              </div>
+            }
+          </div>
+        }
+
         <!-- pane body -->
         <div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden">
           @if (!ag) {
             <div style="flex:1;display:grid;place-items:center;color:var(--ink-4)">
               <button class="btn ghost-hair" (click)="$event.stopPropagation(); pickOpen.set(true)"><app-icon name="plus" size="sm" />Assign an agent</button>
             </div>
+          } @else if (lf.view === 'file' && lf.activeFile) {
+            <app-file-view [agent]="ag" [path]="lf.activeFile" />
           } @else if (lf.view === 'terminal') {
             <app-terminal [agent]="ag" />
           } @else {
@@ -213,6 +240,72 @@ import { TerminalComponent } from "./terminal.component";
       [data-theme="light"] .pane-btn.primary {
         color: #fff;
       }
+      /* file tab strip — must never widen the pane: tabs ellipsize and the
+         strip scrolls (scrollbar hidden; vertical wheel pans, see onStripWheel) */
+      .file-strip {
+        display: flex;
+        align-items: stretch;
+        flex: none;
+        min-width: 0;
+        overflow-x: auto;
+        scrollbar-width: none;
+        background: var(--panel);
+        border-bottom: 1px solid var(--hair);
+      }
+      .file-strip::-webkit-scrollbar {
+        display: none;
+      }
+      .file-tab {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 160px;
+        padding: 4px 6px 4px 10px;
+        border-right: 1px solid var(--hair);
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--ink-3);
+        cursor: pointer;
+        position: relative;
+      }
+      .file-tab:hover {
+        color: var(--ink-2);
+        background: var(--panel-2);
+      }
+      .file-tab.on {
+        color: var(--ink);
+        background: var(--panel-2);
+      }
+      .file-tab.on::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 2px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      }
+      .file-tab .fn {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .file-tab .fx {
+        display: flex;
+        flex: none;
+        padding: 2px;
+        border: none;
+        border-radius: 3px;
+        background: transparent;
+        color: var(--ink-4);
+        cursor: pointer;
+      }
+      .file-tab .fx:hover {
+        color: var(--ink);
+        background: var(--panel-3);
+      }
       .pane-divider {
         position: relative;
         background: transparent;
@@ -260,6 +353,7 @@ export class PaneNodeComponent {
 
   readonly pickOpen = signal(false);
   readonly dragging = signal(false);
+  readonly fname = fileName;
   readonly views: { k: "terminal" | "diff"; icon: string }[] = [
     { k: "terminal", icon: "terminal" },
     { k: "diff", icon: "diff" },
@@ -270,6 +364,34 @@ export class PaneNodeComponent {
   private agentActions = inject(AgentActionsService);
   private picker = viewChild<ElementRef<HTMLElement>>("picker");
   private splitEl = viewChild<ElementRef<HTMLElement>>("splitEl");
+  private fileStrip = viewChild<ElementRef<HTMLElement>>("fileStrip");
+
+  constructor() {
+    // keep the active file tab visible — a newly opened file lands at the END
+    // of an overflowing strip, which would otherwise scroll out of sight
+    effect(() => {
+      const lf = this.asLeaf();
+      const active = lf?.activeFile;
+      const strip = this.fileStrip()?.nativeElement;
+      if (!active || !strip) return;
+      queueMicrotask(() => {
+        strip
+          .querySelector(`[data-path="${CSS.escape(active)}"]`)
+          ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+      });
+    });
+  }
+
+  /** Vertical wheel pans the file strip sideways (same UX as the top tab bar). */
+  onStripWheel(e: WheelEvent) {
+    if (e.ctrlKey) return;
+    const el = e.currentTarget as HTMLElement;
+    if (el.scrollWidth <= el.clientWidth) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    }
+  }
 
   /** which side this leaf would receive a drop on (null = not the drop target). */
   readonly dropSide = computed<DropSide | null>(() => {
