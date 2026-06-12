@@ -53,3 +53,7 @@ graphify-out/
 # local env & tooling
 .env
 .rtk/
+
+# transient build/dev logs
+.cargobuild.log
+.ngserve.log
