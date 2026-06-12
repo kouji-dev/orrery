@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orrery — Conduct your constellation of coding agents</title>
+  <meta name="description" content="Orrery is a native desktop command deck for orchestrating Claude, Codex, Cursor and Gemini side by side — paned workspaces, live diffs, integrated terminals, and agent-aware notifications." />
+  <meta name="theme-color" content="#07080e" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Orrery — Conduct your constellation of coding agents" />
+  <meta property="og:description" content="One native command deck for every coding agent. Paned workspaces, live diffs, integrated terminals, agent-aware alerts." />
+  <meta property="og:type" content="website" />
+
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Spline+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- atmospheric layers -->
+  <div class="grain" aria-hidden="true"></div>
+  <div class="aurora" aria-hidden="true"></div>
+  <div class="cursor-lens" aria-hidden="true"></div>
+
+  <!-- ░░ NAV ░░ -->
+  <header class="nav" id="nav">
+    <a class="brand" href="#top" aria-label="Orrery home">
+      <span class="brand-glyph" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28">
+          <circle cx="16" cy="16" r="3.2" class="g-core" />
+          <ellipse cx="16" cy="16" rx="13" ry="5.2" class="g-ring" />
+          <ellipse cx="16" cy="16" rx="8.5" ry="3.4" class="g-ring" transform="rotate(38 16 16)" />
+          <circle cx="29" cy="16" r="1.9" class="g-planet" />
+          <circle cx="9.6" cy="9.4" r="1.5" class="g-planet alt" />
+        </svg>
+      </span>
+      <span class="brand-word">Orrery</span>
+    </a>
+
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#features">Features</a>
+      <a href="#workspace">Workspace</a>
+      <a href="#agents">Agents</a>
+      <a href="#flow">How it works</a>
+    </nav>
+
+    <div class="nav-cta">
+      <a class="ghost-link" href="https://github.com/kouji-dev/orrery" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="btn btn-amber" href="https://github.com/kouji-dev/orrery-releases/releases/latest" target="_blank" rel="noopener">Download</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- ░░ HERO ░░ -->
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow reveal" data-reveal>
+          <span class="eyebrow-dot"></span> Native desktop · Windows
+        </span>
+
+        <h1 class="hero-title">
+          <span class="line" data-reveal>Conduct your</span>
+          <span class="line" data-reveal>constellation of</span>
+          <span class="line accent" data-reveal><em>coding agents.</em></span>
+        </h1>
+
+        <p class="hero-sub reveal" data-reveal>
+          Orrery is the command deck for AI pair-programming. Run Claude, Codex,
+          Cursor and Gemini side by side in one paned workspace — with live diffs,
+          integrated terminals, and alerts the moment an agent finishes, asks, or
+          needs your call.
+        </p>
+
+        <div class="hero-actions reveal" data-reveal>
+          <a class="btn btn-amber btn-lg" href="https://github.com/kouji-dev/orrery-releases/releases/latest" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3v12m0 0l-4.5-4.5M12 15l4.5-4.5M4 19h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Download for Windows
+          </a>
+          <a class="btn btn-quiet btn-lg" href="https://github.com/kouji-dev/orrery" target="_blank" rel="noopener">
+            Star on GitHub
+          </a>
+        </div>
+
+        <ul class="hero-meta reveal" data-reveal>
+          <li><strong>4</strong> agents, one deck</li>
+          <li><span class="sep">·</span></li>
+          <li>Rust-native <strong>Tauri</strong></li>
+          <li><span class="sep">·</span></li>
+          <li>Auto-updating</li>
+        </ul>
+      </div>
+
+      <!-- live orrery -->
+      <div class="hero-orrery" data-tilt>
+        <canvas id="orrery" aria-hidden="true"></canvas>
+        <div class="orrery-legend" id="orreryLegend" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <!-- ░░ MARQUEE ░░ -->
+    <section class="strip" id="agents" aria-label="Supported agents">
+      <div class="strip-rail">
+        <div class="marquee" id="marquee">
+          <!-- duplicated in JS for seamless loop -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ░░ FEATURES (bento) ░░ -->
+    <section class="features" id="features">
+      <header class="sec-head" data-reveal>
+        <span class="sec-kicker">Everything in one window</span>
+        <h2>A workspace that thinks in <em>agents</em>.</h2>
+        <p>No more juggling four terminals and a pile of tabs. Orrery gives every agent a home, a view, and a voice.</p>
+      </header>
+
+      <div class="bento">
+        <article class="cell cell-lg" data-reveal data-tilt>
+          <div class="cell-ic">⌖</div>
+          <h3>Orchestrate every agent</h3>
+          <p>Spawn Claude, Codex, Cursor or Gemini into their own pane. Watch them work in parallel, hand off context, and keep each one on its own branch.</p>
+          <div class="cell-art art-orchestrate" aria-hidden="true">
+            <span class="chip c-claude">Claude</span>
+            <span class="chip c-codex">Codex</span>
+            <span class="chip c-cursor">Cursor</span>
+            <span class="chip c-gemini">Gemini</span>
+          </div>
+        </article>
+
+        <article class="cell" data-reveal data-tilt>
+          <div class="cell-ic">▤</div>
+          <h3>Paned workspace</h3>
+          <p>Split, drag and nest panes into any layout. Each holds a terminal, a file, or a diff — your call.</p>
+        </article>
+
+        <article class="cell" data-reveal data-tilt>
+          <div class="cell-ic">≢</div>
+          <h3>Live diffs</h3>
+          <p>Every change an agent makes, rendered as a syntax-highlighted merge view against your working tree.</p>
+        </article>
+
+        <article class="cell" data-reveal data-tilt>
+          <div class="cell-ic">▮</div>
+          <h3>Integrated terminals</h3>
+          <p>Full GPU-accelerated terminals — search, links, the lot — wired straight to each agent's shell.</p>
+        </article>
+
+        <article class="cell" data-reveal data-tilt>
+          <div class="cell-ic">⛨</div>
+          <h3>Permissions &amp; safety</h3>
+          <p>Auto-approval rules and remote control, scoped exactly how you want. Nothing runs without your policy.</p>
+        </article>
+
+        <article class="cell cell-wide" data-reveal data-tilt>
+          <div class="cell-ic">♪</div>
+          <h3>Notifications &amp; sound cues</h3>
+          <p>Native OS alerts and distinct chimes the instant an agent <em>finishes</em>, asks a <em>question</em>, needs a <em>permission</em>, or hits an <em>error</em>. Step away — Orrery keeps watch.</p>
+          <div class="cell-art art-events" aria-hidden="true">
+            <span class="evt e-fin">Finished</span>
+            <span class="evt e-q">Question</span>
+            <span class="evt e-perm">Permission</span>
+            <span class="evt e-err">Error</span>
+          </div>
+        </article>
+
+        <article class="cell" data-reveal data-tilt>
+          <div class="cell-ic">↻</div>
+          <h3>Silent auto-updates</h3>
+          <p>Signed, per-user installs that update themselves in the background — no admin, no UAC, no friction.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ░░ WORKSPACE SHOWCASE ░░ -->
+    <section class="showcase" id="workspace">
+      <div class="showcase-copy" data-reveal>
+        <span class="sec-kicker">The deck</span>
+        <h2>Four agents. One pane of glass.</h2>
+        <p>Orrery lays your agents out like instruments on a console. Glance across the room and read the whole orchestra at once — who's running, who's waiting on you, who just shipped.</p>
+        <ul class="ticks">
+          <li>Drag-to-split panes with file, diff &amp; terminal tabs</li>
+          <li>Per-agent branch &amp; status at a glance</li>
+          <li>Markdown raw / preview toggle on any file</li>
+        </ul>
+      </div>
+
+      <div class="window" data-reveal data-tilt aria-hidden="true">
+        <div class="win-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="win-title">orrery — payments-service</span>
+        </div>
+        <div class="win-body">
+          <aside class="win-side">
+            <div class="side-item active"><span class="ag-dot c-claude"></span>Claude</div>
+            <div class="side-item"><span class="ag-dot c-codex"></span>Codex</div>
+            <div class="side-item"><span class="ag-dot c-cursor"></span>Cursor</div>
+            <div class="side-item"><span class="ag-dot c-gemini"></span>Gemini</div>
+          </aside>
+          <div class="win-main">
+            <div class="win-tabs">
+              <span class="tab active">diff · auth.ts</span>
+              <span class="tab">term</span>
+              <span class="tab">readme.md</span>
+            </div>
+            <div class="win-diff">
+              <div class="dl"><span class="ln">12</span><span class="code">  function verify(token) {</span></div>
+              <div class="dl del"><span class="ln">13</span><span class="code">-   return jwt.decode(token)</span></div>
+              <div class="dl add"><span class="ln">13</span><span class="code">+   return jwt.verify(token, KEY)</span></div>
+              <div class="dl"><span class="ln">14</span><span class="code">  }</span></div>
+              <div class="dl"><span class="ln">15</span><span class="code">&nbsp;</span></div>
+              <div class="dl add"><span class="ln">16</span><span class="code">+ // hardened: signature now checked</span></div>
+            </div>
+            <div class="win-term">
+              <span class="prompt">orrery ▸ claude</span>
+              <span class="typed" id="termType"></span><span class="caret"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ░░ HOW IT WORKS ░░ -->
+    <section class="flow" id="flow">
+      <header class="sec-head" data-reveal>
+        <span class="sec-kicker">From zero to orbit</span>
+        <h2>Three moves to a working deck.</h2>
+      </header>
+
+      <ol class="steps">
+        <li class="step" data-reveal>
+          <span class="step-no">01</span>
+          <h3>Install &amp; open</h3>
+          <p>One signed installer, no admin rights. Orrery opens on your projects in seconds.</p>
+        </li>
+        <li class="step" data-reveal>
+          <span class="step-no">02</span>
+          <h3>Spawn your agents</h3>
+          <p>Drop Claude, Codex, Cursor or Gemini into panes. Each gets its own shell, branch and view.</p>
+        </li>
+        <li class="step" data-reveal>
+          <span class="step-no">03</span>
+          <h3>Conduct</h3>
+          <p>Review diffs, approve actions, and let the chimes tell you when something needs you.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ░░ STATS ░░ -->
+    <section class="stats" aria-label="At a glance">
+      <div class="stat" data-reveal>
+        <span class="stat-num" data-count="4">0</span>
+        <span class="stat-lbl">agents, side by side</span>
+      </div>
+      <div class="stat" data-reveal>
+        <span class="stat-num" data-count="100" data-suffix="%">0</span>
+        <span class="stat-lbl">native — Rust + Tauri</span>
+      </div>
+      <div class="stat" data-reveal>
+        <span class="stat-num" data-count="0" data-suffix="ms">0</span>
+        <span class="stat-lbl">tabs to babysit</span>
+      </div>
+      <div class="stat" data-reveal>
+        <span class="stat-num" data-count="1">0</span>
+        <span class="stat-lbl">pane of glass</span>
+      </div>
+    </section>
+
+    <!-- ░░ CTA BAND ░░ -->
+    <section class="cta">
+      <div class="cta-orrery" aria-hidden="true">
+        <span class="cta-ring r1"></span>
+        <span class="cta-ring r2"></span>
+        <span class="cta-ring r3"></span>
+        <span class="cta-sun"></span>
+      </div>
+      <div class="cta-inner" data-reveal>
+        <h2>Bring your agents into orbit.</h2>
+        <p>Free, native, and auto-updating. Download Orrery and conduct your constellation.</p>
+        <div class="hero-actions">
+          <a class="btn btn-amber btn-lg" href="https://github.com/kouji-dev/orrery-releases/releases/latest" target="_blank" rel="noopener">Download for Windows</a>
+          <a class="btn btn-quiet btn-lg" href="https://github.com/kouji-dev/orrery" target="_blank" rel="noopener">Read the source</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ░░ FOOTER ░░ -->
+  <footer class="foot">
+    <div class="foot-brand">
+      <span class="brand-glyph" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="22" height="22">
+          <circle cx="16" cy="16" r="3.2" class="g-core" />
+          <ellipse cx="16" cy="16" rx="13" ry="5.2" class="g-ring" />
+          <circle cx="29" cy="16" r="1.7" class="g-planet" />
+        </svg>
+      </span>
+      <span>Orrery</span>
+    </div>
+    <p class="foot-tag">Conduct your constellation of coding agents.</p>
+    <nav class="foot-links">
+      <a href="https://github.com/kouji-dev/orrery" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/kouji-dev/orrery-releases/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="#features">Features</a>
+    </nav>
+    <p class="foot-fine">© <span id="year"></span> Orrery · Built for people who run many minds at once.</p>
+  </footer>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

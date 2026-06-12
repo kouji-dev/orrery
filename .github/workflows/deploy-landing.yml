@@ -1,0 +1,117 @@
+name: Deploy landing
+
+# Redeploy the Orrery landing page — and ONLY the landing page — to Render.
+# Triggers exclusively on changes under landing/ (plus the infra that defines
+# the deploy itself). Pushes that only touch the app (src/, src-tauri/, …)
+# never run this workflow, so the site is never rebuilt for unrelated commits.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "landing/**"
+      - "render.yaml"
+      - ".github/workflows/deploy-landing.yml"
+  workflow_dispatch: {}
+
+# Never run two landing deploys at once; newer push wins.
+concurrency:
+  group: deploy-landing
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      # GitHub injects this secret; it authorizes the Render API calls.
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      SERVICE_NAME: orrery-landing
+      REPO_URL: https://github.com/kouji-dev/orrery
+      BRANCH: main
+      PUBLISH_PATH: landing
+    steps:
+      - name: Trigger Render deploy (create on first run)
+        run: |
+          set -euo pipefail
+
+          if [ -z "${RENDER_API_KEY:-}" ]; then
+            echo "::error::RENDER_API_KEY is not set. Add it under Settings → Secrets → Actions."
+            exit 1
+          fi
+
+          API="https://api.render.com/v1"
+          AUTH=(-H "Authorization: Bearer ${RENDER_API_KEY}" \
+                -H "Accept: application/json" \
+                -H "Content-Type: application/json")
+
+          echo "::group::Look up static site '${SERVICE_NAME}'"
+          SID="$(curl -fsS "${AUTH[@]}" \
+            "${API}/services?name=${SERVICE_NAME}&type=static_site&limit=1" \
+            | jq -r '.[0].service.id // empty')"
+          echo "service id: '${SID:-<none>}'"
+          echo "::endgroup::"
+
+          if [ -z "${SID}" ]; then
+            echo "::group::No service yet — creating it from this repo"
+            OWNER="$(curl -fsS "${AUTH[@]}" "${API}/owners?limit=1" | jq -r '.[0].owner.id')"
+            echo "owner id: ${OWNER}"
+
+            BODY="$(jq -n \
+              --arg name "${SERVICE_NAME}" \
+              --arg owner "${OWNER}" \
+              --arg repo "${REPO_URL}" \
+              --arg branch "${BRANCH}" \
+              --arg pub "${PUBLISH_PATH}" \
+              '{
+                 type: "static_site",
+                 name: $name,
+                 ownerId: $owner,
+                 repo: $repo,
+                 branch: $branch,
+                 autoDeploy: "no",
+                 serviceDetails: {
+                   buildCommand: "",
+                   publishPath: $pub,
+                   pullRequestPreviewsEnabled: "no"
+                 }
+               }')"
+
+            CREATE="$(curl -fsS "${AUTH[@]}" -X POST "${API}/services" -d "${BODY}")"
+            SID="$(echo "${CREATE}" | jq -r '.service.id // .id // empty')"
+            DID="$(echo "${CREATE}" | jq -r '.deployId // .service.deployId // empty')"
+            echo "created service id: ${SID}"
+            echo "::endgroup::"
+            echo "First deploy is provisioning automatically on create."
+          else
+            echo "::group::Trigger a new deploy"
+            DEPLOY="$(curl -fsS "${AUTH[@]}" -X POST \
+              "${API}/services/${SID}/deploys" \
+              -d '{"clearCache":"do_not_clear"}')"
+            DID="$(echo "${DEPLOY}" | jq -r '.id // empty')"
+            echo "deploy id: ${DID}"
+            echo "::endgroup::"
+          fi
+
+          if [ -z "${DID:-}" ]; then
+            echo "Deploy started (no deploy id returned to poll); exiting success."
+            exit 0
+          fi
+
+          echo "::group::Wait for deploy ${DID} to finish"
+          for i in $(seq 1 60); do
+            STATUS="$(curl -fsS "${AUTH[@]}" \
+              "${API}/services/${SID}/deploys/${DID}" | jq -r '.status // "unknown"')"
+            echo "[$i] status: ${STATUS}"
+            case "${STATUS}" in
+              live)
+                echo "::endgroup::"
+                echo "::notice::Landing deployed — ${STATUS}."
+                exit 0 ;;
+              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                echo "::endgroup::"
+                echo "::error::Deploy ended in '${STATUS}'."
+                exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::endgroup::"
+          echo "::warning::Timed out waiting for deploy ${DID}; check the Render dashboard."

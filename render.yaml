@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────
+# Render Blueprint — Orrery landing page (static site)
+#
+# This file IS the web app definition: connecting it as a Render
+# Blueprint creates the `orrery-landing` static site that serves
+# the ./landing folder.
+#
+# Deploys are gated to the landing page:
+#   • autoDeploy is OFF — Render never rebuilds on an arbitrary push.
+#   • buildFilter scopes any auto build to landing/** only.
+#   • The actual redeploys are fired from CI (.github/workflows/
+#     deploy-landing.yml) via the Render API, which only runs when
+#     files under landing/ change.
+# ─────────────────────────────────────────────────────────────
+services:
+  - type: web
+    name: orrery-landing
+    runtime: static
+    # Pure static — nothing to compile. Keep a no-op so Render is happy.
+    buildCommand: "echo 'orrery-landing: static, no build step'"
+    staticPublishPath: ./landing
+    autoDeploy: false
+    pullRequestPreviewsEnabled: false
+
+    # Only landing-page changes ever justify a build.
+    buildFilter:
+      paths:
+        - landing/**
+      ignoredPaths:
+        - landing/README.md
+
+    # Single-page site: send everything to index.html.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*.html
+        name: Cache-Control
+        value: public, max-age=300
+      - path: /favicon.svg
+        name: Cache-Control
+        value: public, max-age=86400
