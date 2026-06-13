@@ -81,6 +81,10 @@
   .c-msg .scope{color:var(--accent);font-family:var(--mono);font-size:12px;}
   .c-msg .by{color:var(--ink-4);font-family:var(--mono);font-size:11px;margin-left:6px;}
 
+  .cl-more{max-width:880px;margin:0 auto;padding:0 clamp(20px,5vw,48px) 80px;display:flex;justify-content:center;}
+  .btn-more{font-family:var(--mono);font-size:12px;color:var(--ink-2);background:rgba(255,255,255,.03);border:1px solid var(--hair-2);border-radius:9px;padding:11px 22px;cursor:pointer;transition:color .14s,border-color .14s,background .14s;}
+  .btn-more:hover{color:var(--ink);border-color:var(--accent);background:rgba(168,85,247,.08);}
+
   .cl-foot{max-width:880px;margin:0 auto;padding:28px clamp(20px,5vw,48px) 60px;border-top:1px solid var(--hair);
     display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
   .cl-foot .l{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--ink-3);}
@@ -129,6 +133,7 @@
 </section>
 
 <main class="cl-body" id="releases"></main>
+<div class="cl-more" id="moreWrap"><button class="btn-more" id="loadMore" type="button">Load more</button></div>
 
 <footer class="cl-foot">
   <span class="l">
@@ -179,7 +184,13 @@
   const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
   const host = document.getElementById("releases");
   document.getElementById("relCount").textContent = RELEASES.length;
-  RELEASES.forEach(function(r){
+
+  const PAGE_SIZE = 4;
+  let shown = 0;
+  const moreWrap = document.getElementById("moreWrap");
+  const moreBtn = document.getElementById("loadMore");
+
+  function renderRelease(r){
     const rel = document.createElement("section"); rel.className = "rel";
     const commits = r.commits.map(function(c){
       const scope = c.scope ? '<span class="scope">'+esc(c.scope)+':</span> ' : '';
@@ -198,7 +209,16 @@
       '</div>'+
       '<div class="rel-list">'+commits+'</div>';
     host.appendChild(rel);
-  });
+  }
+
+  function renderPage(){
+    RELEASES.slice(shown, shown + PAGE_SIZE).forEach(renderRelease);
+    shown = Math.min(shown + PAGE_SIZE, RELEASES.length);
+    moreWrap.style.display = shown >= RELEASES.length ? "none" : "flex";
+  }
+
+  moreBtn.addEventListener("click", renderPage);
+  renderPage();
 </script>
 </body>
 </html>
