@@ -46,14 +46,19 @@ jobs:
       - name: Generate changelog entry
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >
-          node scripts/landing/gen-changelog.mjs
-          --summary "${{ inputs.summary }}"
-          ${{ inputs.tag && format('--tag {0}', inputs.tag) || '' }}
-          --channel "${{ inputs.channel }}"
+          SUMMARY: ${{ inputs.summary }}
+          CHANNEL: ${{ inputs.channel }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          args=(--summary "$SUMMARY" --channel "$CHANNEL")
+          if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
+          node scripts/landing/gen-changelog.mjs "${args[@]}"
 
       - name: Commit regenerated changelog
         id: commit
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           if git diff --quiet -- landing/changelog.html; then
@@ -64,7 +69,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add landing/changelog.html
-          git commit -m "chore(landing): sync changelog for ${{ inputs.tag || 'latest' }} [skip ci]"
+          git commit -m "chore(landing): sync changelog for ${TAG:-latest} [skip ci]"
           git push origin HEAD:main
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
