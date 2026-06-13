@@ -1,3 +1,7 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { resolve, dirname } from 'node:path';
+
 // Build-time changelog generator for the Orrery landing page.
 // Pure helpers below do all data shaping and are unit-tested; main() (Task 4)
 // adds GitHub API IO, CLI parsing and the file write.
@@ -71,4 +75,111 @@ export function injectRelease(html, entry) {
   const after = html.slice(end);
   const literal = `\n  const RELEASES = ${JSON.stringify(next, null, 2)};\n  `;
   return before + literal + after;
+}
+
+const OWNER = 'kouji-dev';
+const REPO = 'orrery';
+const API = 'https://api.github.com';
+
+function parseArgs(argv) {
+  const out = { channel: 'dev', dryRun: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--summary') out.summary = argv[++i];
+    else if (a === '--tag') out.tag = argv[++i];
+    else if (a === '--channel') out.channel = argv[++i];
+    else if (a === '--dry-run') out.dryRun = true;
+  }
+  return out;
+}
+
+function ghHeaders() {
+  const h = { Accept: 'application/vnd.github+json', 'User-Agent': 'orrery-changelog' };
+  if (process.env.GITHUB_TOKEN) h.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  return h;
+}
+
+async function gh(path) {
+  const res = await fetch(`${API}${path}`, { headers: ghHeaders() });
+  if (!res.ok) throw new Error(`GitHub API ${res.status} for ${path}: ${await res.text()}`);
+  return res.json();
+}
+
+function semverKey(tag) {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(tag);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [0, 0, 0];
+}
+
+function cmpSemver(a, b) {
+  const ka = semverKey(a);
+  const kb = semverKey(b);
+  for (let i = 0; i < 3; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];
+  return 0;
+}
+
+async function listTags() {
+  const tags = await gh(`/repos/${OWNER}/${REPO}/tags?per_page=100`);
+  return tags.map((t) => t.name).filter((n) => /^v\d/.test(n)).sort(cmpSemver);
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (!args.summary) {
+    console.error('error: --summary is required');
+    process.exit(1);
+  }
+
+  const tags = await listTags(); // ascending semver
+  const tag = args.tag || tags[tags.length - 1];
+  if (!tag) throw new Error('no v* tags found');
+  const idx = tags.indexOf(tag);
+  const prevTag = idx > 0 ? tags[idx - 1] : null;
+
+  let rawCommits;
+  if (prevTag) {
+    const cmp = await gh(`/repos/${OWNER}/${REPO}/compare/${prevTag}...${tag}`);
+    rawCommits = cmp.commits; // oldest -> newest
+  } else {
+    const list = await gh(`/repos/${OWNER}/${REPO}/commits?sha=${tag}&per_page=30`);
+    rawCommits = list.slice().reverse(); // make oldest -> newest
+  }
+  if (!rawCommits.length) throw new Error(`no commits found for ${tag}`);
+
+  const head = rawCommits[rawCommits.length - 1];
+  const commits = rawCommits
+    .slice()
+    .reverse() // newest -> oldest for display
+    .map((c) => ({ sha: c.sha, subject: c.commit.message.split('\n')[0] }))
+    .filter((c) => !isNoiseCommit(c.subject))
+    .map((c) => {
+      const p = parseConventionalCommit(c.subject);
+      return { type: p.type, hash: c.sha, scope: p.scope, msg: p.msg };
+    });
+
+  const entry = buildReleaseEntry({
+    tag,
+    channel: args.channel,
+    date: formatDate(head.commit.author.date),
+    ref: head.sha,
+    summary: args.summary,
+    commits,
+  });
+
+  const file = resolve(dirname(fileURLToPath(import.meta.url)), '../../landing/changelog.html');
+  const html = readFileSync(file, 'utf8');
+  const next = injectRelease(html, entry);
+
+  if (args.dryRun) {
+    console.log(JSON.stringify([entry], null, 2));
+    return;
+  }
+  writeFileSync(file, next);
+  console.log(`changelog.html updated for ${tag} (${commits.length} commits).`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(err.message || err);
+    process.exit(1);
+  });
 }
