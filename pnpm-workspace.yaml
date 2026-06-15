@@ -1,3 +1,8 @@
+# pnpm blocks dependency build/postinstall scripts by default (supply-chain
+# safety). These trusted native deps are explicitly allowed to run their install
+# scripts. Maintained by `pnpm approve-builds` (run it if a new native dep needs
+# its build step). If approvals get out of sync, `pnpm approve-builds --all`
+# re-runs the scripts and rewrites this list.
 allowBuilds:
   '@parcel/watcher': true
   esbuild: true

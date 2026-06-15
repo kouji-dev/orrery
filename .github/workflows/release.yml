@@ -41,7 +41,10 @@ jobs:
           fetch-depth: 0
       - uses: pnpm/action-setup@v6
         with:
-          version: 9
+          # pnpm 10+ required: the repo keeps config (allowBuilds) in a
+          # packages-less pnpm-workspace.yaml and ships a pnpm 11 lockfile —
+          # pnpm 9 rejects both ("packages field missing or empty").
+          version: 11
       - uses: actions/setup-node@v6
         with:
           node-version: 22
