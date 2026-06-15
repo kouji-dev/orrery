@@ -9,6 +9,7 @@ import {
   FileNode,
   PermissionQuestion,
   PermissionSuggestion,
+  ToolDetection,
 } from "../models";
 import { bindFacade } from "../state/entity-facade";
 import { createEntityStore } from "../state/entity-store";
@@ -85,8 +86,13 @@ export class AgentsStore {
   async remove(id: string): Promise<void> {
     await this.bridge.invoke(Commands.AgentRemove, { id });
   }
-  detectTools(): Promise<Array<{ id: string; available: boolean }>> {
+  /** Per-tool detection (resolved path + version + ok/error/missing status). */
+  detectTools(): Promise<ToolDetection[]> {
     return this.bridge.invoke(Commands.DetectTools);
+  }
+  /** Probe a candidate executable path for a tool (`<path> --version`). */
+  verifyToolPath(id: string, path: string): Promise<ToolDetection> {
+    return this.bridge.invoke(Commands.VerifyToolPath, { id, path });
   }
   /** Worktree file tree (source recursed, ignored dirs as lazy stubs). */
   tree(id: string): Promise<FileNode[]> {

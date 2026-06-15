@@ -23,6 +23,10 @@ pub struct Settings {
     pub tool_model: BTreeMap<String, String>,
     /// Per-tool effort prefill (tool id → effort id).
     pub tool_effort: BTreeMap<String, String>,
+    /// Per-tool manual executable path override (tool id → absolute path). Set
+    /// when auto-detection on PATH is wrong or a tool was found-but-couldn't-run.
+    /// A non-empty entry wins over the PATH lookup for both detection and launch.
+    pub tool_paths: BTreeMap<String, String>,
     /// Branch name template; tokens: {name} (worktree slug), {tool}, {date} (MMDD).
     pub branch_template: String,
     /// Absolute dir new worktrees are created under; "" = the built-in app-data root.
@@ -79,6 +83,7 @@ impl Default for Settings {
             default_tool: String::new(), // spawn modal keeps its own hardcoded default
             tool_model: BTreeMap::new(),
             tool_effort: BTreeMap::new(),
+            tool_paths: BTreeMap::new(),
             branch_template: "agent/{name}".into(), // the historical branch shape
             worktree_root: String::new(),           // "" = ctor root (app-data/worktrees)
             auto_resume: true,
@@ -105,6 +110,7 @@ mod tests {
             "defaultTool",
             "toolModel",
             "toolEffort",
+            "toolPaths",
             "branchTemplate",
             "worktreeRoot",
             "autoResume",

@@ -309,6 +309,24 @@ export type UpdateChannel = "stable" | "beta";
 export type UpdatePolicy = "auto" | "notify" | "manual";
 export type AutoApprovePolicy = "off" | "allowlist" | "everything";
 
+/** Per-tool runtime detection (backend `detect_tools` / `verify_tool_path`).
+ *  `ok` = resolved + `--version` ran; `error` = found but couldn't launch
+ *  (`reason` explains); `missing` = nothing on PATH. */
+export interface ToolDetection {
+  id: string;
+  status: "ok" | "error" | "missing";
+  /** Mirror of `status === "ok"` (back-compat with the old boolean detection). */
+  available: boolean;
+  /** Resolved executable path (PATH or a manual override); null when missing. */
+  path: string | null;
+  /** Version parsed from `<bin> --version`, when it ran. */
+  version: string | null;
+  /** Where `path` came from: "path" (auto) | "manual" (user override). */
+  source: "path" | "manual" | null;
+  /** Why an `error` tool can't run — shown in the locate-binary editor. */
+  reason: string | null;
+}
+
 /** Which notification kinds are raised at all (off = the alert is not raised). */
 export interface SettingsEvents {
   finished: boolean;
@@ -328,6 +346,9 @@ export interface Settings {
   toolModel: Record<string, string>;
   /** Per-tool effort prefill (tool id → effort). Absent key = the tool default. */
   toolEffort: Record<string, string>;
+  /** Per-tool manual executable path override (tool id → absolute path). Absent
+   *  key = auto-detect on PATH. A set path wins for both detection and launch. */
+  toolPath: Record<string, string>;
   /** Branch name template; tokens: {name} (worktree slug), {tool}, {date} (MMDD). */
   branchTemplate: string;
   /** Absolute dir new worktrees are created under; "" = the built-in app-data root. */

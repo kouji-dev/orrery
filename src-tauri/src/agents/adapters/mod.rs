@@ -4,7 +4,10 @@
 //! allow/deny decision, and how we detect it on the machine — lives behind the
 //! trait so the runtime + hook bridge stay tool-agnostic.
 
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use portable_pty::CommandBuilder;
 use serde::Serialize;
@@ -35,11 +38,40 @@ pub struct HookEnv {
     pub token: String,
 }
 
-/// Installed-tool report surfaced to the frontend (`detect_tools`).
+/// Per-tool detection report surfaced to the frontend (`detect_tools` /
+/// `verify_tool_path`). Three outcomes, mirroring the design:
+///   `ok`      — binary resolved AND `--version` ran → we know its path + version
+///   `error`   — binary resolved but launching it failed (perm/arch/wrapper) →
+///               the user must point Orrery at a working path (`reason` explains)
+///   `missing` — nothing found on PATH (and no manual override)
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolStatus {
     pub id: String,
+    /// "ok" | "error" | "missing".
+    pub status: String,
+    /// Convenience mirror of `status == "ok"` (kept for existing callers).
     pub available: bool,
+    /// Resolved executable path (PATH lookup or a manual override). `None` when missing.
+    pub path: Option<String>,
+    /// Version string parsed from `<bin> --version`, when it ran.
+    pub version: Option<String>,
+    /// Where `path` came from: "path" (auto-detected) | "manual" (user override).
+    pub source: Option<String>,
+    /// Why an `error` tool couldn't run — shown to the user.
+    pub reason: Option<String>,
+}
+
+impl ToolStatus {
+    fn missing(id: String) -> Self {
+        Self { id, status: "missing".into(), available: false, path: None, version: None, source: None, reason: None }
+    }
+    fn ok(id: String, path: String, source: &str, version: Option<String>) -> Self {
+        Self { id, status: "ok".into(), available: true, path: Some(path), version, source: Some(source.into()), reason: None }
+    }
+    fn error(id: String, path: String, source: &str, reason: String) -> Self {
+        Self { id, status: "error".into(), available: false, path: Some(path), version: None, source: Some(source.into()), reason: Some(reason) }
+    }
 }
 
 pub trait AgentAdapter: Send + Sync {
@@ -151,6 +183,30 @@ pub trait AgentAdapter: Send + Sync {
     fn decide_keys(&self, choice: u32) -> String {
         format!("{choice}\r")
     }
+
+    // ── detection: each adapter owns how its tool reports + how we read it ──
+
+    /// Args that make the binary print its version. Default `["--version"]`;
+    /// override for a tool that uses a different flag.
+    fn version_args(&self) -> Vec<&'static str> {
+        vec!["--version"]
+    }
+
+    /// Parse a version out of the version-command output. Default: the first
+    /// `MAJOR.MINOR[.PATCH]` token (see [`parse_semver`]); override for a tool
+    /// whose `--version` output needs bespoke handling.
+    fn parse_version(&self, output: &str) -> Option<String> {
+        parse_semver(output)
+    }
+
+    /// Run the tool's version command at `path` and report whether it launched:
+    /// `Ok(version?)` when it ran cleanly (version parsed if recognizable),
+    /// `Err(reason)` when it couldn't launch / timed out / exited non-zero.
+    /// Default composes [`run_probe`] + [`AgentAdapter::parse_version`]; override
+    /// for a tool that needs entirely custom probing.
+    fn probe_version(&self, path: &str) -> Result<Option<String>, String> {
+        run_probe(path, &self.version_args()).map(|out| self.parse_version(&out))
+    }
 }
 
 /// Every known adapter, installed or not.
@@ -184,15 +240,132 @@ pub fn install_global_hooks(home: &Path, hook_bin: &Path) {
     }
 }
 
-/// Detection: every known tool tagged with whether it is installed.
-pub fn installed() -> Vec<ToolStatus> {
-    registry()
-        .iter()
-        .map(|a| ToolStatus {
-            id: a.id().to_string(),
-            available: a.is_installed(),
-        })
+/// Detection: every known tool resolved to a path + probed via the adapter's
+/// own version command. `overrides` maps a tool id → a user-set manual path
+/// (Settings `tool_paths`); a non-empty override is used INSTEAD of the PATH
+/// lookup. Each tool is probed on its own thread so the spawns run concurrently.
+pub fn installed(overrides: &BTreeMap<String, String>) -> Vec<ToolStatus> {
+    let mut handles = Vec::new();
+    for adapter in registry() {
+        let id = adapter.id().to_string();
+        let id_fallback = id.clone();
+        let manual = overrides
+            .get(&id)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        // `adapter` is Box<dyn AgentAdapter> (Send) — moved into the probe thread.
+        let h = std::thread::spawn(move || detect_one(&*adapter, manual.as_deref()));
+        handles.push((id_fallback, h));
+    }
+    handles
+        .into_iter()
+        .map(|(id, h)| h.join().unwrap_or_else(|_| ToolStatus::missing(id)))
         .collect()
+}
+
+/// Detect one tool via its `adapter`: resolve a path (manual override wins over
+/// PATH), then run the adapter's [`probe_version`](AgentAdapter::probe_version).
+/// See [`ToolStatus`] for the three outcomes.
+pub fn detect_one(adapter: &dyn AgentAdapter, manual: Option<&str>) -> ToolStatus {
+    let id = adapter.id().to_string();
+    let (path, source) = match manual {
+        Some(p) => (Some(p.to_string()), "manual"),
+        None => (
+            which_path(adapter.binary()).map(|p| p.display().to_string()),
+            "path",
+        ),
+    };
+    let Some(path) = path else {
+        return ToolStatus::missing(id);
+    };
+    match adapter.probe_version(&path) {
+        Ok(version) => ToolStatus::ok(id, path, source, version),
+        Err(reason) => ToolStatus::error(id, path, source, reason),
+    }
+}
+
+/// Verify a manual `path` for tool `id` (Settings "Use this path"). Routes
+/// through the tool's adapter so its own version flag + parser apply; an unknown
+/// id falls back to a generic `--version` probe.
+pub fn detect_at(id: &str, path: &str) -> ToolStatus {
+    match adapter_for(id) {
+        Some(adapter) => detect_one(&*adapter, Some(path)),
+        None => match run_probe(path, &["--version"]) {
+            Ok(out) => ToolStatus::ok(id.into(), path.into(), "manual", parse_semver(&out)),
+            Err(reason) => ToolStatus::error(id.into(), path.into(), "manual", reason),
+        },
+    }
+}
+
+/// Shared probe infra: run `<path> <args…>` (best-effort, bounded on a worker
+/// thread so a wedged binary can't hang detection). `Ok(combined stdout+stderr)`
+/// when it exits cleanly; `Err(reason)` when it can't launch / times out / exits
+/// non-zero. Adapters layer their version parsing on top (see `probe_version`).
+pub fn run_probe(path: &str, args: &[&str]) -> Result<String, String> {
+    // Resolve script-shim / extensionless paths to something CreateProcessW can
+    // launch (Windows) — e.g. npm's bare `claude` shim → `cmd.exe /c call
+    // claude.cmd`. Without this, probing such a path fails os error 193.
+    let (program, prefix) = launch_prefix(path);
+    let mut cmd = Command::new(&program);
+    cmd.args(&prefix)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW — no console flash
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(cmd.output());
+    });
+    match rx.recv_timeout(Duration::from_secs(6)) {
+        Err(_) => Err("timed out — the binary didn’t respond".into()),
+        Ok(Err(e)) => Err(format!("couldn’t launch — {e}")),
+        Ok(Ok(out)) => {
+            if out.status.success() {
+                // Combine streams — tools print --version to stdout OR stderr.
+                let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+                text.push('\n');
+                text.push_str(&String::from_utf8_lossy(&out.stderr));
+                Ok(text)
+            } else {
+                let code = out
+                    .status
+                    .code()
+                    .map(|c| format!("exited with code {c}"))
+                    .unwrap_or_else(|| "exited abnormally".into());
+                let hint = String::from_utf8_lossy(&out.stderr);
+                let hint = hint.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+                Err(if hint.is_empty() {
+                    format!("found, but {code}")
+                } else {
+                    format!("found, but {code} — {}", hint.trim())
+                })
+            }
+        }
+    }
+}
+
+/// Default version parser shared by adapters: the first `MAJOR.MINOR[.PATCH]`
+/// token in the output (e.g. "claude 1.4.2" → "1.4.2", "v0.31.0 (abc)" →
+/// "0.31.0"). `None` when no version-like token is present.
+pub fn parse_semver(s: &str) -> Option<String> {
+    for raw in s.split(|c: char| c.is_whitespace() || c == '(' || c == ')' || c == ',') {
+        let tok = raw.trim_start_matches(['v', 'V']);
+        if tok.chars().next().is_some_and(|c| c.is_ascii_digit()) && tok.contains('.') {
+            let ver: String = tok
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            if ver.contains('.') {
+                return Some(ver.trim_end_matches('.').to_string());
+            }
+        }
+    }
+    None
 }
 
 /// Merge our hook groups into a JSON hooks file without clobbering the user's
@@ -296,17 +469,79 @@ fn command_from(argv: Vec<String>) -> CommandBuilder {
 
 /// Is `cmd` an executable on PATH? Pure filesystem check — never spawns.
 pub fn which(cmd: &str) -> bool {
-    let Some(paths) = std::env::var_os("PATH") else {
-        return false;
-    };
+    which_path(cmd).is_some()
+}
+
+/// Resolve an executable PATH to the (program, leading-args) pair an OS process
+/// launcher can actually start. On Windows, a script shim is wrapped in its
+/// interpreter (`.cmd`/`.bat` → `cmd.exe /c call <p>`, `.ps1` → PowerShell) and
+/// an extensionless shim (npm's bare `claude`, which `CreateProcessW` rejects
+/// with os error 193) is redirected to a sibling `.cmd`/`.exe`/`.bat`/`.ps1`.
+/// On other platforms it's the path with no prefix. Shared by the version probe
+/// and the agent launcher so a manual path works identically in both.
+pub fn launch_prefix(path: &str) -> (String, Vec<String>) {
+    #[cfg(windows)]
+    {
+        windows_launch_prefix(path)
+    }
+    #[cfg(not(windows))]
+    {
+        (path.to_string(), Vec::new())
+    }
+}
+
+#[cfg(windows)]
+fn windows_launch_prefix(path: &str) -> (String, Vec<String>) {
+    let p = Path::new(path);
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase);
+    match ext.as_deref() {
+        Some("exe") | Some("com") => (path.to_string(), Vec::new()),
+        Some("cmd") | Some("bat") => (
+            "cmd.exe".into(),
+            vec!["/c".into(), "call".into(), path.to_string()],
+        ),
+        Some("ps1") => (
+            "powershell.exe".into(),
+            vec![
+                "-NoProfile".into(),
+                "-ExecutionPolicy".into(),
+                "Bypass".into(),
+                "-File".into(),
+                path.to_string(),
+            ],
+        ),
+        _ => {
+            // Extensionless (or unknown) shim — prefer a runnable sibling with
+            // the same stem (npm installs `claude` + `claude.cmd` side by side).
+            for sib in ["cmd", "exe", "bat", "ps1"] {
+                let cand = p.with_extension(sib);
+                if cand.is_file() {
+                    return windows_launch_prefix(&cand.to_string_lossy());
+                }
+            }
+            (path.to_string(), Vec::new()) // nothing better — best effort
+        }
+    }
+}
+
+/// Resolve `cmd` to its full path on PATH (first match, honoring PATHEXT-style
+/// extensions on Windows). Pure filesystem check — never spawns. `None` when
+/// nothing matches.
+pub fn which_path(cmd: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
     let exts: &[&str] = if cfg!(windows) {
         &["", ".exe", ".cmd", ".bat"]
     } else {
         &[""]
     };
-    std::env::split_paths(&paths).any(|dir| {
-        exts.iter()
-            .any(|ext| dir.join(format!("{cmd}{ext}")).is_file())
+    std::env::split_paths(&paths).find_map(|dir| {
+        exts.iter().find_map(|ext| {
+            let cand = dir.join(format!("{cmd}{ext}"));
+            cand.is_file().then_some(cand)
+        })
     })
 }
 
@@ -330,12 +565,86 @@ mod tests {
 
     #[test]
     fn installed_reports_every_known_tool() {
-        let report = installed();
+        let report = installed(&BTreeMap::new());
         assert_eq!(report.len(), 4);
-        // claude is the first adapter; its availability mirrors a PATH check.
-        let claude = report.iter().find(|t| t.id == "claude").unwrap();
-        assert_eq!(claude.available, which("claude"));
+        for t in &report {
+            assert!(
+                matches!(t.status.as_str(), "ok" | "error" | "missing"),
+                "valid status for {}: {}",
+                t.id,
+                t.status
+            );
+            assert_eq!(t.available, t.status == "ok", "available mirrors ok");
+        }
+        assert!(report.iter().any(|t| t.id == "claude"));
     }
+
+    #[test]
+    fn parse_semver_extracts_version_token() {
+        assert_eq!(parse_semver("claude 1.4.2"), Some("1.4.2".into()));
+        assert_eq!(parse_semver("v0.31.0 (abcdef)"), Some("0.31.0".into()));
+        assert_eq!(parse_semver("cursor-agent version 2.10"), Some("2.10".into()));
+        assert_eq!(parse_semver("no version here"), None);
+    }
+
+    #[test]
+    fn every_adapter_defaults_to_version_flag_and_semver_parse() {
+        for a in registry() {
+            assert_eq!(a.version_args(), vec!["--version"]);
+            assert_eq!(a.parse_version("tool 3.2.1"), Some("3.2.1".into()));
+        }
+    }
+
+    #[test]
+    fn which_path_is_none_for_bogus_command() {
+        assert!(which_path("definitely-not-a-real-binary-xyzzy").is_none());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn launch_prefix_wraps_script_shims() {
+        assert_eq!(launch_prefix(r"C:\bin\claude.exe"), (r"C:\bin\claude.exe".into(), vec![]));
+        assert_eq!(
+            launch_prefix(r"C:\bin\claude.cmd"),
+            ("cmd.exe".into(), vec!["/c".into(), "call".into(), r"C:\bin\claude.cmd".into()]),
+        );
+        let (prog, args) = launch_prefix(r"C:\bin\claude.ps1");
+        assert_eq!(prog, "powershell.exe");
+        assert_eq!(args.last().unwrap(), r"C:\bin\claude.ps1");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn launch_prefix_redirects_extensionless_shim_to_sibling_cmd() {
+        // npm installs `claude` (bare shim) + `claude.cmd` side by side; pointing
+        // detection at the bare shim must launch the .cmd (CreateProcessW can't
+        // run the extensionless one → os error 193).
+        let dir = tempfile::tempdir().unwrap();
+        let bare = dir.path().join("claude");
+        let cmd = dir.path().join("claude.cmd");
+        std::fs::write(&bare, b"#!/bin/sh\n").unwrap();
+        std::fs::write(&cmd, b"@echo off\n").unwrap();
+        let (prog, args) = launch_prefix(&bare.to_string_lossy());
+        assert_eq!(prog, "cmd.exe");
+        assert_eq!(args[0], "/c");
+        assert_eq!(args[1], "call");
+        assert_eq!(args[2], cmd.to_string_lossy());
+    }
+
+    #[test]
+    fn detect_at_with_bad_manual_path_reports_error() {
+        let bogus = if cfg!(windows) {
+            "C:/nope/not-here.exe"
+        } else {
+            "/nope/not-here"
+        };
+        let st = detect_at("claude", bogus);
+        assert_eq!(st.status, "error");
+        assert_eq!(st.source.as_deref(), Some("manual"));
+        assert_eq!(st.path.as_deref(), Some(bogus));
+        assert!(st.reason.is_some(), "an error carries a reason");
+    }
+
 
     #[test]
     fn argv_includes_task_only_on_first_launch() {

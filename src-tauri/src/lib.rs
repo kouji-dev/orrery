@@ -207,6 +207,7 @@ pub fn run() {
             agents::commands::agent_focus,
             agents::commands::agents_interrupted,
             agents::commands::detect_tools,
+            agents::commands::verify_tool_path,
             settings::commands::settings_get,
             settings::commands::settings_set,
             metrics::commands::system_metrics,

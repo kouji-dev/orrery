@@ -37,4 +37,7 @@ export class InstrumentedBridge implements Bridge {
   pickDirectory(): Promise<string | null> {
     return this.inner.pickDirectory();
   }
+  pickFile(defaultPath?: string): Promise<string | null> {
+    return this.inner.pickFile(defaultPath);
+  }
 }

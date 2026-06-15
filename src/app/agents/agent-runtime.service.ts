@@ -5,6 +5,7 @@ import {
   AgentNotification,
   PermissionQuestion,
   PermissionSuggestion,
+  ToolDetection,
 } from "../models";
 import { NotificationAlertService } from "../notifications/notification-alert.service";
 import { SettingsStore } from "../settings/settings.store";
@@ -53,6 +54,9 @@ export class AgentRuntimeService {
   // (diff-view refetch). Consumers derive elapsed locally via elapsedFor().
   readonly now = signal(Date.now());
   readonly toolsAvailable = signal<Record<string, boolean>>({});
+  /** Full per-tool detection (path/version/status/reason), driving the Settings
+   *  → Agent defaults runtime rows. Keyed by tool id. */
+  readonly detections = signal<Record<string, ToolDetection>>({});
   // Per-agent ROLLING list of hook-driven activity entries — each
   // `{detail, event, kind}` where detail is the latest message content scraped
   // from the agent's transcript (assistant text / thinking / tool use) or the
@@ -116,13 +120,8 @@ export class AgentRuntimeService {
   private tailBuf = createPtyTailBuffer();
 
   constructor() {
-    // detect installed CLI tools once
-    void this.agentsStore
-      .detectTools()
-      .then((list) =>
-        this.toolsAvailable.set(Object.fromEntries(list.map((t) => [t.id, t.available]))),
-      )
-      .catch(() => {});
+    // detect installed CLI tools once (path + version + ok/error/missing)
+    void this.refreshDetections();
 
     // Watch EVERY agent's worktree — the backend watcher runs the initial scan
     // and pushes results (changes + HEAD), so no eager pull is needed here.
@@ -243,6 +242,40 @@ export class AgentRuntimeService {
 
   toolAvailable(id: string): boolean {
     return this.toolsAvailable()[id] !== false;
+  }
+
+  /** One tool's full detection (or null before detection completes). */
+  detection(id: string): ToolDetection | null {
+    return this.detections()[id] ?? null;
+  }
+
+  /** Re-run backend detection for all tools (honors saved manual path
+   *  overrides). Called on startup and after a path is set/reverted. */
+  async refreshDetections(): Promise<void> {
+    try {
+      const list = await this.agentsStore.detectTools();
+      this.applyDetections(list);
+    } catch {
+      // backend unavailable (plain `ng serve`) — leave tools optimistically on
+    }
+  }
+
+  /** Probe a candidate path for a tool (`<path> --version`). Pure — does NOT
+   *  mutate `detections` (a failed probe shouldn't clobber the known state); the
+   *  caller folds the result in via {@link setDetection} only when it's good. */
+  verifyToolPath(id: string, path: string): Promise<ToolDetection> {
+    return this.agentsStore.verifyToolPath(id, path);
+  }
+
+  /** Replace one tool's detection (after a successful verify/save). */
+  setDetection(id: string, det: ToolDetection): void {
+    this.detections.update((m) => ({ ...m, [id]: det }));
+    this.toolsAvailable.update((m) => ({ ...m, [id]: det.available }));
+  }
+
+  private applyDetections(list: ToolDetection[]): void {
+    this.detections.set(Object.fromEntries(list.map((t) => [t.id, t])));
+    this.toolsAvailable.set(Object.fromEntries(list.map((t) => [t.id, t.available])));
   }
 
   /** Elapsed seconds for an agent, derived from the shared clock: live while

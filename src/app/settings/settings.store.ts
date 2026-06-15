@@ -15,7 +15,7 @@ export const SETTINGS_SAVE_DEBOUNCE_MS = 300;
 /** The three per-tool override maps. An ABSENT key means "the tool's default" —
  *  `setMap` trims a value back out when it equals that default, so the persisted
  *  document only carries real overrides and dirty checks stay exact. */
-export type SettingsMapKey = "toolModel" | "toolEffort" | "autoApprove";
+export type SettingsMapKey = "toolModel" | "toolEffort" | "autoApprove" | "toolPath";
 
 /** Mirror of the backend `Settings::default()` (src-tauri/src/settings/model.rs).
  *  MUST stay in sync — the per-row reset pills compare against this. */
@@ -28,6 +28,7 @@ export function settingsDefaults(): Settings {
     defaultTool: "", // "" = spawn modal keeps its own hardcoded default
     toolModel: {},
     toolEffort: {},
+    toolPath: {}, // absent tool = auto-detect on PATH
     branchTemplate: "agent/{name}",
     worktreeRoot: "", // "" = ctor root (app-data/worktrees)
     autoResume: true,
@@ -44,10 +45,16 @@ export function settingsDefaults(): Settings {
 /** The implicit per-tool default a map override is measured against. */
 export function settingsMapDefault(key: SettingsMapKey, tool: string): string | null {
   if (key === "autoApprove") return "off";
+  if (key === "toolPath") return null; // no implicit default — absent = auto-detect
   const meta = AGENT_TOOLS.find((t) => t.id === tool);
   if (!meta) return null;
   if (key === "toolModel") return meta.models[0];
   return meta.effort ? "high" : null; // toolEffort — spawn's hardcoded default
+}
+
+/** Effective manual path override for a tool ("" when none — auto-detect). */
+export function effectiveToolPath(s: Settings, tool: string): string {
+  return s.toolPath[tool] ?? "";
 }
 
 /** Effective (override-or-default) model for a tool. */
@@ -143,6 +150,7 @@ export class SettingsStore {
       ...p,
       toolModel: { ...(p.toolModel ?? {}) },
       toolEffort: { ...(p.toolEffort ?? {}) },
+      toolPath: { ...(p.toolPath ?? {}) },
       autoApprove: { ...(p.autoApprove ?? {}) },
       events: { ...d.events, ...(p.events ?? {}) },
     };
@@ -159,7 +167,10 @@ export class SettingsStore {
   setMap(key: SettingsMapKey, tool: string, value: string | null): void {
     this.settings.update((s) => {
       const next: Record<string, string> = { ...s[key] };
-      if (value == null || value === settingsMapDefault(key, tool)) delete next[tool];
+      // Absent = the tool's default; an empty string (e.g. cleared toolPath) or a
+      // value equal to the default both fall back to absent.
+      if (value == null || value.trim() === "" || value === settingsMapDefault(key, tool))
+        delete next[tool];
       else next[tool] = value;
       return { ...s, [key]: next } as Settings;
     });

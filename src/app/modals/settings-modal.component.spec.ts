@@ -4,7 +4,8 @@ import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { Bridge, BRIDGE } from "../data-source/bridge";
-import { Settings } from "../models";
+import { Settings, ToolDetection } from "../models";
+import { RuntimeRowComponent } from "./runtime-row.component";
 import { SettingsStore } from "../settings/settings.store";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
@@ -42,24 +43,45 @@ interface Setup {
   pickDirectory: ReturnType<typeof vi.fn>;
 }
 
+// claude/codex/cursor detected; gemini missing — mirrors the design fixture.
+const DETECTIONS: Record<string, ToolDetection> = {
+  claude: { id: "claude", status: "ok", available: true, path: "/usr/local/bin/claude", version: "1.4.2", source: "path", reason: null },
+  codex: { id: "codex", status: "ok", available: true, path: "/usr/local/bin/codex", version: "0.31.0", source: "path", reason: null },
+  cursor: { id: "cursor", status: "ok", available: true, path: "/usr/local/bin/cursor-agent", version: null, source: "path", reason: null },
+  gemini: { id: "gemini", status: "missing", available: false, path: null, version: null, source: null, reason: null },
+};
+
 async function setup(stored: Partial<Settings> = {}): Promise<Setup> {
   const pickDirectory = vi.fn(async () => "C:/picked/worktrees");
   const bridge: Bridge = {
     invoke: vi.fn(async (cmd: string) => (cmd === "settings_get" ? stored : null)) as Bridge["invoke"],
     on: async () => () => {},
     pickDirectory,
+    pickFile: async () => null,
   };
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       { provide: BRIDGE, useValue: bridge },
       { provide: UiStore, useValue: { flash: vi.fn() } },
-      // claude/codex/cursor detected; gemini missing — mirrors the design fixture
-      { provide: AgentRuntimeService, useValue: { toolAvailable: (id: string) => id !== "gemini" } },
+      {
+        provide: AgentRuntimeService,
+        useValue: {
+          toolAvailable: (id: string) => id !== "gemini",
+          detection: (id: string) => DETECTIONS[id] ?? null,
+          refreshDetections: async () => {},
+          verifyToolPath: vi.fn(),
+          setDetection: vi.fn(),
+        },
+      },
       { provide: VersionService, useValue: { version: () => "0.9.2" } },
     ],
   });
   TestBed.overrideComponent(SettingsModalComponent, {
+    remove: { imports: [IconComponent, ToolBadgeComponent] },
+    add: { imports: [IconStub, ToolBadgeStub] },
+  });
+  TestBed.overrideComponent(RuntimeRowComponent, {
     remove: { imports: [IconComponent, ToolBadgeComponent] },
     add: { imports: [IconStub, ToolBadgeStub] },
   });
@@ -99,7 +121,7 @@ describe("SettingsModal sections render", () => {
     expect(s.el.querySelector(".set-upd")).toBeNull();
   });
 
-  it("Agent defaults: tool grid with the undetected tool dimmed 'not found'", async () => {
+  it("Agent defaults: tool grid shows version, undetected tool dimmed 'not found'", async () => {
     const s = await setup();
     navTo(s, "Agent defaults");
     expect(s.el.querySelector(".set-head .ht")?.textContent).toContain("Agent defaults");
@@ -107,9 +129,13 @@ describe("SettingsModal sections render", () => {
     expect(tools).toHaveLength(4);
     const gemini = tools[3];
     expect(gemini.classList.contains("off")).toBe(true);
-    expect(gemini.disabled).toBe(true);
+    // tiles are now selectable even when not runnable (you pick one to fix its path)
     expect(gemini.textContent).toContain("not found");
     expect(tools[0].textContent).toContain("detected");
+    expect(tools[0].textContent).toContain("v1.4.2"); // version surfaced
+    // the Executable runtime row renders for the selected tool with its path chip
+    const chip = s.el.querySelector(".set-rt-pathchip .pt");
+    expect(chip?.textContent).toContain("/usr/local/bin/claude");
     // branch template live preview
     expect(s.el.querySelector(".set-preview b")?.textContent).toContain("agent/fix-login");
   });

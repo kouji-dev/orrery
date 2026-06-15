@@ -255,15 +255,21 @@ pub fn agent_start<R: Runtime>(
 ) -> AppResult<()> {
     crate::perf::timed("agent_start", || {
         let agent = svc.get(id)?;
+        let cfg = settings.get().unwrap_or_default();
         // per-tool autoApprove policy → the adapter's skip-permissions flag
         // ("off" when unset/unreadable — the tool's own flow is the safe default)
-        let approve_policy = settings
-            .get()
-            .unwrap_or_default()
+        let approve_policy = cfg
             .auto_approve
             .get(&agent.tool)
             .cloned()
             .unwrap_or_else(|| "off".into());
+        // user-set manual executable path (Settings → Agent defaults), if any —
+        // launched instead of resolving the tool's binary on PATH
+        let program_override = cfg
+            .tool_paths
+            .get(&agent.tool)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         // resume-into-session only when asked AND a session id was captured
         let resume_session = if resume.unwrap_or(false) {
             agent.session_id.clone()
@@ -292,6 +298,7 @@ pub fn agent_start<R: Runtime>(
             hook_env.as_ref(),
             resume_session.as_deref(),
             &approve_policy,
+            program_override.as_deref(),
         )
         .map_err(AppError::Other)?;
         if send_prompt {
@@ -474,9 +481,27 @@ pub fn agents_interrupted(state: State<'_, InterruptedAgents>) -> AppResult<Vec<
 /// registry so only-installed tools are offered (and, later, hooked).
 /// Blocking pool: shells out per known tool.
 #[tauri::command]
-pub async fn detect_tools() -> AppResult<Vec<super::adapters::ToolStatus>> {
-    tauri::async_runtime::spawn_blocking(|| {
-        crate::perf::timed("detect_tools", super::adapters::installed)
+pub async fn detect_tools(
+    settings: State<'_, SettingsService>,
+) -> AppResult<Vec<super::adapters::ToolStatus>> {
+    let overrides = settings.get().unwrap_or_default().tool_paths;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("detect_tools", || super::adapters::installed(&overrides))
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))
+}
+
+/// Verify a candidate executable path for a tool by running `<path> --version`.
+/// Returns the same `ToolStatus` shape (status ok|error, path, version, reason)
+/// so the Settings "Use this path" flow can show whether the binary launches.
+/// Blocking pool: shells out once.
+#[tauri::command]
+pub async fn verify_tool_path(id: String, path: String) -> AppResult<super::adapters::ToolStatus> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("verify_tool_path", || {
+            super::adapters::detect_at(&id, path.trim())
+        })
     })
     .await
     .map_err(|e| AppError::Other(format!("join: {e}")))

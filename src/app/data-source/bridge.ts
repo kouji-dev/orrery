@@ -14,6 +14,9 @@ export interface Bridge {
   on<T>(event: string, handler: (payload: T) => void): Promise<() => void>;
   /** Open a native folder picker. Resolves the absolute path, or null if cancelled. */
   pickDirectory(): Promise<string | null>;
+  /** Open a native file picker, optionally starting at `defaultPath` (a file or
+   *  dir). Resolves the absolute path, or null if cancelled. */
+  pickFile(defaultPath?: string): Promise<string | null>;
 }
 
 export const Commands = {
@@ -57,6 +60,7 @@ export const Commands = {
   CommentList: 'comment_list',
   CommentAdd: 'comment_add',
   DetectTools: 'detect_tools',
+  VerifyToolPath: 'verify_tool_path',
   SystemMetrics: 'system_metrics',
   SystemCost: 'system_cost',
   SetWindowIcon: 'set_window_icon',

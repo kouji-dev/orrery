@@ -24,6 +24,7 @@ import {
 } from "../settings/settings.store";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
+import { RuntimeRowComponent } from "./runtime-row.component";
 import { NotificationAlertService } from "../notifications/notification-alert.service";
 import { VersionService } from "../shared/version.service";
 
@@ -351,7 +352,7 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
   // glyphs INSIDE the icon/badge child components — encapsulation off keeps the
   // pixel-level CSS working verbatim (everything is namespaced under .set-).
   encapsulation: ViewEncapsulation.None,
-  imports: [IconComponent, ToolBadgeComponent, SetSegComponent, SetToggleComponent, SetSelectComponent, ModelComboComponent, SetRowComponent],
+  imports: [IconComponent, ToolBadgeComponent, SetSegComponent, SetToggleComponent, SetSelectComponent, ModelComboComponent, SetRowComponent, RuntimeRowComponent],
   template: `
     @let s = store.settings();
     <div class="set-backdrop" (mousedown)="close()">
@@ -469,22 +470,38 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
                   <div class="set-grp-h">Default agent<span class="ln"></span></div>
                   <app-set-row [wide]="true" [dirty]="s.defaultTool !== D.defaultTool" (reset)="store.set({ defaultTool: D.defaultTool })">
                     <ng-container row-label>Default tool</ng-container>
-                    <ng-container row-help>Used when you spawn without picking one. Detected CLIs on your PATH are selectable.</ng-container>
+                    <ng-container row-help>Used when you spawn without picking one. Pick an agent to configure its model, effort and executable path below.</ng-container>
                     <div class="set-tools">
                       @for (tl of tools; track tl.id) {
-                        @let detected = runtime.toolAvailable(tl.id);
+                        @let e = runtime.detection(tl.id);
+                        @let runnable = e?.status === 'ok';
                         @let on = s.defaultTool === tl.id;
-                        <button type="button" class="set-tool" [class.on]="on" [class.off]="!detected" [disabled]="!detected" (click)="store.set({ defaultTool: tl.id })">
+                        <button type="button" class="set-tool"
+                          [class.on]="on" [class.warn]="on && !runnable" [class.off]="!runnable && !on"
+                          [title]="runnable ? e?.path : (e?.status === 'error' ? 'Found but can’t run — set its path below' : 'Not installed — locate it below')"
+                          (click)="store.set({ defaultTool: tl.id })">
                           <app-tool-badge [tool]="tl.id" [size]="22" />
                           <div class="tn">{{ tl.name }}</div>
                           <div class="ts">
-                            @if (detected) { <span class="dot done" style="width:5px;height:5px"></span>detected } @else { binary missing }
+                            @if (runnable) {
+                              <span class="dot done" style="width:5px;height:5px"></span>detected{{ e?.version ? ' · v' + e?.version : '' }}
+                            } @else if (e?.status === 'error') {
+                              <span style="color:var(--set-amber)">can’t run</span>
+                            } @else { not installed }
                           </div>
                           @if (on) { <span class="pick"><app-icon name="check" size="sm" [px]="11" /></span> }
-                          @if (!detected) { <span class="nf">not found</span> }
+                          @if (!runnable && !on) {
+                            <span class="nf" [class.amber]="e?.status === 'error'">{{ e?.status === 'error' ? 'needs path' : 'not found' }}</span>
+                          }
                         </button>
                       }
                     </div>
+                  </app-set-row>
+
+                  <app-set-row [wide]="true" [dirty]="s.toolPath[modelTool().id] !== undefined" (reset)="resetToolPath(modelTool().id)">
+                    <ng-container row-label>Executable <span style="color:var(--ink-4);font-weight:400">· {{ modelTool().name }}</span></ng-container>
+                    <ng-container row-help>Where Orrery launches <b style="color:var(--ink-3);font-weight:500">{{ modelTool().name }}</b> from — detected on your <code>PATH</code> at startup. Override it if the binary lives elsewhere or couldn’t run.</ng-container>
+                    <app-runtime-row [toolId]="modelTool().id" [toolName]="modelTool().name" />
                   </app-set-row>
 
                   <app-set-row [dirty]="s.toolModel[modelTool().id] !== undefined" (reset)="store.setMap('toolModel', modelTool().id, null)">
@@ -729,7 +746,10 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
 .set-tool.on{color:var(--ink);border-color:color-mix(in oklch,var(--accent),transparent 42%);
   background:color-mix(in oklch,var(--accent),transparent 88%);
   box-shadow:0 0 18px -8px rgba(var(--accent-rgb),.7);}
-.set-tool.off{opacity:.5;cursor:not-allowed;}
+.set-tool.off{opacity:.5;}
+.set-tool.warn{color:var(--ink);border-color:color-mix(in oklch,var(--set-amber),transparent 50%);
+  background:color-mix(in oklch,var(--set-amber),transparent 90%);}
+.set-tool.warn .pick{background:var(--set-amber);}
 .set-tool .tn{font-size:11.5px;font-weight:500;}
 .set-tool .ts{font-size:9px;color:var(--ink-4);display:flex;align-items:center;gap:4px;}
 .set-tool .pick{position:absolute;top:9px;right:9px;width:15px;height:15px;border-radius:50%;
@@ -737,6 +757,7 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
 [data-theme="light"] .set-tool .pick{color:#fff;}
 .set-tool .nf{position:absolute;top:10px;right:10px;font-size:8px;letter-spacing:.08em;text-transform:uppercase;
   color:var(--ink-4);border:1px solid var(--hair);border-radius:4px;padding:1px 4px;}
+.set-tool .nf.amber{color:var(--set-amber);border-color:color-mix(in oklch,var(--set-amber),transparent 55%);}
 
 /* ── chips / amber / fields ── */
 .set-warn{display:inline-flex;align-items:center;gap:8px;padding:7px 11px;border-radius:8px;font-size:10.5px;
@@ -963,6 +984,12 @@ export class SettingsModalComponent {
     } catch {
       /* picker unavailable (plain browser) — ignore */
     }
+  }
+
+  /** Clear a tool's manual path override and re-detect it on PATH. */
+  resetToolPath(id: string): void {
+    this.store.setMap("toolPath", id, null);
+    void this.runtime.refreshDetections();
   }
 
   // ── permissions ──

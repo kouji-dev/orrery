@@ -25,6 +25,9 @@ class FakeBridge implements Bridge {
   async pickDirectory(): Promise<string | null> {
     return null;
   }
+  async pickFile(_defaultPath?: string): Promise<string | null> {
+    return null;
+  }
   emit(event: string, payload: unknown) {
     (this.handlers[event] || []).forEach((h) => h(payload));
   }

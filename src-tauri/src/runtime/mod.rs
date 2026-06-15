@@ -148,6 +148,7 @@ impl RuntimeService {
         hooks: Option<&HookEnv>,
         resume_session: Option<&str>,
         approve_policy: &str,
+        program_override: Option<&str>,
     ) -> Result<(), String> {
         let id = agent.id;
         if self.is_running(id) {
@@ -177,8 +178,12 @@ impl RuntimeService {
             resume_session,
             approve_policy,
         );
+        // A user-set manual executable path (Settings → tool_paths) overrides
+        // argv[0] so we launch exactly the binary they pointed us at.
+        let cmd = apply_program_override(cmd, program_override);
         // Resolve argv[0] to something CreateProcessW can actually launch (Windows):
-        // see resolve_program_command. No-op elsewhere.
+        // see resolve_program_command. No-op elsewhere (and a no-op when the
+        // override is already an absolute path — that path is taken as-is).
         let mut cmd = resolve_program_command(cmd);
         cmd.cwd(worktree);
 
@@ -437,6 +442,29 @@ fn kill_proc(p: &mut Proc) {
 /// and the resume launch — the policy is a property of the agent run, not of
 /// how the session was entered. Unknown tools get no flags (no adapter knows
 /// their CLI).
+/// Swap argv[0] for a user-set manual executable path, keeping every arg the
+/// adapter appended. No-op when `program` is `None`/blank or the command somehow
+/// has no argv. The replacement is an absolute path, so the later
+/// `resolve_program_command` (Windows) takes it verbatim.
+fn apply_program_override(cmd: CommandBuilder, program: Option<&str>) -> CommandBuilder {
+    let Some(program) = program.map(str::trim).filter(|p| !p.is_empty()) else {
+        return cmd;
+    };
+    let argv: Vec<String> = cmd
+        .get_argv()
+        .iter()
+        .map(|s| s.to_string_lossy().into_owned())
+        .collect();
+    if argv.is_empty() {
+        return cmd;
+    }
+    let mut out = CommandBuilder::new(program);
+    for a in &argv[1..] {
+        out.arg(a);
+    }
+    out
+}
+
 fn tool_command(
     tool: &str,
     task: &str,
@@ -524,9 +552,15 @@ fn resolve_program_command(cmd: CommandBuilder) -> CommandBuilder {
 #[cfg(windows)]
 fn resolve_program(argv: Vec<String>) -> Vec<String> {
     let prog = &argv[0];
-    // A path (has a separator) is the caller's explicit choice — take it as-is.
+    // An explicit path (a manual `tool_paths` override) — still wrap a script or
+    // extensionless shim so CreateProcessW can launch it (npm's bare `claude` →
+    // `cmd.exe /c call claude.cmd`). A real `.exe` passes through unchanged.
     if prog.contains('/') || prog.contains('\\') {
-        return argv;
+        let (program, mut head) = crate::agents::adapters::launch_prefix(prog);
+        head.extend_from_slice(&argv[1..]);
+        let mut out = vec![program];
+        out.extend(head);
+        return out;
     }
     let dirs: Vec<std::path::PathBuf> = std::env::var_os("PATH")
         .map(|p| std::env::split_paths(&p).collect())

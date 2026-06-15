@@ -25,4 +25,8 @@ export class TauriBridge implements Bridge {
     // dialog returns string (path) | string[] | null; we requested a single dir.
     return typeof selected === 'string' ? selected : null;
   }
+  async pickFile(defaultPath?: string): Promise<string | null> {
+    const selected = await open({ directory: false, multiple: false, defaultPath });
+    return typeof selected === 'string' ? selected : null;
+  }
 }
