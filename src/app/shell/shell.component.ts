@@ -6,6 +6,7 @@ import { SpawnModalComponent } from '../modals/spawn-modal.component';
 import { SettingsStore } from '../settings/settings.store';
 import { UiStore } from '../ui/ui.store';
 import { OverviewComponent } from '../overview/overview.component';
+import { BacklogComponent } from '../backlog/backlog.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { SidebarComponent } from '../sidebar/sidebar.component';
 import { CompactRailComponent } from '../sidebar/compact-rail.component';
@@ -14,6 +15,7 @@ import { TopBarComponent } from '../top-bar/top-bar.component';
 import { TweaksPanelComponent } from '../tweaks/tweaks-panel.component';
 import { DevPanelComponent } from '../dev-tools/dev-panel.component';
 import { PaneManagerComponent } from '../workspace/pane-manager.component';
+import { TicketPageComponent } from '../backlog/ticket-page.component';
 
 declare const ngDevMode: boolean | undefined;
 
@@ -25,7 +27,9 @@ declare const ngDevMode: boolean | undefined;
     SidebarComponent,
     CompactRailComponent,
     OverviewComponent,
+    BacklogComponent,
     PaneManagerComponent,
+    TicketPageComponent,
     RightPanelComponent,
     StatusBarComponent,
     SpawnModalComponent,
@@ -52,10 +56,13 @@ declare const ngDevMode: boolean | undefined;
           <app-sidebar />
         }
 
-        @if (ui.activeTab() === 'orchestrator') {
-          <app-overview />
-        } @else {
-          <app-pane-manager [tabId]="ui.activeTab()" />
+        @switch (ui.activeTabKind()) {
+          @case ('orchestrator') { <app-overview /> }
+          @case ('backlog') { <app-backlog /> }
+          @case ('ticket') {
+            <app-ticket-page [ticketId]="ui.activeTicketId()!" />
+          }
+          @default { <app-pane-manager [tabId]="ui.activeTab()" /> }
         }
 
         @if (ui.tweaks().rightPanel) {

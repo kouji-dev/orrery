@@ -72,6 +72,7 @@ export class AgentsStore {
     name: string;
     task: string;
     base: string;
+    ticketId?: string;
   }): Promise<Agent> {
     return this.bridge.invoke<Agent>(Commands.AgentSpawn, { req });
   }

@@ -17,6 +17,8 @@ export interface SpawnRequest {
   effort: string | null;
   name: string;
   prompt: string;
+  /** When set, the backend attaches this ticket (→ inprogress + agentId). */
+  ticketId?: string;
   /** When true, launch the agent's process right after creating it (Spawn);
    *  otherwise it's created idle until the user Starts it (Create). */
   start?: boolean;
@@ -151,6 +153,7 @@ export class AgentActionsService {
         name,
         task: req.prompt,
         base: req.branch,
+        ...(req.ticketId ? { ticketId: req.ticketId } : {}),
       });
     } catch (e) {
       this.ui.flash((e as { message?: string })?.message ?? "spawn failed");

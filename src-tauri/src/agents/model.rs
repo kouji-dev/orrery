@@ -22,6 +22,9 @@ pub struct AgentRecord {
     /// The tool's own CLI session id (captured from a hook's `session_id`), used to
     /// relaunch with `claude --resume <id>`. `None` until a hook reports it.
     pub session_id: Option<String>,
+    /// The ticket this agent is working on, if any. Set at spawn time; drives
+    /// lifecycle: attach_agent on spawn, complete_for_agent on PTY exit.
+    pub ticket_id: Option<Uuid>,
 }
 
 /// View model sent to the frontend: persisted record + transient runtime fields.
@@ -43,6 +46,8 @@ pub struct Agent {
     pub base: String,
     pub started: bool,
     pub session_id: Option<String>,
+    /// The ticket this agent is working on (`ticketId` in camelCase for the frontend).
+    pub ticket_id: Option<Uuid>,
     // --- transient runtime (defaulted; owned by the runtime layer later) ---
     pub commits: i64,
     pub elapsed: i64,
@@ -63,6 +68,9 @@ pub struct AgentSpawnRequest {
     pub name: String,
     pub task: String,
     pub base: String,
+    /// Optional ticket to attach this agent to. When Some, attach_agent is called
+    /// after spawn so the ticket flips to InProgress and the board updates.
+    pub ticket_id: Option<Uuid>,
 }
 
 /// Partial update — only provided fields are written.

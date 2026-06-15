@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, PtySize};
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use uuid::Uuid;
 
 use crate::agents::adapters::{self, HookEnv};
@@ -275,7 +275,12 @@ impl RuntimeService {
             // up without this id, so `is_running()` is false afterwards. Bind
             // the removed entry so its drop (ConPTY teardown — a blocking OS
             // call) happens AFTER the map guard is released, never under it.
+            // The return value is the authoritative natural-vs-stopped signal:
+            // Some(_) means we were still registered (natural exit or crash),
+            // None means stop()/stop_all() yanked the entry before the process
+            // exited (user-initiated kill).
             let removed = procs.lock().unwrap().remove(&id);
+            let naturally_exited = removed.is_some();
             drop(removed);
             // Removing the entry dropped `master`, so the reader hits EOF and
             // the batcher final-flushes into the mux, then returns. Join it so
@@ -286,6 +291,30 @@ impl RuntimeService {
             let _ = batcher.join();
             if let Some(entry) = mux_exit.take(&exit_id) {
                 emit_output_frame(&app_exit, vec![entry]);
+            }
+            // Ticket lifecycle: only complete the ticket on a natural exit
+            // (agent ran to completion). When the user calls agent_stop → rt.stop(),
+            // stop() removes the proc from the map before killing, so
+            // `naturally_exited` is false here. A crash is indistinguishable from
+            // a natural exit at the OS level (both leave the proc in the map), so
+            // crash exits do complete the ticket — acceptable given that a crashed
+            // agent still "finished" the work it was doing up to that point and
+            // the ticket needs to be unblocked. If this ever needs refinement,
+            // gate additionally on the persisted agent status.
+            if naturally_exited {
+                use crate::core::events::{emit_entity, Change};
+                use crate::tickets::service::TicketService;
+                if let Some(tickets) = app_exit.try_state::<TicketService>() {
+                    match tickets.complete_for_agent(id) {
+                        Ok(Some(ticket)) => {
+                            emit_entity(&app_exit, "ticket", Change::Updated, ticket);
+                        }
+                        Ok(None) => {} // no ticket attached, or already done
+                        Err(e) => {
+                            log::warn!("complete_for_agent({id}) on exit failed: {e:?}");
+                        }
+                    }
+                }
             }
             let _ = app_exit.emit("agent://exit", serde_json::json!({ "id": exit_id }));
         });

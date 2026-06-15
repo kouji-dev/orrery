@@ -24,6 +24,17 @@ pub enum ProjectError {
     NotFound(String),
 }
 
+// ---- domain error: Ticket ----
+#[derive(Debug, Error)]
+pub enum TicketError {
+    #[error("invalid ticket: {0}")]
+    Invalid(String),
+    #[error("required field missing: {0}")]
+    Required(String),
+    #[error("not found: {0}")]
+    NotFound(String),
+}
+
 // ---- domain error: Agent ----
 #[derive(Debug, Error)]
 pub enum AgentError {
@@ -43,6 +54,8 @@ pub enum AppError {
     #[error(transparent)]
     Project(#[from] ProjectError), // ProjectError -> AppError
     #[error(transparent)]
+    Ticket(#[from] TicketError), // TicketError -> AppError
+    #[error(transparent)]
     Agent(#[from] AgentError), // AgentError -> AppError
     #[error("{0}")]
     Other(String),
@@ -58,6 +71,8 @@ impl serde::Serialize for AppError {
         let (kind, message) = match self {
             AppError::Project(ProjectError::NotFound(m)) => ("notFound", m.clone()),
             AppError::Project(e) => ("project", e.to_string()),
+            AppError::Ticket(TicketError::NotFound(m)) => ("notFound", m.clone()),
+            AppError::Ticket(e) => ("ticket", e.to_string()),
             AppError::Agent(AgentError::NotFound(m)) => ("notFound", m.clone()),
             AppError::Agent(e) => ("agent", e.to_string()),
             AppError::Db(e) => ("db", e.to_string()),

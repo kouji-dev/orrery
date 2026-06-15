@@ -120,6 +120,8 @@ impl AgentService {
         );
         // migrate DBs created before the `session_id` column existed (ignored if present)
         let _ = c.execute("ALTER TABLE agents ADD COLUMN session_id TEXT", []);
+        // migrate DBs created before the `ticket_id` column existed (ignored if present)
+        let _ = c.execute("ALTER TABLE agents ADD COLUMN ticket_id TEXT", []);
     }
 
     /// Record → view model. Runtime fields are defaulted (no disk/process access yet).
@@ -138,6 +140,7 @@ impl AgentService {
             base: rec.base,
             started: rec.started,
             session_id: rec.session_id,
+            ticket_id: rec.ticket_id,
             commits: 0,
             elapsed: 0,
             progress: 0.0,
@@ -209,13 +212,14 @@ impl AgentService {
             base: req.base,
             started: false,
             session_id: None,
+            ticket_id: req.ticket_id,
         };
         {
             let c = self.db.lock().unwrap();
             c.execute(
                 "INSERT INTO agents
-                    (id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    (id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, ticket_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 rusqlite::params![
                     rec.id.to_string(),
                     rec.project_id.to_string(),
@@ -229,6 +233,7 @@ impl AgentService {
                     rec.worktree,
                     rec.base,
                     rec.started,
+                    rec.ticket_id.map(|u| u.to_string()),
                 ],
             )
             .map_err(DbError::Sqlite)?;
@@ -461,11 +466,12 @@ impl AgentService {
             String,
             bool,
             Option<String>,
+            Option<String>,
         )> = {
             let c = self.db.lock().unwrap();
             let mut stmt = c
                 .prepare(
-                    "SELECT id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id FROM agents",
+                    "SELECT id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id, ticket_id FROM agents",
                 )
                 .map_err(DbError::Sqlite)?;
             let rows = stmt
@@ -484,6 +490,7 @@ impl AgentService {
                         r.get(10)?,
                         r.get(11)?,
                         r.get(12)?,
+                        r.get(13)?,
                     ))
                 })
                 .map_err(DbError::Sqlite)?;
@@ -506,7 +513,13 @@ impl AgentService {
                     base,
                     started,
                     session_id,
+                    ticket_id,
                 )| {
+                    let ticket_id = ticket_id
+                        .as_deref()
+                        .map(Uuid::parse_str)
+                        .transpose()
+                        .map_err(|e| AppError::Other(e.to_string()))?;
                     Ok(AgentRecord {
                         id: Uuid::parse_str(&id).map_err(|e| AppError::Other(e.to_string()))?,
                         project_id: Uuid::parse_str(&project_id)
@@ -522,6 +535,7 @@ impl AgentService {
                         base,
                         started,
                         session_id,
+                        ticket_id,
                     })
                 },
             )
@@ -542,12 +556,13 @@ impl AgentService {
             String,
             bool,
             Option<String>,
+            Option<String>,
         )> = {
             let c = self.db.lock().unwrap();
             c.query_row(
-                "SELECT project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id FROM agents WHERE id = ?1",
+                "SELECT project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id, ticket_id FROM agents WHERE id = ?1",
                 [id.to_string()],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?, r.get(12)?)),
             )
             .optional()
             .map_err(DbError::Sqlite)?
@@ -566,22 +581,31 @@ impl AgentService {
                 base,
                 started,
                 session_id,
-            )) => Ok(AgentRecord {
-                id,
-                project_id: Uuid::parse_str(&project_id)
-                    .map_err(|e| AppError::Other(e.to_string()))?,
-                tool,
-                model,
-                effort,
-                name,
-                task,
-                status,
-                branch,
-                worktree,
-                base,
-                started,
-                session_id,
-            }),
+                ticket_id,
+            )) => {
+                let ticket_id = ticket_id
+                    .as_deref()
+                    .map(Uuid::parse_str)
+                    .transpose()
+                    .map_err(|e| AppError::Other(e.to_string()))?;
+                Ok(AgentRecord {
+                    id,
+                    project_id: Uuid::parse_str(&project_id)
+                        .map_err(|e| AppError::Other(e.to_string()))?,
+                    tool,
+                    model,
+                    effort,
+                    name,
+                    task,
+                    status,
+                    branch,
+                    worktree,
+                    base,
+                    started,
+                    session_id,
+                    ticket_id,
+                })
+            }
             None => Err(AgentError::NotFound(id.to_string()).into()),
         }
     }
@@ -717,6 +741,7 @@ mod tests {
             name: name.into(),
             task: "do the thing".into(),
             base: "main".into(),
+            ticket_id: None,
         }
     }
 

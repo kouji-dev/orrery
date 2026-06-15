@@ -49,6 +49,13 @@ export const Commands = {
   /** ONE-SHOT drain of the agents that were running when the app last shut
    *  down (captured before reset_running) — the auto-resume flow's source. */
   AgentsInterrupted: 'agents_interrupted',
+  TicketList: 'ticket_list',
+  TicketCreate: 'ticket_create',
+  TicketUpdate: 'ticket_update',
+  TicketRemove: 'ticket_remove',
+  TicketSetStatus: 'ticket_set_status',
+  CommentList: 'comment_list',
+  CommentAdd: 'comment_add',
   DetectTools: 'detect_tools',
   SystemMetrics: 'system_metrics',
   SystemCost: 'system_cost',
@@ -97,6 +104,10 @@ export const Events = {
   SystemCost: 'system://cost',
   /** Per-command backend exec aggregates (pushed every 2s; dev + prod). */
   PerfStats: 'perf://stats',
+  TicketCreated: 'ticket://created',
+  TicketUpdated: 'ticket://updated',
+  TicketDeleted: 'ticket://deleted',
+  CommentCreated: 'comment://created',
   /** Cumulative update-download bytes: `{downloaded, total|null}`. */
   UpdateProgress: 'update://progress',
   /** Install handoff: payload `"installing"` once the download is done and the

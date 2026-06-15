@@ -81,9 +81,35 @@ export interface Loadable<T> {
   data: T;
 }
 
+export type TicketStatus = "todo" | "inprogress" | "done";
+
+export interface Ticket {
+  id: string;
+  title: string;
+  notes: string;
+  status: TicketStatus;
+  projectId: string | null;
+  agentId: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type CommentRole = "user" | "agent";
+
+export interface Comment {
+  id: string;
+  ticketId: string;
+  author: string;
+  role: CommentRole;
+  tool: string | null;
+  body: string;
+  createdAt: number;
+}
+
 export interface Agent {
   id: string;
   projectId: string;
+  ticketId?: string;
   tool: AgentTool["id"];
   model: string;
   effort?: string | null;
@@ -213,7 +239,8 @@ export interface Tab {
   id: string;
   // "orchestrator" = the fixed overview tab; "agent" = a workspace tab holding a
   // pane tree (one agent, or several tiled together). Defaults to "agent".
-  kind?: "orchestrator" | "agent";
+  kind?: "orchestrator" | "agent" | "backlog" | "ticket";
+  ticketId?: string;
 }
 
 export interface Tweaks {

@@ -1,6 +1,7 @@
 use crate::agents::service::AgentService;
 use crate::git::service::GitService;
 use crate::projects::service::ProjectService;
+use crate::tickets::service::TicketService;
 
 mod agents;
 mod appicon;
@@ -13,6 +14,7 @@ mod hooks;
 mod metrics;
 mod perf;
 mod projects;
+mod tickets;
 mod runtime;
 mod settings;
 mod update;
@@ -45,6 +47,7 @@ pub fn run() {
                 .app_data_dir()
                 .expect("no app data dir")
                 .join("worktrees");
+            let ticket_service = TicketService::new(pool.clone());
             let agent_service =
                 AgentService::new(pool, git, worktree_root, settings_service.clone());
             // Snapshot in-flight agents BEFORE reconciling: reset_running flips
@@ -57,6 +60,7 @@ pub fn run() {
             app.manage(crate::agents::service::InterruptedAgents::new(interrupted));
             app.manage(settings_service);
             app.manage(project_service);
+            app.manage(ticket_service);
             app.manage(agent_service);
             app.manage(crate::watch::WatchService::new());
             app.manage(RuntimeService::new());
@@ -172,6 +176,13 @@ pub fn run() {
             projects::commands::project_remove,
             projects::commands::project_detect_git,
             projects::commands::project_commits,
+            tickets::commands::ticket_list,
+            tickets::commands::ticket_create,
+            tickets::commands::ticket_update,
+            tickets::commands::ticket_remove,
+            tickets::commands::ticket_set_status,
+            tickets::commands::comment_list,
+            tickets::commands::comment_add,
             agents::commands::agent_list,
             agents::commands::agent_spawn,
             agents::commands::agent_update,

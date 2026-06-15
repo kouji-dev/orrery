@@ -8,6 +8,7 @@ use crate::hooks::{hook_binary, HookBridge};
 use crate::projects::service::ProjectService;
 use crate::runtime::RuntimeService;
 use crate::settings::SettingsService;
+use crate::tickets::service::TicketService;
 use crate::watch::WatchService;
 
 use super::model::{Agent, AgentSpawnRequest, AgentUpdateRequest};
@@ -24,9 +25,14 @@ pub async fn agent_spawn<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, AgentService>,
     projects: State<'_, ProjectService>,
+    tickets: State<'_, TicketService>,
     req: AgentSpawnRequest,
 ) -> AppResult<Agent> {
-    let (svc, projects) = (svc.inner().clone(), projects.inner().clone());
+    let (svc, projects, tickets) = (
+        svc.inner().clone(),
+        projects.inner().clone(),
+        tickets.inner().clone(),
+    );
     let agent = tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_spawn", || {
             let project_path = projects.path_of(req.project_id)?;
@@ -37,6 +43,18 @@ pub async fn agent_spawn<R: Runtime>(
     .await
     .map_err(|e| AppError::Other(format!("join: {e}")))??;
     emit_entity(&app, "agent", Change::Created, agent.clone());
+    // If a ticket was requested, attach this agent to it (best-effort: a missing
+    // or already-assigned ticket must not fail the spawn).
+    if let Some(ticket_id) = agent.ticket_id {
+        match tickets.attach_agent(ticket_id, agent.id) {
+            Ok(updated_ticket) => {
+                emit_entity(&app, "ticket", Change::Updated, updated_ticket);
+            }
+            Err(e) => {
+                log::warn!("agent_spawn: attach_agent({ticket_id}) failed: {e:?}");
+            }
+        }
+    }
     Ok(agent)
 }
 

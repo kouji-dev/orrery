@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@a
 import { Agent } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
+import { TicketsStore } from "../stores/tickets.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ProjectGroupComponent } from "./project-group.component";
@@ -13,6 +14,22 @@ import { ProjectGroupComponent } from "./project-group.component";
   template: `
     <aside style="display:flex;flex-direction:column;min-height:0;background:var(--panel);border-right:1px solid var(--hair)">
       <div style="padding:10px 12px 8px;border-bottom:1px solid var(--hair)">
+        <!-- Backlog nav entry -->
+        <button
+          (click)="ui.openBacklog()"
+          [style.background]="ui.activeTabKind() === 'backlog' ? 'var(--panel-2)' : 'transparent'"
+          [style.color]="ui.activeTabKind() === 'backlog' ? 'var(--ink)' : 'var(--ink-3)'"
+          style="display:flex;align-items:center;gap:7px;width:100%;padding:5px 6px;border-radius:var(--r-sm);border:none;cursor:pointer;font-size:12px;margin-bottom:6px"
+        >
+          <app-icon name="layers" size="sm" [color]="ui.activeTabKind() === 'backlog' ? 'var(--accent)' : null" />
+          <span>Backlog</span>
+          @if (openTicketCount() > 0) {
+            <span
+              class="tnum"
+              style="margin-left:auto;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--accent);color:#06070b;font-size:9px;font-weight:700;display:grid;place-items:center"
+            >{{ openTicketCount() }}</span>
+          }
+        </button>
         <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
           <app-icon name="layers" size="sm" color="var(--accent)" />
           <span class="up" style="font-size:9.5px;color:var(--ink-3)">Projects</span>
@@ -68,11 +85,15 @@ export class SidebarComponent {
   readonly ui = inject(UiStore);
   readonly projects = inject(ProjectActionsService);
   readonly runtime = inject(AgentRuntimeService);
+  private readonly ticketsStore = inject(TicketsStore);
   readonly collapsed = signal<Record<string, boolean>>({});
 
   readonly activeAgent = computed(() => this.runtime.activeAgent()?.id ?? null);
   readonly totalRunning = computed(
     () => this.runtime.agents().filter((a) => a.status === "running").length,
+  );
+  readonly openTicketCount = computed(
+    () => this.ticketsStore.all().filter((t) => t.status !== "done").length,
   );
 
   agentsFor(projectId: string): Agent[] {

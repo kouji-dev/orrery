@@ -22,6 +22,7 @@ import { LogoComponent } from "./logo.component";
 import { NotificationCenterComponent } from "./notification-center.component";
 import { WindowControlsComponent } from "./window-controls.component";
 import { VersionBadgeComponent } from "../shared/version-badge.component";
+import { TicketsStore } from "../stores/tickets.store";
 
 @Component({
   selector: "app-top-bar",
@@ -95,6 +96,12 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
             @if (isOrch) {
               <app-icon name="layers" size="sm" [color]="active ? 'var(--accent)' : null" />
               <span style="font-size:12px">Orchestrator</span>
+            } @else if (tab.kind === 'backlog') {
+              <app-icon name="layers" size="sm" [color]="active ? 'var(--accent)' : null" />
+              <span style="font-size:12px">Backlog</span>
+            } @else if (tab.kind === 'ticket') {
+              <app-icon name="file" size="sm" [color]="active ? 'var(--accent)' : null" />
+              <span style="font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ticketTabLabel(tab) }}</span>
             } @else if (isGroup) {
               <app-icon name="columns" size="sm" [color]="active ? 'var(--accent)' : 'var(--ink-3)'" />
               <span style="display:flex;gap:2px">
@@ -109,7 +116,7 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
               <span style="font-size:12px">{{ tas[0] ? tas[0].name : tab.id }}</span>
             }
 
-            @if (!isOrch) {
+            @if (!isOrch && tab.kind !== 'backlog') {
               <button
                 (click)="closeTab($event, tab.id)"
                 class="tab-x"
@@ -173,6 +180,7 @@ export class TopBarComponent implements AfterViewInit, OnDestroy {
   readonly runtime = inject(AgentRuntimeService);
   readonly projects = inject(ProjectActionsService);
   readonly agentActions = inject(AgentActionsService);
+  readonly tickets = inject(TicketsStore);
   private readonly drag = inject(DragService);
 
   // tab drag state: which tab is being dragged + the live drop zone on a target.
@@ -225,10 +233,15 @@ export class TopBarComponent implements AfterViewInit, OnDestroy {
   agentTabCount(): number {
     return this.ui.tabs().filter((t) => t.kind !== "orchestrator").length;
   }
+  ticketTabLabel(tab: Tab): string {
+    if (tab.ticketId === "draft") return "New ticket";
+    const tk = tab.ticketId ? this.tickets.byId(tab.ticketId) : undefined;
+    return tk?.title ? tk.title.slice(0, 30) + (tk.title.length > 30 ? "…" : "") : "Ticket";
+  }
 
   // ----- tab drag-and-drop (group / reorder), + dropping a sidebar agent on a tab -----
   onDragStart(e: DragEvent, tab: Tab) {
-    if (tab.kind === "orchestrator") return;
+    if (tab.kind !== "agent") return;
     this.dragId.set(tab.id);
     this.drag.start({ kind: "tab", tabId: tab.id, agentId: this.tabAgentIds(tab)[0] ?? null });
     if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";

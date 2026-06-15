@@ -1,4 +1,4 @@
-import { effect, Injectable, signal } from "@angular/core";
+import { computed, effect, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS, ORG, WORKTREE_ROOT } from "../data";
 import { ContextMenuState, MenuItem, Tab, Tweaks, VizMode } from "../models";
 import { hexRgb } from "../utils";
@@ -43,7 +43,10 @@ export class UiStore {
   readonly tweaks = signal<Tweaks>(loadTweaks());
   readonly viz = signal<VizMode>(TWEAK_DEFAULTS.defaultViz);
 
-  readonly tabs = signal<Tab[]>([{ id: "orchestrator", kind: "orchestrator" }]);
+  readonly tabs = signal<Tab[]>([
+    { id: "orchestrator", kind: "orchestrator" },
+    { id: "backlog", kind: "backlog" },
+  ]);
   readonly activeTab = signal<string>("orchestrator");
   // the "focused" agent within the active tab — drives the sidebar highlight and
   // the right panel scope. A tab can tile several agents; this is the live one.
@@ -52,6 +55,22 @@ export class UiStore {
   private newTabId(): string {
     return "tab" + ++this.tabSeq;
   }
+
+  /** Computed kind of the currently active tab (defaults to "orchestrator"). */
+  readonly activeTabKind = computed<string>(() => {
+    const id = this.activeTab();
+    return this.tabs().find((t) => t.id === id)?.kind ?? "orchestrator";
+  });
+
+  /** The ticketId of the active tab when its kind is "ticket", else null. */
+  readonly activeTicketId = computed<string | null>(() => {
+    const id = this.activeTab();
+    const tab = this.tabs().find((t) => t.id === id);
+    return tab?.kind === "ticket" ? (tab.ticketId ?? null) : null;
+  });
+
+  /** Signal for the ticket to dispatch (read by the spawn modal in Phase 7). */
+  readonly spawnTicketId = signal<string | null>(null);
 
   readonly query = signal<string>("");
   readonly toast = signal<string>("");
@@ -146,12 +165,46 @@ export class UiStore {
     this.scopeAgentId.set(agentId);
   }
   closeTab(id: string) {
+    // Backlog tab is a pinned singleton — never close it
+    if (id === "backlog") return;
     this.tabs.update((prev) => prev.filter((x) => x.id !== id));
     this.paneRoots.update((m) => {
       const { [id]: _drop, ...rest } = m;
       return rest;
     });
     if (this.activeTab() === id) this.activeTab.set("orchestrator");
+  }
+
+  /** Focus the always-present pinned backlog tab. */
+  openBacklog() {
+    this.activeTab.set("backlog");
+  }
+
+  /** Open a ticket tab — reuse if one for this ticketId already exists. */
+  openTicket(ticketId: string) {
+    const existing = this.tabs().find(
+      (t) => t.kind === "ticket" && t.ticketId === ticketId,
+    );
+    if (existing) {
+      this.activeTab.set(existing.id);
+      return;
+    }
+    const id = this.newTabId();
+    this.tabs.update((prev) => [...prev, { id, kind: "ticket", ticketId }]);
+    this.activeTab.set(id);
+  }
+
+  /** Open a draft (new) ticket tab. */
+  openTicketDraft() {
+    const id = this.newTabId();
+    this.tabs.update((prev) => [...prev, { id, kind: "ticket", ticketId: "draft" }]);
+    this.activeTab.set(id);
+  }
+
+  /** Set spawnTicketId then open the spawn modal for the given project. */
+  dispatchTicket(ticket: { id: string; projectId: string | null }) {
+    this.spawnTicketId.set(ticket.id);
+    this.openSpawn(ticket.projectId);
   }
 
   // ---- split-pane workspace ----
@@ -283,6 +336,12 @@ export class UiStore {
   }
   closeSpawn() {
     this.spawning.set(null);
+    this.clearSpawnTicket();
+  }
+  /** Clear the pending dispatch ticket (called once by the spawn modal on init,
+   *  and automatically by closeSpawn so stale links don't leak). */
+  clearSpawnTicket() {
+    this.spawnTicketId.set(null);
   }
   openAddProject() {
     this.addingProject.set(true);

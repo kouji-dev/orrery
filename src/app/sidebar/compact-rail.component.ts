@@ -3,6 +3,7 @@ import { Agent, Project } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
+import { TicketsStore } from "../stores/tickets.store";
 import { DragService } from "../shared/drag.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -26,6 +27,26 @@ import { mix } from "../utils";
       <button class="rail-btn" (click)="ui.toggleSidebarCompact()" title="Expand sidebar" style="margin-bottom:2px">
         <app-icon name="columns" size="sm" color="var(--accent)" />
       </button>
+      <div style="width:24px;height:1px;background:var(--hair);margin:2px 0 4px"></div>
+
+      <!-- Backlog entry -->
+      <div style="position:relative">
+        <button
+          class="rail-btn"
+          (click)="ui.openBacklog()"
+          title="Backlog"
+          [style.background]="ui.activeTabKind() === 'backlog' ? 'var(--panel-2)' : 'transparent'"
+          [style.border-color]="ui.activeTabKind() === 'backlog' ? 'color-mix(in oklch,var(--accent),transparent 50%)' : 'transparent'"
+        >
+          <app-icon name="layers" size="sm" [color]="ui.activeTabKind() === 'backlog' ? 'var(--accent)' : 'var(--ink-3)'" />
+        </button>
+        @if (openTicketCount() > 0) {
+          <span
+            class="tnum"
+            style="position:absolute;top:2px;right:2px;min-width:13px;height:13px;padding:0 3px;border-radius:7px;background:var(--accent);color:#06070b;font-size:8px;font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
+          >{{ openTicketCount() }}</span>
+        }
+      </div>
       <div style="width:24px;height:1px;background:var(--hair);margin:2px 0 4px"></div>
 
       <div class="scroll-y" style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:5px">
@@ -145,6 +166,11 @@ export class CompactRailComponent {
   readonly agentActions = inject(AgentActionsService);
   readonly drag = inject(DragService);
   private readonly runtime = inject(AgentRuntimeService);
+  private readonly ticketsStore = inject(TicketsStore);
+
+  readonly openTicketCount = computed(
+    () => this.ticketsStore.all().filter((t) => t.status !== "done").length,
+  );
 
   readonly mix = mix;
   readonly hover = signal<{ id: string; top: number } | null>(null);
