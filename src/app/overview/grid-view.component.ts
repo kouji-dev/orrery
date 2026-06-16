@@ -8,7 +8,7 @@ import { AgentCardComponent } from "./agent-card.component";
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AgentCardComponent],
   template: `
-    <div style="display:grid;gap:14px;padding:18px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));align-content:start">
+    <div style="display:grid;gap:var(--sp-6);padding:var(--sp-7);grid-template-columns:repeat(auto-fill,minmax(320px,1fr));align-content:start">
       @for (ag of agents(); track ag.id) {
         <app-agent-card [agent]="ag" [proj]="projects.projectOf(ag.projectId)" />
       }

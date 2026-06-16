@@ -29,21 +29,21 @@ import { MiniTermComponent } from "./mini-term.component";
     <div
       class="surface rise agent-card"
       (click)="ui.openAgent(ag.id)"
-      style="padding:14px;display:flex;flex-direction:column;gap:11px;cursor:pointer;transition:border-color 0.15s,transform 0.15s"
+      style="padding:var(--sp-6);display:flex;flex-direction:column;gap:var(--sp-5);cursor:pointer;transition:border-color 0.15s,transform 0.15s"
     >
-      <div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="display:flex;align-items:flex-start;gap:var(--sp-5)">
         <div style="position:relative;flex:none" [class.working]="ag.working">
           <app-ring [value]="ringValue()" [size]="36" [stroke]="3" [color]="meta().color" />
-          <span class="tnum" style="position:absolute;inset:0;display:grid;place-items:center;font-size:9px;color:var(--ink-2)">{{ centerLabel() }}</span>
+          <span class="tnum" style="position:absolute;inset:0;display:grid;place-items:center;font-size:var(--fs-2xs);color:var(--ink-2)">{{ centerLabel() }}</span>
         </div>
         <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:7px;min-width:0">
-            <span class="disp" style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto">{{ ag.name }}</span>
+          <div style="display:flex;align-items:center;gap:var(--sp-3);min-width:0">
+            <span class="disp" style="font-size:var(--fs-lg);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto">{{ ag.name }}</span>
             <span style="flex:none"><app-status-pill [status]="ag.status" [filled]="true" /></span>
           </div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;display:flex;gap:6px;align-items:center;min-width:0">
+          <div style="font-size:var(--fs-sm);color:var(--ink-3);margin-top:var(--sp-1);display:flex;gap:var(--sp-3);align-items:center;min-width:0">
             @if (proj()) {
-              <span [style.color]="proj()!.color" style="display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden">
+              <span [style.color]="proj()!.color" style="display:flex;align-items:center;gap:var(--sp-2);min-width:0;overflow:hidden">
                 <app-icon [name]="proj()!.icon" size="sm" [px]="11" />
                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ proj()!.name }}</span>
               </span>
@@ -55,33 +55,33 @@ import { MiniTermComponent } from "./mini-term.component";
         </div>
       </div>
 
-      <p style="font-size:12px;color:var(--ink-2);line-height:1.5;text-wrap:pretty;min-height:34px">{{ ag.task }}</p>
+      <p style="font-size:var(--fs-ui);color:var(--ink-2);line-height:1.5;text-wrap:pretty;min-height:var(--ctl-h-lg)">{{ ag.task }}</p>
 
       @if (ag.status === 'blocked') {
         <div
           [style.background]="mix('var(--st-blocked)', 90)"
           [style.border]="'1px solid ' + mix('var(--st-blocked)', 70)"
-          style="display:flex;gap:7px;padding:7px 9px;border-radius:var(--r-sm)"
+          style="display:flex;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-radius:var(--r-sm)"
         >
           <app-icon name="flag" size="sm" color="var(--st-blocked)" style="flex:none;margin-top:1px" />
-          <span style="font-size:11px;color:var(--code-del-ink);line-height:1.45">{{ ag.blockReason }}</span>
+          <span style="font-size:var(--fs-sm);color:var(--code-del-ink);line-height:1.45">{{ ag.blockReason }}</span>
         </div>
       }
 
       <app-mini-term [agentId]="ag.id" />
 
-      <div class="tnum" style="display:flex;align-items:center;gap:10px;font-size:10.5px;color:var(--ink-3)">
-        <span style="display:flex;gap:4px"><app-icon name="file" size="sm" [px]="11" />{{ ch().data.length }}</span>
+      <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-5);font-size:var(--fs-xs);color:var(--ink-3)">
+        <span style="display:flex;gap:var(--sp-2)"><app-icon name="file" size="sm" [px]="11" />{{ ch().data.length }}</span>
         @if (ch().status === 'loading') { <span style="opacity:.5" title="scanning…">·</span> }
         <span style="color:var(--code-add-ink)">+{{ totAdd() }}</span>
         <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
-        <span style="display:flex;gap:4px"><app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}</span>
-        <span style="margin-left:auto;display:flex;gap:4px;color:var(--ink-4)">
+        <span style="display:flex;gap:var(--sp-2)"><app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}</span>
+        <span style="margin-left:auto;display:flex;gap:var(--sp-2);color:var(--ink-4)">
           <app-icon name="clock" size="sm" [px]="11" />{{ elapsed() ? fmt(elapsed()) : '—' }}
         </span>
       </div>
 
-      <div style="display:flex;gap:6px" (click)="$event.stopPropagation()">
+      <div style="display:flex;gap:var(--sp-3)" (click)="$event.stopPropagation()">
         @switch (ag.status) {
           @case ('done') {
             <button class="btn primary" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, 'merge')"><app-icon name="merge" size="sm" />Merge</button>
@@ -103,14 +103,14 @@ import { MiniTermComponent } from "./mini-term.component";
                 <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, ag.started ? 'resume' : 'start')">
                   <app-icon name="play" size="sm" />{{ ag.started ? 'Resume' : 'Start' }}
                 </button>
-                <button class="btn ghost-hair" (click)="toggleResumeMenu($event)" title="Session options" style="padding-left:5px;padding-right:5px">
+                <button class="btn ghost-hair" (click)="toggleResumeMenu($event)" title="Session options" style="padding-left:var(--sp-2);padding-right:var(--sp-2)">
                   <app-icon name="chevronD" size="sm" />
                 </button>
                 @if (resumeMenuOpen()) {
                   <div
                     #resumeMenu
                     class="rise"
-                    style="position:absolute;bottom:calc(100% + 4px);right:0;z-index:80;min-width:184px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:5px"
+                    style="position:absolute;bottom:calc(100% + 4px);right:0;z-index:80;min-width:184px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:var(--sp-2)"
                   >
                     <button
                       [disabled]="!ag.sessionId"
@@ -118,7 +118,7 @@ import { MiniTermComponent } from "./mini-term.component";
                       [style.color]="!ag.sessionId ? 'var(--ink-4)' : 'var(--ink-2)'"
                       [style.cursor]="!ag.sessionId ? 'default' : 'pointer'"
                       [title]="ag.sessionId ? ('claude --resume ' + ag.sessionId) : 'no captured session yet'"
-                      style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:6px 9px;border-radius:6px;border:none;background:transparent;font-family:var(--font-mono);font-size:12px"
+                      style="display:flex;align-items:center;gap:var(--sp-4);width:100%;text-align:left;padding:var(--sp-3) var(--sp-4);border-radius:6px;border:none;background:transparent;font-family:var(--font-mono);font-size:var(--fs-ui)"
                     >
                       <app-icon name="refresh" size="sm" [color]="!ag.sessionId ? 'var(--ink-4)' : 'var(--ink-3)'" style="flex:none" />
                       <span style="flex:1">Continue session</span>
@@ -129,7 +129,7 @@ import { MiniTermComponent } from "./mini-term.component";
             }
           }
         }
-        <button class="btn ghost-hair" (click)="ui.openAgent(ag.id)" style="padding:5px 9px"><app-icon name="terminal" size="sm" />Open</button>
+        <button class="btn ghost-hair" (click)="ui.openAgent(ag.id)" style="padding:var(--sp-2) var(--sp-4)"><app-icon name="terminal" size="sm" />Open</button>
       </div>
     </div>
   `,

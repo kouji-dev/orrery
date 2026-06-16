@@ -39,6 +39,11 @@ export const ALLOWLIST = [
   // and taller than the sp-* spacing scale (sp-7≈16px); it is a fixed visual
   // constant for the header badge and does not map to a control-height token.
   { file: "version-badge.component.ts", value: "17px" },
+  // mini-term preview container is exactly 60px = 3 rows × (10px × 1.6 line-height)
+  // + 12px vertical padding (2×6px). This is a deliberately calculated fixed layout
+  // height — not a control-height token — so that idle and streaming cards are
+  // pixel-identical regardless of content.
+  { file: "mini-term.component.ts", value: "60px" },
 ];
 
 export function scanText(text, file = "") {

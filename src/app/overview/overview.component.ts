@@ -31,21 +31,21 @@ interface VizDef {
     <div style="display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--panel-2)">
       <!-- stat header — the stat group and the view controls wrap to their own
            rows when the pane is narrow, so content never widens the layout -->
-      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px 0;padding:14px 18px;border-bottom:1px solid var(--hair);background:var(--panel);min-width:0">
-        <div style="margin-right:24px;min-width:0">
-          <h1 class="disp" style="font-size:16px;font-weight:600;letter-spacing:-0.02em">Orchestrator</h1>
-          <span style="font-size:10.5px;color:var(--ink-3)">
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-5) 0;padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);background:var(--panel);min-width:0">
+        <div style="margin-right:var(--sp-9);min-width:0">
+          <h1 class="disp" style="font-size:var(--fs-lg);font-weight:600;letter-spacing:-0.02em">Orchestrator</h1>
+          <span style="font-size:var(--fs-xs);color:var(--ink-3)">
             {{ runtime.agents().length }} agents across {{ projects.all().length }} projects · {{ ui.org }}
           </span>
         </div>
-        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px 0;min-width:0">
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-4) 0;min-width:0">
           <app-stat-block [n]="count('running')" label="Running" color="var(--st-running)" [pulse]="true" />
           <app-stat-block [n]="count('blocked')" label="Need you" color="var(--st-blocked)" />
           <app-stat-block [n]="count('waiting') + count('queued')" label="Waiting" color="var(--st-waiting)" />
           <app-stat-block [n]="count('done')" label="Done" color="var(--st-done)" />
         </div>
-        <div style="margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding-left:12px">
-          <div style="display:flex;flex-wrap:wrap;gap:2px;padding:3px;background:var(--panel-2);border-radius:var(--r-md);border:1px solid var(--hair)">
+        <div style="margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:var(--sp-4);padding-left:var(--sp-6)">
+          <div style="display:flex;flex-wrap:wrap;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border-radius:var(--r-md);border:1px solid var(--hair)">
             @for (v of viz; track v.key) {
               @let on = ui.viz() === v.key;
               <button
@@ -54,7 +54,7 @@ interface VizDef {
                 [style.background]="on ? 'var(--panel-3)' : 'transparent'"
                 [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'"
                 [style.box-shadow]="on ? '0 0 0 1px var(--hair-2)' : 'none'"
-                style="padding:4px 9px;border-radius:var(--r-sm)"
+                style="padding:var(--sp-2) var(--sp-4);border-radius:var(--r-sm)"
               >
                 <app-icon [name]="v.icon" size="sm" [color]="on ? 'var(--accent)' : null" />{{ v.label }}
               </button>

@@ -18,29 +18,29 @@ interface Col {
   imports: [StatusDotComponent, IconComponent],
   template: `
     <!-- columns keep a readable floor; past that the overview body scrolls sideways -->
-    <div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;padding:18px;align-items:start;min-height:0">
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:var(--sp-6);padding:var(--sp-7);align-items:start;min-height:0">
       @for (c of cols; track c.key) {
         @let items = colItems(c);
-        <div style="display:flex;flex-direction:column;gap:9px">
-          <div [style.border-bottom]="'2px solid ' + color(c.key)" style="display:flex;align-items:center;gap:7px;padding:0 2px 4px">
-            <span class="up" style="font-size:10px;color:var(--ink-2)">{{ c.label }}</span>
-            <span class="chip tnum" style="margin-left:auto;font-size:9.5px;padding:0 6px">{{ items.length }}</span>
+        <div style="display:flex;flex-direction:column;gap:var(--sp-4)">
+          <div [style.border-bottom]="'2px solid ' + color(c.key)" style="display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-1) var(--sp-2)">
+            <span class="up" style="font-size:var(--fs-xs);color:var(--ink-2)">{{ c.label }}</span>
+            <span class="chip tnum" style="margin-left:auto;font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ items.length }}</span>
           </div>
           @for (ag of items; track ag.id) {
             <div
               class="surface rise kanban-card"
               (click)="ui.openAgent(ag.id)"
-              style="padding:11px;cursor:pointer;display:flex;flex-direction:column;gap:7px"
+              style="padding:var(--sp-5);cursor:pointer;display:flex;flex-direction:column;gap:var(--sp-3)"
             >
-              <div style="display:flex;align-items:center;gap:7px">
+              <div style="display:flex;align-items:center;gap:var(--sp-3)">
                 <app-status-dot [status]="ag.status" />
-                <span class="disp" style="font-size:12.5px;font-weight:600">{{ ag.name }}</span>
+                <span class="disp" style="font-size:var(--fs-ui);font-weight:600">{{ ag.name }}</span>
               </div>
-              <span style="font-size:11px;color:var(--ink-2);line-height:1.45;text-wrap:pretty">{{ ag.task }}</span>
+              <span style="font-size:var(--fs-sm);color:var(--ink-2);line-height:1.45;text-wrap:pretty">{{ ag.task }}</span>
               @if (ag.status === 'running') {
                 <div class="activity"></div>
               }
-              <div class="tnum" style="display:flex;align-items:center;gap:8px;font-size:10px;color:var(--ink-3)">
+              <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-xs);color:var(--ink-3)">
                 <app-icon name="branch" size="sm" [px]="10" />
                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
                 <span style="margin-left:auto;color:var(--code-add-ink)">+{{ add(ag) }}</span>
@@ -48,7 +48,7 @@ interface Col {
             </div>
           }
           @if (!items.length) {
-            <div style="padding:14px;text-align:center;color:var(--ink-4);font-size:10.5px;border:1px dashed var(--hair);border-radius:var(--r-md)">empty</div>
+            <div style="padding:var(--sp-6);text-align:center;color:var(--ink-4);font-size:var(--fs-xs);border:1px dashed var(--hair);border-radius:var(--r-md)">empty</div>
           }
         </div>
       }

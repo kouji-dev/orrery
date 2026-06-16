@@ -4,14 +4,14 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
   selector: "app-stat-block",
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div style="display:flex;flex-direction:column;gap:2px;padding-right:20px">
-      <div style="display:flex;align-items:baseline;gap:6px">
-        <span class="disp tnum" [style.color]="color() || 'var(--ink)'" style="font-size:24px;font-weight:600;line-height:1">{{ n() }}</span>
+    <div style="display:flex;flex-direction:column;gap:var(--sp-1);padding-right:var(--sp-8)">
+      <div style="display:flex;align-items:baseline;gap:var(--sp-3)">
+        <span class="disp tnum" [style.color]="color() || 'var(--ink)'" style="font-size:var(--fs-2xl);font-weight:600;line-height:1">{{ n() }}</span>
         @if (pulse()) {
           <span class="dot running" [style.background]="color()"></span>
         }
       </div>
-      <span class="up" style="font-size:9px;color:var(--ink-3);white-space:nowrap">{{ label() }}</span>
+      <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3);white-space:nowrap">{{ label() }}</span>
     </div>
   `,
 })

@@ -18,7 +18,7 @@ interface Laid {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let g = layout();
-    <div style="padding:18px;display:grid;place-items:center;min-height:0;overflow:auto">
+    <div style="padding:var(--sp-7);display:grid;place-items:center;min-height:0;overflow:auto">
       <svg [attr.viewBox]="'0 0 ' + W + ' ' + g.H" style="width:100%;max-width:920px;height:auto">
         <defs>
           <radialGradient id="orch-core" cx="50%" cy="50%">
