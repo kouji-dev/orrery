@@ -39,10 +39,13 @@ These tables are the single source of truth for the sweep. Snap rule = nearest s
 | 5  | `--sp-2` | 12 | `--sp-6` | 20 | `--sp-8` |
 | 6  | `--sp-3` | 13 | `--sp-6` | 22 | `--sp-8` |
 | 7  | `--sp-3` | 14 | `--sp-6` | 24 | `--sp-9` |
-| 8  | `--sp-4` | | | >24 | nearest `--sp-*` |
+| 8  | `--sp-4` | 26 | `--sp-9` | 28 | `--sp-10` |
+| | | 30 | `--sp-10` | 32 | `--sp-11` |
+| | | 34 | `--sp-11` | >34 | nearest `--sp-*` |
 
 - `0` / `0px` → `0` (leave). Percentages / `auto` → leave.
 - Negative (e.g. `-8px`) → `calc(var(--sp-4) * -1)`.
+- **Spacing props ALWAYS use `--sp-*`** — never a `--ctl-h*`/`--row-h` (those are height-only). A large margin/padding (e.g. `margin-top:28px`) is `--sp-10`, NOT `--ctl-h`.
 
 **HEIGHT** — `height`, `min-height` (literal px → token), context-sensitive:
 

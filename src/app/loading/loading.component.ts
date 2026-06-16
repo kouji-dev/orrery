@@ -39,7 +39,7 @@ import { UpdateOutcome } from '../updater/updater';
       font-weight: 600;
       font-size: var(--fs-display);
       letter-spacing: 0.01em;
-      margin-top: var(--ctl-h);
+      margin-top: var(--sp-10);
     }
     .ob-word .o { color: #a855f7; }
     .ob-status {

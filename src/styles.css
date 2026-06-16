@@ -83,6 +83,8 @@
   --sp-7: calc(16px * var(--density));
   --sp-8: calc(20px * var(--density));
   --sp-9: calc(24px * var(--density));
+  --sp-10: calc(28px * var(--density));
+  --sp-11: calc(32px * var(--density));
 
   /* control + structural heights */
   --ctl-h-sm: calc(22px * var(--density));
