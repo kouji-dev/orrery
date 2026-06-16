@@ -13,7 +13,8 @@
     "perf:assert": "node tools/perf-smoke/assert.mjs",
     "release": "node scripts/release/bump.mjs release",
     "release:patch": "node scripts/release/bump.mjs patch",
-    "check:tokens": "node tools/density/check-tokens.mjs"
+    "check:tokens": "node tools/density/check-tokens.mjs",
+    "e2e": "playwright test"
   },
   "private": true,
   "dependencies": {
@@ -61,6 +62,7 @@
     "@angular/build": "^20.1.4",
     "@angular/cli": "^20.1.4",
     "@angular/compiler-cli": "^20.1.4",
+    "@playwright/test": "^1.61.0",
     "@tailwindcss/postcss": "^4.3.0",
     "@tauri-apps/cli": "^2",
     "ccusage": "^20.0.6",
