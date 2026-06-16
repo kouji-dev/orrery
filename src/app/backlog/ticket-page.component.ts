@@ -89,10 +89,10 @@ export function fmtCreated(ts: number): string {
   template: `
     @let c = comment();
     @let isAgent = c.role === 'agent';
-    <div style="display:flex;gap:11px">
+    <div style="display:flex;gap:var(--sp-5)">
       <!-- avatar / tool badge -->
       @if (isAgent && c.tool) {
-        <div style="flex:none;width:28px;height:28px;display:grid;place-items:center">
+        <div style="flex:none;width:var(--ctl-h);height:var(--ctl-h);display:grid;place-items:center">
           <app-tool-badge [tool]="$any(c.tool)" [size]="28" />
         </div>
       } @else {
@@ -102,20 +102,20 @@ export function fmtCreated(ts: number): string {
           [style.color]="avatarColor()"
           [style.background]="avatarBg()"
           [style.border]="avatarBorder()"
-          style="flex:none;border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);font-size:10px;font-weight:600"
+          style="flex:none;border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);font-size:var(--fs-xs);font-weight:600"
         >{{ avatarInitials() }}</span>
       }
       <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
-          <span class="disp" style="font-size:12.5px;font-weight:600;color:var(--ink)">{{ c.author }}</span>
+        <div style="display:flex;align-items:center;gap:var(--sp-4);margin-bottom:var(--sp-2)">
+          <span class="disp" style="font-size:var(--fs-ui);font-weight:600;color:var(--ink)">{{ c.author }}</span>
           @if (isAgent) {
-            <span class="chip up" style="font-size:8.5px;padding:1px 6px;color:var(--accent-2);border-color:color-mix(in oklch,var(--accent-2),transparent 60%)">AGENT</span>
+            <span class="chip up" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--accent-2);border-color:color-mix(in oklch,var(--accent-2),transparent 60%)">AGENT</span>
           }
-          <span class="tnum" style="font-size:10.5px;color:var(--ink-4)">{{ when() }}</span>
+          <span class="tnum" style="font-size:var(--fs-xs);color:var(--ink-4)">{{ when() }}</span>
         </div>
         <div
           [style.background]="isAgent ? 'color-mix(in oklch,var(--accent-2),transparent 94%)' : 'var(--panel)'"
-          style="border:1px solid var(--hair);border-radius:var(--r-md);padding:9px 12px"
+          style="border:1px solid var(--hair);border-radius:var(--r-md);padding:var(--sp-4) var(--sp-6)"
         >
           <app-rich-view [html]="c.body" [compact]="true" />
         </div>
@@ -162,13 +162,13 @@ export class TicketCommentComponent {
     <div style="display:flex;flex-direction:column;min-height:0;height:100%;background:var(--panel-2)">
 
       <!-- ── Header ── -->
-      <div style="padding:12px 22px;border-bottom:1px solid var(--hair);background:var(--panel);flex:none">
+      <div style="padding:var(--sp-6) var(--sp-8);border-bottom:1px solid var(--hair);background:var(--panel);flex:none">
 
         <!-- breadcrumb + status pill -->
-        <div style="display:flex;align-items:center;gap:9px;font-size:11px;color:var(--ink-3);margin-bottom:9px">
+        <div style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-sm);color:var(--ink-3);margin-bottom:var(--sp-4)">
           <app-icon name="layers" size="sm" [color]="'var(--accent)'" />
           <span>Backlog</span>
-          <app-icon name="chevron" size="sm" style="width:11px;height:11px" [color]="'var(--ink-4)'" />
+          <app-icon name="chevron" size="sm" style="width:var(--sp-5);height:var(--sp-5)" [color]="'var(--ink-4)'" />
           <span class="tnum">{{ isDraft ? 'New ticket' : '#' + (tk ? shortId(tk.id) : '') }}</span>
           <span style="margin-left:auto">
             <span
@@ -176,7 +176,7 @@ export class TicketCommentComponent {
               [style.color]="sm.color"
               [style.border]="'1px solid color-mix(in oklch,' + sm.color + ',transparent 62%)'"
               [style.background]="'color-mix(in oklch,' + sm.color + ',transparent 88%)'"
-              style="display:inline-flex;align-items:center;gap:6px;font-size:9.5px;padding:3px 9px;border-radius:999px;letter-spacing:0.1em"
+              style="display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-2xs);padding:var(--sp-1) var(--sp-4);border-radius:999px;letter-spacing:0.1em"
             >
               <span class="dot" [style.background]="sm.color" style="animation:none"></span>
               {{ sm.label }}
@@ -192,16 +192,16 @@ export class TicketCommentComponent {
             (input)="draftTitle.set($any($event.target).value)"
             (keydown.enter)="save()"
             placeholder="Ticket title — what needs to be done?"
-            style="width:100%;background:transparent;border:none;outline:none;color:var(--ink);font-family:var(--font-disp);font-size:22px;font-weight:600;letter-spacing:-0.02em;padding:0"
+            style="width:100%;background:transparent;border:none;outline:none;color:var(--ink);font-family:var(--font-disp);font-size:var(--fs-xl);font-weight:600;letter-spacing:-0.02em;padding:0"
           />
         } @else if (tk) {
-          <h1 class="disp" style="font-size:22px;font-weight:600;letter-spacing:-0.02em;line-height:1.25;text-wrap:balance">
+          <h1 class="disp" style="font-size:var(--fs-xl);font-weight:600;letter-spacing:-0.02em;line-height:1.25;text-wrap:balance">
             {{ tk.title }}
           </h1>
         }
 
         <!-- actions row -->
-        <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:var(--sp-4);margin-top:var(--sp-6)">
           @if (isEditing) {
             <button class="btn primary" [disabled]="!draftTitle().trim()" (click)="save()">
               <app-icon [name]="isDraft ? 'plus' : 'check'" size="sm" />
@@ -237,14 +237,14 @@ export class TicketCommentComponent {
 
       <!-- ── Body ── -->
       <div class="scroll-y" style="flex:1">
-        <div style="display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:28px;padding:22px 24px;max-width:1040px;margin:0 auto;align-items:start">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:var(--sp-10);padding:var(--sp-8) var(--sp-9);max-width:1040px;margin:0 auto;align-items:start">
 
           <!-- ── MAIN COLUMN ── -->
-          <div style="display:flex;flex-direction:column;gap:24px;min-width:0">
+          <div style="display:flex;flex-direction:column;gap:var(--sp-9);min-width:0">
 
             <!-- Notes -->
             <div>
-              <div class="up" style="font-size:10px;color:var(--ink-3);margin-bottom:9px">What should be done</div>
+              <div class="up" style="font-size:var(--fs-xs);color:var(--ink-3);margin-bottom:var(--sp-4)">What should be done</div>
               @if (isEditing) {
                 <app-rich-editor
                   [value]="draftNotes()"
@@ -256,23 +256,23 @@ export class TicketCommentComponent {
                 @if (plainTextNonEmpty(tk.notes)) {
                   <app-rich-view [html]="tk.notes" />
                 } @else {
-                  <div style="font-size:12px;color:var(--ink-4);font-style:italic">No description yet.</div>
+                  <div style="font-size:var(--fs-ui);color:var(--ink-4);font-style:italic">No description yet.</div>
                 }
               }
             </div>
 
             <!-- Comments (not in draft mode) -->
             @if (!isDraft) {
-              <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;flex-direction:column;gap:var(--sp-6)">
                 <!-- section header -->
-                <div class="up" style="font-size:10px;color:var(--ink-3);display:flex;align-items:center;gap:7px">
+                <div class="up" style="font-size:var(--fs-xs);color:var(--ink-3);display:flex;align-items:center;gap:var(--sp-3)">
                   <app-icon name="chat" size="sm" />
                   Comments
-                  <span class="chip tnum" style="font-size:9px;padding:0 6px">{{ comments().length }}</span>
+                  <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ comments().length }}</span>
                 </div>
 
                 @if (comments().length === 0) {
-                  <div style="font-size:11.5px;color:var(--ink-4)">No comments yet — start the thread.</div>
+                  <div style="font-size:var(--fs-sm);color:var(--ink-4)">No comments yet — start the thread.</div>
                 } @else {
                   @for (c of comments(); track c.id) {
                     <app-ticket-comment [comment]="c" />
@@ -280,15 +280,15 @@ export class TicketCommentComponent {
                 }
 
                 <!-- composer -->
-                <div style="display:flex;gap:11px;margin-top:2px">
+                <div style="display:flex;gap:var(--sp-5);margin-top:var(--sp-1)">
                   <!-- "You" avatar -->
                   <span
-                    style="flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);font-size:10px;font-weight:600"
+                    style="flex:none;width:var(--ctl-h);height:var(--ctl-h);border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);font-size:var(--fs-xs);font-weight:600"
                     [style.color]="youAvatarColor"
                     [style.background]="youAvatarBg"
                     [style.border]="youAvatarBorder"
                   >Y</span>
-                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--sp-4)">
                     <app-rich-editor
                       [value]="''"
                       (valueChange)="composerBody.set($event)"
@@ -313,12 +313,12 @@ export class TicketCommentComponent {
           </div>
 
           <!-- ── SIDE RAIL ── -->
-          <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;flex-direction:column;gap:var(--sp-7)">
 
             <!-- Status segmented control -->
-            <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
               <span class="field-label" style="margin:0">Status</span>
-              <div style="display:flex;gap:4px;padding:3px;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md)">
+              <div style="display:flex;gap:var(--sp-2);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md)">
                 @for (s of statusOrder; track s) {
                   @let sm2 = ticketStatusMeta(s);
                   @let on = (isDraft ? 'todo' : (tk?.status ?? 'todo')) === s;
@@ -326,12 +326,12 @@ export class TicketCommentComponent {
                     class="btn"
                     (click)="moveStatus(s)"
                     [style.flex]="1"
-                    style="justify-content:center;padding:5px 4px;font-size:10.5px;border-radius:var(--r-sm);gap:5px"
+                    style="justify-content:center;padding:var(--sp-2) var(--sp-2);font-size:var(--fs-xs);border-radius:var(--r-sm);gap:var(--sp-2)"
                     [style.background]="on ? 'color-mix(in oklch,' + sm2.color + ',transparent 86%)' : 'transparent'"
                     [style.color]="on ? sm2.color : 'var(--ink-3)'"
                     [style.box-shadow]="on ? '0 0 0 1px color-mix(in oklch,' + sm2.color + ',transparent 60%)' : 'none'"
                   >
-                    <span class="dot" [style.background]="sm2.color" style="animation:none;width:6px;height:6px"></span>
+                    <span class="dot" [style.background]="sm2.color" style="animation:none;width:var(--sp-3);height:var(--sp-3)"></span>
                     {{ sm2.label }}
                   </button>
                 }
@@ -339,7 +339,7 @@ export class TicketCommentComponent {
             </div>
 
             <!-- Project -->
-            <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
               <span class="field-label" style="margin:0">Project</span>
               @if (isEditing) {
                 <select class="osel" [value]="draftProjectId()" (change)="draftProjectId.set($any($event.target).value)">
@@ -351,37 +351,37 @@ export class TicketCommentComponent {
               } @else {
                 @let proj = resolvedProject();
                 @if (proj) {
-                  <span style="display:inline-flex;align-items:center;gap:7px;font-size:12px" [style.color]="proj.color">
+                  <span style="display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-ui)" [style.color]="proj.color">
                     <span
                       style="width:19px;height:19px;border-radius:5px;display:grid;place-items:center;flex:none"
                       [style.background]="'color-mix(in oklch,' + proj.color + ',transparent 82%)'"
                       [style.border]="'1px solid color-mix(in oklch,' + proj.color + ',transparent 62%)'"
                     >
-                      <app-icon [name]="proj.icon" size="sm" [color]="proj.color" style="width:12px;height:12px" />
+                      <app-icon [name]="proj.icon" size="sm" [color]="proj.color" style="width:var(--sp-6);height:var(--sp-6)" />
                     </span>
                     {{ proj.name }}
                   </span>
                 } @else {
-                  <span style="font-size:12px;color:var(--ink-4)">No project</span>
+                  <span style="font-size:var(--fs-ui);color:var(--ink-4)">No project</span>
                 }
               }
             </div>
 
             <!-- Agent -->
-            <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
               <span class="field-label" style="margin:0">Agent</span>
               @if (ag && tk) {
                 <div
                   (click)="openAgent()"
                   (mouseenter)="agentHovered.set(true)"
                   (mouseleave)="agentHovered.set(false)"
-                  style="display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:var(--r-md);background:var(--panel);cursor:pointer;transition:border-color .15s"
+                  style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);border-radius:var(--r-md);background:var(--panel);cursor:pointer;transition:border-color .15s"
                   [style.border]="agentHovered() ? '1px solid var(--hair-2)' : '1px solid var(--hair)'"
                 >
                   <app-tool-badge [tool]="ag.tool" [size]="20" />
                   <div style="min-width:0;flex:1">
-                    <div class="disp" style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</div>
-                    <div style="display:flex;align-items:center;gap:5px;font-size:10px;margin-top:2px" [style.color]="agentMeta().color">
+                    <div class="disp" style="font-size:var(--fs-ui);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</div>
+                    <div style="display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-xs);margin-top:var(--sp-1)" [style.color]="agentMeta().color">
                       <app-status-dot [status]="ag.status" />{{ agentMeta().label }}
                     </div>
                   </div>
@@ -396,25 +396,25 @@ export class TicketCommentComponent {
                   <app-icon name="bolt" size="sm" />Dispatch an agent
                 </button>
               } @else {
-                <span style="font-size:12px;color:var(--ink-4)">None attached</span>
+                <span style="font-size:var(--fs-ui);color:var(--ink-4)">None attached</span>
               }
             </div>
 
             <!-- Branch (only when agent exists) -->
             @if (ag) {
-              <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
                 <span class="field-label" style="margin:0">Branch</span>
-                <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2)">
-                  <app-icon name="branch" size="sm" style="width:12px;height:12px" [color]="'var(--accent-2)'" />
+                <span style="display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-sm);color:var(--ink-2)">
+                  <app-icon name="branch" size="sm" style="width:var(--sp-6);height:var(--sp-6)" [color]="'var(--accent-2)'" />
                   {{ ag.branch.replace('agent/', '') }}
                 </span>
               </div>
             }
 
             <!-- Created -->
-            <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
               <span class="field-label" style="margin:0">Created</span>
-              <span class="tnum" style="font-size:11.5px;color:var(--ink-2)">
+              <span class="tnum" style="font-size:var(--fs-sm);color:var(--ink-2)">
                 {{ isDraft ? 'just now' : (tk ? fmtCreated(tk.createdAt) : '—') }}
               </span>
             </div>

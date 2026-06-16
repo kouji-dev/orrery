@@ -33,17 +33,17 @@ import { STATUS_META } from "../utils";
         [style.background]="'var(--panel-2)'"
         [style.border]="'1px solid ' + (hovered() ? 'color-mix(in oklch, ' + m.color + ', transparent 55%)' : 'var(--hair)')"
         [style.box-shadow]="hovered() ? '0 0 0 1px color-mix(in oklch, ' + m.color + ', transparent 72%)' : 'none'"
-        style="display:flex;flex-direction:column;gap:7px;padding:8px 9px;cursor:pointer;border-radius:var(--r-md);transition:border-color .15s,box-shadow .15s"
+        style="display:flex;flex-direction:column;gap:var(--sp-3);padding:var(--sp-4) var(--sp-4);cursor:pointer;border-radius:var(--r-md);transition:border-color .15s,box-shadow .15s"
       >
         <!-- row 1: badge + name + pill + enter icon -->
-        <div style="display:flex;align-items:center;gap:7px;min-width:0">
+        <div style="display:flex;align-items:center;gap:var(--sp-3);min-width:0">
           <app-tool-badge [tool]="ag.tool" [size]="17" />
           <span
             class="disp"
-            style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto"
+            style="font-size:var(--fs-ui);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto"
           >{{ ag.name }}</span>
           <span
-            style="display:inline-flex;align-items:center;gap:5px;flex:none;font-size:9.5px;padding:2px 7px 2px 6px;border-radius:999px;letter-spacing:.08em;text-transform:uppercase"
+            style="display:inline-flex;align-items:center;gap:var(--sp-2);flex:none;font-size:var(--fs-2xs);padding:var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-3);border-radius:999px;letter-spacing:.08em;text-transform:uppercase"
             [style.color]="m.color"
             [style.border]="'1px solid color-mix(in oklch, ' + m.color + ', transparent 62%)'"
             [style.background]="'color-mix(in oklch, ' + m.color + ', transparent 88%)'"
@@ -59,7 +59,7 @@ import { STATUS_META } from "../utils";
         </div>
 
         <!-- progress bar -->
-        <div style="height:3px;border-radius:3px;background:var(--hair);overflow:hidden;position:relative">
+        <div style="height:var(--sp-1);border-radius:3px;background:var(--hair);overflow:hidden;position:relative">
           <div
             [style.width]="progressPct() + '%'"
             [style.background]="m.color"
@@ -69,16 +69,16 @@ import { STATUS_META } from "../utils";
         </div>
 
         <!-- row 3: branch/blockReason + commits -->
-        <div class="tnum" style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--ink-3)">
+        <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--ink-3)">
           @if (ag.status === 'blocked' && ag.blockReason) {
-            <span style="display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden" [style.color]="'var(--code-del-ink)'">
+            <span style="display:flex;align-items:center;gap:var(--sp-2);min-width:0;overflow:hidden" [style.color]="'var(--code-del-ink)'">
               <app-icon name="flag" size="sm" [px]="11" style="flex:none" />
               <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.blockReason }}</span>
             </span>
           } @else {
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
           }
-          <span style="margin-left:auto;display:flex;gap:4px;flex:none;color:var(--ink-4)">
+          <span style="margin-left:auto;display:flex;gap:var(--sp-2);flex:none;color:var(--ink-4)">
             <app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}
           </span>
         </div>

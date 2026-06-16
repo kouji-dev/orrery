@@ -64,6 +64,16 @@ export const ALLOWLIST = [
   // (44px); it is a bespoke structural tab-bar height intentionally distinct from
   // the control-height scale.
   { file: "right-panel.component.ts", value: "36px" },
+  // Empty-state icon container in backlog is 52×52px with border-radius:14px — a
+  // bespoke decorative square that sits well above ctl-h-lg (34px) and topbar-h
+  // (44px); it does not map to any control-height token and its fixed size is a
+  // deliberate visual design constant.
+  { file: "backlog.component.ts", value: "52px" },
+  // Project icon badge in ticket-page is 19×19px with border-radius:5px — sits
+  // between sp-7 (16px) and ctl-h-sm (22px); it is a bespoke fixed square that
+  // mirrors the SVG icon viewport and does not map to a standard control-height or
+  // spacing token.
+  { file: "ticket-page.component.ts", value: "19px" },
 ];
 
 export function scanText(text, file = "") {

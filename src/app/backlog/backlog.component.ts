@@ -30,17 +30,17 @@ const COLS: ColDef[] = [
   template: `
     <div style="display:flex;flex-direction:column;min-height:0;background:var(--panel-2)">
       <!-- header -->
-      <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;flex:none;border-bottom:1px solid var(--hair);background:var(--panel)">
+      <div style="display:flex;align-items:center;gap:var(--sp-6);padding:var(--sp-6) var(--sp-7);flex:none;border-bottom:1px solid var(--hair);background:var(--panel)">
         <div>
-          <h1 class="disp" style="font-size:16px;font-weight:600;letter-spacing:-0.02em">Backlog</h1>
-          <span style="font-size:10.5px;color:var(--ink-3)">
+          <h1 class="disp" style="font-size:var(--fs-lg);font-weight:600;letter-spacing:-0.02em">Backlog</h1>
+          <span style="font-size:var(--fs-xs);color:var(--ink-3)">
             {{ tickets.all().length }} tickets · {{ openCount() }} open · {{ ui.org }}
           </span>
         </div>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-4)">
           <!-- project filter dropdown -->
           <div style="position:relative">
-            <button class="btn ghost-hair" style="font-size:11.5px;color:var(--ink-2)" (click)="filterOpen.set(!filterOpen())">
+            <button class="btn ghost-hair" style="font-size:var(--fs-sm);color:var(--ink-2)" (click)="filterOpen.set(!filterOpen())">
               <app-icon name="folder" size="sm" color="var(--ink-3)" />
               {{ filterLabel() }}
               <app-icon name="chevronD" size="sm" color="var(--ink-4)" />
@@ -48,7 +48,7 @@ const COLS: ColDef[] = [
             @if (filterOpen()) {
               <div
                 class="surface"
-                style="position:absolute;top:100%;right:0;margin-top:6px;z-index:20;padding:5px;min-width:190px;box-shadow:var(--shadow)"
+                style="position:absolute;top:100%;right:0;margin-top:var(--sp-3);z-index:20;padding:var(--sp-2);min-width:190px;box-shadow:var(--shadow)"
                 (click)="$event.stopPropagation()"
               >
                 @for (p of filterOptions(); track p.id) {
@@ -56,7 +56,7 @@ const COLS: ColDef[] = [
                     (click)="setFilter(p.id)"
                     [style.background]="activeFilter() === p.id ? 'var(--panel-3)' : 'transparent'"
                     [style.color]="activeFilter() === p.id ? 'var(--ink)' : 'var(--ink-2)'"
-                    style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:var(--r-sm);cursor:pointer;font-size:12px"
+                    style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-4);border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-ui)"
                   >
                     <app-icon [name]="p.icon" size="sm" [color]="p.color" />
                     {{ p.name }}
@@ -74,13 +74,13 @@ const COLS: ColDef[] = [
       <!-- board body -->
       <div class="scroll-y" style="flex:1" (click)="filterOpen.set(false)">
         @if (isEmpty()) {
-          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:100%;padding:40px 20px;text-align:center">
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-6);min-height:100%;padding:var(--sp-11) var(--sp-8);text-align:center">
             <div style="width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:color-mix(in oklch,var(--accent),transparent 88%);border:1px solid color-mix(in oklch,var(--accent),transparent 60%)">
               <app-icon name="layers" size="lg" color="var(--accent)" />
             </div>
             <div>
-              <div class="disp" style="font-size:16px;font-weight:600">No tickets yet</div>
-              <div style="font-size:12px;color:var(--ink-3);margin-top:5px;max-width:340px;line-height:1.5">
+              <div class="disp" style="font-size:var(--fs-lg);font-weight:600">No tickets yet</div>
+              <div style="font-size:var(--fs-ui);color:var(--ink-3);margin-top:var(--sp-2);max-width:340px;line-height:1.5">
                 Capture work to be done, then dispatch an agent straight from a ticket — the board tracks it to done.
               </div>
             </div>
@@ -89,7 +89,7 @@ const COLS: ColDef[] = [
             </button>
           </div>
         } @else {
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:18px;align-content:start">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-6);padding:var(--sp-7);align-content:start">
             @for (col of cols; track col.key) {
               @let colTickets = filtered(col.key);
               @let isTarget = drag() !== null && drag()?.from !== col.key;
@@ -100,15 +100,15 @@ const COLS: ColDef[] = [
                 [style.outline]="over() === col.key && isTarget ? '1.5px dashed color-mix(in oklch,' + col.color + ',transparent 35%)' : '1.5px dashed transparent'"
                 [style.outline-offset]="'4px'"
                 [style.background]="over() === col.key && isTarget ? 'color-mix(in oklch,' + col.color + ',transparent 94%)' : 'transparent'"
-                style="display:flex;flex-direction:column;gap:9px;min-width:0;border-radius:var(--r-lg);transition:background .15s"
+                style="display:flex;flex-direction:column;gap:var(--sp-4);min-width:0;border-radius:var(--r-lg);transition:background .15s"
               >
                 <!-- column header -->
                 <div
                   [style.border-bottom]="'2px solid ' + col.color"
-                  style="display:flex;align-items:center;gap:8px;padding:0 2px 6px;flex:none"
+                  style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-1) var(--sp-3);flex:none"
                 >
-                  <span class="up" style="font-size:10px;color:var(--ink-2)">{{ col.label }}</span>
-                  <span class="chip tnum" style="margin-left:auto;font-size:9.5px;padding:0 6px">{{ colTickets.length }}</span>
+                  <span class="up" style="font-size:var(--fs-xs);color:var(--ink-2)">{{ col.label }}</span>
+                  <span class="chip tnum" style="margin-left:auto;font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ colTickets.length }}</span>
                 </div>
 
                 <!-- cards -->
@@ -125,12 +125,12 @@ const COLS: ColDef[] = [
                 @if (col.key === 'todo') {
                   <button
                     (click)="ui.openTicketDraft()"
-                    style="display:flex;justify-content:center;align-items:center;gap:6px;padding:9px;border-radius:var(--r-md);border:1px dashed var(--hair-2);color:var(--ink-3);font-size:11.5px;background:transparent;cursor:pointer"
+                    style="display:flex;justify-content:center;align-items:center;gap:var(--sp-3);padding:var(--sp-4);border-radius:var(--r-md);border:1px dashed var(--hair-2);color:var(--ink-3);font-size:var(--fs-sm);background:transparent;cursor:pointer"
                   >
                     <app-icon name="plus" size="sm" />New ticket
                   </button>
                 } @else if (!colTickets.length) {
-                  <div style="padding:14px;text-align:center;color:var(--ink-4);font-size:10.5px;border:1px dashed var(--hair);border-radius:var(--r-md)">empty</div>
+                  <div style="padding:var(--sp-6);text-align:center;color:var(--ink-4);font-size:var(--fs-xs);border:1px dashed var(--hair);border-radius:var(--r-md)">empty</div>
                 }
               </div>
             }

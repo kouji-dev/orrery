@@ -47,26 +47,26 @@ function plainText(html: string | null | undefined): string {
       [style.transform]="hovered() ? 'translateY(-2px)' : 'none'"
       [style.box-shadow]="hovered() ? 'var(--shadow)' : 'none'"
       [style.opacity]="dragging() ? '0.4' : '1'"
-      style="border-radius:var(--r-lg);padding:13px;display:flex;flex-direction:column;gap:9px;position:relative;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s"
+      style="border-radius:var(--r-lg);padding:var(--sp-6);display:flex;flex-direction:column;gap:var(--sp-4);position:relative;cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s"
     >
       <!-- title row -->
-      <div style="display:flex;align-items:flex-start;gap:8px">
+      <div style="display:flex;align-items:flex-start;gap:var(--sp-4)">
         @if (st === 'done') {
-          <span style="flex:none;width:16px;height:16px;margin-top:1px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklch,var(--st-done),transparent 82%);border:1px solid color-mix(in oklch,var(--st-done),transparent 55%)">
+          <span style="flex:none;width:var(--sp-7);height:var(--sp-7);margin-top:1px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklch,var(--st-done),transparent 82%);border:1px solid color-mix(in oklch,var(--st-done),transparent 55%)">
             <app-icon name="check" size="sm" [px]="11" color="var(--st-done)" />
           </span>
         }
         <span
           class="disp"
           [style.color]="st === 'done' ? 'var(--ink-2)' : 'var(--ink)'"
-          style="font-size:13.5px;font-weight:600;line-height:1.3;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"
+          style="font-size:var(--fs-md);font-weight:600;line-height:1.3;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"
         >{{ tk.title }}</span>
-        <span class="tnum" style="flex:none;font-size:9.5px;color:var(--ink-4);margin-top:2px">#{{ shortId(tk.id) }}</span>
+        <span class="tnum" style="flex:none;font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">#{{ shortId(tk.id) }}</span>
       </div>
 
       <!-- notes preview (todo + inprogress only) -->
       @if (st !== 'done') {
-        <p style="font-size:12px;color:var(--ink-2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
+        <p style="font-size:var(--fs-ui);color:var(--ink-2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
           {{ notes() }}
         </p>
       }
@@ -78,7 +78,7 @@ function plainText(html: string | null | undefined): string {
         } @else {
           <div
             (click)="dispatch($event, tk)"
-            style="display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:var(--r-md);cursor:pointer;border:1px dashed color-mix(in oklch,var(--accent),transparent 55%);color:var(--accent);font-size:11px"
+            style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-radius:var(--r-md);cursor:pointer;border:1px dashed color-mix(in oklch,var(--accent),transparent 55%);color:var(--accent);font-size:var(--fs-sm)"
           >
             <app-icon name="bolt" size="sm" />No agent yet — dispatch one
           </div>
@@ -87,8 +87,8 @@ function plainText(html: string | null | undefined): string {
 
       <!-- bottom row -->
       @if (st === 'todo') {
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;min-width:0;overflow:hidden" [style.color]="chipColor()">
+        <div style="display:flex;align-items:center;gap:var(--sp-4)">
+          <span style="display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-sm);min-width:0;overflow:hidden" [style.color]="chipColor()">
             <app-icon [name]="chipIcon()" size="sm" [px]="12" style="flex:none" />
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ chipName() }}</span>
           </span>
@@ -97,7 +97,7 @@ function plainText(html: string | null | undefined): string {
             [class]="'btn ' + (hovered() ? 'primary' : 'ghost-hair')"
             [style.color]="hovered() ? null : 'var(--accent)'"
             [style.border-color]="hovered() ? null : 'color-mix(in oklch,var(--accent),transparent 55%)'"
-            style="margin-left:auto;flex:none;padding:5px 11px;font-size:11.5px"
+            style="margin-left:auto;flex:none;padding:var(--sp-2) var(--sp-5);font-size:var(--fs-sm)"
           >
             <app-icon name="bolt" size="sm" />Dispatch
           </button>
@@ -106,7 +106,7 @@ function plainText(html: string | null | undefined): string {
 
       @if (st === 'inprogress') {
         <div style="display:flex;align-items:center">
-          <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;min-width:0;overflow:hidden" [style.color]="chipColor()">
+          <span style="display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-sm);min-width:0;overflow:hidden" [style.color]="chipColor()">
             <app-icon [name]="chipIcon()" size="sm" [px]="12" style="flex:none" />
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ chipName() }}</span>
           </span>
@@ -114,17 +114,17 @@ function plainText(html: string | null | undefined): string {
       }
 
       @if (st === 'done') {
-        <div class="tnum" style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-3)">
-          <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;min-width:0;overflow:hidden" [style.color]="'var(--ink-3)'">
+        <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-sm);color:var(--ink-3)">
+          <span style="display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-sm);min-width:0;overflow:hidden" [style.color]="'var(--ink-3)'">
             <app-icon [name]="chipIcon()" size="sm" [px]="12" style="flex:none" />
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ chipName() }}</span>
           </span>
           @if (ag) {
-            <span style="margin-left:auto;display:flex;align-items:center;gap:6px;flex:none">
+            <span style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3);flex:none">
               <app-tool-badge [tool]="ag.tool" [size]="14" />
               <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:92px">{{ ag.name }}</span>
               <span style="color:var(--ink-4)">·</span>
-              <span style="display:flex;align-items:center;gap:3px;color:var(--st-done)">
+              <span style="display:flex;align-items:center;gap:var(--sp-1);color:var(--st-done)">
                 <app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}
               </span>
             </span>
