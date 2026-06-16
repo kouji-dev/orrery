@@ -20,6 +20,8 @@
     graph: "M6 6a2 2 0 100-.01M18 6a2 2 0 100-.01M12 18a2 2 0 100-.01M7.5 7.5l3 8M16.5 7.5l-3 8",
     flag: "M5 21V4m0 0h11l-2 4 2 4H5", refresh: "M4 11a8 8 0 0114-5l2 2M20 13a8 8 0 01-14 5l-2-2M18 4v4h-4M6 20v-4h4",
     panelLeft: "M4 5h16v14H4zM9.5 5v14",
+    bell: "M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0",
+    moon: "M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z",
     settings: "M12 9a3 3 0 100 6 3 3 0 000-6zM19.4 15a1.65 1.65 0 00.33 1.82l.05.05a2 2 0 11-2.83 2.83l-.05-.05a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.08a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.05.05a2 2 0 11-2.83-2.83l.05-.05a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.08a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.05-.05a2 2 0 112.83-2.83l.05.05a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.08a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.05-.05a2 2 0 112.83 2.83l-.05.05a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.08a1.65 1.65 0 00-1.51 1z",
     box: "M3.3 7.5L12 3l8.7 4.5v9L12 21l-8.7-4.5v-9zM3.3 7.5L12 12m0 0l8.7-4.5M12 12v9",
     globe: "M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c2.5 2.5 3.5 6 3.5 9S14.5 18.5 12 21M12 3c-2.5 2.5-3.5 6-3.5 9S9.5 18.5 12 21",
@@ -172,17 +174,23 @@
       <div style="display:flex;align-items:center;gap:11px;flex:none;width:248px;padding:0 14px;border-right:1px solid var(--hair)">${appLogo(24)}
         <div style="display:flex;flex-direction:column;line-height:1.12;min-width:0">
           <span class="disp" style="font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px"><span><span style="color:var(--accent)">O</span>rrery</span>
-            <span style="display:inline-flex;align-items:center;gap:5px;height:17px;padding:0 7px;border-radius:999px;border:1px solid color-mix(in oklch, var(--accent-2), transparent 58%);background:color-mix(in oklch, var(--accent-2), transparent 88%);font-family:var(--font-mono)"><span style="font-size:10px;color:var(--ink-2)">v0.2.5</span><span style="width:1px;height:9px;background:color-mix(in oklch, var(--accent-2), transparent 50%)"></span><span class="up" style="font-size:8.5px;font-weight:700;letter-spacing:.12em;color:var(--accent-2)">BETA</span></span></span>
+            <span style="display:inline-flex;align-items:center;gap:5px;height:17px;padding:0 7px;border-radius:999px;border:1px solid color-mix(in oklch, var(--accent-2), transparent 58%);background:color-mix(in oklch, var(--accent-2), transparent 88%);font-family:var(--font-mono)"><span class="js-ver" style="font-size:10px;color:var(--ink-2)">v0.4.1</span><span style="width:1px;height:9px;background:color-mix(in oklch, var(--accent-2), transparent 50%)"></span><span class="up" style="font-size:8.5px;font-weight:700;letter-spacing:.12em;color:var(--accent-2)">BETA</span></span></span>
           <span style="font-size:9.5px;color:var(--ink-3);letter-spacing:.04em">${PROJECTS.length} projects · ${AGENTS.length} agents</span>
         </div>
       </div>
       <div style="display:flex;align-items:stretch;flex:1;min-width:0;overflow:hidden">${tabs.map(tab).join("")}</div>
       <div style="display:flex;align-items:center;gap:8px;padding:0 12px;flex:none;border-left:1px solid var(--hair)">
-        <button class="btn ghost-hair">${icon("pause", 13)}Pause all</button>
-        <button class="btn ghost-hair" style="padding:5px 8px">${icon("sun", 13)}</button>
-        <button class="btn ghost-hair" style="padding:5px 8px">${icon("settings", 13)}</button>
-        <div style="display:flex;gap:2px;margin-left:4px">${winBtns}</div>
+        <button class="btn ghost-hair" title="Notifications" style="padding:5px 8px;position:relative">${icon("bell", 13)}<span class="tnum" style="position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 2px;display:grid;place-items:center;font-size:9.5px;font-weight:600;color:#fff;background:var(--st-blocked);border-radius:8px">2</span></button>
+        <div class="action-pill" role="group" aria-label="Workspace controls">
+          <button class="pill-seg run" title="Run all agents">${icon("play", 13)}</button>
+          <span class="pill-div"></span>
+          <button class="pill-seg" title="Toggle theme">${icon("sun", 13)}</button>
+          <span class="pill-div"></span>
+          <button class="pill-seg" title="Settings">${icon("settings", 13)}</button>
+        </div>
       </div>
+      <div style="width:1px;background:var(--hair);align-self:stretch;flex:none"></div>
+      <div style="display:flex;align-items:center;gap:2px;padding:0 4px;flex:none">${winBtns}</div>
     </header>`;
   }
 
