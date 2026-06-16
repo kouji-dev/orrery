@@ -174,6 +174,8 @@ impl RuntimeService {
         let cmd = tool_command(
             &agent.tool,
             &agent.task,
+            &agent.model,
+            agent.effort.as_deref(),
             send_prompt,
             resume_session,
             approve_policy,
@@ -437,11 +439,13 @@ fn kill_proc(p: &mut Proc) {
 /// prompt is passed only on the first launch (`send_prompt`); resumes open the
 /// tool bare. Unknown tools fall back to invoking the id verbatim.
 ///
-/// `approve_policy` appends the adapter's auto-approve flags ("everything" →
-/// the tool's skip-permissions flag; anything else → none) on BOTH the normal
-/// and the resume launch — the policy is a property of the agent run, not of
-/// how the session was entered. Unknown tools get no flags (no adapter knows
-/// their CLI).
+/// `approve_policy`, `model`, and `effort` append the adapter's run flags on
+/// BOTH the normal and the resume launch — they are properties of the agent run,
+/// not of how the session was entered: the auto-approve flag ("everything" → the
+/// tool's skip-permissions flag; else none), `--model <model>` (empty → omitted),
+/// and the effort flag (only tools with an effort knob, e.g. codex's
+/// `--config model_reasoning_effort`). Unknown tools get no flags (no adapter
+/// knows their CLI).
 /// Swap argv[0] for a user-set manual executable path, keeping every arg the
 /// adapter appended. No-op when `program` is `None`/blank or the command somehow
 /// has no argv. The replacement is an absolute path, so the later
@@ -468,17 +472,31 @@ fn apply_program_override(cmd: CommandBuilder, program: Option<&str>) -> Command
 fn tool_command(
     tool: &str,
     task: &str,
+    model: &str,
+    effort: Option<&str>,
     send_prompt: bool,
     resume_session: Option<&str>,
     approve_policy: &str,
 ) -> CommandBuilder {
     let adapter = crate::agents::adapters::adapter_for(tool);
-    let approve_args = adapter
+    // Flags that belong to the RUN, not the entry path — appended after the base
+    // argv on BOTH a fresh launch and a resume: the auto-approve policy, the model
+    // the user picked, and (for tools that support it) the reasoning effort. Model
+    // + effort live on the agent record but were never forwarded before, so every
+    // agent launched on its tool's default model regardless of the choice.
+    let run_args: Vec<String> = adapter
         .as_ref()
-        .map(|a| a.auto_approve_args(approve_policy))
+        .map(|a| {
+            let mut v = a.auto_approve_args(approve_policy);
+            v.extend(a.model_args(model));
+            if let Some(e) = effort.filter(|e| !e.is_empty()) {
+                v.extend(a.effort_args(e));
+            }
+            v
+        })
         .unwrap_or_default();
-    let with_approve = |mut cmd: CommandBuilder| {
-        for a in &approve_args {
+    let with_run_args = |mut cmd: CommandBuilder| {
+        for a in &run_args {
             cmd.arg(a);
         }
         cmd
@@ -488,7 +506,7 @@ fn tool_command(
     // supports it (no prompt — the session continues from where it left off).
     if let (Some(id), Some(adapter)) = (resume_session, adapter.as_ref()) {
         if let Some(cmd) = adapter.build_resume_command(id) {
-            return with_approve(cmd);
+            return with_run_args(cmd);
         }
     }
 
@@ -498,7 +516,7 @@ fn tool_command(
         None
     };
     match adapter {
-        Some(adapter) => with_approve(adapter.build_command(prompt)),
+        Some(adapter) => with_run_args(adapter.build_command(prompt)),
         None => {
             let mut c = CommandBuilder::new(tool);
             if let Some(t) = prompt {
@@ -648,7 +666,7 @@ mod tests {
 
     #[test]
     fn tool_command_resume_builds_claude_resume_without_prompt() {
-        let cmd = tool_command("claude", "fix the bug", true, Some("sess-123"), "off");
+        let cmd = tool_command("claude", "fix the bug", "", None, true, Some("sess-123"), "off");
         assert_eq!(argv_of(&cmd), vec!["claude", "--resume", "sess-123"]);
     }
 
@@ -656,7 +674,7 @@ mod tests {
     // prompt on the first launch (send_prompt true).
     #[test]
     fn tool_command_normal_launch_sends_prompt_on_first_run() {
-        let cmd = tool_command("claude", "fix the bug", true, None, "off");
+        let cmd = tool_command("claude", "fix the bug", "", None, true, None, "off");
         assert_eq!(argv_of(&cmd), vec!["claude", "fix the bug"]);
     }
 
@@ -664,7 +682,7 @@ mod tests {
     // back to the normal launch (no prompt on a resume — send_prompt false).
     #[test]
     fn tool_command_resume_falls_back_when_adapter_has_no_resume() {
-        let cmd = tool_command("gemini", "fix the bug", false, Some("sess-123"), "off");
+        let cmd = tool_command("gemini", "fix the bug", "", None, false, Some("sess-123"), "off");
         assert_eq!(argv_of(&cmd), vec!["gemini"], "no resume_argv → bare launch");
     }
 
@@ -673,12 +691,20 @@ mod tests {
     // not the entry path). "off"/"allowlist" leave the argv untouched.
     #[test]
     fn tool_command_appends_auto_approve_flag_for_everything() {
-        let cmd = tool_command("claude", "fix the bug", true, None, "everything");
+        let cmd = tool_command("claude", "fix the bug", "", None, true, None, "everything");
         assert_eq!(
             argv_of(&cmd),
             vec!["claude", "fix the bug", "--dangerously-skip-permissions"]
         );
-        let cmd = tool_command("claude", "fix the bug", true, Some("sess-123"), "everything");
+        let cmd = tool_command(
+            "claude",
+            "fix the bug",
+            "",
+            None,
+            true,
+            Some("sess-123"),
+            "everything",
+        );
         assert_eq!(
             argv_of(&cmd),
             vec![
@@ -694,7 +720,7 @@ mod tests {
     #[test]
     fn tool_command_off_and_allowlist_add_no_flags() {
         for policy in ["off", "allowlist"] {
-            let cmd = tool_command("claude", "fix the bug", true, None, policy);
+            let cmd = tool_command("claude", "fix the bug", "", None, true, None, policy);
             assert_eq!(
                 argv_of(&cmd),
                 vec!["claude", "fix the bug"],
@@ -702,8 +728,76 @@ mod tests {
             );
         }
         // gemini has no bypass wired — "everything" is honestly a no-op for it.
-        let cmd = tool_command("gemini", "t", false, None, "everything");
+        let cmd = tool_command("gemini", "t", "", None, false, None, "everything");
         assert_eq!(argv_of(&cmd), vec!["gemini"]);
+    }
+
+    // The selected MODEL is forwarded as `--model <model>` after the prompt, for
+    // every tool (claude/codex/cursor/gemini all take `--model`). This is the bug
+    // fix: the picked model used to be dropped and every agent ran on the default.
+    #[test]
+    fn tool_command_forwards_model_for_each_tool() {
+        // (tool id, launch binary, model) — cursor's binary is `cursor-agent`.
+        let cases: &[(&str, &str, &str)] = &[
+            ("claude", "claude", "opus"),
+            ("codex", "codex", "gpt-5.1-codex"),
+            ("cursor", "cursor-agent", "composer-1"),
+            ("gemini", "gemini", "gemini-2.5-pro"),
+        ];
+        for (tool, bin, model) in cases {
+            let cmd = tool_command(tool, "t", model, None, true, None, "off");
+            assert_eq!(
+                argv_of(&cmd),
+                vec![*bin, "t", "--model", model],
+                "{tool} must launch with --model {model}"
+            );
+        }
+    }
+
+    // An empty model (record never carried one) forwards nothing — the agent runs
+    // on the tool's own default.
+    #[test]
+    fn tool_command_empty_model_omits_model_flag() {
+        let cmd = tool_command("claude", "t", "", None, true, None, "off");
+        assert_eq!(argv_of(&cmd), vec!["claude", "t"]);
+    }
+
+    // Codex is the one tool with a reasoning-effort knob: effort is forwarded as a
+    // TOML config override AFTER the model. Tools without an effort flag
+    // (claude/cursor/gemini) silently ignore the effort value.
+    #[test]
+    fn tool_command_codex_forwards_model_and_effort() {
+        let cmd = tool_command("codex", "t", "gpt-5.1-codex", Some("high"), true, None, "off");
+        assert_eq!(
+            argv_of(&cmd),
+            vec![
+                "codex",
+                "t",
+                "--model",
+                "gpt-5.1-codex",
+                "--config",
+                "model_reasoning_effort=high"
+            ]
+        );
+    }
+
+    #[test]
+    fn tool_command_effort_ignored_for_tools_without_an_effort_flag() {
+        // claude has `effort: false` in the catalog — even if an effort slips
+        // through, it adds nothing (only --model is forwarded).
+        let cmd = tool_command("claude", "t", "opus", Some("high"), true, None, "off");
+        assert_eq!(argv_of(&cmd), vec!["claude", "t", "--model", "opus"]);
+    }
+
+    // Model + effort are part of the run, so they ride a resume launch too (after
+    // the resume args + any approve flag).
+    #[test]
+    fn tool_command_forwards_model_on_resume() {
+        let cmd = tool_command("claude", "t", "opus", None, true, Some("sess-1"), "off");
+        assert_eq!(
+            argv_of(&cmd),
+            vec!["claude", "--resume", "sess-1", "--model", "opus"]
+        );
     }
 
     #[test]
