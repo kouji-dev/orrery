@@ -31,19 +31,19 @@ import { TicketsStore } from "../stores/tickets.store";
   template: `
     <header
       data-tauri-drag-region
-      style="display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--hair);height:44px;position:relative;z-index:5;min-width:0"
+      style="display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--hair);height:var(--topbar-h);position:relative;z-index:5;min-width:0"
     >
       <!-- brand (also a window drag handle). Pinned to the OPEN sidebar width
            (--sidebar-w) so it lines up with the sidebar column and keeps that
            width even when the sidebar is collapsed to the compact rail. -->
-      <div data-tauri-drag-region style="display:flex;align-items:center;gap:11px;padding:0 14px;flex:none;width:var(--sidebar-w, 252px);box-sizing:border-box">
+      <div data-tauri-drag-region style="display:flex;align-items:center;gap:var(--sp-5);padding:0 var(--sp-6);flex:none;width:var(--sidebar-w, 252px);box-sizing:border-box">
         <app-logo style="pointer-events:none" />
         <div style="display:flex;flex-direction:column;line-height:1.12;pointer-events:none">
-          <span class="disp" style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;letter-spacing:0.005em">
+          <span class="disp" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-lg);font-weight:600;letter-spacing:0.005em">
             <span><span style="color:var(--accent)">O</span>rrery</span>
             <app-version-badge style="pointer-events:auto" />
           </span>
-          <span style="font-size:9.5px;color:var(--ink-3);letter-spacing:0.04em">
+          <span style="font-size:var(--fs-2xs);color:var(--ink-3);letter-spacing:0.04em">
             {{ projects.all().length }} projects · {{ runtime.agents().length }} agents
           </span>
         </div>
@@ -78,10 +78,10 @@ import { TicketsStore } from "../stores/tickets.store";
             [style.position]="isOrch ? 'sticky' : 'relative'"
             [style.left]="isOrch ? '0' : null"
             [style.z-index]="isOrch ? 2 : null"
-            style="display:flex;align-items:center;gap:8px;padding:0 13px;cursor:pointer;white-space:nowrap;flex:none;border-right:1px solid var(--hair)"
+            style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);cursor:pointer;white-space:nowrap;flex:none;border-right:1px solid var(--hair)"
           >
             @if (active) {
-              <span style="position:absolute;left:0;right:0;top:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent-2))"></span>
+              <span style="position:absolute;left:0;right:0;top:0;height:var(--sp-1);background:linear-gradient(90deg,var(--accent),var(--accent-2))"></span>
             }
             @if (dz === 'before') {
               <span style="position:absolute;left:-1px;top:4px;bottom:4px;width:3px;border-radius:2px;background:var(--accent)"></span>
@@ -95,32 +95,32 @@ import { TicketsStore } from "../stores/tickets.store";
 
             @if (isOrch) {
               <app-icon name="layers" size="sm" [color]="active ? 'var(--accent)' : null" />
-              <span style="font-size:12px">Orchestrator</span>
+              <span style="font-size:var(--fs-ui)">Orchestrator</span>
             } @else if (tab.kind === 'backlog') {
               <app-icon name="layers" size="sm" [color]="active ? 'var(--accent)' : null" />
-              <span style="font-size:12px">Backlog</span>
+              <span style="font-size:var(--fs-ui)">Backlog</span>
             } @else if (tab.kind === 'ticket') {
               <app-icon name="file" size="sm" [color]="active ? 'var(--accent)' : null" />
-              <span style="font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ticketTabLabel(tab) }}</span>
+              <span style="font-size:var(--fs-ui);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ticketTabLabel(tab) }}</span>
             } @else if (isGroup) {
               <app-icon name="columns" size="sm" [color]="active ? 'var(--accent)' : 'var(--ink-3)'" />
-              <span style="display:flex;gap:2px">
+              <span style="display:flex;gap:var(--sp-1)">
                 @for (a of tas.slice(0, 3); track a.id) { <app-status-dot [status]="a.status" /> }
               </span>
-              <span style="font-size:12px">{{ tas[0]?.name }} <span style="color:var(--ink-4)">+{{ ids.length - 1 }}</span></span>
+              <span style="font-size:var(--fs-ui)">{{ tas[0]?.name }} <span style="color:var(--ink-4)">+{{ ids.length - 1 }}</span></span>
             } @else {
               <app-status-dot [status]="tas[0] ? tas[0].status : 'idle'" />
               @if (proj) {
-                <span [style.background]="proj.color" [title]="proj.name" style="width:6px;height:6px;border-radius:2px;flex:none"></span>
+                <span [style.background]="proj.color" [title]="proj.name" style="width:6px;height:var(--sp-3);border-radius:2px;flex:none"></span>
               }
-              <span style="font-size:12px">{{ tas[0] ? tas[0].name : tab.id }}</span>
+              <span style="font-size:var(--fs-ui)">{{ tas[0] ? tas[0].name : tab.id }}</span>
             }
 
             @if (!isOrch && tab.kind !== 'backlog') {
               <button
                 (click)="closeTab($event, tab.id)"
                 class="tab-x"
-                style="background:transparent;border:none;color:var(--ink-4);cursor:pointer;display:flex;padding:1px;border-radius:3px;margin-left:2px"
+                style="background:transparent;border:none;color:var(--ink-4);cursor:pointer;display:flex;padding:1px;border-radius:3px;margin-left:var(--sp-1)"
               >
                 <app-icon name="x" size="sm" />
               </button>
@@ -128,7 +128,7 @@ import { TicketsStore } from "../stores/tickets.store";
           </div>
         }
         @if (agentTabCount() >= 2) {
-          <div style="display:flex;align-items:center;gap:6px;padding:0 12px;color:var(--ink-4);font-size:10px;white-space:nowrap">
+          <div style="display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-6);color:var(--ink-4);font-size:var(--fs-xs);white-space:nowrap">
             <app-icon name="columns" size="sm" [px]="12" />drag a tab onto another to tile them
           </div>
         }
@@ -140,22 +140,22 @@ import { TicketsStore } from "../stores/tickets.store";
            the right panel column lines up exactly under this cluster -->
       <div #rightGroup style="display:flex;align-items:stretch;flex:none">
         <!-- actions: Run all/Pause all (left), then notification + theme buttons -->
-        <div style="display:flex;align-items:center;gap:8px;padding:0 12px;flex:none">
+        <div style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);flex:none">
           @let running = agentActions.anyRunning();
           <button
             [class]="'btn ' + (running ? 'ghost-hair' : 'primary')"
             (click)="agentActions.toggleRunAll()"
             title="Pause / start every agent"
-            style="height:25px;padding:0 10px;min-width:96px;justify-content:center"
+            style="height:25px;padding:0 var(--sp-5);min-width:96px;justify-content:center"
           >
             <app-icon [name]="running ? 'pause' : 'play'" size="sm" />
             {{ running ? 'Pause all' : 'Run all' }}
           </button>
           <app-notification-center />
-          <button class="btn ghost-hair" (click)="ui.toggleTheme()" title="Toggle theme" style="padding:5px 8px">
+          <button class="btn ghost-hair" (click)="ui.toggleTheme()" title="Toggle theme" style="padding:var(--sp-2) var(--sp-4)">
             <app-icon [name]="ui.tweaks().theme === 'dark' ? 'sun' : 'moon'" size="sm" />
           </button>
-          <button class="btn ghost-hair" (click)="settings.openModal()" title="Settings" aria-label="Settings" style="padding:5px 8px">
+          <button class="btn ghost-hair" (click)="settings.openModal()" title="Settings" aria-label="Settings" style="padding:var(--sp-2) var(--sp-4)">
             <app-icon name="settings" size="sm" />
           </button>
         </div>
