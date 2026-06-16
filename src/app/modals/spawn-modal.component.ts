@@ -56,28 +56,28 @@ function slugName(title: string): string {
     @let linked = !!ticketId();
     <div
       (click)="ui.closeSpawn()"
-      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
+      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
     >
       <div
         class="surface rise"
         (click)="$event.stopPropagation()"
         style="width:540px;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;box-shadow:var(--shadow)"
       >
-        <div style="padding:14px 18px;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:9px;flex:none">
+        <div style="padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:var(--sp-4);flex:none">
           <app-icon name="agent" color="var(--accent)" />
-          <span class="disp" style="font-size:14px;font-weight:600;white-space:nowrap">Spawn agent</span>
-          <span class="chip" style="margin-left:auto;font-size:9.5px">new git worktree + branch</span>
+          <span class="disp" style="font-size:var(--fs-lg);font-weight:600;white-space:nowrap">Spawn agent</span>
+          <span class="chip" style="margin-left:auto;font-size:var(--fs-2xs)">new git worktree + branch</span>
         </div>
 
-        <div class="scroll-y" style="padding:18px;display:flex;flex-direction:column;gap:16px;flex:1">
+        <div class="scroll-y" style="padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-7);flex:1">
           <!-- project + branch -->
-          <div style="display:flex;gap:14px">
+          <div style="display:flex;gap:var(--sp-6)">
             <div style="flex:1">
               <label class="field-label">Project</label>
               <select class="osel" [value]="projectId()" (change)="setProject($any($event.target).value)">
                 @for (p of projects.all(); track p.id) { <option [value]="p.id" [selected]="p.id === projectId()">{{ p.name }}</option> }
               </select>
-              <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ proj.path }}</div>
+              <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ proj.path }}</div>
             </div>
             <div style="flex:1">
               <label class="field-label">Source branch</label>
@@ -85,9 +85,9 @@ function slugName(title: string): string {
                 @for (b of proj.branches; track b) { <option [value]="b" [selected]="b === branch()">{{ b }}</option> }
               </select>
               @if (!proj.branches?.length) {
-                <div style="font-size:9.5px;color:var(--st-blocked);margin-top:6px">no branch found — project git is not initialized</div>
+                <div style="font-size:var(--fs-2xs);color:var(--st-blocked);margin-top:var(--sp-3)">no branch found — project git is not initialized</div>
               } @else {
-                <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px">base · {{ proj.head }}</div>
+                <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-3)">base · {{ proj.head }}</div>
               }
             </div>
           </div>
@@ -118,11 +118,11 @@ function slugName(title: string): string {
               }
             </select>
             @if (linked) {
-              <div style="display:flex;align-items:center;gap:5px;margin-top:6px;font-size:10px;color:var(--accent-2)">
+              <div style="display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-3);font-size:var(--fs-xs);color:var(--accent-2)">
                 <app-icon name="link" size="sm" />Name linked · the ticket is prepended to the prompt on spawn
               </div>
             } @else {
-              <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px">optional · attach a ticket to base the agent on it</div>
+              <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-3)">optional · attach a ticket to base the agent on it</div>
             }
           </div>
 
@@ -130,7 +130,7 @@ function slugName(title: string): string {
           <div>
             <label class="field-label">Name</label>
             <div
-              style="display:flex;align-items:center;gap:8px;background:var(--panel-2);border-radius:var(--r-md);padding:0 10px"
+              style="display:flex;align-items:center;gap:var(--sp-4);background:var(--panel-2);border-radius:var(--r-md);padding:0 var(--sp-5)"
               [style.border]="linked ? '1px solid var(--accent)' : '1px solid var(--hair)'"
             >
               <app-icon name="agent" size="sm" color="var(--ink-4)" />
@@ -138,16 +138,16 @@ function slugName(title: string): string {
                 [value]="name()"
                 (input)="onNameInput($any($event.target).value)"
                 placeholder="e.g. fix-login-bug"
-                style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:10px 0;color:var(--ink);font-family:var(--font-mono);font-size:12.5px"
+                style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:var(--sp-5) 0;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui)"
               />
             </div>
-            <div style="font-size:9.5px;color:var(--ink-4);margin-top:6px">unique per project · becomes the worktree → <span style="color:var(--ink-3)">{{ worktreePreview() }}</span></div>
+            <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-3)">unique per project · becomes the worktree → <span style="color:var(--ink-3)">{{ worktreePreview() }}</span></div>
           </div>
 
           <!-- agent tool -->
           <div>
             <label class="field-label">Agent</label>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-3)">
               @for (tl of tools; track tl.id) {
                 @let on = toolId() === tl.id;
                 <button
@@ -155,12 +155,12 @@ function slugName(title: string): string {
                   (click)="setTool(tl.id)"
                   [style.border]="'1px solid ' + (on ? mix(tl.accent, 45) : 'var(--hair)')"
                   [style.background]="on ? mix(tl.accent, 88) : 'var(--panel-2)'"
-                  style="flex-direction:column;gap:6px;padding:10px 6px;border-radius:var(--r-md)"
+                  style="flex-direction:column;gap:var(--sp-3);padding:var(--sp-5) var(--sp-3);border-radius:var(--r-md)"
                 >
                   <app-tool-badge [tool]="tl.id" [size]="20" />
-                  <span [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'" style="font-size:10.5px">{{ tl.name }}</span>
+                  <span [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'" style="font-size:var(--fs-xs)">{{ tl.name }}</span>
                   @if (!runtime.toolAvailable(tl.id)) {
-                    <span class="tnum" style="font-size:8px;color:var(--st-blocked)">not found</span>
+                    <span class="tnum" style="font-size:var(--fs-3xs);color:var(--st-blocked)">not found</span>
                   }
                 </button>
               }
@@ -168,7 +168,7 @@ function slugName(title: string): string {
           </div>
 
           <!-- model + effort -->
-          <div style="display:flex;gap:14px">
+          <div style="display:flex;gap:var(--sp-6)">
             <div style="flex:1">
               <label class="field-label">Model</label>
               <select class="osel" [value]="model()" (change)="model.set($any($event.target).value)">
@@ -178,7 +178,7 @@ function slugName(title: string): string {
             @if (tool.effort) {
               <div style="flex:1">
                 <label class="field-label">Reasoning effort</label>
-                <div style="display:flex;gap:6px">
+                <div style="display:flex;gap:var(--sp-3)">
                   @for (ef of tool.effort; track ef) {
                     <button
                       class="btn ghost-hair"
@@ -186,7 +186,7 @@ function slugName(title: string): string {
                       [style.border-color]="effort() === ef ? 'var(--accent)' : 'var(--hair)'"
                       [style.color]="effort() === ef ? 'var(--ink)' : 'var(--ink-3)'"
                       [style.background]="effort() === ef ? mix('var(--accent)', 90) : 'transparent'"
-                      style="flex:1;justify-content:center;font-size:11px;text-transform:capitalize"
+                      style="flex:1;justify-content:center;font-size:var(--fs-sm);text-transform:capitalize"
                     >{{ ef }}</button>
                   }
                 </div>
@@ -206,14 +206,14 @@ function slugName(title: string): string {
               rows="3"
               [placeholder]="linked ? 'Add extra instructions — the ticket is included automatically…' : 'Describe what this agent should do…'"
               class="spawn-textarea"
-              style="width:100%;resize:none;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:10px 12px;color:var(--ink);font-family:var(--font-mono);font-size:12.5px;line-height:1.5;outline:none"
+              style="width:100%;resize:none;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:var(--sp-5) var(--sp-6);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui);line-height:1.5;outline:none"
             ></textarea>
           </div>
         </div>
 
-        <div style="padding:12px 18px;border-top:1px solid var(--hair);display:flex;align-items:center;gap:8px;flex:none">
-          <span style="font-size:10px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ {{ ui.worktreeRoot }}/{{ proj.id }}-…</span>
-          <div style="margin-left:auto;display:flex;gap:8px;flex:none">
+        <div style="padding:var(--sp-6) var(--sp-7);border-top:1px solid var(--hair);display:flex;align-items:center;gap:var(--sp-4);flex:none">
+          <span style="font-size:var(--fs-xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ {{ ui.worktreeRoot }}/{{ proj.id }}-…</span>
+          <div style="margin-left:auto;display:flex;gap:var(--sp-4);flex:none">
             <button class="btn ghost-hair" (click)="ui.closeSpawn()">Cancel</button>
             <button class="btn ghost-hair" [disabled]="!name().trim() || !branch()" (click)="submit(false)"><app-icon name="plus" size="sm" />Create</button>
             <button class="btn primary" [disabled]="!name().trim() || !branch()" (click)="submit(true)"><app-icon name="bolt" size="sm" />Spawn</button>

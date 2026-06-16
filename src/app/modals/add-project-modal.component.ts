@@ -23,44 +23,44 @@ import { mix } from "../utils";
   template: `
     <div
       (click)="ui.closeAddProject()"
-      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
+      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
     >
       <div
         class="surface rise"
         (click)="$event.stopPropagation()"
         style="width:480px;padding:0;overflow:hidden;box-shadow:var(--shadow)"
       >
-        <div style="padding:14px 18px;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:9px">
+        <div style="padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:var(--sp-4)">
           <span
             [style.background]="mix(color(), 82)"
             [style.border]="'1px solid ' + mix(color(), 55)"
-            style="flex:none;width:24px;height:24px;border-radius:7px;display:grid;place-items:center"
+            style="flex:none;width:var(--sp-9);height:var(--sp-9);border-radius:7px;display:grid;place-items:center"
           >
             <app-icon [name]="icon()" size="sm" [color]="color()" />
           </span>
-          <span class="disp" style="font-size:14px;font-weight:600;white-space:nowrap">Add project</span>
-          <span class="chip" style="margin-left:auto;font-size:9.5px">git repository</span>
+          <span class="disp" style="font-size:var(--fs-lg);font-weight:600;white-space:nowrap">Add project</span>
+          <span class="chip" style="margin-left:auto;font-size:var(--fs-2xs)">git repository</span>
         </div>
 
-        <div style="padding:18px;display:flex;flex-direction:column;gap:16px">
+        <div style="padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-7)">
           <!-- working directory -->
           <div>
             <label class="field-label">Working directory</label>
-            <div style="display:flex;gap:8px">
-              <div style="flex:1;display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:0 10px">
+            <div style="display:flex;gap:var(--sp-4)">
+              <div style="flex:1;display:flex;align-items:center;gap:var(--sp-4);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:0 var(--sp-5)">
                 <app-icon name="folder" size="sm" color="var(--ink-4)" />
                 <input
                   #dirEl
                   [value]="dir()"
                   (input)="dir.set($any($event.target).value)"
                   placeholder="~/code/my-repo"
-                  style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:10px 0;color:var(--ink);font-family:var(--font-mono);font-size:12.5px"
+                  style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:var(--sp-5) 0;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui)"
                 />
               </div>
               <button class="btn ghost-hair" (click)="browse()"><app-icon name="folderOpen" size="sm" />Browse…</button>
             </div>
             @if (name()) {
-              <div style="font-size:10px;color:var(--ink-4);margin-top:6px">project name → <span style="color:var(--ink-2)">{{ name() }}</span></div>
+              <div style="font-size:var(--fs-xs);color:var(--ink-4);margin-top:var(--sp-3)">project name → <span style="color:var(--ink-2)">{{ name() }}</span></div>
             }
           </div>
 
@@ -69,32 +69,32 @@ import { mix } from "../utils";
             <div
               [style.background]="mix('var(--st-done)', 92)"
               [style.border]="'1px solid ' + mix('var(--st-done)', 70)"
-              style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r-md)"
+              style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-6);border-radius:var(--r-md)"
             >
-              <span style="flex:none;width:16px;height:16px;border-radius:4px;display:grid;place-items:center;background:var(--st-done)">
+              <span style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:4px;display:grid;place-items:center;background:var(--st-done)">
                 <app-icon name="check" size="sm" [px]="11" color="#06070b" />
               </span>
               <div style="flex:1">
-                <div style="font-size:11.5px;color:var(--ink)">Git repository already exists</div>
-                <div style="font-size:9.5px;color:var(--ink-4);margin-top:2px">agents can branch + commit right away</div>
+                <div style="font-size:var(--fs-sm);color:var(--ink)">Git repository already exists</div>
+                <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">agents can branch + commit right away</div>
               </div>
               <app-icon name="git" size="sm" color="var(--st-done)" />
             </div>
           } @else {
             <div
               (click)="gitInit.set(!gitInit())"
-              style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--r-md);cursor:pointer;background:var(--panel-2);border:1px solid var(--hair)"
+              style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-6);border-radius:var(--r-md);cursor:pointer;background:var(--panel-2);border:1px solid var(--hair)"
             >
               <span
                 [style.border]="'1px solid ' + (gitInit() ? 'var(--accent)' : 'var(--hair-2)')"
                 [style.background]="gitInit() ? 'var(--accent)' : 'transparent'"
-                style="flex:none;width:16px;height:16px;border-radius:4px;display:grid;place-items:center"
+                style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:4px;display:grid;place-items:center"
               >
                 @if (gitInit()) { <app-icon name="check" size="sm" [px]="11" color="#06070b" /> }
               </span>
               <div style="flex:1">
-                <div style="font-size:11.5px;color:var(--ink)">Run git init (no .git found)</div>
-                <div style="font-size:9.5px;color:var(--ink-4);margin-top:2px">initializes a repo so agents can branch + commit</div>
+                <div style="font-size:var(--fs-sm);color:var(--ink)">Run git init (no .git found)</div>
+                <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">initializes a repo so agents can branch + commit</div>
               </div>
               <app-icon name="bolt" size="sm" color="var(--accent)" />
             </div>
@@ -103,14 +103,14 @@ import { mix } from "../utils";
           <!-- icon -->
           <div>
             <label class="field-label">Icon</label>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <div style="display:flex;gap:var(--sp-3);flex-wrap:wrap">
               @for (ic of icons; track ic) {
                 <button
                   class="btn"
                   (click)="icon.set(ic)"
                   [style.border]="'1px solid ' + (icon() === ic ? 'var(--accent)' : 'var(--hair)')"
                   [style.background]="icon() === ic ? mix('var(--accent)', 90) : 'var(--panel-2)'"
-                  style="padding:8px;border-radius:var(--r-md)"
+                  style="padding:var(--sp-4);border-radius:var(--r-md)"
                 >
                   <app-icon [name]="ic" size="sm" [color]="icon() === ic ? color() : 'var(--ink-3)'" />
                 </button>
@@ -121,21 +121,21 @@ import { mix } from "../utils";
           <!-- color -->
           <div>
             <label class="field-label">Color</label>
-            <div style="display:flex;gap:8px">
+            <div style="display:flex;gap:var(--sp-4)">
               @for (c of colors; track c) {
                 <button
                   (click)="color.set(c)"
                   [style.background]="c"
                   [style.border]="'2px solid ' + (color() === c ? 'var(--ink)' : 'transparent')"
                   [style.box-shadow]="color() === c ? '0 0 0 2px var(--panel), 0 0 12px -2px ' + c : 'none'"
-                  style="width:26px;height:26px;border-radius:50%;cursor:pointer"
+                  style="width:var(--ctl-h);height:var(--ctl-h);border-radius:50%;cursor:pointer"
                 ></button>
               }
             </div>
           </div>
         </div>
 
-        <div style="padding:12px 18px;border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:8px">
+        <div style="padding:var(--sp-6) var(--sp-7);border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:var(--sp-4)">
           <button class="btn ghost-hair" (click)="ui.closeAddProject()">Cancel</button>
           <button class="btn primary" [disabled]="!dir().trim()" (click)="submit()"><app-icon name="plus" size="sm" />Add project</button>
         </div>

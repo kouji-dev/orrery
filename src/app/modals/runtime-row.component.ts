@@ -66,20 +66,20 @@ import { ToolBadgeComponent } from "../shared/tool-badge.component";
                 (keydown.enter)="verify()" (keydown.escape)="onEscape()" />
             </div>
             <div class="set-rt-act">
-              <button type="button" class="btn ghost-hair" style="padding:6px 11px" (click)="browse()">
+              <button type="button" class="btn ghost-hair" style="padding:var(--sp-3) var(--sp-5)" (click)="browse()">
                 <app-icon name="folderOpen" size="sm" />Browse
               </button>
-              <button type="button" class="btn primary" style="padding:6px 13px" [disabled]="checking()" (click)="verify()">
+              <button type="button" class="btn primary" style="padding:var(--sp-3) var(--sp-6)" [disabled]="checking()" (click)="verify()">
                 <app-icon [name]="checking() ? 'refresh' : 'check'" size="sm" [class.spin]="checking()" />
                 {{ checking() ? 'Verifying…' : (isOk() ? 'Save' : 'Use this path') }}
               </button>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:12px">
+          <div style="display:flex;align-items:center;gap:var(--sp-6)">
             @if (fail()) {
               <span class="set-rt-fail"><app-icon name="x" size="sm" />{{ fail() }}</span>
             } @else {
-              <span style="font-size:10px;color:var(--ink-4)">Orrery runs
+              <span style="font-size:var(--fs-xs);color:var(--ink-4)">Orrery runs
                 <code style="font-family:var(--font-mono)">{{ toolId() }} --version</code> to confirm it launches.</span>
             }
             @if (isOk()) { <button type="button" class="set-rt-cancel" (click)="cancel()">Cancel</button> }
@@ -93,43 +93,43 @@ import { ToolBadgeComponent } from "../shared/tool-badge.component";
     /* As a flex child of the wide set-row value cell, allow shrinking so a long
        path ellipsizes inside the panel instead of overflowing it. */
     :host{display:block;flex:1 1 auto;min-width:0;max-width:100%;}
-    .set-rt{display:flex;flex-direction:column;gap:10px;padding:11px 12px;border-radius:11px;
+    .set-rt{display:flex;flex-direction:column;gap:var(--sp-5);padding:var(--sp-5) var(--sp-6);border-radius:11px;
       border:1px solid var(--hair);background:var(--panel-2);width:100%;max-width:100%;box-sizing:border-box;}
     .set-rt.warn{border-color:color-mix(in oklch,var(--set-amber),transparent 62%);
       background:color-mix(in oklch,var(--set-amber),transparent 93%);}
-    .set-rt-top{display:flex;align-items:center;gap:10px;min-width:0;}
-    .set-rt-id{flex:none;display:flex;flex-direction:column;gap:2px;max-width:220px;}
-    .set-rt-name{font-size:12.5px;color:var(--ink);font-weight:500;line-height:1.1;}
-    .set-rt-st{font-size:9.5px;display:flex;align-items:center;gap:5px;color:var(--ink-4);white-space:nowrap;}
-    .set-rt-st .rd{width:6px;height:6px;border-radius:50%;flex:none;background:var(--ink-4);}
+    .set-rt-top{display:flex;align-items:center;gap:var(--sp-5);min-width:0;}
+    .set-rt-id{flex:none;display:flex;flex-direction:column;gap:var(--sp-1);max-width:220px;}
+    .set-rt-name{font-size:var(--fs-ui);color:var(--ink);font-weight:500;line-height:1.1;}
+    .set-rt-st{font-size:var(--fs-2xs);display:flex;align-items:center;gap:var(--sp-2);color:var(--ink-4);white-space:nowrap;}
+    .set-rt-st .rd{width:var(--sp-3);height:var(--sp-3);border-radius:50%;flex:none;background:var(--ink-4);}
     .set-rt-st.ok{color:var(--st-done);} .set-rt-st.ok .rd{background:var(--st-done);box-shadow:0 0 7px -1px var(--st-done);}
     .set-rt-st.err{color:var(--set-amber);} .set-rt-st.err .rd{background:var(--set-amber);box-shadow:0 0 7px -1px var(--set-amber);}
     .set-rt-st.miss .rd{background:transparent;border:1px solid var(--hair-2);box-shadow:none;}
     .set-rt-spacer{flex:1;}
-    .set-rt-pathchip{flex:1 1 auto;min-width:0;max-width:100%;display:flex;align-items:center;gap:7px;height:30px;
-      padding:0 11px;background:var(--panel);border:1px solid var(--hair);border-radius:8px;color:var(--ink-2);font-size:11.5px;}
+    .set-rt-pathchip{flex:1 1 auto;min-width:0;max-width:100%;display:flex;align-items:center;gap:var(--sp-3);height:var(--row-h);
+      padding:0 var(--sp-5);background:var(--panel);border:1px solid var(--hair);border-radius:8px;color:var(--ink-2);font-size:var(--fs-sm);}
     .set-rt-pathchip app-icon{color:var(--ink-4);flex:none;display:inline-flex;}
     .set-rt-pathchip .pt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);}
-    .set-rt-link{background:none;border:none;color:var(--ink-4);font-family:var(--font-mono);font-size:10px;
-      cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:4px;transition:color .12s;flex:none;}
+    .set-rt-link{background:none;border:none;color:var(--ink-4);font-family:var(--font-mono);font-size:var(--fs-xs);
+      cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:var(--sp-2);transition:color .12s;flex:none;}
     .set-rt-link:hover{color:var(--accent);}
-    .set-rt-edit{display:flex;flex-direction:column;gap:8px;padding-left:34px;}
-    .set-rt-reason{display:flex;align-items:flex-start;gap:7px;font-size:10px;color:var(--set-amber);line-height:1.45;}
+    .set-rt-edit{display:flex;flex-direction:column;gap:var(--sp-4);padding-left:var(--sp-11);}
+    .set-rt-reason{display:flex;align-items:flex-start;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--set-amber);line-height:1.45;}
     .set-rt-reason app-icon{flex:none;margin-top:1px;}
     .set-rt-reason code{font-family:var(--font-mono);background:color-mix(in oklch,var(--set-amber),transparent 86%);
-      padding:0 4px;border-radius:4px;}
-    .set-rt-field{display:flex;align-items:center;gap:8px;}
-    .set-rt-input{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;
+      padding:0 var(--sp-2);border-radius:4px;}
+    .set-rt-field{display:flex;align-items:center;gap:var(--sp-4);}
+    .set-rt-input{flex:1;min-width:0;display:flex;align-items:center;gap:var(--sp-4);height:var(--ctl-h-lg);padding:0 var(--sp-5);
       background:var(--panel);border:1px solid var(--hair);border-radius:8px;transition:border-color .12s,box-shadow .12s;}
     .set-rt-input:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in oklch,var(--accent),transparent 88%);}
     .set-rt-input app-icon{color:var(--ink-4);flex:none;display:inline-flex;}
     .set-rt-input input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);
-      font-family:var(--font-mono);font-size:12px;}
+      font-family:var(--font-mono);font-size:var(--fs-ui);}
     .set-rt-input input::placeholder{color:var(--ink-4);}
-    .set-rt-act{display:flex;align-items:center;gap:7px;flex:none;}
-    .set-rt-fail{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--set-danger);}
+    .set-rt-act{display:flex;align-items:center;gap:var(--sp-3);flex:none;}
+    .set-rt-fail{display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--set-danger);}
     .set-rt-fail app-icon{flex:none;display:inline-flex;}
-    .set-rt-cancel{background:none;border:none;color:var(--ink-4);font-family:var(--font-mono);font-size:10.5px;
+    .set-rt-cancel{background:none;border:none;color:var(--ink-4);font-family:var(--font-mono);font-size:var(--fs-xs);
       cursor:pointer;padding:0;margin-left:auto;transition:color .12s;}
     .set-rt-cancel:hover{color:var(--ink-2);}
     app-icon.spin{display:inline-flex;animation:rt-spin .9s linear infinite;}
