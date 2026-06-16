@@ -23,6 +23,10 @@ export const ALLOWLIST = [
   // .rail-btn is a compact sidebar icon button whose square 38×38 size is a
   // deliberate visual design constant — not a control height token.
   { file: "styles.css", value: "38px" },
+  // .tweak-fab svg icon (19px) and .toggle switch (19px) are bespoke visual
+  // constants: the icon mirrors its SVG viewport and the toggle thumb track is a
+  // fixed-size pill — neither maps to a control-height or spacing token.
+  { file: "tweaks-panel.component.ts", value: "19px" },
 ];
 
 export function scanText(text, file = "") {
