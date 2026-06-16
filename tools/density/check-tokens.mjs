@@ -19,7 +19,11 @@ const ALLOW_PX = new Set(["0px", "1px", "999px"]);
 
 // Documented exceptions: { file: <substring>, value: <substring> }. Bespoke
 // structural heights that intentionally stay fixed go here (populated in sweep).
-export const ALLOWLIST = [];
+export const ALLOWLIST = [
+  // .rail-btn is a compact sidebar icon button whose square 38×38 size is a
+  // deliberate visual design constant — not a control height token.
+  { file: "styles.css", value: "38px" },
+];
 
 export function scanText(text, file = "") {
   const out = [];
