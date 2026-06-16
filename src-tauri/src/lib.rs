@@ -29,6 +29,19 @@ use tauri::{Manager, RunEvent, WindowEvent};
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // Open at 80% of the CURRENT monitor (clamped to a sane floor), then
+            // re-center — the config ships a fixed 1600×800 that overflows small
+            // laptops and looks tiny on large displays. Runtime, because 80% needs
+            // the live screen size; a failed monitor query leaves the config size.
+            if let Some(win) = app.get_webview_window("main") {
+                if let Ok(Some(monitor)) = win.current_monitor() {
+                    let screen = monitor.size(); // physical px
+                    let w = ((screen.width as f64 * 0.8).round() as u32).max(1000);
+                    let h = ((screen.height as f64 * 0.8).round() as u32).max(600);
+                    let _ = win.set_size(tauri::PhysicalSize::new(w, h));
+                    let _ = win.center();
+                }
+            }
             // Install the OS process-tree kill mechanism FIRST so every process
             // we later spawn (agents + their subtrees) inherits it. On Windows
             // this is a kill-on-close Job Object; the guard must live for the
