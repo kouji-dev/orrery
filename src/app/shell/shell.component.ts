@@ -104,7 +104,7 @@ declare const ngDevMode: boolean | undefined;
         display: flex;
         flex-direction: column;
         align-items: flex-end;
-        gap: 12px;
+        gap: var(--sp-6);
         pointer-events: none;
       }
       .anchor-rail > * {

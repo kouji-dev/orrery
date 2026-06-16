@@ -25,11 +25,11 @@ import { MenuItem } from "../models";
         class="rise"
         [style.left.px]="pos().x"
         [style.top.px]="pos().y"
-        style="position:fixed;z-index:80;min-width:196px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:5px"
+        style="position:fixed;z-index:80;min-width:196px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:var(--sp-2)"
       >
         @for (it of menu.items; track $index) {
           @if (it.sep) {
-            <div style="height:1px;background:var(--hair);margin:5px 6px"></div>
+            <div style="height:1px;background:var(--hair);margin:var(--sp-2) var(--sp-3)"></div>
           } @else {
             <button
               class="menu-item"
@@ -38,7 +38,7 @@ import { MenuItem } from "../models";
               (click)="run(it)"
               [style.color]="it.disabled ? 'var(--ink-4)' : it.danger ? 'var(--st-blocked)' : 'var(--ink-2)'"
               [style.cursor]="it.disabled ? 'default' : 'pointer'"
-              style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:6px 9px;border-radius:6px;border:none;background:transparent;font-family:var(--font-mono);font-size:12px"
+              style="display:flex;align-items:center;gap:var(--sp-4);width:100%;text-align:left;padding:var(--sp-3) var(--sp-4);border-radius:6px;border:none;background:transparent;font-family:var(--font-mono);font-size:var(--fs-ui)"
             >
               @if (it.icon) {
                 <app-icon [name]="it.icon" size="sm" [color]="it.danger ? 'var(--st-blocked)' : (it.accent || 'var(--ink-3)')" style="flex:none" />

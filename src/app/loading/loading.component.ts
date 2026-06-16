@@ -37,23 +37,23 @@ import { UpdateOutcome } from '../updater/updater';
     .ob-word {
       font-family: 'Space Grotesk', sans-serif;
       font-weight: 600;
-      font-size: 36px;
+      font-size: var(--fs-display);
       letter-spacing: 0.01em;
-      margin-top: 28px;
+      margin-top: var(--ctl-h);
     }
     .ob-word .o { color: #a855f7; }
     .ob-status {
-      font-size: 10.5px;
+      font-size: var(--fs-xs);
       letter-spacing: 0.2em;
       text-transform: uppercase;
       color: #6b7488;
-      margin-top: 15px;
-      height: 13px;
+      margin-top: var(--sp-7);
+      height: var(--sp-6);
     }
     .ob-bar {
-      margin-top: 20px;
+      margin-top: var(--sp-8);
       width: 188px;
-      height: 2px;
+      height: var(--sp-1);
       border-radius: 2px;
       background: rgba(255, 255, 255, 0.08);
       overflow: hidden;
