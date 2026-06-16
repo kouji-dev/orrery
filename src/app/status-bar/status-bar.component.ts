@@ -19,15 +19,15 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
   imports: [IconComponent, VersionBadgeComponent],
   template: `
     <footer
-      style="display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--panel);border-top:1px solid var(--hair);font-size:10.5px;color:var(--ink-3)"
+      style="display:flex;align-items:center;gap:var(--sp-6);padding:0 var(--sp-6);background:var(--panel);border-top:1px solid var(--hair);font-size:var(--fs-xs);color:var(--ink-3)"
     >
-      <span style="display:flex;gap:6px;align-items:center">
+      <span style="display:flex;gap:var(--sp-3);align-items:center">
         <span class="dot running" style="background:var(--st-running)"></span
         >{{ running() }} running
       </span>
       @if (blocked() > 0) {
         <span
-          style="display:flex;gap:6px;align-items:center;color:var(--st-blocked)"
+          style="display:flex;gap:var(--sp-3);align-items:center;color:var(--st-blocked)"
         >
           <span class="dot" style="background:var(--st-blocked)"></span
           >{{ blocked() }} need attention
@@ -37,14 +37,14 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
         >{{ projects.all().length }} projects ·
         {{ runtime.agents().length }} agents</span
       >
-      <span style="display:flex;gap:5px"
+      <span style="display:flex;gap:var(--sp-2)"
         ><app-icon name="folder" size="sm" [px]="11" />{{
           ui.worktreeRoot
         }}</span
       >
       <span
         class="tnum"
-        style="margin-left:auto;display:flex;gap:5px;align-items:center"
+        style="margin-left:auto;display:flex;gap:var(--sp-2);align-items:center"
       >
         @if (ui.toast()) {
           <span class="grad-ink" style="font-weight:600">{{ ui.toast() }}</span>
@@ -59,7 +59,7 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
       @if (cost.cost()?.available) {
         <span
           class="cost-readout tnum"
-          style="position:relative;display:flex;gap:5px;align-items:center;cursor:default"
+          style="position:relative;display:flex;gap:var(--sp-2);align-items:center;cursor:default"
         >
           <app-icon
             name="sparkles"
@@ -69,18 +69,18 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
           />\${{ cost.cost()!.totalCost.toFixed(2) }}
           <span
             class="cost-tip"
-            style="position:absolute;bottom:calc(100% + 8px);right:0;z-index:90;width:max-content;background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));padding:9px 12px;text-align:right"
+            style="position:absolute;bottom:calc(100% + 8px);right:0;z-index:90;width:max-content;background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));padding:var(--sp-4) var(--sp-6);text-align:right"
           >
             <span
-              style="display:block;font-size:9.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em"
+              style="display:block;font-size:var(--fs-2xs);color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em"
               >Total Claude cost</span
             >
             <span
               class="tnum"
-              style="display:block;font-size:19px;font-weight:600;color:var(--ink);line-height:1.35"
+              style="display:block;font-size:var(--fs-xl);font-weight:600;color:var(--ink);line-height:1.35"
               >\${{ cost.cost()!.totalCost.toFixed(2) }}</span
             >
-            <span style="display:block;font-size:9.5px;color:var(--ink-3)"
+            <span style="display:block;font-size:var(--fs-2xs);color:var(--ink-3)"
               >all usage · via ccusage</span
             >
           </span>
@@ -94,13 +94,13 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
         class="gauge"
         (click)="devPanel.openResources()"
         title="Open Resources (dev console)"
-        style="display:flex;align-items:center;gap:7px;border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:10.5px;padding:0;color:var(--ink-3)"
+        style="display:flex;align-items:center;gap:var(--sp-3);border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:var(--fs-xs);padding:0;color:var(--ink-3)"
       >
         <app-icon name="cpu" size="sm" [px]="11" [color]="'var(--accent)'" />
         <span class="tnum">CPU {{ cpuPct() }}% · MEM {{ totalMem() }}</span>
         <!-- mini bar reflecting total cpu (clamped 0–100) -->
         <span
-          style="position:relative;width:30px;height:4px;border-radius:2px;background:var(--panel-2);overflow:hidden"
+          style="position:relative;width:30px;height:var(--sp-2);border-radius:2px;background:var(--panel-2);overflow:hidden"
         >
           <span
             [style.width.%]="cpuBar()"
