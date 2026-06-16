@@ -12,6 +12,7 @@ import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { AgentStripComponent } from "./agent-strip.component";
+import { TagChipComponent } from "./tag-chip.component";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 
@@ -28,7 +29,7 @@ function plainText(html: string | null | undefined): string {
 @Component({
   selector: "app-ticket-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ToolBadgeComponent, AgentStripComponent],
+  imports: [IconComponent, ToolBadgeComponent, AgentStripComponent, TagChipComponent],
   template: `
     @let tk = ticket();
     @let st = tk.status;
@@ -69,6 +70,20 @@ function plainText(html: string | null | undefined): string {
         <p style="font-size:12px;color:var(--ink-2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
           {{ notes() }}
         </p>
+      }
+
+      <!-- tags (click a chip to toggle it into the board filter) -->
+      @if (tk.tags && tk.tags.length > 0) {
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          @for (t of tk.tags; track t) {
+            <app-tag
+              [name]="t"
+              [clickable]="true"
+              [active]="activeTags().includes(t)"
+              (toggle)="toggleTag.emit($event)"
+            />
+          }
+        </div>
       }
 
       <!-- inprogress: agent strip or "dispatch one" nudge -->
@@ -137,8 +152,11 @@ function plainText(html: string | null | undefined): string {
 export class TicketCardComponent {
   readonly ticket = input.required<Ticket>();
   readonly dragging = input<boolean>(false);
+  /** Tags currently active in the board filter — drives the chip's `active` look. */
+  readonly activeTags = input<string[]>([]);
   readonly dragEnd = output<void>();
   readonly dragStarted = output<DragEvent>();
+  readonly toggleTag = output<string>();
 
   readonly ui = inject(UiStore);
   private readonly runtime = inject(AgentRuntimeService);

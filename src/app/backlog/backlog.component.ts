@@ -11,6 +11,9 @@ import { UiStore } from "../ui/ui.store";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
 import { TicketCardComponent } from "./ticket-card.component";
+import { TagChipComponent } from "./tag-chip.component";
+import { TagFilterComponent } from "./tag-filter.component";
+import { allTagsOf } from "./tags.util";
 
 type ColDef = { key: TicketStatus; label: string; color: string };
 
@@ -26,7 +29,7 @@ const COLS: ColDef[] = [
 @Component({
   selector: "app-backlog",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, TicketCardComponent],
+  imports: [IconComponent, TicketCardComponent, TagChipComponent, TagFilterComponent],
   template: `
     <div style="display:flex;flex-direction:column;min-height:0;background:var(--panel-2)">
       <!-- header -->
@@ -65,11 +68,32 @@ const COLS: ColDef[] = [
               </div>
             }
           </div>
+          <app-tag-filter
+            [allTags]="allTags()"
+            [counts]="tagCounts()"
+            [selected]="activeTagSel()"
+            (selectedChange)="tagSel.set($event)"
+          />
           <button class="btn primary" (click)="ui.openTicketDraft()">
             <app-icon name="plus" size="sm" />New ticket
           </button>
         </div>
       </div>
+
+      <!-- active tag-filter summary -->
+      @if (activeTagSel().length > 0) {
+        <div style="display:flex;align-items:center;gap:8px;padding:9px 18px;flex:none;border-bottom:1px solid var(--hair);background:var(--panel)">
+          <span class="up" style="font-size:9.5px;color:var(--ink-4);letter-spacing:.1em;flex:none">Filtered by</span>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            @for (t of activeTagSel(); track t) {
+              <app-tag [name]="t" [active]="true" [removable]="true" (remove)="toggleTag($event)" />
+            }
+          </div>
+          <span class="tnum" style="margin-left:auto;flex:none;font-size:10.5px;color:var(--ink-4)">
+            {{ shownTotal() }} of {{ tickets.all().length }}
+          </span>
+        </div>
+      }
 
       <!-- board body -->
       <div class="scroll-y" style="flex:1" (click)="filterOpen.set(false)">
@@ -116,6 +140,8 @@ const COLS: ColDef[] = [
                   <app-ticket-card
                     [ticket]="tk"
                     [dragging]="drag()?.id === tk.id"
+                    [activeTags]="activeTagSel()"
+                    (toggleTag)="toggleTag($event)"
                     (dragStarted)="onCardDragStart($event, tk)"
                     (dragEnd)="onDragEnd()"
                   />
@@ -149,6 +175,7 @@ export class BacklogComponent {
 
   readonly activeFilter = signal<string>("all");
   readonly filterOpen = signal(false);
+  readonly tagSel = signal<string[]>([]);
   readonly drag = signal<{ id: string; from: TicketStatus } | null>(null);
   readonly over = signal<TicketStatus | null>(null);
 
@@ -156,6 +183,39 @@ export class BacklogComponent {
   readonly openCount = computed(
     () => this.tickets.all().filter((t) => t.status !== "done").length,
   );
+
+  // ---- tags ----
+  readonly allTags = computed(() => allTagsOf(this.tickets.all()));
+  readonly tagCounts = computed(() => {
+    const counts: Record<string, number> = {};
+    for (const t of this.tickets.all()) {
+      for (const tg of t.tags ?? []) counts[tg] = (counts[tg] ?? 0) + 1;
+    }
+    return counts;
+  });
+  // drop selected tags that no longer exist on any ticket
+  readonly activeTagSel = computed(() => {
+    const tags = this.allTags();
+    return this.tagSel().filter((t) => tags.includes(t));
+  });
+  // total tickets passing both filters (all statuses) — for the "N of M" summary
+  readonly shownTotal = computed(
+    () => this.tickets.all().filter((t) => this.passes(t)).length,
+  );
+
+  toggleTag(t: string) {
+    this.tagSel.update((s) => (s.includes(t) ? s.filter((x) => x !== t) : [...s, t]));
+  }
+
+  /** Does a ticket pass the active project + tag filters? Tags use OR semantics. */
+  private passes(t: Ticket): boolean {
+    const f = this.activeFilter();
+    const sel = this.activeTagSel();
+    return (
+      (f === "all" || t.projectId === f) &&
+      (sel.length === 0 || (t.tags ?? []).some((tg) => sel.includes(tg)))
+    );
+  }
 
   readonly filterOptions = computed(() => [
     { id: "all", name: "All projects", icon: "layers", color: "var(--ink-3)" },
@@ -174,13 +234,7 @@ export class BacklogComponent {
   });
 
   filtered(status: TicketStatus): Ticket[] {
-    const f = this.activeFilter();
-    return this.tickets
-      .all()
-      .filter(
-        (t) =>
-          t.status === status && (f === "all" || t.projectId === f),
-      );
+    return this.tickets.all().filter((t) => t.status === status && this.passes(t));
   }
 
   setFilter(id: string) {

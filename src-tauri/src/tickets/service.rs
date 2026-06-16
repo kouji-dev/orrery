@@ -46,6 +46,31 @@ fn str_to_role(s: &str) -> CommentRole {
     }
 }
 
+/// Serialize tags to the JSON-array text stored in the `tags` column.
+fn tags_to_json(tags: &[String]) -> String {
+    serde_json::to_string(tags).unwrap_or_else(|_| "[]".into())
+}
+
+/// Parse the `tags` column back to a list (tolerant: malformed/legacy `NULL`
+/// rows decode to an empty list rather than erroring).
+fn json_to_tags(s: &str) -> Vec<String> {
+    serde_json::from_str(s).unwrap_or_default()
+}
+
+/// Defensive backstop for tags coming off the wire: trim, drop empties, and
+/// dedupe while preserving order. The frontend already snake_cases labels; this
+/// just guarantees we never persist blanks or duplicates.
+fn norm_tags(tags: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for t in tags {
+        let t = t.trim().to_string();
+        if !t.is_empty() && !out.contains(&t) {
+            out.push(t);
+        }
+    }
+    out
+}
+
 #[derive(Clone)]
 pub struct TicketService {
     db: DB,
@@ -68,12 +93,21 @@ impl TicketService {
                 status     TEXT NOT NULL DEFAULT 'todo',
                 project_id TEXT,
                 agent_id   TEXT,
+                tags       TEXT NOT NULL DEFAULT '[]',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             )",
             [],
         )
         .unwrap();
+
+        // Migration for tickets tables created before tags existed: add the
+        // column if it isn't there. SQLite has no "ADD COLUMN IF NOT EXISTS", so
+        // we run it unconditionally and ignore the "duplicate column" error.
+        let _ = c.execute(
+            "ALTER TABLE tickets ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
+            [],
+        );
 
         c.execute(
             "CREATE TABLE IF NOT EXISTS comments (
@@ -110,17 +144,19 @@ impl TicketService {
         let now = now_ms();
         let notes = req.notes.unwrap_or_default();
         let project_id_str = req.project_id.map(|u| u.to_string());
+        let tags = norm_tags(req.tags.unwrap_or_default());
         {
             let c = self.db.lock().unwrap();
             c.execute(
-                "INSERT INTO tickets (id, title, notes, status, project_id, agent_id, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7)",
+                "INSERT INTO tickets (id, title, notes, status, project_id, agent_id, tags, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8)",
                 rusqlite::params![
                     id.to_string(),
                     req.title,
                     notes,
                     "todo",
                     project_id_str,
+                    tags_to_json(&tags),
                     now,
                     now,
                 ],
@@ -134,6 +170,7 @@ impl TicketService {
             status: TicketStatus::Todo,
             project_id: req.project_id,
             agent_id: None,
+            tags,
             created_at: now,
             updated_at: now,
         }))
@@ -154,17 +191,22 @@ impl TicketService {
         if let Some(pid) = req.project_id {
             rec.project_id = Some(pid);
         }
+        // tags: Some(list) replaces the set wholesale; None leaves it untouched.
+        if let Some(tags) = req.tags {
+            rec.tags = norm_tags(tags);
+        }
         let now = now_ms();
         rec.updated_at = now;
         {
             let c = self.db.lock().unwrap();
             c.execute(
-                "UPDATE tickets SET title = ?2, notes = ?3, project_id = ?4, updated_at = ?5 WHERE id = ?1",
+                "UPDATE tickets SET title = ?2, notes = ?3, project_id = ?4, tags = ?5, updated_at = ?6 WHERE id = ?1",
                 rusqlite::params![
                     id.to_string(),
                     rec.title,
                     rec.notes,
                     rec.project_id.map(|u| u.to_string()),
+                    tags_to_json(&rec.tags),
                     now,
                 ],
             )
@@ -293,11 +335,11 @@ impl TicketService {
     // ---- record readers ----
 
     fn records(&self) -> AppResult<Vec<TicketRecord>> {
-        let raw: Vec<(String, String, String, String, Option<String>, Option<String>, i64, i64)> = {
+        let raw: Vec<(String, String, String, String, Option<String>, Option<String>, String, i64, i64)> = {
             let c = self.db.lock().unwrap();
             let mut stmt = c
                 .prepare(
-                    "SELECT id, title, notes, status, project_id, agent_id, created_at, updated_at FROM tickets ORDER BY created_at DESC",
+                    "SELECT id, title, notes, status, project_id, agent_id, tags, created_at, updated_at FROM tickets ORDER BY created_at DESC",
                 )
                 .map_err(DbError::Sqlite)?;
             let rows = stmt
@@ -311,6 +353,7 @@ impl TicketService {
                         r.get(5)?,
                         r.get(6)?,
                         r.get(7)?,
+                        r.get(8)?,
                     ))
                 })
                 .map_err(DbError::Sqlite)?;
@@ -318,7 +361,7 @@ impl TicketService {
         };
 
         raw.into_iter()
-            .map(|(id, title, notes, status, project_id, agent_id, created_at, updated_at)| {
+            .map(|(id, title, notes, status, project_id, agent_id, tags, created_at, updated_at)| {
                 let id = Uuid::parse_str(&id).map_err(|e| AppError::Other(e.to_string()))?;
                 let project_id = project_id
                     .as_deref()
@@ -337,6 +380,7 @@ impl TicketService {
                     status: str_to_status(&status),
                     project_id,
                     agent_id,
+                    tags: json_to_tags(&tags),
                     created_at,
                     updated_at,
                 })
@@ -345,18 +389,18 @@ impl TicketService {
     }
 
     fn record(&self, id: Uuid) -> AppResult<TicketRecord> {
-        let row: Option<(String, String, String, Option<String>, Option<String>, i64, i64)> = {
+        let row: Option<(String, String, String, Option<String>, Option<String>, String, i64, i64)> = {
             let c = self.db.lock().unwrap();
             c.query_row(
-                "SELECT title, notes, status, project_id, agent_id, created_at, updated_at FROM tickets WHERE id = ?1",
+                "SELECT title, notes, status, project_id, agent_id, tags, created_at, updated_at FROM tickets WHERE id = ?1",
                 [id.to_string()],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)),
             )
             .optional()
             .map_err(DbError::Sqlite)?
         };
         match row {
-            Some((title, notes, status, project_id, agent_id, created_at, updated_at)) => {
+            Some((title, notes, status, project_id, agent_id, tags, created_at, updated_at)) => {
                 let project_id = project_id
                     .as_deref()
                     .map(Uuid::parse_str)
@@ -374,6 +418,7 @@ impl TicketService {
                     status: str_to_status(&status),
                     project_id,
                     agent_id,
+                    tags: json_to_tags(&tags),
                     created_at,
                     updated_at,
                 })
@@ -438,6 +483,7 @@ mod tests {
             title: title.into(),
             notes: None,
             project_id: None,
+            tags: None,
         }
     }
 
@@ -477,11 +523,97 @@ mod tests {
                     title: Some("new title".into()),
                     notes: Some("<p>some notes</p>".into()),
                     project_id: None,
+                    tags: None,
                 },
             )
             .unwrap();
         assert_eq!(updated.title, "new title");
         assert_eq!(updated.notes, "<p>some notes</p>");
+    }
+
+    #[test]
+    fn create_seeds_tags_and_they_persist() {
+        let s = svc();
+        let t = s
+            .create(TicketCreateRequest {
+                title: "tagged".into(),
+                notes: None,
+                project_id: None,
+                tags: Some(vec!["payments".into(), "tech_debt".into()]),
+            })
+            .unwrap();
+        assert_eq!(t.tags, vec!["payments", "tech_debt"]);
+        // round-trips through the DB
+        let fetched = s.get(t.id).unwrap();
+        assert_eq!(fetched.tags, vec!["payments", "tech_debt"]);
+        // and through list()
+        assert_eq!(s.list().unwrap()[0].tags, vec!["payments", "tech_debt"]);
+    }
+
+    #[test]
+    fn update_tags_replaces_set_and_normalizes() {
+        let s = svc();
+        let t = s.create(create_req("task")).unwrap();
+        assert!(t.tags.is_empty(), "no tags by default");
+        // Some(list) replaces wholesale; blanks/dupes are dropped, order kept.
+        let updated = s
+            .update(
+                t.id,
+                TicketUpdateRequest {
+                    title: None,
+                    notes: None,
+                    project_id: None,
+                    tags: Some(vec![
+                        "auth".into(),
+                        "  ".into(),
+                        "auth".into(),
+                        "bug".into(),
+                    ]),
+                },
+            )
+            .unwrap();
+        assert_eq!(updated.tags, vec!["auth", "bug"]);
+
+        // None leaves tags untouched.
+        let again = s
+            .update(
+                t.id,
+                TicketUpdateRequest {
+                    title: Some("renamed".into()),
+                    notes: None,
+                    project_id: None,
+                    tags: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(again.tags, vec!["auth", "bug"], "None must not clear tags");
+    }
+
+    #[test]
+    fn tags_default_empty_for_legacy_rows_via_migration() {
+        // Simulate a pre-tags DB: create the old schema WITHOUT the tags column,
+        // insert a row, then let TicketService::new run the ADD COLUMN migration.
+        let db: DB = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        {
+            let c = db.lock().unwrap();
+            c.execute(
+                "CREATE TABLE tickets (
+                    id TEXT PRIMARY KEY, title TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'todo', project_id TEXT, agent_id TEXT,
+                    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+                [],
+            )
+            .unwrap();
+            c.execute(
+                "INSERT INTO tickets (id, title, created_at, updated_at) VALUES (?1, 'legacy', 0, 0)",
+                [Uuid::new_v4().to_string()],
+            )
+            .unwrap();
+        }
+        let s = TicketService::new(db); // runs the ALTER TABLE migration
+        let all = s.list().unwrap();
+        assert_eq!(all.len(), 1);
+        assert!(all[0].tags.is_empty(), "legacy row decodes to empty tags");
     }
 
     #[test]

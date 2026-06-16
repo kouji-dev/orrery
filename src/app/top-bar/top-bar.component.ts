@@ -139,25 +139,29 @@ import { TicketsStore } from "../stores/tickets.store";
       <!-- right group: its measured width is mirrored into --right-w (see below) so
            the right panel column lines up exactly under this cluster -->
       <div #rightGroup style="display:flex;align-items:stretch;flex:none">
-        <!-- actions: Run all/Pause all (left), then notification + theme buttons -->
+        <!-- actions: notifications, then a factorized segmented pill
+             (run/pause · theme · settings) — one shared border, icon-only -->
         <div style="display:flex;align-items:center;gap:8px;padding:0 12px;flex:none">
           @let running = agentActions.anyRunning();
-          <button
-            [class]="'btn ' + (running ? 'ghost-hair' : 'primary')"
-            (click)="agentActions.toggleRunAll()"
-            title="Pause / start every agent"
-            style="height:25px;padding:0 10px;min-width:96px;justify-content:center"
-          >
-            <app-icon [name]="running ? 'pause' : 'play'" size="sm" />
-            {{ running ? 'Pause all' : 'Run all' }}
-          </button>
           <app-notification-center />
-          <button class="btn ghost-hair" (click)="ui.toggleTheme()" title="Toggle theme" style="padding:5px 8px">
-            <app-icon [name]="ui.tweaks().theme === 'dark' ? 'sun' : 'moon'" size="sm" />
-          </button>
-          <button class="btn ghost-hair" (click)="settings.openModal()" title="Settings" aria-label="Settings" style="padding:5px 8px">
-            <app-icon name="settings" size="sm" />
-          </button>
+          <div class="action-pill" role="group" aria-label="Workspace controls">
+            <button
+              [class]="'pill-seg run' + (running ? ' running' : '')"
+              (click)="agentActions.toggleRunAll()"
+              [title]="running ? 'Pause all agents' : 'Run all agents'"
+              [attr.aria-label]="running ? 'Pause all' : 'Run all'"
+            >
+              <app-icon [name]="running ? 'pause' : 'play'" size="sm" />
+            </button>
+            <span class="pill-div"></span>
+            <button class="pill-seg" (click)="ui.toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+              <app-icon [name]="ui.tweaks().theme === 'dark' ? 'sun' : 'moon'" size="sm" />
+            </button>
+            <span class="pill-div"></span>
+            <button class="pill-seg" (click)="settings.openModal()" title="Settings" aria-label="Settings">
+              <app-icon name="settings" size="sm" />
+            </button>
+          </div>
         </div>
 
         <!-- window controls (borderless titlebar) -->

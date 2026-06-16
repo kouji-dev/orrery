@@ -50,6 +50,7 @@ function todo(): Ticket {
     status: "todo",
     projectId: "p1",
     agentId: null,
+    tags: [],
     createdAt: 1000,
     updatedAt: 1000,
   };

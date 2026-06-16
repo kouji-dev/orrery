@@ -40,6 +40,7 @@ const TICKET: Ticket = {
   status: "todo",
   projectId: null,
   agentId: null,
+  tags: [],
   createdAt: 1000,
   updatedAt: 1000,
 };
