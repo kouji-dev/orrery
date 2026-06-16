@@ -17,15 +17,15 @@ interface FlatRow {
   template: `
     @let ag = agent();
     <div style="display:flex;flex-direction:column;min-height:0;flex:1">
-      <div style="display:flex;align-items:center;gap:7px;padding:8px 12px;border-bottom:1px solid var(--hair)">
+      <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair)">
         <app-icon name="folder" size="sm" [color]="project() ? project()!.color : 'var(--accent)'" />
-        <span style="flex:1;min-width:0;font-size:11.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="ag.worktree">{{ wtName(ag.worktree) }}</span>
-        @if (loading()) { <span class="tnum" style="font-size:9px;color:var(--ink-4);flex:none">scanning…</span> }
-        <button class="btn" (click)="refresh()" [disabled]="loading()" title="Rescan worktree" style="padding:3px;border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
+        <span style="flex:1;min-width:0;font-size:var(--fs-sm);color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="ag.worktree">{{ wtName(ag.worktree) }}</span>
+        @if (loading()) { <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4);flex:none">scanning…</span> }
+        <button class="btn" (click)="refresh()" [disabled]="loading()" title="Rescan worktree" style="padding:var(--sp-1);border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
       </div>
 
       @if (loading()) {
-        <div style="padding:8px 12px;font-size:10.5px;color:var(--ink-4)">scanning worktree…</div>
+        <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">scanning worktree…</div>
       } @else if (rows().length) {
         <!-- virtualized: only visible rows are rendered -->
         <cdk-virtual-scroll-viewport itemSize="24" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y">
@@ -33,7 +33,7 @@ interface FlatRow {
             *cdkVirtualFor="let row of rows()"
             (click)="onRow(row.node)"
             [style.padding-left.px]="8 + row.depth * 13"
-            style="height:24px;display:flex;align-items:center;gap:6px;cursor:pointer;padding-right:8px;border-radius:5px"
+            style="height:var(--sp-9);display:flex;align-items:center;gap:var(--sp-3);cursor:pointer;padding-right:var(--sp-4);border-radius:5px"
           >
             @if (row.node.isDir) {
               <app-icon [name]="isOpen(row.node) ? 'chevronD' : 'chevron'" size="sm" [px]="11" color="var(--ink-4)" />
@@ -45,17 +45,17 @@ interface FlatRow {
             <span
               [style.color]="row.node.ignored ? 'var(--ink-4)' : row.node.isDir ? 'var(--ink-2)' : 'var(--ink-3)'"
               [style.opacity]="row.node.ignored ? 0.7 : 1"
-              style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              style="font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
             >{{ row.node.name }}</span>
             @if (row.node.ignored) {
-              <span class="chip" style="margin-left:auto;font-size:8px;padding:0 4px;color:var(--ink-4)">ignored</span>
+              <span class="chip" style="margin-left:auto;font-size:var(--fs-3xs);padding:0 var(--sp-2);color:var(--ink-4)">ignored</span>
             } @else if (!row.node.isDir && stateOf(row.node.path); as st) {
-              <span class="tnum" [style.color]="stateInk(st)" style="margin-left:auto;flex:none;font-size:9px;font-weight:700;padding-left:6px">{{ st }}</span>
+              <span class="tnum" [style.color]="stateInk(st)" style="margin-left:auto;flex:none;font-size:var(--fs-2xs);font-weight:700;padding-left:var(--sp-3)">{{ st }}</span>
             }
           </div>
         </cdk-virtual-scroll-viewport>
       } @else {
-        <div style="padding:8px 12px;font-size:10.5px;color:var(--ink-4)">empty worktree</div>
+        <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">empty worktree</div>
       }
     </div>
   `,

@@ -15,17 +15,17 @@ import { EmptyStateComponent } from "./empty-state.component";
   imports: [NotificationCardComponent, IconComponent, EmptyStateComponent],
   template: `
     @if (items().length) {
-      <div style="display:flex;align-items:center;gap:6px;padding:8px 12px 6px;border-bottom:1px solid var(--hair)">
-        <span class="up" style="font-size:9px;letter-spacing:0.08em;color:var(--ink-3)">
+      <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-6) var(--sp-3);border-bottom:1px solid var(--hair)">
+        <span class="up" style="font-size:var(--fs-2xs);letter-spacing:0.08em;color:var(--ink-3)">
           {{ scopeAgent() ? '' : 'All projects · ' }}{{ pendingCount() }} pending · {{ items().length }} total
         </span>
         @if (hasResolved()) {
-          <button class="btn ghost-hair" style="margin-left:auto;padding:2px 7px;font-size:10px" (click)="notifications.clearResolved()">
+          <button class="btn ghost-hair" style="margin-left:auto;padding:var(--sp-1) var(--sp-3);font-size:var(--fs-xs)" (click)="notifications.clearResolved()">
             <app-icon name="x" size="sm" />Clear read
           </button>
         }
       </div>
-      <div class="scroll-y" style="flex:1;padding-bottom:8px">
+      <div class="scroll-y" style="flex:1;padding-bottom:var(--sp-4)">
         @for (n of items(); track n.id) {
           <app-notification-card [notification]="n" />
         }

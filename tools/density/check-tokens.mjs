@@ -52,6 +52,14 @@ export const ALLOWLIST = [
   // ctl-h-sm (22px); it is a bespoke fixed square for the sidebar project row icon
   // and does not map to a standard control-height or spacing token.
   { file: "project-group.component.ts", value: "19px" },
+  // Right-panel agent-header is 38px tall — one pixel above ctl-h-lg (34px) and
+  // below topbar-h (44px); it is a deliberate structural panel-header height that
+  // mirrors the left-panel rail and does not snap to a standard control-height token.
+  { file: "right-panel.component.ts", value: "38px" },
+  // Right-panel tab-bar is 36px tall — sits between ctl-h-lg (34px) and topbar-h
+  // (44px); it is a bespoke structural tab-bar height intentionally distinct from
+  // the control-height scale.
+  { file: "right-panel.component.ts", value: "36px" },
 ];
 
 export function scanText(text, file = "") {
