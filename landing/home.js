@@ -97,6 +97,12 @@
       const frame = document.createElement("div"); frame.className = "rc-frame";
       frame.appendChild(inner); mount.appendChild(frame);
       window.renderOrreryConsole(inner);
+      // The mock is a fixed 1340x812. Size .rc-inner to match BEFORE scaling so
+      // its overflow:hidden (the rounded-corner clip) never cuts the mock's right
+      // edge — without this, .rc-inner defaults to the frame width (< 1340) and
+      // clips the top-bar buttons + right column before the scale shrinks it.
+      inner.style.width = "1340px";
+      inner.style.height = "812px";
       const fit = () => {
         const host = mount.closest(".console-scroll") || mount.parentElement;
         const scale = Math.min(1, host.clientWidth / 1340);
