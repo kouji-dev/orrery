@@ -74,6 +74,21 @@ export const ALLOWLIST = [
   // mirrors the SVG icon viewport and does not map to a standard control-height or
   // spacing token.
   { file: "ticket-page.component.ts", value: "19px" },
+  // Dev-panel FAB svg icon (19px) mirrors the SVG viewport of the line-chart icon
+  // inside the 44px FAB button — a bespoke visual constant that does not map to
+  // a control-height or spacing token.
+  { file: "dev-panel.component.ts", value: "19px" },
+  // Dev-panel alert badge (.dvc-badge) is 17px tall — intentionally slimmer than
+  // ctl-h-sm (22px) and above sp-7 (≈16px); it is a fixed pill badge matching the
+  // FAB corner overlay and does not map to a standard control-height token.
+  // .dvc-tool and .dvc-kind are 17×17px square icon containers — between sp-7 (16px)
+  // and ctl-h-sm (22px); they mirror their SVG icon viewports and are bespoke fixed
+  // squares that do not snap to a standard control-height token.
+  { file: "dev-panel.component.ts", value: "17px" },
+  // .dvc-ring is a 46×46px dashed circular empty-state ring with border-radius:50%
+  // — sits above topbar-h (44px); it is a decorative visual element and does not map
+  // to any control-height token.
+  { file: "dev-panel.component.ts", value: "46px" },
 ];
 
 export function scanText(text, file = "") {
