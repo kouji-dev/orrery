@@ -40,7 +40,7 @@ import { CommitFeedComponent } from "./commit-feed.component";
             <button (click)="toggleAll()" [title]="allSelected() ? 'Deselect all' : 'Select all'"
               [style.border]="'1px solid ' + (allSelected() ? 'var(--accent)' : 'var(--hair-2)')"
               [style.background]="allSelected() ? 'var(--accent)' : 'transparent'"
-              style="flex:none;width:14px;height:var(--sp-6);border-radius:4px;display:grid;place-items:center;cursor:pointer;padding:0">
+              style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:4px;display:grid;place-items:center;cursor:pointer;padding:0">
               @if (allSelected()) { <app-icon name="check" size="sm" [px]="10" color="#06070b" /> }
             </button>
           }
@@ -62,7 +62,7 @@ import { CommitFeedComponent } from "./commit-feed.component";
               <span
                 [style.border]="'1px solid ' + (isSelected(f.path) ? 'var(--accent)' : 'var(--hair-2)')"
                 [style.background]="isSelected(f.path) ? 'var(--accent)' : 'transparent'"
-                style="flex:none;width:13px;height:var(--sp-6);border-radius:3px;display:grid;place-items:center"
+                style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:3px;display:grid;place-items:center"
               >@if (isSelected(f.path)) { <app-icon name="check" size="sm" [px]="9" color="#06070b" /> }</span>
               <span [style.color]="stateInk(f.state)" style="flex:none;width:12px;text-align:center;font-size:var(--fs-2xs);font-weight:700">{{ f.state }}</span>
               <span [title]="f.path" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">

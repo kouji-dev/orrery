@@ -88,7 +88,9 @@ import { IconComponent } from "../shared/icon.component";
          when the Perf FAB is hidden in PRD. */
       .tweak-fab {
         position: relative;
-        width: 44px;
+        /* square launcher: width MUST track height so it stays square across
+           densities (sized to the top-bar height) */
+        width: var(--topbar-h);
         height: var(--topbar-h);
         border-radius: 13px;
         display: grid;
@@ -209,7 +211,8 @@ import { IconComponent } from "../shared/icon.component";
         box-shadow: 0 0 0 1px var(--hair-2);
       }
       .swatch {
-        width: 22px;
+        /* circle: width tracks height so it stays round across densities */
+        width: var(--ctl-h-sm);
         height: var(--ctl-h-sm);
         border-radius: 50%;
         cursor: pointer;
@@ -234,8 +237,10 @@ import { IconComponent } from "../shared/icon.component";
         position: absolute;
         top: 2px;
         left: 2px;
+        /* knob: fixed 13x13 circle to match the fixed-geometry track
+           (34x19 + 2px inset + 15px travel). Scaling only height made it oval. */
         width: 13px;
-        height: var(--sp-6);
+        height: 13px;
         border-radius: 50%;
         background: var(--ink-3);
         transition:

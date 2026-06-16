@@ -17,7 +17,7 @@ import { STATUS_META } from "../utils";
           (click)="open(c.agent)"
           style="position:relative;padding:var(--sp-3) var(--sp-6) var(--sp-3) var(--sp-4);cursor:pointer;border-radius:var(--r-sm);margin:0 var(--sp-3)"
         >
-          <span [style.border]="'2px solid ' + color(c.agent)" style="position:absolute;left:-12px;top:11px;width:9px;height:var(--sp-4);border-radius:50%;background:var(--panel)"></span>
+          <span [style.border]="'2px solid ' + color(c.agent)" style="position:absolute;left:-12px;top:11px;width:var(--sp-4);height:var(--sp-4);border-radius:50%;background:var(--panel)"></span>
           <div
             [title]="c.msg"
             style="font-size:var(--fs-sm);color:var(--ink);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"

@@ -34,7 +34,7 @@ import { fmtDur } from "../utils";
         <app-status-dot [status]="ag.status" />
         <span style="font-size:var(--fs-tree);color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</span>
         @if (needs()) {
-          <span style="width:5px;height:var(--sp-2);border-radius:50%;background:var(--st-blocked);flex:none"></span>
+          <span style="width:var(--sp-2);height:var(--sp-2);border-radius:50%;background:var(--st-blocked);flex:none"></span>
         }
         <app-tool-badge [tool]="ag.tool" [size]="14" />
         <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ elapsed() ? fmt(elapsed()) : '—' }}</span>

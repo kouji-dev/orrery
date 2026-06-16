@@ -35,7 +35,7 @@ import { ProjectGroupComponent } from "./project-group.component";
           <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">Projects</span>
           <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ projects.all().length }}</span>
           <span class="chip tnum" style="margin-left:auto;font-size:var(--fs-2xs);padding:1px var(--sp-3)">
-            <span class="dot running" style="background:var(--st-running);width:6px;height:var(--sp-3)"></span>{{ totalRunning() }}/5
+            <span class="dot running" style="background:var(--st-running);width:var(--sp-3);height:var(--sp-3)"></span>{{ totalRunning() }}/5
           </span>
           <button class="pane-btn" (click)="ui.toggleSidebarCompact()" title="Collapse sidebar">
             <app-icon name="panelLeft" size="sm" [px]="14" />

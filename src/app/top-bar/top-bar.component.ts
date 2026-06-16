@@ -111,7 +111,7 @@ import { TicketsStore } from "../stores/tickets.store";
             } @else {
               <app-status-dot [status]="tas[0] ? tas[0].status : 'idle'" />
               @if (proj) {
-                <span [style.background]="proj.color" [title]="proj.name" style="width:6px;height:var(--sp-3);border-radius:2px;flex:none"></span>
+                <span [style.background]="proj.color" [title]="proj.name" style="width:var(--sp-3);height:var(--sp-3);border-radius:2px;flex:none"></span>
               }
               <span style="font-size:var(--fs-ui)">{{ tas[0] ? tas[0].name : tab.id }}</span>
             }

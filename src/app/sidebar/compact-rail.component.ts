@@ -73,12 +73,12 @@ import { mix } from "../utils";
               <span
                 [style.background]="mix(p.color, 84)"
                 [style.border]="'1px solid ' + mix(p.color, 60)"
-                style="width:22px;height:var(--ctl-h-sm);border-radius:6px;display:grid;place-items:center"
+                style="width:var(--ctl-h-sm);height:var(--ctl-h-sm);border-radius:6px;display:grid;place-items:center"
               >
                 <app-icon [name]="p.icon" size="sm" [px]="13" [color]="p.color" />
               </span>
               @if (runningOf(pa) > 0) {
-                <span class="dot running" style="position:absolute;top:3px;right:3px;width:7px;height:var(--sp-3);background:var(--st-running)"></span>
+                <span class="dot running" style="position:absolute;top:3px;right:3px;width:var(--sp-3);height:var(--sp-3);background:var(--st-running)"></span>
               }
               @if (needsOf(pa) > 0) {
                 <span
@@ -140,7 +140,7 @@ import { mix } from "../utils";
                 <app-status-dot [status]="ag.status" />
                 <span style="flex:1;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</span>
                 @if (needsAgent(ag)) {
-                  <span style="width:5px;height:var(--sp-2);border-radius:50%;background:var(--st-blocked)"></span>
+                  <span style="width:var(--sp-2);height:var(--sp-2);border-radius:50%;background:var(--st-blocked)"></span>
                 }
                 <app-tool-badge [tool]="ag.tool" [size]="13" />
               </div>

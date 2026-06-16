@@ -27,6 +27,10 @@ export const ALLOWLIST = [
   // constants: the icon mirrors its SVG viewport and the toggle thumb track is a
   // fixed-size pill — neither maps to a control-height or spacing token.
   { file: "tweaks-panel.component.ts", value: "19px" },
+  // .toggle knob is a fixed 13x13 circle matching the fixed-geometry switch track
+  // (34x19 + 2px inset + 15px travel). Its width/height must stay equal and fixed
+  // so the thumb stays round; scaling only height made it oval.
+  { file: "tweaks-panel.component.ts", value: "13px" },
   // "Run all / Pause all" button in the top-bar is 25px tall — sits between the
   // ctl-h-sm (22px) and ctl-h (26px) control-height tokens and is an intentional
   // compact inline action that doesn't map to a standard control-height token.
