@@ -92,7 +92,7 @@ const REPO = 'orrery';
 const API = 'https://api.github.com';
 
 function parseArgs(argv) {
-  const out = { channel: 'dev', dryRun: false };
+  const out = { channel: 'beta', dryRun: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--summary') out.summary = argv[++i];

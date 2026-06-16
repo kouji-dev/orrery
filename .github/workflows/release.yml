@@ -165,7 +165,7 @@ jobs:
           SUMMARY: ${{ inputs.summary }}
         run: |
           set -euo pipefail
-          args=(--channel dev --tag "v${{ needs.build.outputs.version }}")
+          args=(--channel beta --tag "v${{ needs.build.outputs.version }}")
           if [ -n "${SUMMARY:-}" ]; then args+=(--summary "$SUMMARY"); fi
           node scripts/landing/gen-changelog.mjs "${args[@]}"
       - name: Commit changelog to main
