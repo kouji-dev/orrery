@@ -81,9 +81,11 @@ For the target file(s):
 1. Find every `padding*`, `margin*`, `gap`/`row-gap`/`column-gap`, `height`/`min-height`, `font-size` declaration in inline `style="…"` attributes and `styles:[ ` … ` ]` blocks.
 2. Replace each px literal using the mapping tables above. Multi-value shorthands convert each value (`padding:6px 10px 7px` → `padding:var(--sp-3) var(--sp-5) var(--sp-3)`).
 3. Do **not** restructure markup, rename classes, or extract components. Pure value substitution. (Opportunistic: if a component already duplicates an existing atom like `.btn` exactly, you may switch to the class — but never invent new component APIs.)
-4. Leave `1px` borders, `999px`, `0`, percentages, `auto`, `max-height`, and `width` untouched.
-5. Verify the file/dir is clean: `node tools/density/check-tokens.mjs <paths>` → `0 violations`.
-6. Commit.
+4. Leave `1px` borders, `999px`, `0`, percentages, `auto`, and `max-height` untouched. `width` is out of scope **except** for the SHAPE RULE below.
+5. **SHAPE RULE (critical).** Tokenizing `height` while leaving `width` a fixed px **distorts squares/circles** under density (the element becomes an ellipse/rectangle in compact/comfy). For any element that must keep its aspect ratio — `border-radius:50%` (circle), a square icon container (`display:grid;place-items:center`), a status dot, an avatar, a square/round button/FAB — set **`width` to the SAME token as `height`** so both scale together (e.g. `width:6px;height:var(--sp-3)` → `width:var(--sp-3);height:var(--sp-3)`). For tightly-coupled mini-widgets whose geometry is interdependent (e.g. a toggle switch: track + knob + inset + travel), keep **all** dimensions fixed (revert the height to its original literal and add an ALLOWLIST entry) rather than scaling some parts. Genuinely oblong elements (bars, `min-width` count badges, dividers, panel widths) keep their fixed `width`.
+6. Verify the file/dir is clean: `node tools/density/check-tokens.mjs <paths>` → `0 violations`.
+7. Also confirm the shell/structural rows match their bar tokens — grid rows that host `--topbar-h`/`--statusbar-h`/`--row-h` content must use the same token, not a fixed px, or a background gap appears.
+8. Commit.
 
 Throughout the sweep `pnpm test` stays green — the scanner's **acceptance** assertion is added only in Task 19. Use the CLI for per-batch progress.
 
