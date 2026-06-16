@@ -44,14 +44,14 @@ import { TerminalComponent } from "./terminal.component";
         style="flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel-2);position:relative;border-radius:var(--r-md);overflow:hidden"
       >
         <!-- pane header -->
-        <div style="display:flex;align-items:center;gap:6px;padding:5px 6px 5px 8px;background:var(--panel);border-bottom:1px solid var(--hair);position:relative;flex:none">
-          @if (proj(); as p) { <span [style.background]="p.color" [title]="p.name" style="width:6px;height:6px;border-radius:2px;flex:none"></span> }
+        <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);background:var(--panel);border-bottom:1px solid var(--hair);position:relative;flex:none">
+          @if (proj(); as p) { <span [style.background]="p.color" [title]="p.name" style="width:var(--sp-3);height:var(--sp-3);border-radius:2px;flex:none"></span> }
           <button
             (click)="$event.stopPropagation(); pickOpen.set(!pickOpen())"
-            style="display:flex;align-items:center;gap:6px;background:transparent;border:none;cursor:pointer;color:var(--ink);font-family:var(--font-mono);font-size:11.5px;padding:2px 4px;border-radius:5px;min-width:0"
+            style="display:flex;align-items:center;gap:var(--sp-3);background:transparent;border:none;cursor:pointer;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);padding:var(--sp-1) var(--sp-2);border-radius:5px;min-width:0"
           >
             @if (ag) {
-              <span [style.background]="dot(ag.status)" style="width:7px;height:7px;border-radius:50%;flex:none"></span>
+              <span [style.background]="dot(ag.status)" style="width:var(--sp-3);height:var(--sp-3);border-radius:50%;flex:none"></span>
             } @else {
               <app-icon name="agent" size="sm" color="var(--ink-4)" />
             }
@@ -60,21 +60,21 @@ import { TerminalComponent } from "./terminal.component";
           </button>
 
           @if (pickOpen()) {
-            <div #picker class="rise" style="position:absolute;top:calc(100% + 4px);left:6px;z-index:40;width:230px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:5px;max-height:320px;overflow-y:auto">
+            <div #picker class="rise" style="position:absolute;top:calc(100% + 4px);left:6px;z-index:40;width:230px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:var(--sp-2);max-height:320px;overflow-y:auto">
               @for (p of ctx().projects(); track p.id) {
                 @let pa = agentsOf(p.id);
                 @if (pa.length) {
-                  <div style="display:flex;align-items:center;gap:6px;padding:5px 8px 3px">
-                    <span [style.background]="p.color" style="width:6px;height:6px;border-radius:2px"></span>
-                    <span class="up" style="font-size:8.5px;color:var(--ink-3)">{{ p.name }}</span>
+                  <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4) var(--sp-1)">
+                    <span [style.background]="p.color" style="width:var(--sp-3);height:var(--sp-3);border-radius:2px"></span>
+                    <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-3)">{{ p.name }}</span>
                   </div>
                   @for (a of pa; track a.id) {
                     <button
                       (click)="ctx().onAgent(lf.id, a.id); pickOpen.set(false)"
                       [style.background]="lf.agentId === a.id ? 'var(--panel-3)' : 'transparent'"
-                      style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:5px 9px;border-radius:6px;border:none;cursor:pointer;font-family:var(--font-mono);font-size:11.5px;color:var(--ink)"
+                      style="display:flex;align-items:center;gap:var(--sp-4);width:100%;text-align:left;padding:var(--sp-2) var(--sp-4);border-radius:6px;border:none;cursor:pointer;font-family:var(--font-mono);font-size:var(--fs-sm);color:var(--ink)"
                     >
-                      <span [style.background]="dot(a.status)" style="width:7px;height:7px;border-radius:50%;flex:none"></span>
+                      <span [style.background]="dot(a.status)" style="width:var(--sp-3);height:var(--sp-3);border-radius:50%;flex:none"></span>
                       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.name }}</span>
                       <app-tool-badge [tool]="a.tool" [size]="13" />
                     </button>
@@ -85,14 +85,14 @@ import { TerminalComponent } from "./terminal.component";
           }
 
           @if (ag) {
-            <div style="display:flex;gap:1px;margin-left:4px;padding:2px;background:var(--panel-2);border:1px solid var(--hair);border-radius:5px">
+            <div style="display:flex;gap:1px;margin-left:var(--sp-2);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:5px">
               @for (v of views; track v.k) {
                 <button
                   (click)="$event.stopPropagation(); ctx().onView(lf.id, v.k)"
                   [title]="v.k"
                   [style.background]="lf.view === v.k ? 'var(--panel-3)' : 'transparent'"
                   [style.color]="lf.view === v.k ? 'var(--accent)' : 'var(--ink-3)'"
-                  style="display:flex;padding:2px 5px;border-radius:3px;border:none;cursor:pointer"
+                  style="display:flex;padding:var(--sp-1) var(--sp-2);border-radius:3px;border:none;cursor:pointer"
                 ><app-icon [name]="v.icon" size="sm" [px]="12" /></button>
               }
             </div>
@@ -209,7 +209,7 @@ import { TerminalComponent } from "./terminal.component";
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 3px;
+        padding: var(--sp-1);
         background: transparent;
         border: none;
         border-radius: 4px;
@@ -229,7 +229,7 @@ import { TerminalComponent } from "./terminal.component";
       .pane-btn.primary {
         background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
         color: #06070b;
-        padding: 3px 8px;
+        padding: var(--sp-1) var(--sp-4);
         box-shadow: 0 0 16px -5px rgba(var(--accent-rgb), 0.85);
       }
       .pane-btn.primary:hover:not(:disabled) {
@@ -247,7 +247,7 @@ import { TerminalComponent } from "./terminal.component";
       .file-strip {
         display: flex;
         align-items: center;
-        gap: 2px;
+        gap: var(--sp-1);
         flex: 1;
         min-width: 0;
         overflow-x: auto;
@@ -262,13 +262,13 @@ import { TerminalComponent } from "./terminal.component";
         flex: none;
         display: flex;
         align-items: center;
-        gap: 5px;
+        gap: var(--sp-2);
         max-width: 150px;
-        padding: 3px 5px 3px 8px;
+        padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-4);
         border: 1px solid transparent;
         border-radius: 5px;
         font-family: var(--font-mono);
-        font-size: 10.5px;
+        font-size: var(--fs-xs);
         color: var(--ink-3);
         cursor: pointer;
         position: relative;
@@ -336,12 +336,12 @@ import { TerminalComponent } from "./terminal.component";
         transform: translate(-50%, -50%);
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 4px 9px;
+        gap: var(--sp-3);
+        padding: var(--sp-2) var(--sp-4);
         border-radius: 999px;
         background: var(--accent);
         color: #06070b;
-        font-size: 10.5px;
+        font-size: var(--fs-xs);
         font-weight: 600;
         white-space: nowrap;
       }

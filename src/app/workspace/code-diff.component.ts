@@ -18,7 +18,7 @@ import { buildTheme, CMCore, loadCMCore, loadLangExt } from "./code-lang";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div
     #host
-    style="height:100%;overflow:auto;font-size:12.5px"
+    style="height:100%;overflow:auto;font-size:var(--fs-ui)"
   ></div>`,
   styles: [
     `

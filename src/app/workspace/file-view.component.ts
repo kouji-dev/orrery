@@ -35,26 +35,26 @@ const MAX_CHARS = 1_500_000;
   imports: [IconComponent],
   template: `
     <!-- slim toolbar: path · changed-state · (md toggle) · lang · refresh -->
-    <div style="display:flex;align-items:center;gap:7px;padding:5px 12px;background:var(--panel);border-bottom:1px solid var(--hair);font-size:11px;flex:none;min-width:0">
+    <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-6);background:var(--panel);border-bottom:1px solid var(--hair);font-size:var(--fs-sm);flex:none;min-width:0">
       <app-icon name="file" size="sm" [px]="12" color="var(--ink-3)" />
       <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="path()">
         <span style="color:var(--ink-4)">{{ fdir(path()) }}</span>{{ fname(path()) }}
       </span>
-      <div style="margin-left:auto;display:flex;align-items:center;gap:7px;flex:none">
+      <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3);flex:none">
         @if (isMarkdown()) {
-          <div style="display:flex;gap:2px;padding:2px;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
+          <div style="display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
             <button class="btn" (click)="preview.set(false)"
               [style.background]="!preview() ? 'var(--panel-3)' : 'transparent'"
               [style.color]="!preview() ? 'var(--ink)' : 'var(--ink-3)'"
-              style="padding:2px 7px;border-radius:4px;font-size:10px">Raw</button>
+              style="padding:var(--sp-1) var(--sp-3);border-radius:4px;font-size:var(--fs-xs)">Raw</button>
             <button class="btn" (click)="preview.set(true)"
               [style.background]="preview() ? 'var(--panel-3)' : 'transparent'"
               [style.color]="preview() ? 'var(--ink)' : 'var(--ink-3)'"
-              style="padding:2px 7px;border-radius:4px;font-size:10px">Preview</button>
+              style="padding:var(--sp-1) var(--sp-3);border-radius:4px;font-size:var(--fs-xs)">Preview</button>
           </div>
         }
-        @if (tag()) { <span class="chip tnum" style="font-size:9px;padding:0 6px">{{ tag() }}</span> }
-        <button class="btn" (click)="reload()" title="Reload from the worktree" style="padding:3px;border-radius:4px">
+        @if (tag()) { <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ tag() }}</span> }
+        <button class="btn" (click)="reload()" title="Reload from the worktree" style="padding:var(--sp-1);border-radius:4px">
           <app-icon name="refresh" size="sm" [px]="12" [class.set-spin]="loading()" />
         </button>
       </div>
@@ -62,11 +62,11 @@ const MAX_CHARS = 1_500_000;
 
     <!-- body -->
     @if (notice(); as n) {
-      <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:11px;padding:18px;text-align:center">{{ n }}</div>
+      <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-sm);padding:var(--sp-7);text-align:center">{{ n }}</div>
     } @else if (isMarkdown() && preview()) {
-      <div class="scroll-y md-body" style="flex:1;padding:16px 20px" [innerHTML]="mdHtml()"></div>
+      <div class="scroll-y md-body" style="flex:1;padding:var(--sp-7) var(--sp-8)" [innerHTML]="mdHtml()"></div>
     } @else {
-      <div #host style="flex:1;min-height:0;overflow:auto;font-size:12.5px"></div>
+      <div #host style="flex:1;min-height:0;overflow:auto;font-size:var(--fs-ui)"></div>
     }
   `,
   styles: [
@@ -81,10 +81,10 @@ const MAX_CHARS = 1_500_000;
       :host ::ng-deep .cm-editor { height: 100%; background-color: var(--bg) !important; }
       :host ::ng-deep .cm-gutters { min-height: 100%; background-color: var(--bg) !important; }
       :host ::ng-deep .cm-content { min-height: 100%; }
-      .md-body { font-size: 12.5px; line-height: 1.7; color: var(--ink-2); }
-      .md-body ::ng-deep h1, .md-body ::ng-deep h2, .md-body ::ng-deep h3 { color: var(--ink); margin: 14px 0 6px; }
-      .md-body ::ng-deep code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
-      .md-body ::ng-deep pre { background: var(--panel-2); padding: 10px 12px; border-radius: 8px; overflow-x: auto; }
+      .md-body { font-size: var(--fs-ui); line-height: 1.7; color: var(--ink-2); }
+      .md-body ::ng-deep h1, .md-body ::ng-deep h2, .md-body ::ng-deep h3 { color: var(--ink); margin: var(--sp-6) 0 var(--sp-3); }
+      .md-body ::ng-deep code { background: var(--panel-2); padding: 1px var(--sp-2); border-radius: 4px; font-size: var(--fs-sm); }
+      .md-body ::ng-deep pre { background: var(--panel-2); padding: var(--sp-5) var(--sp-6); border-radius: 8px; overflow-x: auto; }
       .md-body ::ng-deep a { color: var(--accent-2); }
     `,
   ],

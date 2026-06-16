@@ -29,11 +29,11 @@ const LIST_DEFAULT = 236;
       [style.grid-template-columns]="listW() + 'px 6px 1fr'"
     >
       <!-- file list -->
-      <div class="scroll-y" style="background:var(--panel);padding:6px 0">
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px 6px 14px">
-          <span class="up" style="font-size:9px;color:var(--ink-3)">Changed · {{ changes().length }}</span>
+      <div class="scroll-y" style="background:var(--panel);padding:var(--sp-3) 0">
+        <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-5) var(--sp-3) var(--sp-6)">
+          <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">Changed · {{ changes().length }}</span>
           <!-- tree / flat toggle -->
-          <div style="margin-left:auto;display:flex;gap:2px;padding:2px;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
+          <div style="margin-left:auto;display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
             <button
               class="btn"
               (click)="treeMode.set(true)"
@@ -41,7 +41,7 @@ const LIST_DEFAULT = 236;
               [style.background]="treeMode() ? 'var(--panel-3)' : 'transparent'"
               [style.color]="treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
               [style.box-shadow]="treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
-              style="padding:3px 7px;border-radius:4px;gap:5px;font-size:10px"
+              style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
             ><app-icon name="graph" size="sm" [px]="12" [color]="treeMode() ? 'var(--accent)' : null" />Tree</button>
             <button
               class="btn"
@@ -50,22 +50,22 @@ const LIST_DEFAULT = 236;
               [style.background]="!treeMode() ? 'var(--panel-3)' : 'transparent'"
               [style.color]="!treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
               [style.box-shadow]="!treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
-              style="padding:3px 7px;border-radius:4px;gap:5px;font-size:10px"
+              style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
             ><app-icon name="dots" size="sm" [px]="12" [color]="!treeMode() ? 'var(--accent)' : null" />Flat</button>
           </div>
-          <button class="btn" (click)="refresh()" title="Rescan changes" style="padding:3px;border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
+          <button class="btn" (click)="refresh()" title="Rescan changes" style="padding:var(--sp-1);border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
         </div>
 
         @if (!changes().length) {
-          <div style="padding:10px 14px;font-size:10.5px;color:var(--ink-4)">no changes</div>
+          <div style="padding:var(--sp-5) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">no changes</div>
         } @else if (treeMode()) {
           <!-- tree view: folders + indented file leaves -->
           @for (row of treeRows(); track row.path) {
             @if (row.dir) {
-              <div (click)="toggleDir(row.path)" style="display:flex;align-items:center;gap:6px;padding:4px 8px;cursor:pointer" [style.padding-left.px]="8 + row.depth * 13">
+              <div (click)="toggleDir(row.path)" style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);cursor:pointer" [style.padding-left.px]="8 + row.depth * 13">
                 <app-icon [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" size="sm" [px]="11" color="var(--ink-4)" />
                 <app-icon [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" size="sm" [px]="13" color="var(--ink-4)" />
-                <span style="font-size:11px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
+                <span style="font-size:var(--fs-sm);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
               </div>
             } @else {
               <div
@@ -73,11 +73,11 @@ const LIST_DEFAULT = 236;
                 [class.sel]="current()?.path === row.path"
                 (click)="selPath.set(row.path)"
                 [style.padding-left.px]="12 + row.depth * 13"
-                style="display:flex;align-items:center;gap:7px;padding:4px 10px;cursor:pointer;margin:1px 6px;border-radius:var(--r-sm)"
+                style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-5);cursor:pointer;margin:1px var(--sp-3);border-radius:var(--r-sm)"
               >
-                <span [style.color]="stateInk(row.file!.state)" [style.background]="stateBg(row.file!.state)" style="flex:none;width:14px;height:14px;border-radius:3px;display:grid;place-items:center;font-size:9px;font-weight:700">{{ row.file!.state }}</span>
-                <span [title]="row.file!.state === 'R' && row.file!.oldPath ? ('renamed from ' + row.file!.oldPath) : row.name" style="flex:1;min-width:0;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
-                <span class="tnum" style="font-size:9.5px;display:flex;gap:4px;flex:none">
+                <span [style.color]="stateInk(row.file!.state)" [style.background]="stateBg(row.file!.state)" style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:3px;display:grid;place-items:center;font-size:var(--fs-2xs);font-weight:700">{{ row.file!.state }}</span>
+                <span [title]="row.file!.state === 'R' && row.file!.oldPath ? ('renamed from ' + row.file!.oldPath) : row.name" style="flex:1;min-width:0;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
+                <span class="tnum" style="font-size:var(--fs-2xs);display:flex;gap:var(--sp-2);flex:none">
                   <span style="color:var(--code-add-ink)">+{{ row.file!.add }}</span>
                   @if (row.file!.del > 0) { <span style="color:var(--code-del-ink)">−{{ row.file!.del }}</span> }
                 </span>
@@ -91,22 +91,22 @@ const LIST_DEFAULT = 236;
               class="diff-file"
               [class.sel]="current()?.path === f.path"
               (click)="selPath.set(f.path)"
-              style="display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;margin:1px 6px;border-radius:var(--r-sm)"
+              style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);cursor:pointer;margin:1px var(--sp-3);border-radius:var(--r-sm)"
             >
               <span
                 [style.color]="stateInk(f.state)"
                 [style.background]="stateBg(f.state)"
-                style="flex:none;width:14px;height:14px;border-radius:3px;display:grid;place-items:center;font-size:9px;font-weight:700"
+                style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:3px;display:grid;place-items:center;font-size:var(--fs-2xs);font-weight:700"
               >{{ f.state }}</span>
               <div style="flex:1;min-width:0">
-                <div style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fname(f.path) }}</div>
+                <div style="font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fname(f.path) }}</div>
                 @if (f.state === 'R' && f.oldPath) {
-                  <div [title]="'renamed from ' + f.oldPath" style="font-size:9.5px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">← {{ f.oldPath }}</div>
+                  <div [title]="'renamed from ' + f.oldPath" style="font-size:var(--fs-2xs);color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">← {{ f.oldPath }}</div>
                 } @else if (fdir(f.path)) {
-                  <div style="font-size:9.5px;color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(f.path) }}</div>
+                  <div style="font-size:var(--fs-2xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(f.path) }}</div>
                 }
               </div>
-              <span class="tnum" style="font-size:9.5px;display:flex;gap:4px;flex:none">
+              <span class="tnum" style="font-size:var(--fs-2xs);display:flex;gap:var(--sp-2);flex:none">
                 <span style="color:var(--code-add-ink)">+{{ f.add }}</span>
                 @if (f.del > 0) { <span style="color:var(--code-del-ink)">−{{ f.del }}</span> }
               </span>
@@ -142,14 +142,14 @@ const LIST_DEFAULT = 236;
               <div class="diff-head-path">
                 <app-icon name="file" size="sm" color="var(--ink-3)" />
                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="f.path">{{ f.path }}</span>
-                @if (loading()) { <span class="chip tnum" style="font-size:9px;padding:0 6px">loading…</span> }
+                @if (loading()) { <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">loading…</span> }
               </div>
             } @else {
-              <span style="color:var(--ink-4);font-size:11.5px">—</span>
+              <span style="color:var(--ink-4);font-size:var(--fs-sm)">—</span>
             }
           </div>
           @if (current() && langLabel()) {
-            <span class="chip tnum" style="align-self:flex-start;font-size:9.5px">{{ langLabel() }}</span>
+            <span class="chip tnum" style="align-self:flex-start;font-size:var(--fs-2xs)">{{ langLabel() }}</span>
           }
         </div>
 
@@ -157,12 +157,12 @@ const LIST_DEFAULT = 236;
           @defer (on immediate) {
             <app-code-diff style="flex:1;min-height:0" [oldText]="d.old" [newText]="d.new" [lang]="langId()" />
           } @placeholder {
-            <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:12px">loading diff…</div>
+            <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">loading diff…</div>
           }
         } @else if (!current()) {
-          <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:12px">no changed files</div>
+          <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">no changed files</div>
         } @else if (!loading()) {
-          <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:12px">no diff</div>
+          <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">no diff</div>
         }
       </div>
     </div>
@@ -199,7 +199,7 @@ const LIST_DEFAULT = 236;
       }
       .diff-resizer .grip {
         width: 1px;
-        height: 28px;
+        height: var(--ctl-h);
         border-radius: 1px;
         background: var(--hair-2);
         transition: background 0.13s ease, box-shadow 0.13s ease;
@@ -214,8 +214,8 @@ const LIST_DEFAULT = 236;
       .diff-head {
         display: flex;
         align-items: flex-start;
-        gap: 12px;
-        padding: 7px 14px;
+        gap: var(--sp-6);
+        padding: var(--sp-3) var(--sp-6);
         background: var(--panel);
         border-bottom: 1px solid var(--hair);
       }
@@ -224,13 +224,13 @@ const LIST_DEFAULT = 236;
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: var(--sp-1);
       }
       .diff-head-top {
         display: flex;
         align-items: center;
-        gap: 9px;
-        font-size: 11px;
+        gap: var(--sp-4);
+        font-size: var(--fs-sm);
         min-width: 0;
       }
       .hunk {
@@ -238,26 +238,26 @@ const LIST_DEFAULT = 236;
         background: color-mix(in oklch, var(--accent-2), transparent 88%);
         border: 1px solid color-mix(in oklch, var(--accent-2), transparent 70%);
         border-radius: var(--r-sm);
-        padding: 1px 7px;
+        padding: 1px var(--sp-3);
         white-space: nowrap;
       }
       .state-label {
-        font-size: 10px;
+        font-size: var(--fs-xs);
         text-transform: uppercase;
         letter-spacing: 0.1em;
         font-weight: 600;
       }
       .counts {
         display: flex;
-        gap: 6px;
-        font-size: 10.5px;
+        gap: var(--sp-3);
+        font-size: var(--fs-xs);
         margin-left: auto;
       }
       .diff-head-path {
         display: flex;
         align-items: center;
-        gap: 7px;
-        font-size: 11.5px;
+        gap: var(--sp-3);
+        font-size: var(--fs-sm);
         color: var(--ink-2);
         min-width: 0;
       }

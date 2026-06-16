@@ -29,14 +29,14 @@ import { UiStore } from "../ui/ui.store";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--bg)">
-      <div style="color:var(--ink-4);padding:8px 14px 4px;font-size:10.5px">── session: {{ agent().worktree }} · {{ agent().branch }} ──</div>
+      <div style="color:var(--ink-4);padding:var(--sp-4) var(--sp-6) var(--sp-2);font-size:var(--fs-xs)">── session: {{ agent().worktree }} · {{ agent().branch }} ──</div>
       <div style="flex:1;min-height:0;position:relative">
-        <div #host style="position:absolute;inset:0;padding:2px 10px 8px"></div>
+        <div #host style="position:absolute;inset:0;padding:var(--sp-1) var(--sp-5) var(--sp-4)"></div>
 
         @if (searchOpen()) {
           <div
-            style="position:absolute;top:8px;right:14px;z-index:5;display:flex;align-items:center;gap:4px;
-                   padding:4px 4px 4px 8px;background:var(--panel);border:1px solid var(--hair);
+            style="position:absolute;top:8px;right:14px;z-index:5;display:flex;align-items:center;gap:var(--sp-2);
+                   padding:var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4);background:var(--panel);border:1px solid var(--hair);
                    border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,0.35)"
             (keydown)="onBoxKeydown($event)"
           >
@@ -49,10 +49,10 @@ import { UiStore } from "../ui/ui.store";
               spellcheck="false"
               autocomplete="off"
               style="width:160px;background:transparent;border:0;outline:0;color:var(--ink-2);
-                     font-size:12px;font-family:inherit"
+                     font-size:var(--fs-ui);font-family:inherit"
             />
             @if (matchInfo()) {
-              <span class="tnum" style="font-size:10px;color:var(--ink-4);padding:0 2px;white-space:nowrap">{{ matchInfo() }}</span>
+              <span class="tnum" style="font-size:var(--fs-xs);color:var(--ink-4);padding:0 var(--sp-1);white-space:nowrap">{{ matchInfo() }}</span>
             }
             <button type="button" title="Previous (Shift+Enter)" (click)="prev()" [style]="btn">↑</button>
             <button type="button" title="Next (Enter)" (click)="next()" [style]="btn">↓</button>
@@ -86,8 +86,8 @@ export class TerminalComponent {
 
   /** Shared style for the tiny prev/next/close affordances. */
   readonly btn =
-    "display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;" +
-    "background:transparent;border:0;border-radius:4px;color:var(--ink-3);cursor:pointer;font-size:11px;line-height:1";
+    "display:inline-flex;align-items:center;justify-content:center;width:var(--sp-8);height:var(--sp-8);" +
+    "background:transparent;border:0;border-radius:4px;color:var(--ink-3);cursor:pointer;font-size:var(--fs-sm);line-height:1";
 
   constructor() {
     const destroyRef = inject(DestroyRef);
