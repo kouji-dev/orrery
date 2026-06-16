@@ -92,14 +92,15 @@ the component's size prop, not a spacing token.
 --fs-tree (kept)             --fs-md  13.5 / 12.5 / 14.5
 ```
 
-**Non-scaling:** `--hair: 1px`, `--r-pill: 999px`, plus existing
-`--r-sm/md/lg` (kept, fixed).
+**Non-scaling:** `1px` borders (left literal — `--hair` is already the hairline
+*color*, not a width), `--r-pill: 999px`, plus existing `--r-sm/md/lg` (kept,
+fixed).
 
 ## Migration sweep
 
 Target: zero hardcoded padding/margin/gap/height/font-size literals in
-`src/app`. The only literals allowed are `1px` borders and `999px` pill radius,
-and even those get `--hair` / `--r-pill` tokens.
+`src/app`. The only literals allowed are `1px` borders and `999px` pill radius
+(`999px` also available as `--r-pill`).
 
 **Per-component, mechanical:**
 

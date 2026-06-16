@@ -16,7 +16,7 @@
 
 | File | Responsibility |
 |---|---|
-| `src/styles.css` | Token definitions (`--density`, spacing scale, control heights, type scale, `--hair`/`--r-pill`); atom classes (`.btn`, `.chip`, …) swept to tokens. |
+| `src/styles.css` | Token definitions (`--density`, spacing scale, control heights, type scale, `--r-pill`; `--hair` stays the existing hairline color); atom classes (`.btn`, `.chip`, …) swept to tokens. |
 | `src/app/ui/ui.store.ts` | Already applies `data-density` to `<html>`. No logic change — density values now live in CSS. Verify only. |
 | `src/app/**/*.ts` (~40 components) | Literal→token sweep of inline `style="…"` + `styles:[]`. |
 | `tools/density/check-tokens.mjs` | Scanner: finds disallowed `px` literals in target properties. CLI + exported `scanText`/`scanRepo`. |
@@ -89,7 +89,9 @@ Throughout the sweep `pnpm test` stays green — the scanner's **acceptance** as
 ### Task 1: Token foundation in `styles.css`
 
 **Files:**
-- Modify: `src/styles.css:71-89` (replace the density block) and `src/styles.css:66-69` (radii — add `--hair`/`--r-pill`)
+- Modify: `src/styles.css:71-89` (replace the density block) and `src/styles.css:66-69` (radii — add `--r-pill`)
+
+> **Note (resolved during impl):** the codebase already uses `--hair` as the hairline **color** (`rgba`), so do NOT mint a `--hair: 1px` width token — it would clobber the color. `1px` borders stay literal (the scanner allow-lists `1px`), so no width token is needed.
 
 - [ ] **Step 1: Replace the density token block**
 
@@ -101,7 +103,6 @@ Replace lines 71-89 (the `/* density */` block in `:root`, plus the `[data-densi
   --r-md: 8px;
   --r-lg: 12px;
   --r-pill: 999px;
-  --hair: 1px;
 
   /* ---- DENSITY ENGINE ---- */
   /* single multiplier; spacing + heights derive from it */
@@ -218,8 +219,7 @@ describe("density token engine", () => {
     }
   });
 
-  it("keeps borders + pill radius non-scaling", () => {
-    expect(css).toMatch(/--hair:\s*1px/);
+  it("keeps pill radius non-scaling", () => {
     expect(css).toMatch(/--r-pill:\s*999px/);
   });
 
@@ -612,4 +612,4 @@ git commit -m "test(density): enforce zero literals in CI"
 
 - **Spec coverage:** density factor + calc (Task 1) ✓; explicit type scale (Task 1) ✓; non-scaling borders/pill (Task 1) ✓; snapped scale (Reference tables) ✓; zero-literal sweep (Tasks 4–17) ✓; guardrail (Tasks 3, 19) ✓; 3-density verification (Task 18) ✓; manual smoke + docs (Task 20) ✓.
 - **Scope refinement (deliberate):** scanner targets `padding/margin/gap/height/min-height/font-size`; `max-height`/`width` are out of scope (structural). Bespoke heights >34px use the documented `ALLOWLIST`. Recorded in the spec's "heights" intent.
-- **Type consistency:** token names used in sweep tables (`--sp-1..9`, `--ctl-h-sm/--ctl-h/--ctl-h-lg`, `--row-h`, `--topbar-h`, `--statusbar-h`, `--fs-3xs..--fs-display`, `--hair`, `--r-pill`) all match the definitions in Task 1. Scanner exports (`scanText`, `scanRepo`, `defaultFiles`, `ALLOWLIST`) match their usages in Tasks 3 and 19.
+- **Type consistency:** token names used in sweep tables (`--sp-1..9`, `--ctl-h-sm/--ctl-h/--ctl-h-lg`, `--row-h`, `--topbar-h`, `--statusbar-h`, `--fs-3xs..--fs-display`, `--r-pill`) all match the definitions in Task 1. Scanner exports (`scanText`, `scanRepo`, `defaultFiles`, `ALLOWLIST`) match their usages in Tasks 3 and 19.
