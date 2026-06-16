@@ -11,7 +11,15 @@ Source: `styles.css` (tokens + atoms), `utils.ts` (icons, status meta, helpers),
 - [x] Theme‑switched color tokens (`--bg`, `--panel*`, `--hair*`, `--ink*`, `--accent*`)
 - [x] Status colors (running/blocked/waiting/done/idle) as tokens
 - [x] Code add/del background + ink tokens for diffs
-- [x] Density tokens (`--row-h`, `--pad`, font sizes) driven by `data-density`
+- [x] Density engine: a single `--density` factor (compact `0.85` / regular `1` /
+      comfy `1.18`) set per `data-density`. Spacing (`--sp-1`…`--sp-11`) and control
+      heights (`--ctl-h*`, `--row-h`, `--topbar-h`, `--statusbar-h`) derive from it via
+      `calc(base * var(--density))`; font sizes (`--fs-3xs`…`--fs-display`) are explicit
+      per density. So changing density rescales spacing, paddings, gaps, and heights —
+      not just font size. Borders (`1px`) and pill radius (`--r-pill`) never scale.
+      **No hardcoded spacing/height/font px** in `src/app` — enforced by
+      `tools/density/check-tokens.mjs` (run in CI via `pnpm test`). Square/circular
+      elements derive width from the same token as height so shapes hold across densities.
 - [x] Radii, glow, and shadow tokens
 - [x] Tokens mapped into Tailwind v4 `@theme` so utilities stay themeable
 - [x] `color-mix(oklch)` used for tinted/translucent surfaces
