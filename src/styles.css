@@ -63,29 +63,80 @@
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --font-disp: "Space Grotesk", var(--font-mono);
 
-  /* radii */
+  /* radii (fixed — not density-scaled) */
   --r-sm: 5px;
   --r-md: 8px;
   --r-lg: 12px;
+  --r-pill: 999px;
 
-  /* density (overridden via [data-density]) */
-  --row-h: 30px;
-  --pad: 12px;
-  --fs-ui: 12.5px;
-  --fs-tree: 12.5px;
+  /* ---- DENSITY ENGINE ---- */
+  /* single multiplier; spacing + heights derive from it */
+  --density: 1;
+
+  /* spacing scale (padding / margin / gap) */
+  --sp-1: calc(2px  * var(--density));
+  --sp-2: calc(4px  * var(--density));
+  --sp-3: calc(6px  * var(--density));
+  --sp-4: calc(8px  * var(--density));
+  --sp-5: calc(10px * var(--density));
+  --sp-6: calc(12px * var(--density));
+  --sp-7: calc(16px * var(--density));
+  --sp-8: calc(20px * var(--density));
+  --sp-9: calc(24px * var(--density));
+
+  /* control + structural heights */
+  --ctl-h-sm: calc(22px * var(--density));
+  --ctl-h:    calc(28px * var(--density));
+  --ctl-h-lg: calc(34px * var(--density));
+  --row-h:    calc(30px * var(--density));   /* kept name; now derived */
+  --topbar-h:    calc(44px * var(--density));
+  --statusbar-h: calc(24px * var(--density));
+
+  /* back-compat alias (old --pad == 12px) */
+  --pad: var(--sp-6);
+
+  /* type scale — explicit per density (regular values here) */
+  --fs-3xs: 9px;
+  --fs-2xs: 9.5px;
+  --fs-xs:  10.5px;
+  --fs-sm:  11.5px;
+  --fs-ui:  12.5px;   /* kept */
+  --fs-tree: 12.5px;  /* kept */
+  --fs-md:  13.5px;
+  --fs-lg:  15px;
+  --fs-xl:  21px;
+  --fs-2xl: 24px;
+  --fs-display: 36px;
 }
 
 [data-density="compact"] {
-  --row-h: 26px;
-  --pad: 9px;
-  --fs-ui: 11.5px;
+  --density: 0.85;
+  --fs-3xs: 8.5px;
+  --fs-2xs: 9px;
+  --fs-xs:  10px;
+  --fs-sm:  11px;
+  --fs-ui:  11.5px;
   --fs-tree: 11.5px;
+  --fs-md:  12.5px;
+  --fs-lg:  14px;
+  --fs-xl:  19px;
+  --fs-2xl: 22px;
+  --fs-display: 32px;
 }
+
 [data-density="comfy"] {
-  --row-h: 36px;
-  --pad: 16px;
-  --fs-ui: 13.5px;
+  --density: 1.18;
+  --fs-3xs: 9.5px;
+  --fs-2xs: 10.5px;
+  --fs-xs:  11.5px;
+  --fs-sm:  12.5px;
+  --fs-ui:  13.5px;
   --fs-tree: 13px;
+  --fs-md:  14.5px;
+  --fs-lg:  16.5px;
+  --fs-xl:  23px;
+  --fs-2xl: 26px;
+  --fs-display: 40px;
 }
 
 /* ---------- DARK (default) ---------- */
