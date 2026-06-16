@@ -136,18 +136,18 @@ import {
          clean by rounding the toolbar/content edges individually instead. */
     }
     .rte-toolbar {
-      display: flex; align-items: center; gap: 2px;
-      padding: 5px 6px; flex-wrap: wrap;
+      display: flex; align-items: center; gap: var(--sp-1);
+      padding: var(--sp-2) var(--sp-3); flex-wrap: wrap;
       border-bottom: 1px solid var(--hair);
       background: var(--panel);
       border-radius: calc(var(--r-md) - 1px) calc(var(--r-md) - 1px) 0 0;
     }
-    .rte-div { width: 1px; height: 16px; background: var(--hair); margin: 0 3px; flex: none; }
+    .rte-div { width: 1px; height: var(--sp-7); background: var(--hair); margin: 0 var(--sp-1); flex: none; }
     .rte-btn {
       width: 27px; height: 27px; border-radius: var(--r-sm);
       border: 1px solid transparent; background: transparent;
       color: var(--ink-3); cursor: pointer; display: grid; place-items: center;
-      font-family: var(--font-mono); font-size: 12px; flex: none;
+      font-family: var(--font-mono); font-size: var(--fs-ui); flex: none;
       transition: background .12s, color .12s, border-color .12s;
     }
     .rte-btn:hover { background: var(--panel-3); color: var(--ink); }
@@ -159,18 +159,18 @@ import {
     .rte-btn .bold { font-weight: 800; }
     .rte-btn .ital { font-style: italic; font-family: Georgia, serif; }
     .rte-btn .strike { text-decoration: line-through; }
-    .rte-btn .mono { font-size: 13px; font-family: var(--font-mono); }
-    .rte-btn .num { font-size: 11px; letter-spacing: -1px; }
-    .rte-btn .quo { font-family: Georgia, serif; font-size: 16px; line-height: 1; }
+    .rte-btn .mono { font-size: var(--fs-md); font-family: var(--font-mono); }
+    .rte-btn .num { font-size: var(--fs-sm); letter-spacing: -1px; }
+    .rte-btn .quo { font-family: Georgia, serif; font-size: var(--fs-lg); line-height: 1; }
 
     /* heading / paragraph dropdown */
     .rte-block-wrap { position: relative; }
     .rte-btn.rte-block {
-      width: auto; min-width: 56px; padding: 0 7px; gap: 5px;
+      width: auto; min-width: 56px; padding: 0 var(--sp-3); gap: var(--sp-2);
       display: flex; align-items: center; justify-content: space-between;
       font-family: var(--font-disp);
     }
-    .rte-btn.rte-block .cv { font-size: 11px; font-weight: 600; }
+    .rte-btn.rte-block .cv { font-size: var(--fs-sm); font-weight: 600; }
     .rte-btn.rte-block .chev {
       width: 0; height: 0; flex: none;
       border-left: 3.5px solid transparent; border-right: 3.5px solid transparent;
@@ -178,47 +178,47 @@ import {
     }
     .rte-block-pop {
       position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
-      display: flex; flex-direction: column; gap: 1px; padding: 4px; width: 156px;
+      display: flex; flex-direction: column; gap: 1px; padding: var(--sp-2); width: 156px;
       background: var(--elev); border: 1px solid var(--hair-2);
       border-radius: var(--r-md); box-shadow: var(--shadow);
     }
     .rte-block-opt {
-      display: flex; align-items: center; padding: 6px 9px;
+      display: flex; align-items: center; padding: var(--sp-3) var(--sp-4);
       border: none; border-radius: var(--r-sm); background: transparent;
       color: var(--ink-2); cursor: pointer; text-align: left;
-      font-family: var(--font-mono); font-size: 11.5px;
+      font-family: var(--font-mono); font-size: var(--fs-sm);
     }
     .rte-block-opt:hover { background: var(--panel-3); color: var(--ink); }
     .rte-block-opt.on { color: var(--accent); }
     .rte-block-opt .pv { color: var(--ink); }
     .rte-block-opt .pv.paragraph { font-family: var(--font-mono); font-weight: 400; }
-    .rte-block-opt .pv.h1 { font-family: var(--font-disp); font-size: 16px; font-weight: 600; }
-    .rte-block-opt .pv.h2 { font-family: var(--font-disp); font-size: 14.5px; font-weight: 600; }
-    .rte-block-opt .pv.h3 { font-family: var(--font-disp); font-size: 13px; font-weight: 600; }
-    .rte-block-opt .pv.h4 { font-family: var(--font-disp); font-size: 12.5px; font-weight: 600; }
+    .rte-block-opt .pv.h1 { font-family: var(--font-disp); font-size: var(--fs-lg); font-weight: 600; }
+    .rte-block-opt .pv.h2 { font-family: var(--font-disp); font-size: var(--fs-lg); font-weight: 600; }
+    .rte-block-opt .pv.h3 { font-family: var(--font-disp); font-size: var(--fs-md); font-weight: 600; }
+    .rte-block-opt .pv.h4 { font-family: var(--font-disp); font-size: var(--fs-ui); font-weight: 600; }
     .rte-block-opt .pv.h5,
     .rte-block-opt .pv.h6 {
-      font-family: var(--font-disp); font-size: 11px; font-weight: 600;
+      font-family: var(--font-disp); font-size: var(--fs-sm); font-weight: 600;
       text-transform: uppercase; letter-spacing: 0.06em;
     }
 
     .rte-link-wrap { position: relative; }
     .rte-link-pop {
       position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
-      display: flex; gap: 6px; padding: 6px; width: 250px;
+      display: flex; gap: var(--sp-3); padding: var(--sp-3); width: 250px;
       background: var(--elev); border: 1px solid var(--hair-2);
       border-radius: var(--r-md); box-shadow: var(--shadow);
     }
     .rte-link-input {
-      flex: 1; min-width: 0; padding: 5px 8px;
+      flex: 1; min-width: 0; padding: var(--sp-2) var(--sp-4);
       background: var(--panel-2); border: 1px solid var(--hair);
       border-radius: var(--r-sm); color: var(--ink);
-      font-family: var(--font-mono); font-size: 11.5px; outline: none;
+      font-family: var(--font-mono); font-size: var(--fs-sm); outline: none;
     }
     .rte-link-add {
-      padding: 4px 9px; border: none; border-radius: var(--r-sm);
+      padding: var(--sp-2) var(--sp-4); border: none; border-radius: var(--r-sm);
       background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
-      color: white; font-family: var(--font-disp); font-size: 11.5px;
+      color: white; font-family: var(--font-disp); font-size: var(--fs-sm);
       cursor: pointer; white-space: nowrap;
     }
 
@@ -227,10 +227,10 @@ import {
        read-only view and applied to the DOM Lexical builds at runtime. */
     .rte-content {
       outline: none;
-      padding: 12px 14px; max-height: 460px; overflow-y: auto;
+      padding: var(--sp-6) var(--sp-6); max-height: 460px; overflow-y: auto;
       border-radius: 0 0 calc(var(--r-md) - 1px) calc(var(--r-md) - 1px);
     }
-    .rte-content.compact { padding: 9px 11px; max-height: 220px; }
+    .rte-content.compact { padding: var(--sp-4) var(--sp-5); max-height: 220px; }
     .rte-content:empty::before,
     .rte-content > p:only-child:empty::before {
       content: attr(data-ph); color: var(--ink-4); pointer-events: none;

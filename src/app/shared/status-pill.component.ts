@@ -10,7 +10,7 @@ import { StatusDotComponent } from "./status-dot.component";
   template: `
     <span class="chip" [style]="pillStyle()">
       <app-status-dot [status]="status()" />
-      <span class="up" style="font-size:9.5px;letter-spacing:0.1em">{{ meta().label }}</span>
+      <span class="up" style="font-size:var(--fs-2xs);letter-spacing:0.1em">{{ meta().label }}</span>
     </span>
   `,
 })

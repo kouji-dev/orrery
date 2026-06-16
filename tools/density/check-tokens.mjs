@@ -31,6 +31,14 @@ export const ALLOWLIST = [
   // ctl-h-sm (22px) and ctl-h (26px) control-height tokens and is an intentional
   // compact inline action that doesn't map to a standard control-height token.
   { file: "top-bar.component.ts", value: "25px" },
+  // .rte-btn toolbar buttons are 27px square — sits between ctl-h-sm (22px) and
+  // ctl-h (26/28px); the square icon-button size is a deliberate design constant
+  // for the rich editor toolbar and does not map to a standard control-height token.
+  { file: "rich-editor.component.ts", value: "27px" },
+  // Version badge pill height is 17px — intentionally slimmer than ctl-h-sm (22px)
+  // and taller than the sp-* spacing scale (sp-7≈16px); it is a fixed visual
+  // constant for the header badge and does not map to a control-height token.
+  { file: "version-badge.component.ts", value: "17px" },
 ];
 
 export function scanText(text, file = "") {
