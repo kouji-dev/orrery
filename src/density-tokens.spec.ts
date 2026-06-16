@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
+import { scanRepo } from "../tools/density/check-tokens.mjs";
 
 const css = readFileSync(resolve(__dirname, "styles.css"), "utf8");
 
@@ -27,5 +28,12 @@ describe("density token engine", () => {
       const seg = css.slice(css.search(block));
       expect(seg).toMatch(/--fs-ui:\s*\d/);
     }
+  });
+});
+
+describe("no hardcoded spacing/font literals", () => {
+  it("src/app + styles.css are fully tokenized", () => {
+    const { total, byFile } = scanRepo();
+    expect(total, JSON.stringify(byFile, null, 2)).toBe(0);
   });
 });
