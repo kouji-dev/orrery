@@ -31,10 +31,8 @@ export const ALLOWLIST = [
   // (34x19 + 2px inset + 15px travel). Its width/height must stay equal and fixed
   // so the thumb stays round; scaling only height made it oval.
   { file: "tweaks-panel.component.ts", value: "13px" },
-  // "Run all / Pause all" button in the top-bar is 25px tall — sits between the
-  // ctl-h-sm (22px) and ctl-h (26px) control-height tokens and is an intentional
-  // compact inline action that doesn't map to a standard control-height token.
-  { file: "top-bar.component.ts", value: "25px" },
+  // The old "Run all / Pause all" standalone button (25px) was replaced by the
+  // icon-only .pill-seg square buttons that match --row-h. No entry needed.
   // .rte-btn toolbar buttons are 27px square — sits between ctl-h-sm (22px) and
   // ctl-h (26/28px); the square icon-button size is a deliberate design constant
   // for the rich editor toolbar and does not map to a standard control-height token.

@@ -450,6 +450,105 @@ app-timeline-view {
   white-space: nowrap;
 }
 
+/* factorized top-bar action group: run/pause · theme · settings */
+.action-pill {
+  display: flex;
+  align-items: stretch;
+  height: var(--row-h);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  overflow: hidden;
+  flex: none;
+}
+.action-pill .pill-seg {
+  min-width: 32px;
+  width: var(--row-h);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: none;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, filter 0.12s;
+}
+.action-pill .pill-seg:hover {
+  background: var(--panel-3);
+  color: var(--ink);
+}
+.action-pill .pill-div {
+  width: 1px;
+  align-self: stretch;
+  background: var(--hair);
+  flex: none;
+}
+.action-pill .pill-seg.run {
+  color: #06070b;
+  background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
+  box-shadow: 0 0 16px -8px rgba(var(--accent-rgb), 0.7);
+}
+.action-pill .pill-seg.run:hover {
+  filter: brightness(1.08);
+}
+[data-theme="light"] .action-pill .pill-seg.run {
+  color: #fff;
+}
+.action-pill .pill-seg.run.running {
+  background: transparent;
+  color: var(--ink-2);
+  box-shadow: none;
+}
+.action-pill .pill-seg.run.running:hover {
+  background: var(--panel-3);
+  color: var(--ink);
+}
+
+/* tag picker / filter rows */
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+  border: none;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  transition: background 0.12s, color 0.12s;
+}
+.tag-row:hover {
+  background: var(--panel-2);
+  color: var(--ink);
+}
+.tag-row .tag-check {
+  width: var(--sp-7);
+  height: var(--sp-7);
+  flex: none;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--hair-2);
+  color: #06070b;
+  transition: background 0.12s, border-color 0.12s;
+}
+.tag-row .tag-check.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+[data-theme="light"] .tag-row .tag-check.on {
+  color: #fff;
+}
+.tag-row .tag-count {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+}
+
 .kbd {
   font-size: var(--fs-xs);
   padding: 1px var(--sp-2);

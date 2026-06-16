@@ -38,6 +38,8 @@ pub struct TicketRecord {
     pub status: TicketStatus,
     pub project_id: Option<Uuid>,
     pub agent_id: Option<Uuid>,
+    /// snake_case labels; stored as a JSON array in the `tags` column.
+    pub tags: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -52,6 +54,7 @@ pub struct Ticket {
     pub status: TicketStatus,
     pub project_id: Option<Uuid>,
     pub agent_id: Option<Uuid>,
+    pub tags: Vec<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -65,6 +68,7 @@ impl From<TicketRecord> for Ticket {
             status: r.status,
             project_id: r.project_id,
             agent_id: r.agent_id,
+            tags: r.tags,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -116,6 +120,9 @@ pub struct TicketCreateRequest {
     pub title: String,
     pub notes: Option<String>,
     pub project_id: Option<Uuid>,
+    /// snake_case labels to seed on the new ticket (absent → none).
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
 }
 
 /// Partial update — only the provided fields are written.
@@ -125,6 +132,9 @@ pub struct TicketUpdateRequest {
     pub title: Option<String>,
     pub notes: Option<String>,
     pub project_id: Option<Uuid>,
+    /// `Some(list)` replaces the ticket's tags wholesale; `None` leaves them.
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

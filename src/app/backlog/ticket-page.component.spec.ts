@@ -27,6 +27,7 @@ function ticket(overrides: Partial<Ticket> = {}): Ticket {
     status: "todo",
     projectId: "p1",
     agentId: null,
+    tags: [],
     createdAt: 1000,
     updatedAt: 1000,
     ...overrides,

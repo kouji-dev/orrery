@@ -44,13 +44,14 @@ export class TicketsStore {
     title: string;
     notes?: string;
     projectId?: string | null;
+    tags?: string[];
   }): Promise<Ticket> {
     return this.bridge.invoke<Ticket>(Commands.TicketCreate, { req });
   }
 
   async update(
     id: string,
-    patch: { title?: string; notes?: string; projectId?: string | null },
+    patch: { title?: string; notes?: string; projectId?: string | null; tags?: string[] },
   ): Promise<Ticket> {
     return this.bridge.invoke<Ticket>(Commands.TicketUpdate, { id, req: patch });
   }

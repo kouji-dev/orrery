@@ -152,6 +152,27 @@ pub trait AgentAdapter: Send + Sync {
         Vec::new()
     }
 
+    /// Extra spawn args that pin the agent's MODEL for this launch (the model the
+    /// user picked in the spawn modal, stored on the agent record). Default
+    /// `--model <model>` — claude / codex / cursor / gemini all accept `--model`
+    /// (cursor + gemini also accept `-m`, claude only `--model`). An empty `model`
+    /// adds nothing, so a record with no model launches on the tool's own default.
+    fn model_args(&self, model: &str) -> Vec<String> {
+        if model.is_empty() {
+            Vec::new()
+        } else {
+            vec!["--model".into(), model.into()]
+        }
+    }
+
+    /// Extra spawn args that set the reasoning EFFORT for this launch. Default:
+    /// NONE — most tools expose no effort flag (claude/cursor/gemini all have
+    /// `effort: false` in the frontend catalog), so the value is ignored. Tools
+    /// with a real effort knob (codex) override this.
+    fn effort_args(&self, _effort: &str) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Best-effort PTY keystrokes that APPROVE the tool's current permission
     /// prompt. These are typed straight into the agent's PTY stdin — a stop-gap
     /// until real decision-forwarding over hooks lands. The default is a plain
@@ -684,6 +705,52 @@ mod tests {
                     "{tool} policy '{policy}' must add nothing"
                 );
             }
+        }
+    }
+
+    // Every adapter forwards the picked model as `--model <model>` (claude only
+    // accepts `--model`; codex/cursor/gemini accept it too — and also `-m`, but we
+    // emit the long form uniformly). An empty model adds nothing.
+    #[test]
+    fn model_args_default_is_dash_dash_model_for_every_tool() {
+        for tool in ["claude", "codex", "cursor", "gemini"] {
+            let a = adapter_for(tool).unwrap();
+            assert_eq!(
+                a.model_args("the-model"),
+                vec!["--model".to_string(), "the-model".into()],
+                "{tool} model flag"
+            );
+            assert!(
+                a.model_args("").is_empty(),
+                "{tool} empty model adds nothing"
+            );
+        }
+    }
+
+    // Only codex has a reasoning-effort knob: `--config model_reasoning_effort="<v>"`
+    // (codex parses the value as TOML, hence the quotes). claude/cursor/gemini have
+    // `effort: false` in the catalog and add nothing.
+    #[test]
+    fn effort_args_only_codex_emits_a_flag() {
+        let codex = adapter_for("codex").unwrap();
+        assert_eq!(
+            codex.effort_args("high"),
+            vec![
+                "--config".to_string(),
+                "model_reasoning_effort=high".into()
+            ],
+            "codex effort → config override"
+        );
+        assert!(
+            codex.effort_args("").is_empty(),
+            "codex empty effort adds nothing"
+        );
+        for tool in ["claude", "cursor", "gemini"] {
+            let a = adapter_for(tool).unwrap();
+            assert!(
+                a.effort_args("high").is_empty(),
+                "{tool} has no effort flag"
+            );
         }
     }
 

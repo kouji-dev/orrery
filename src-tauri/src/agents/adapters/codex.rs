@@ -55,6 +55,22 @@ impl AgentAdapter for CodexAdapter {
         }
     }
 
+    // Codex has no dedicated reasoning-effort flag — the documented path is a
+    // config override: `--config model_reasoning_effort=<value>` (valid values
+    // minimal | low | medium | high | xhigh; the catalog offers low/medium/high).
+    // The value is passed BARE (no quotes): codex's docs show `-c
+    // model_reasoning_effort="xhigh"`, but that is shell syntax — the shell strips
+    // the quotes, so codex actually receives the unquoted word. We spawn argv
+    // directly (no shell), so we emit exactly what codex sees in that working path.
+    // Empty effort adds nothing. (`--model` for the model is the trait default.)
+    fn effort_args(&self, effort: &str) -> Vec<String> {
+        if effort.is_empty() {
+            Vec::new()
+        } else {
+            vec!["--config".into(), format!("model_reasoning_effort={effort}")]
+        }
+    }
+
     // Codex's interactive approval prompt is a SELECT list, but its exact key
     // mapping is not stably documented across versions, so we keep the
     // best-effort y/n default for ALLOW and use Esc for DENY (Esc reliably

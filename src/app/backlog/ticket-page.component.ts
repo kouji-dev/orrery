@@ -18,6 +18,8 @@ import { RichViewComponent } from "../shared/rich-editor/rich-view.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { STATUS_META } from "../utils";
+import { TagBarComponent } from "./tag-bar.component";
+import { allTagsOf } from "./tags.util";
 
 // ── Status token map (mirrors design TICKET_COL) ─────────────────────────────
 export interface TicketStatusMeta {
@@ -151,6 +153,7 @@ export class TicketCommentComponent {
     ToolBadgeComponent,
     StatusDotComponent,
     TicketCommentComponent,
+    TagBarComponent,
   ],
   template: `
     @let tk = ticket();
@@ -367,6 +370,16 @@ export class TicketCommentComponent {
               }
             </div>
 
+            <!-- Tags (live add/remove via search-or-create picker) -->
+            <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
+              <span class="field-label" style="margin:0">Tags</span>
+              <app-tag-bar
+                [allTags]="allTags()"
+                [tags]="currentTags()"
+                (tagsChange)="onTagsChange($event)"
+              />
+            </div>
+
             <!-- Agent -->
             <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
               <span class="field-label" style="margin:0">Agent</span>
@@ -438,6 +451,7 @@ export class TicketPageComponent {
   readonly draftTitle = signal("");
   readonly draftNotes = signal("");
   readonly draftProjectId = signal("");
+  readonly draftTags = signal<string[]>([]);
   readonly deleteHovered = signal(false);
   readonly agentHovered = signal(false);
 
@@ -482,6 +496,14 @@ export class TicketPageComponent {
     return STATUS_META[ag.status] ?? STATUS_META["idle"];
   });
 
+  // ── tags ──────────────────────────────────────────────────────────────────
+  /** The tag universe (for search/suggest), derived from every ticket. */
+  readonly allTags = computed(() => allTagsOf(this.ticketsStore.all()));
+  /** Tags shown/edited: a draft stages locally; a real ticket reads its own. */
+  readonly currentTags = computed(() =>
+    this.ticketId() === "draft" ? this.draftTags() : (this.ticket()?.tags ?? []),
+  );
+
   // ── static helpers (template-accessible) ─────────────────────────────────
   readonly statusOrder = TICKET_STATUS_ORDER;
   readonly plainTextNonEmpty = plainTextNonEmpty;
@@ -508,6 +530,7 @@ export class TicketPageComponent {
       this.draftTitle.set(tk?.title ?? "");
       this.draftNotes.set(tk?.notes ?? "");
       this.draftProjectId.set(tk?.projectId ?? "");
+      this.draftTags.set(isDraft ? [] : (tk?.tags ?? []));
       this.deleteHovered.set(false);
       this.composerBody.set("");
 
@@ -541,6 +564,7 @@ export class TicketPageComponent {
           title,
           notes: this.draftNotes() || undefined,
           projectId: this.draftProjectId() || null,
+          tags: this.draftTags(),
         });
         // Close the draft tab and open the new ticket
         const draftTab = this.ui.tabs().find(
@@ -609,6 +633,18 @@ export class TicketPageComponent {
     const id = this.ticketId();
     if (id === "draft") return;
     void this.ticketsStore.setStatus(id, s);
+  }
+
+  /** Tags edited from the side rail. A draft stages locally (saved on create);
+   *  a real ticket persists immediately and refreshes from the ticket:// event. */
+  onTagsChange(next: string[]): void {
+    const id = this.ticketId();
+    if (id === "draft") {
+      this.draftTags.set(next);
+      return;
+    }
+    this.draftTags.set(next);
+    void this.ticketsStore.update(id, { tags: next });
   }
 
   async postComment(): Promise<void> {

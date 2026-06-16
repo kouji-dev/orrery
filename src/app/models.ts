@@ -90,6 +90,8 @@ export interface Ticket {
   status: TicketStatus;
   projectId: string | null;
   agentId: string | null;
+  /** snake_case labels (mirrors the Rust `tags` column). */
+  tags: string[];
   createdAt: number;
   updatedAt: number;
 }
