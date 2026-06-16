@@ -46,12 +46,12 @@ import { IconComponent } from "../shared/icon.component";
       .opt {
         display: flex;
         align-items: flex-start;
-        gap: 7px;
+        gap: var(--sp-3);
         width: 100%;
         font-family: var(--font-mono);
-        font-size: 10px;
+        font-size: var(--fs-xs);
         line-height: 1.4;
-        padding: 6px 9px;
+        padding: var(--sp-3) var(--sp-4);
         border-radius: var(--r-sm, 5px);
         border: 1px solid var(--hair);
         background: var(--panel);
@@ -77,7 +77,7 @@ import { IconComponent } from "../shared/icon.component";
       .mark {
         flex: none;
         width: 13px;
-        height: 13px;
+        height: var(--sp-6);
         margin-top: 1px;
         border: 1px solid var(--ink-4);
         border-radius: 50%;
@@ -94,14 +94,14 @@ import { IconComponent } from "../shared/icon.component";
       }
       .otherText {
         width: 100%;
-        margin-top: 6px;
+        margin-top: var(--sp-3);
         box-sizing: border-box;
         resize: none;
         overflow: hidden;
         font-family: var(--font-mono);
-        font-size: 10.5px;
+        font-size: var(--fs-xs);
         line-height: 1.5;
-        padding: 6px 8px;
+        padding: var(--sp-3) var(--sp-4);
         border-radius: var(--r-sm, 5px);
         border: 1px solid var(--accent);
         background: var(--panel-2, var(--panel));
@@ -111,26 +111,26 @@ import { IconComponent } from "../shared/icon.component";
       .nav {
         display: flex;
         align-items: center;
-        gap: 6px;
-        margin-top: 10px;
+        gap: var(--sp-3);
+        margin-top: var(--sp-5);
         flex-wrap: wrap;
       }
       .badge {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
-        font-size: 8px;
+        gap: var(--sp-2);
+        font-size: var(--fs-3xs);
         letter-spacing: 0.06em;
         text-transform: uppercase;
-        padding: 1px 6px;
+        padding: 1px var(--sp-3);
         border-radius: 999px;
         border: 1px solid var(--accent-2);
         color: var(--accent-2);
         background: color-mix(in oklch, var(--accent-2), transparent 88%);
       }
       .hint {
-        margin-top: 6px;
-        font-size: 9px;
+        margin-top: var(--sp-3);
+        font-size: var(--fs-2xs);
         line-height: 1.4;
         color: var(--ink-4);
       }
@@ -141,14 +141,14 @@ import { IconComponent } from "../shared/icon.component";
     @let i = step();
     @let q = qs[i];
     @if (q) {
-      <div (click)="$event.stopPropagation()" style="margin-top:8px">
+      <div (click)="$event.stopPropagation()" style="margin-top:var(--sp-4)">
         <!-- progress + header -->
-        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span class="up tnum" style="font-size:8.5px;letter-spacing:0.06em;color:var(--ink-4)"
+        <div style="display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap">
+          <span class="up tnum" style="font-size:var(--fs-3xs);letter-spacing:0.06em;color:var(--ink-4)"
             >Question {{ i + 1 }} of {{ qs.length }}</span
           >
           @if (q.header) {
-            <span class="up" style="font-size:8.5px;letter-spacing:0.06em;color:var(--accent)">{{ q.header }}</span>
+            <span class="up" style="font-size:var(--fs-3xs);letter-spacing:0.06em;color:var(--accent)">{{ q.header }}</span>
           }
           @if (q.multiSelect) {
             <span class="badge" title="Multi-select is experimental: the claude TUI's space-toggle is unreliable. Use Terminal if it doesn't take."
@@ -158,11 +158,11 @@ import { IconComponent } from "../shared/icon.component";
         </div>
 
         <!-- the question text -->
-        <div style="font-size:11px;line-height:1.45;color:var(--ink-2);margin-top:5px">{{ q.question }}</div>
+        <div style="font-size:var(--fs-sm);line-height:1.45;color:var(--ink-2);margin-top:var(--sp-2)">{{ q.question }}</div>
 
         <!-- options (radio for single, checkbox for multi) + the synthesized
              "Other" free-text choice claude auto-appends -->
-        <div style="display:flex;flex-direction:column;gap:5px;margin-top:7px">
+        <div style="display:flex;flex-direction:column;gap:var(--sp-2);margin-top:var(--sp-3)">
           @for (opt of q.options; track $index) {
             <button
               type="button"
@@ -218,25 +218,25 @@ import { IconComponent } from "../shared/icon.component";
         <!-- stepper nav + actions -->
         <div class="nav">
           @if (i > 0) {
-            <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="back()">
+            <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="back()">
               <app-icon name="chevron" size="sm" style="transform:rotate(180deg)" />Back
             </button>
           }
           @if (i < qs.length - 1) {
-            <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="next()">
+            <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="next()">
               Next<app-icon name="chevron" size="sm" />
             </button>
           } @else {
-            <button class="btn primary" style="padding:4px 9px;font-size:11px" [disabled]="sending()" (click)="submit()">
+            <button class="btn primary" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" [disabled]="sending()" (click)="submit()">
               <app-icon name="check" size="sm" />{{ sending() ? "Sending…" : "Submit" }}
             </button>
           }
           <!-- Terminal: the RELIABLE fallback for every question -->
-          <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="terminal()">
+          <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="terminal()">
             <app-icon name="terminal" size="sm" />Terminal
           </button>
           <!-- Reject: Esc cancels the numbered select -->
-          <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="reject()">
+          <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="reject()">
             <app-icon name="x" size="sm" />Reject
           </button>
         </div>

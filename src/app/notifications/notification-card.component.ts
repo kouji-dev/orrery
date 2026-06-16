@@ -40,9 +40,9 @@ interface Presentation {
          states signal it is the selection control. */
       .opt {
         font-family: var(--font-mono);
-        font-size: 9.5px;
+        font-size: var(--fs-2xs);
         line-height: 1.4;
-        padding: 2px 8px;
+        padding: var(--sp-1) var(--sp-4);
         border-radius: 5px;
         border: 1px solid var(--hair);
         background: var(--panel);
@@ -73,14 +73,14 @@ interface Presentation {
     @let n = notification();
     @let p = presentation();
     @let pending = n.status === 'pending';
-    <div [style.opacity]="pending ? 1 : 0.55" style="padding:11px 12px;border-bottom:1px solid var(--hair);display:flex;gap:9px">
+    <div [style.opacity]="pending ? 1 : 0.55" style="padding:var(--sp-5) var(--sp-6);border-bottom:1px solid var(--hair);display:flex;gap:var(--sp-4)">
       <app-icon [name]="p.icon" size="sm" [color]="p.color" style="flex:none;margin-top:1px" />
       <div style="flex:1;min-width:0">
         <!-- body: click anywhere on the text region to open the agent terminal -->
         <div style="cursor:pointer" title="Open agent terminal" (click)="openTerminal(n)">
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:12px;font-weight:600;color:var(--ink)">{{ n.title }}</span>
-            <span class="tnum" style="margin-left:auto;font-size:9.5px;color:var(--ink-4)">{{ ago(n.createdAt) }}</span>
+          <div style="display:flex;align-items:center;gap:var(--sp-3)">
+            <span style="font-size:var(--fs-ui);font-weight:600;color:var(--ink)">{{ n.title }}</span>
+            <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ ago(n.createdAt) }}</span>
           </div>
 
           @switch (p.layout) {
@@ -96,27 +96,27 @@ interface Presentation {
                    permission mode, then suggested-rule chips (allow=accent /
                    deny=blocked). Display-only — persisting a rule is deferred. -->
               @if (n.mode) {
-                <div style="margin-top:6px">
-                  <span class="up" style="font-size:9px;letter-spacing:0.06em;color:var(--ink-4)">{{ n.mode }}</span>
+                <div style="margin-top:var(--sp-3)">
+                  <span class="up" style="font-size:var(--fs-2xs);letter-spacing:0.06em;color:var(--ink-4)">{{ n.mode }}</span>
                 </div>
               }
               @let body = n.command || n.description || n.filePath;
               @if (body) {
                 <pre
-                  style="margin:5px 0 0;font-family:var(--font-mono);font-size:10.5px;line-height:1.45;color:var(--ink-3);white-space:pre-wrap;word-break:break-word;max-height:72px;overflow:hidden"
+                  style="margin:var(--sp-2) 0 0;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.45;color:var(--ink-3);white-space:pre-wrap;word-break:break-word;max-height:72px;overflow:hidden"
                 >{{ body }}</pre>
               }
               @if (n.suggestions && n.suggestions.length) {
-                <div class="up" style="margin:8px 0 4px;font-size:8.5px;letter-spacing:0.07em;color:var(--ink-4)">suggested rules</div>
-                <div style="display:flex;flex-wrap:wrap;gap:5px">
+                <div class="up" style="margin:var(--sp-4) 0 var(--sp-2);font-size:var(--fs-3xs);letter-spacing:0.07em;color:var(--ink-4)">suggested rules</div>
+                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2)">
                   @for (s of n.suggestions; track s.rule) {
                     <span
                       [title]="s.description"
                       [style.color]="s.behavior === 'deny' ? 'var(--st-blocked)' : 'var(--accent)'"
                       [style.border-color]="s.behavior === 'deny' ? 'var(--st-blocked)' : 'var(--accent)'"
-                      style="display:inline-flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:9.5px;padding:2px 7px;border-radius:5px;border:1px solid;background:var(--panel)"
+                      style="display:inline-flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:var(--fs-2xs);padding:var(--sp-1) var(--sp-3);border-radius:5px;border:1px solid;background:var(--panel)"
                     >
-                      <span class="up" style="font-size:8px;letter-spacing:0.05em;opacity:0.8">{{ s.behavior }}</span>
+                      <span class="up" style="font-size:var(--fs-3xs);letter-spacing:0.05em;opacity:0.8">{{ s.behavior }}</span>
                       <span>{{ s.rule }}</span>
                     </span>
                   }
@@ -128,7 +128,7 @@ interface Presentation {
               @let body = n.summary || n.detail;
               @if (body) {
                 <pre
-                  style="margin:5px 0 0;font-family:var(--font-mono);font-size:10.5px;line-height:1.45;color:var(--ink-3);white-space:pre-wrap;word-break:break-word;max-height:54px;overflow:hidden"
+                  style="margin:var(--sp-2) 0 0;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.45;color:var(--ink-3);white-space:pre-wrap;word-break:break-word;max-height:54px;overflow:hidden"
                 >{{ body }}</pre>
               }
             }
@@ -141,29 +141,29 @@ interface Presentation {
                (Back/Next/Submit + Terminal + Reject), so the card's button row is
                suppressed for any notification with questions. -->
           @if (!n.questions?.length) {
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px" (click)="$event.stopPropagation()">
+          <div style="display:flex;flex-wrap:wrap;gap:var(--sp-3);margin-top:var(--sp-4)" (click)="$event.stopPropagation()">
             @switch (n.kind) {
               @case ('permission') {
-                <button class="btn primary" style="padding:4px 9px;font-size:11px" (click)="notifications.accept(n)"><app-icon name="check" size="sm" />Accept</button>
-                <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="notifications.reject(n)"><app-icon name="x" size="sm" />Reject</button>
-                <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="navigate.emit(); notifications.open(n)"><app-icon name="terminal" size="sm" />Terminal</button>
+                <button class="btn primary" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.accept(n)"><app-icon name="check" size="sm" />Accept</button>
+                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.reject(n)"><app-icon name="x" size="sm" />Reject</button>
+                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="navigate.emit(); notifications.open(n)"><app-icon name="terminal" size="sm" />Terminal</button>
               }
               @case ('question') {
                 <!-- question with NO options to render → primary Terminal answer +
                      Dismiss. (Option-bearing questions show the stepper inline.) -->
-                <button class="btn primary" style="padding:4px 9px;font-size:11px" (click)="navigate.emit(); notifications.open(n)"><app-icon name="terminal" size="sm" />Answer in terminal</button>
-                <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="notifications.dismiss(n)">Dismiss</button>
+                <button class="btn primary" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="navigate.emit(); notifications.open(n)"><app-icon name="terminal" size="sm" />Answer in terminal</button>
+                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.dismiss(n)">Dismiss</button>
               }
               @case ('done') {
-                <button class="btn primary" style="padding:4px 9px;font-size:11px" (click)="notifications.push(n)"><app-icon name="push" size="sm" />Push</button>
-                <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="navigate.emit(); notifications.review(n)"><app-icon name="diff" size="sm" />Review diff</button>
-                <button class="btn ghost-hair" style="padding:4px 9px;font-size:11px" (click)="notifications.dismiss(n)">Dismiss</button>
+                <button class="btn primary" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.push(n)"><app-icon name="push" size="sm" />Push</button>
+                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="navigate.emit(); notifications.review(n)"><app-icon name="diff" size="sm" />Review diff</button>
+                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.dismiss(n)">Dismiss</button>
               }
             }
           </div>
           }
         } @else {
-          <div class="up" style="margin-top:6px;font-size:9.5px;letter-spacing:0.06em;color:var(--ink-4)">
+          <div class="up" style="margin-top:var(--sp-3);font-size:var(--fs-2xs);letter-spacing:0.06em;color:var(--ink-4)">
             {{ n.status === 'dismissed' ? 'dismissed' : n.decision || n.status }}
           </div>
         }
