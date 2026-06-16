@@ -12,7 +12,8 @@
     "perf:noise": "node tools/perf-smoke/noise.mjs",
     "perf:assert": "node tools/perf-smoke/assert.mjs",
     "release": "node scripts/release/bump.mjs release",
-    "release:patch": "node scripts/release/bump.mjs patch"
+    "release:patch": "node scripts/release/bump.mjs patch",
+    "check:tokens": "node tools/density/check-tokens.mjs"
   },
   "private": true,
   "dependencies": {
