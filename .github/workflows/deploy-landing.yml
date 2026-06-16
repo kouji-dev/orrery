@@ -12,6 +12,12 @@ on:
       - "render.yaml"
       - ".github/workflows/deploy-landing.yml"
   workflow_dispatch: {}
+  # A shipped release redeploys the landing so its download links / version
+  # badge / changelog reflect the just-published build. Fires when the Release
+  # workflow finishes (covers both the v* tag push and the manual dispatch).
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
 
 # Never run two landing deploys at once; newer push wins.
 concurrency:
@@ -21,6 +27,9 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # workflow_run fires for ANY Release conclusion — only redeploy when the
+    # release actually succeeded (push/manual triggers are unaffected).
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     env:
       # GitHub injects this secret; it authorizes the Render API calls.
       RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
