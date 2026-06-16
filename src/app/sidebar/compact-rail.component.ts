@@ -22,12 +22,12 @@ import { mix } from "../utils";
   imports: [IconComponent, StatusDotComponent, ToolBadgeComponent],
   template: `
     <aside
-      style="display:flex;flex-direction:column;align-items:center;min-height:0;width:54px;background:var(--panel);border-right:1px solid var(--hair);padding:8px 0;gap:4px;position:relative"
+      style="display:flex;flex-direction:column;align-items:center;min-height:0;width:54px;background:var(--panel);border-right:1px solid var(--hair);padding:var(--sp-4) 0;gap:var(--sp-2);position:relative"
     >
-      <button class="rail-btn" (click)="ui.toggleSidebarCompact()" title="Expand sidebar" style="margin-bottom:2px">
+      <button class="rail-btn" (click)="ui.toggleSidebarCompact()" title="Expand sidebar" style="margin-bottom:var(--sp-1)">
         <app-icon name="columns" size="sm" color="var(--accent)" />
       </button>
-      <div style="width:24px;height:1px;background:var(--hair);margin:2px 0 4px"></div>
+      <div style="width:24px;height:1px;background:var(--hair);margin:var(--sp-1) 0 var(--sp-2)"></div>
 
       <!-- Backlog entry -->
       <div style="position:relative">
@@ -43,13 +43,13 @@ import { mix } from "../utils";
         @if (openTicketCount() > 0) {
           <span
             class="tnum"
-            style="position:absolute;top:2px;right:2px;min-width:13px;height:13px;padding:0 3px;border-radius:7px;background:var(--accent);color:#06070b;font-size:8px;font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
+            style="position:absolute;top:2px;right:2px;min-width:var(--sp-6);height:var(--sp-6);padding:0 var(--sp-1);border-radius:7px;background:var(--accent);color:#06070b;font-size:var(--fs-3xs);font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
           >{{ openTicketCount() }}</span>
         }
       </div>
-      <div style="width:24px;height:1px;background:var(--hair);margin:2px 0 4px"></div>
+      <div style="width:24px;height:1px;background:var(--hair);margin:var(--sp-1) 0 var(--sp-2)"></div>
 
-      <div class="scroll-y" style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:5px">
+      <div class="scroll-y" style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:var(--sp-2)">
         @for (p of projects.all(); track p.id) {
           @let pa = agentsOf(p.id);
           <div
@@ -73,17 +73,17 @@ import { mix } from "../utils";
               <span
                 [style.background]="mix(p.color, 84)"
                 [style.border]="'1px solid ' + mix(p.color, 60)"
-                style="width:22px;height:22px;border-radius:6px;display:grid;place-items:center"
+                style="width:22px;height:var(--ctl-h-sm);border-radius:6px;display:grid;place-items:center"
               >
                 <app-icon [name]="p.icon" size="sm" [px]="13" [color]="p.color" />
               </span>
               @if (runningOf(pa) > 0) {
-                <span class="dot running" style="position:absolute;top:3px;right:3px;width:7px;height:7px;background:var(--st-running)"></span>
+                <span class="dot running" style="position:absolute;top:3px;right:3px;width:7px;height:var(--sp-3);background:var(--st-running)"></span>
               }
               @if (needsOf(pa) > 0) {
                 <span
                   class="tnum"
-                  style="position:absolute;top:2px;right:2px;min-width:13px;height:13px;padding:0 3px;border-radius:7px;background:var(--st-blocked);color:#fff;font-size:8px;font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
+                  style="position:absolute;top:2px;right:2px;min-width:var(--sp-6);height:var(--sp-6);padding:0 var(--sp-1);border-radius:7px;background:var(--st-blocked);color:#fff;font-size:var(--fs-3xs);font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
                 >{{ needsOf(pa) }}</span>
               }
             </button>
@@ -91,7 +91,7 @@ import { mix } from "../utils";
         }
       </div>
 
-      <div style="width:24px;height:1px;background:var(--hair);margin:4px 0"></div>
+      <div style="width:24px;height:1px;background:var(--hair);margin:var(--sp-2) 0"></div>
       <button class="rail-btn" (click)="ui.openAddProject()" title="Add project">
         <app-icon name="folder" size="sm" color="var(--ink-3)" />
       </button>
@@ -112,7 +112,7 @@ import { mix } from "../utils";
           [style.top.px]="popTop()"
           style="position:fixed;left:52px;z-index:60;width:236px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);overflow:hidden"
         >
-          <div style="display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--hair)">
+          <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--hair)">
             <span
               [style.background]="mix(hp.color, 82)"
               [style.border]="'1px solid ' + mix(hp.color, 62)"
@@ -120,13 +120,13 @@ import { mix } from "../utils";
             >
               <app-icon [name]="hp.icon" size="sm" [px]="11" [color]="hp.color" />
             </span>
-            <span style="font-size:12px;font-weight:600">{{ hp.name }}</span>
-            <span class="tnum" style="margin-left:auto;font-size:9.5px;color:var(--ink-4)">{{ hoverAgents().length }}</span>
+            <span style="font-size:var(--fs-ui);font-weight:600">{{ hp.name }}</span>
+            <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ hoverAgents().length }}</span>
             <button class="pane-btn" (click)="ui.openSpawn(hp.id)" title="Spawn agent">
               <app-icon name="bolt" size="sm" [px]="13" />
             </button>
           </div>
-          <div style="padding:5px;max-height:280px;overflow-y:auto">
+          <div style="padding:var(--sp-2);max-height:280px;overflow-y:auto">
             @for (ag of hoverAgents(); track ag.id) {
               <div
                 class="rail-pop-row"
@@ -135,17 +135,17 @@ import { mix } from "../utils";
                 (dragend)="drag.end()"
                 (click)="ui.openAgent(ag.id)"
                 (contextmenu)="ui.openMenu($event, agentActions.agentMenu(ag.id))"
-                style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer"
+                style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-4);border-radius:6px;cursor:pointer"
               >
                 <app-status-dot [status]="ag.status" />
-                <span style="flex:1;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</span>
+                <span style="flex:1;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</span>
                 @if (needsAgent(ag)) {
-                  <span style="width:5px;height:5px;border-radius:50%;background:var(--st-blocked)"></span>
+                  <span style="width:5px;height:var(--sp-2);border-radius:50%;background:var(--st-blocked)"></span>
                 }
                 <app-tool-badge [tool]="ag.tool" [size]="13" />
               </div>
             } @empty {
-              <div style="padding:8px 10px;font-size:10.5px;color:var(--ink-4)">no agents — spawn one</div>
+              <div style="padding:var(--sp-4) var(--sp-5);font-size:var(--fs-xs);color:var(--ink-4)">no agents — spawn one</div>
             }
           </div>
         </div>

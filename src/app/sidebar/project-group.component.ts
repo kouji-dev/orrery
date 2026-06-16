@@ -21,12 +21,12 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
   imports: [IconComponent, AgentRowComponent],
   template: `
     @let p = project();
-    <div style="margin-bottom:2px">
+    <div style="margin-bottom:var(--sp-1)">
       <div
         class="proj-row"
         (click)="toggle.emit(p.id)"
         (contextmenu)="ui.openMenu($event, projects.projectMenu(p.id))"
-        style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;position:relative;margin:0 6px;border-radius:var(--r-md)"
+        style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-5);cursor:pointer;position:relative;margin:0 var(--sp-3);border-radius:var(--r-md)"
       >
         <app-icon [name]="collapsed() ? 'chevron' : 'chevronD'" size="sm" [px]="11" color="var(--ink-4)" />
         <span
@@ -38,20 +38,20 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
         </span>
         <span
           [style.color]="p.folderExists ? 'var(--ink)' : 'var(--ink-3)'"
-          style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          style="font-size:var(--fs-ui);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
         >{{ p.name }}</span>
         @if (!p.folderExists) {
           <app-icon name="flag" size="sm" [px]="11" color="var(--st-blocked)" title="folder not found — right-click to relocate" />
         }
         @if (needs() > 0) {
-          <span class="tnum" style="font-size:9px;font-weight:700;color:var(--st-blocked)">{{ needs() }}!</span>
+          <span class="tnum" style="font-size:var(--fs-2xs);font-weight:700;color:var(--st-blocked)">{{ needs() }}!</span>
         }
-        <span class="tnum" style="margin-left:auto;font-size:9.5px;color:var(--ink-4);flex:none">{{ agents().length }}</span>
+        <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4);flex:none">{{ agents().length }}</span>
         <button
           class="proj-spawn"
           title="Spawn agent in this project"
           (click)="spawnHere($event)"
-          style="background:transparent;border:none;color:var(--ink-3);cursor:pointer;display:flex;padding:2px;border-radius:4px;flex:none"
+          style="background:transparent;border:none;color:var(--ink-3);cursor:pointer;display:flex;padding:var(--sp-1);border-radius:4px;flex:none"
         >
           <app-icon name="bolt" size="sm" />
         </button>
@@ -64,7 +64,7 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
               <app-agent-row [agent]="ag" [active]="ag.id === activeAgent()" />
             }
           } @else {
-            <div style="padding:4px 10px 6px 30px;font-size:10.5px;color:var(--ink-4)">no agents — spawn one</div>
+            <div style="padding:var(--sp-2) var(--sp-5) var(--sp-3) var(--sp-10);font-size:var(--fs-xs);color:var(--ink-4)">no agents — spawn one</div>
           }
         </div>
       }

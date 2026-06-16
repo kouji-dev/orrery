@@ -25,32 +25,32 @@ import { fmtDur } from "../utils";
       (click)="ui.openAgent(ag.id)"
       (contextmenu)="ui.openMenu($event, agentActions.agentMenu(ag.id))"
       title="drag onto a pane or tab to add its terminal"
-      style="display:flex;flex-direction:column;gap:3px;padding:6px 10px 7px;cursor:pointer;position:relative;border-radius:var(--r-md);margin:1px 8px 1px 14px"
+      style="display:flex;flex-direction:column;gap:var(--sp-1);padding:var(--sp-3) var(--sp-5) var(--sp-3);cursor:pointer;position:relative;border-radius:var(--r-md);margin:1px var(--sp-4) 1px var(--sp-6)"
     >
       @if (active()) {
         <span style="position:absolute;left:-8px;top:7px;bottom:7px;width:2.5px;border-radius:3px;background:linear-gradient(var(--accent),var(--accent-2))"></span>
       }
-      <div style="display:flex;align-items:center;gap:7px">
+      <div style="display:flex;align-items:center;gap:var(--sp-3)">
         <app-status-dot [status]="ag.status" />
         <span style="font-size:var(--fs-tree);color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</span>
         @if (needs()) {
-          <span style="width:5px;height:5px;border-radius:50%;background:var(--st-blocked);flex:none"></span>
+          <span style="width:5px;height:var(--sp-2);border-radius:50%;background:var(--st-blocked);flex:none"></span>
         }
         <app-tool-badge [tool]="ag.tool" [size]="14" />
-        <span class="tnum" style="margin-left:auto;font-size:9.5px;color:var(--ink-4)">{{ elapsed() ? fmt(elapsed()) : '—' }}</span>
+        <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ elapsed() ? fmt(elapsed()) : '—' }}</span>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;padding-left:15px">
+      <div style="display:flex;align-items:center;gap:var(--sp-3);padding-left:var(--sp-7)">
         <app-icon name="branch" size="sm" [px]="11" color="var(--ink-4)" />
-        <span style="font-size:10.5px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
+        <span style="font-size:var(--fs-xs);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
         @if (ch().data.length > 0) {
-          <span class="tnum" style="margin-left:auto;font-size:10px;display:flex;gap:5px;flex:none">
+          <span class="tnum" style="margin-left:auto;font-size:var(--fs-xs);display:flex;gap:var(--sp-2);flex:none">
             <span style="color:var(--code-add-ink)">+{{ totAdd() }}</span>
             <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
           </span>
         }
       </div>
       @if (ag.status === 'running') {
-        <div class="activity" style="margin-left:15px;margin-top:2px"></div>
+        <div class="activity" style="margin-left:var(--sp-7);margin-top:var(--sp-1)"></div>
       }
     </div>
   `,

@@ -44,6 +44,14 @@ export const ALLOWLIST = [
   // height — not a control-height token — so that idle and streaming cards are
   // pixel-identical regardless of content.
   { file: "mini-term.component.ts", value: "60px" },
+  // Popover project-icon badge in compact-rail is 17px — sits between sp-7 (16px)
+  // and ctl-h-sm (22px); it is a bespoke fixed square that mirrors the SVG icon
+  // viewport and does not map to a standard control-height or spacing token.
+  { file: "compact-rail.component.ts", value: "17px" },
+  // Project-icon badge in project-group is 19px — sits between sp-7 (16px) and
+  // ctl-h-sm (22px); it is a bespoke fixed square for the sidebar project row icon
+  // and does not map to a standard control-height or spacing token.
+  { file: "project-group.component.ts", value: "19px" },
 ];
 
 export function scanText(text, file = "") {
