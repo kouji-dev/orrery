@@ -89,6 +89,26 @@ export const ALLOWLIST = [
   // — sits above topbar-h (44px); it is a decorative visual element and does not map
   // to any control-height token.
   { file: "dev-panel.component.ts", value: "46px" },
+  // .set-tgl is a tightly-coupled toggle mini-widget: the 34×19 track pill and the
+  // 15×15 circular thumb form a fixed-geometry unit where all dims must stay equal
+  // and fixed so the thumb remains round and travels exactly 15px (34−15−2×2=15).
+  // Scaling height alone would distort the thumb into an oval. Kept fully fixed.
+  { file: "settings-modal.component.ts", value: "19px" },
+  { file: "settings-modal.component.ts", value: "15px" },
+  // .set-modal height is a fixed structural viewport constraint (600px) — the modal
+  // is designed for an 84vh max with a 600px preferred height. This is not a control
+  // height token; it is a bespoke panel dimension.
+  { file: "settings-modal.component.ts", value: "600px" },
+  // .set-nav-item height is 35px — sits between ctl-h-lg (34px) and topbar-h (44px).
+  // It is a bespoke nav sidebar row height that intentionally exceeds ctl-h-lg by 1px
+  // for comfortable tap targets and does not map to a standard control-height token.
+  { file: "settings-modal.component.ts", value: "35px" },
+  // .set-slider track (4px) and thumb (14×14) are a tightly-coupled fixed-geometry
+  // slider mini-widget. The 128px track width and 14px thumb diameter determine the
+  // slider's travel range (128−14=114px); altering any single dimension independently
+  // breaks the visual and interaction geometry. All dims kept fully fixed.
+  { file: "settings-modal.component.ts", value: "4px" },
+  { file: "settings-modal.component.ts", value: "14px" },
 ];
 
 export function scanText(text, file = "") {
