@@ -35,6 +35,16 @@ export function shortHash(sha) {
   return String(sha).slice(0, 7);
 }
 
+// Fallback one-line summary when none is typed (e.g. a `pnpm release` tag push
+// with no human at the keyboard): prefer the newest feat, else the newest
+// commit, else the tag itself. `commits` is the shaped list, newest-first.
+export function deriveSummary(commits, tag) {
+  const feat = commits.find((c) => c.type === 'feat');
+  if (feat) return feat.msg;
+  if (commits[0]) return commits[0].msg;
+  return `Orrery ${tag}`;
+}
+
 export function buildReleaseEntry({ tag, channel, date, ref, summary, commits }) {
   return {
     tag,
@@ -124,10 +134,6 @@ async function listTags() {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!args.summary) {
-    console.error('error: --summary is required');
-    process.exit(1);
-  }
 
   const tags = await listTags(); // ascending semver
   const tag = args.tag || tags[tags.length - 1];
@@ -156,12 +162,14 @@ async function main() {
       return { type: p.type, hash: c.sha, scope: p.scope, msg: p.msg };
     });
 
+  const summary = args.summary || deriveSummary(commits, tag);
+
   const entry = buildReleaseEntry({
     tag,
     channel: args.channel,
     date: formatDate(head.commit.author.date),
     ref: head.sha,
-    summary: args.summary,
+    summary,
     commits,
   });
 

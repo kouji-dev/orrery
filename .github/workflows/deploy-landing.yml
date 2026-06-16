@@ -53,9 +53,18 @@ jobs:
                 -H "Content-Type: application/json")
 
           echo "::group::Look up static site '${SERVICE_NAME}'"
-          SID="$(curl -fsS "${AUTH[@]}" \
-            "${API}/services?name=${SERVICE_NAME}&type=static_site&limit=1" \
-            | jq -r '.[0].service.id // empty')"
+          RESP="$(mktemp)"
+          CODE="$(curl -sS -o "${RESP}" -w '%{http_code}' "${AUTH[@]}" \
+            "${API}/services?name=${SERVICE_NAME}&type=static_site&limit=1")"
+          if [ "${CODE}" = "401" ] || [ "${CODE}" = "403" ]; then
+            echo "::error::Render API returned ${CODE} (auth failed). RENDER_API_KEY is invalid, expired, or revoked. Rotate it: Render Dashboard → Account Settings → API Keys → create a key, then update the GitHub secret: gh secret set RENDER_API_KEY"
+            exit 1
+          fi
+          if [ "${CODE}" -ge 400 ]; then
+            echo "::error::Render API HTTP ${CODE}: $(cat "${RESP}")"
+            exit 1
+          fi
+          SID="$(jq -r '.[0].service.id // empty' "${RESP}")"
           echo "service id: '${SID:-<none>}'"
           echo "::endgroup::"
 

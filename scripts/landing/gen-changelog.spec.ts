@@ -4,6 +4,7 @@ import {
   isNoiseCommit,
   formatDate,
   shortHash,
+  deriveSummary,
   buildReleaseEntry,
   readReleases,
   injectRelease,
@@ -44,6 +45,24 @@ describe('formatDate', () => {
 
 describe('shortHash', () => {
   it('takes the first 7 chars', () => expect(shortHash('abcdef1234567')).toBe('abcdef1'));
+});
+
+describe('deriveSummary', () => {
+  it('prefers the newest feat commit message', () => {
+    const commits = [
+      { type: 'fix', msg: 'a crash' },
+      { type: 'feat', msg: 'add density modes' },
+      { type: 'feat', msg: 'older feature' },
+    ];
+    expect(deriveSummary(commits, 'v0.3.2')).toBe('add density modes');
+  });
+  it('falls back to the newest commit when there is no feat', () => {
+    expect(deriveSummary([{ type: 'fix', msg: 'patch a bug' }], 'v0.3.2'))
+      .toBe('patch a bug');
+  });
+  it('falls back to the tag when there are no commits', () => {
+    expect(deriveSummary([], 'v0.3.2')).toBe('Orrery v0.3.2');
+  });
 });
 
 describe('buildReleaseEntry', () => {
