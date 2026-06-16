@@ -57,3 +57,7 @@ graphify-out/
 # transient build/dev logs
 .cargobuild.log
 .ngserve.log
+
+# playwright (e2e) artifacts
+test-results/
+playwright-report/
