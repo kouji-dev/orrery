@@ -93,11 +93,12 @@ import { fileName } from "../utils";
             </div>
 
             <!-- bottom row: avatar + sha + file-count + add/del + rel-time -->
+            @let tot = totalsBySha()[c.sha];
             <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-3);margin-top:var(--sp-2);padding-left:var(--sp-6);font-size:var(--fs-2xs);color:var(--ink-4)">
               <app-author-avatar [author]="c.agent" [size]="13" />
               <app-sha-chip [sha]="c.sha" [dim]="true" />
               <span>{{ c.files }}f</span>
-              <app-add-del [add]="commitTotAdd(c)" [del]="commitTotDel(c)" />
+              <app-add-del [add]="tot?.add ?? 0" [del]="tot?.del ?? 0" />
               <span style="margin-left:auto">{{ c.when }}</span>
             </div>
           </div>
@@ -214,15 +215,26 @@ export class AgentCommitHistoryComponent {
     }
   }
 
-  // Totals from expanded file list (or 0 while not loaded).
-  commitTotAdd(c: Commit): number {
-    const files = this.gitInspect.commitFilesFor(this.agent().id, c.sha).data;
-    return files.reduce((s, f) => s + f.add, 0);
-  }
-  commitTotDel(c: Commit): number {
-    const files = this.gitInspect.commitFilesFor(this.agent().id, c.sha).data;
-    return files.reduce((s, f) => s + f.del, 0);
-  }
+  /**
+   * add/del totals per commit sha, derived from the lazily-loaded file lists
+   * (0 until a commit is expanded and its files load). Memoized as a single
+   * computed so it recomputes only when commit-file data changes — not once per
+   * row on every change-detection pass, which the old template methods did.
+   */
+  readonly totalsBySha = computed<Record<string, { add: number; del: number }>>(() => {
+    const id = this.agent().id;
+    const out: Record<string, { add: number; del: number }> = {};
+    for (const c of this.commits()) {
+      let add = 0;
+      let del = 0;
+      for (const f of this.gitInspect.commitFilesFor(id, c.sha).data) {
+        add += f.add;
+        del += f.del;
+      }
+      out[c.sha] = { add, del };
+    }
+    return out;
+  });
 
   // ---- interaction ----
   toggleExpand(sha: string): void {

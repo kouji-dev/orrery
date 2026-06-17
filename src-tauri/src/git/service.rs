@@ -758,6 +758,7 @@ impl GitService {
         walk.push_head()
             .map_err(|e| AppError::Other(format!("push head: {e}")))?;
 
+        let target = std::path::Path::new(path);
         let mut results = Vec::new();
         let mut seen = 0usize;
 
@@ -766,65 +767,52 @@ impl GitService {
                 Ok(c) => c,
                 Err(_) => continue,
             };
-            // Check whether this commit touches `path`
             let to_tree = match commit.tree() {
                 Ok(t) => t,
                 Err(_) => continue,
             };
             let from_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
-            let diff = match repo.diff_tree_to_tree(from_tree.as_ref(), Some(&to_tree), None) {
-                Ok(d) => d,
-                Err(_) => continue,
-            };
-            let touches_path = diff.deltas().any(|d| {
-                let new_match = d
-                    .new_file()
-                    .path()
-                    .map(|p| p.to_string_lossy().replace('\\', "/") == path)
-                    .unwrap_or(false);
-                let old_match = d
-                    .old_file()
-                    .path()
-                    .map(|p| p.to_string_lossy().replace('\\', "/") == path)
-                    .unwrap_or(false);
-                new_match || old_match
-            });
-            if !touches_path {
-                continue;
-            }
-            // Count add/del for this path in this commit
-            let (add, del) = (0..diff.deltas().len())
-                .filter(|&i| {
-                    let d = diff.get_delta(i).unwrap();
-                    let new_match = d
-                        .new_file()
-                        .path()
-                        .map(|p| p.to_string_lossy().replace('\\', "/") == path)
-                        .unwrap_or(false);
-                    let old_match = d
-                        .old_file()
-                        .path()
-                        .map(|p| p.to_string_lossy().replace('\\', "/") == path)
-                        .unwrap_or(false);
-                    new_match || old_match
-                })
-                .fold((0i64, 0i64), |acc, idx| {
-                    let (a, d) = git2::Patch::from_diff(&diff, idx)
-                        .ok()
-                        .flatten()
-                        .map(|p| {
-                            let s = p.line_stats().unwrap_or((0, 0, 0));
-                            (s.1 as i64, s.2 as i64)
-                        })
-                        .unwrap_or((0, 0));
-                    (acc.0 + a, acc.1 + d)
-                });
 
-            // Apply offset/limit
+            // Cheap "did this path change?" check: compare the blob OID of
+            // `path` in this commit's tree vs the (first) parent's tree. No diff
+            // is computed, so non-touching commits cost only two tree lookups —
+            // this is what keeps history walks fast on large repos.
+            let new_oid = to_tree.get_path(target).ok().map(|e| e.id());
+            let old_oid = from_tree
+                .as_ref()
+                .and_then(|t| t.get_path(target).ok())
+                .map(|e| e.id());
+            if new_oid == old_oid {
+                continue; // path unchanged in this commit
+            }
+
+            // Apply offset before any diff work — skipped entries cost nothing.
             if seen < offset {
                 seen += 1;
                 continue;
             }
+
+            // Only for entries we actually return: run a pathspec-limited diff
+            // so add/del is computed for just this path (not the whole tree).
+            let (add, del) = {
+                let mut opts = git2::DiffOptions::new();
+                opts.pathspec(path);
+                match repo.diff_tree_to_tree(from_tree.as_ref(), Some(&to_tree), Some(&mut opts)) {
+                    Ok(diff) => (0..diff.deltas().len()).fold((0i64, 0i64), |acc, idx| {
+                        let (a, d) = git2::Patch::from_diff(&diff, idx)
+                            .ok()
+                            .flatten()
+                            .map(|p| {
+                                let s = p.line_stats().unwrap_or((0, 0, 0));
+                                (s.1 as i64, s.2 as i64)
+                            })
+                            .unwrap_or((0, 0));
+                        (acc.0 + a, acc.1 + d)
+                    }),
+                    Err(_) => (0, 0),
+                }
+            };
+
             results.push(FileHistoryEntry {
                 sha: commit.id().to_string().chars().take(7).collect(),
                 author: commit.author().name().unwrap_or("unknown").to_string(),
@@ -899,13 +887,13 @@ impl GitService {
         for hunk in blame.iter() {
             let sig = hunk.final_signature();
             let sha: String = hunk.final_commit_id().to_string().chars().take(7).collect();
-            let author = sig.name().unwrap_or("unknown").to_string();
-            let when = sig.when().seconds();
+            let author = sig.as_ref().and_then(|s| s.name().ok()).unwrap_or("unknown").to_string();
+            let when = sig.as_ref().map(|s| s.when().seconds()).unwrap_or(0);
             // summary: look up the commit message
             let summary = repo
                 .find_commit(hunk.final_commit_id())
                 .ok()
-                .and_then(|c| c.message().map(|m| m.lines().next().unwrap_or("").to_string()))
+                .and_then(|c| c.message().ok().map(|m| m.lines().next().unwrap_or("").to_string()))
                 .unwrap_or_default();
 
             for _ in 0..hunk.lines_in_hunk() {
@@ -1591,8 +1579,25 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let svc = GitService::new();
         svc.init(dir.path()).unwrap();
+        // Four commits, each changing f.txt's *content* so every commit truly
+        // touches the path (the shared commit_file helper writes identical bytes,
+        // which would collapse to a single touching commit).
         for i in 0..4 {
-            commit_file(dir.path(), "f.txt", &format!("c{i}"));
+            std::fs::write(dir.path().join("f.txt"), format!("content {i}\n")).unwrap();
+            let repo = git2::Repository::open(dir.path()).unwrap();
+            let mut index = repo.index().unwrap();
+            index.add_path(Path::new("f.txt")).unwrap();
+            index.write().unwrap();
+            let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+            let sig = git2::Signature::now("T", "t@t").unwrap();
+            let parent = repo
+                .head()
+                .ok()
+                .and_then(|h| h.target())
+                .and_then(|oid| repo.find_commit(oid).ok());
+            let parents: Vec<&git2::Commit> = parent.iter().collect();
+            repo.commit(Some("HEAD"), &sig, &sig, &format!("c{i}"), &tree, &parents)
+                .unwrap();
         }
         let repo = git2::Repository::open(dir.path()).unwrap();
         let all = svc.file_history(&repo, "f.txt", 10, 0).unwrap();
