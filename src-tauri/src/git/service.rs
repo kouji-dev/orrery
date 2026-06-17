@@ -606,61 +606,6 @@ impl GitService {
         Ok(self.diff_trees(repo, from_tree.as_ref(), Some(&to_tree)))
     }
 
-    /// Build hunks from a `git2::Diff` for a single `path`.
-    /// Returns (old_content, new_content) pair as strings + the hunk vec.
-    /// This is a shared helper extracted from the old `file_diff` logic so both
-    /// the working-tree and commit diff paths can reuse it.
-    fn hunks_from_diff(
-        diff: &git2::Diff,
-        path: &str,
-    ) -> AppResult<(String, String)> {
-        // Find the delta index for `path`
-        let idx = (0..diff.deltas().len())
-            .find(|&i| {
-                let d = diff.get_delta(i).unwrap();
-                let new_match = d
-                    .new_file()
-                    .path()
-                    .map(|p| p.to_string_lossy().replace('\\', "/") == path)
-                    .unwrap_or(false);
-                let old_match = d
-                    .old_file()
-                    .path()
-                    .map(|p| p.to_string_lossy().replace('\\', "/") == path)
-                    .unwrap_or(false);
-                new_match || old_match
-            })
-            .ok_or_else(|| AppError::Other(format!("path '{path}' not in diff")))?;
-
-        let patch = git2::Patch::from_diff(diff, idx)
-            .map_err(|e| AppError::Other(format!("patch: {e}")))?
-            .ok_or_else(|| AppError::Other(format!("no patch for '{path}'")))?;
-
-        // Reconstruct old/new from the patch hunks
-        let mut old = String::new();
-        let mut new = String::new();
-        for h in 0..patch.num_hunks() {
-            let (_, line_count) = patch
-                .hunk(h)
-                .map_err(|e| AppError::Other(format!("hunk: {e}")))?;
-            for l in 0..line_count {
-                let line = patch
-                    .line_in_hunk(h, l)
-                    .map_err(|e| AppError::Other(format!("line: {e}")))?;
-                let text = String::from_utf8_lossy(line.content()).to_string();
-                match line.origin() {
-                    '-' => old.push_str(&text),
-                    '+' => new.push_str(&text),
-                    ' ' => {
-                        old.push_str(&text);
-                        new.push_str(&text);
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok((old, new))
-    }
 
     /// Old/new content of `path` between the first-parent and the commit at
     /// `sha`. Returns the same `FileDiff` shape as `file_diff`.
@@ -678,19 +623,27 @@ impl GitService {
             .tree()
             .map_err(|e| AppError::Other(format!("commit tree: {e}")))?;
         let from_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
-        // Limit the diff to `path` so we don't compute the whole commit's tree
-        // diff just to extract one file (cuts latency on large commits).
-        let mut opts = git2::DiffOptions::new();
-        opts.pathspec(path);
-        let diff = repo
-            .diff_tree_to_tree(from_tree.as_ref(), Some(&to_tree), Some(&mut opts))
-            .map_err(|e| AppError::Other(format!("diff: {e}")))?;
-        let (old, new) = Self::hunks_from_diff(&diff, path)?;
+        // Full file content on each side (parent's blob vs this commit's blob) so
+        // the diff shows the whole file and per-line blame aligns by line number.
+        let new = Self::blob_text(repo, &to_tree, path);
+        let old = from_tree
+            .as_ref()
+            .map(|t| Self::blob_text(repo, t, path))
+            .unwrap_or_default();
         Ok(FileDiff {
             old,
             new,
             lang: lang_from_path(path).to_string(),
         })
+    }
+
+    /// Full UTF-8 text of `path` in `tree`, or empty when the path/blob is absent.
+    fn blob_text(repo: &git2::Repository, tree: &git2::Tree, path: &str) -> String {
+        tree.get_path(std::path::Path::new(path))
+            .ok()
+            .and_then(|e| repo.find_blob(e.id()).ok())
+            .map(|b| String::from_utf8_lossy(b.content()).to_string())
+            .unwrap_or_default()
     }
 
     /// Diff from `from_sha`'s tree to `to_sha`'s tree: files changed in that range.
@@ -735,13 +688,10 @@ impl GitService {
             .map_err(|e| AppError::Other(format!("to commit: {e}")))?
             .tree()
             .map_err(|e| AppError::Other(format!("to tree: {e}")))?;
-        // Limit the diff to `path` — single-file extraction, not a full range diff.
-        let mut opts = git2::DiffOptions::new();
-        opts.pathspec(path);
-        let diff = repo
-            .diff_tree_to_tree(Some(&from_tree), Some(&to_tree), Some(&mut opts))
-            .map_err(|e| AppError::Other(format!("diff: {e}")))?;
-        let (old, new) = Self::hunks_from_diff(&diff, path)?;
+        // Full file content on each side so the diff is whole-file and per-line
+        // blame aligns by line number.
+        let old = Self::blob_text(repo, &from_tree, path);
+        let new = Self::blob_text(repo, &to_tree, path);
         Ok(FileDiff {
             old,
             new,
@@ -887,21 +837,40 @@ impl GitService {
             .map(|b| String::from_utf8_lossy(b.content()).to_string())
             .unwrap_or_default();
 
+        Ok(Self::blame_to_lines(repo, &blame, &file_content))
+    }
+
+    /// Build per-line `BlameLine`s from a git2 `Blame` and the file content it was
+    /// computed over. Lines with a zero oid (from `blame_buffer` on a modified
+    /// working tree) are reported as "Uncommitted".
+    fn blame_to_lines(
+        repo: &git2::Repository,
+        blame: &git2::Blame,
+        file_content: &str,
+    ) -> Vec<BlameLine> {
         let file_lines: Vec<&str> = file_content.split('\n').collect();
         let mut result = Vec::new();
         let mut line_num = 1usize;
 
         for hunk in blame.iter() {
+            let oid = hunk.final_commit_id();
+            let uncommitted = oid.is_zero();
             let sig = hunk.final_signature();
-            let sha: String = hunk.final_commit_id().to_string().chars().take(7).collect();
-            let author = sig.as_ref().and_then(|s| s.name().ok()).unwrap_or("unknown").to_string();
+            let sha: String = oid.to_string().chars().take(7).collect();
+            let author = if uncommitted {
+                "Uncommitted".to_string()
+            } else {
+                sig.as_ref().and_then(|s| s.name().ok()).unwrap_or("unknown").to_string()
+            };
             let when = sig.as_ref().map(|s| s.when().seconds()).unwrap_or(0);
-            // summary: look up the commit message
-            let summary = repo
-                .find_commit(hunk.final_commit_id())
-                .ok()
-                .and_then(|c| c.message().ok().map(|m| m.lines().next().unwrap_or("").to_string()))
-                .unwrap_or_default();
+            let summary = if uncommitted {
+                "Uncommitted changes".to_string()
+            } else {
+                repo.find_commit(oid)
+                    .ok()
+                    .and_then(|c| c.message().ok().map(|m| m.lines().next().unwrap_or("").to_string()))
+                    .unwrap_or_default()
+            };
 
             for _ in 0..hunk.lines_in_hunk() {
                 let line_text = file_lines
@@ -921,7 +890,65 @@ impl GitService {
             }
         }
 
-        Ok(result)
+        result
+    }
+
+    /// Blame both sides of the working-tree diff for `path`:
+    ///  - `old` = HEAD content blamed at HEAD,
+    ///  - `new` = working-tree content blamed via `blame_buffer` (your uncommitted
+    ///    edits map to "Uncommitted"; untouched lines keep their original author).
+    pub fn working_blame(
+        &self,
+        repo: &git2::Repository,
+        path: &str,
+    ) -> AppResult<(Vec<BlameLine>, Vec<BlameLine>)> {
+        let p = std::path::Path::new(path);
+        let work_dir = repo
+            .workdir()
+            .ok_or_else(|| AppError::Other("no workdir".into()))?;
+        let working = std::fs::read(work_dir.join(path)).unwrap_or_default();
+        let working_str = String::from_utf8_lossy(&working).to_string();
+
+        // A brand-new (untracked) file has no HEAD history to blame — the whole
+        // file is your uncommitted work, and there is no old side.
+        let Ok(blame) = repo.blame_file(p, None) else {
+            return Ok((Vec::new(), Self::uncommitted_lines(&working_str)));
+        };
+
+        let head_content = repo
+            .head()
+            .ok()
+            .and_then(|h| h.peel_to_tree().ok())
+            .and_then(|t| t.get_path(p).ok())
+            .and_then(|e| repo.find_blob(e.id()).ok())
+            .map(|b| String::from_utf8_lossy(b.content()).to_string())
+            .unwrap_or_default();
+        let old = Self::blame_to_lines(repo, &blame, &head_content);
+
+        // New side: re-map the committed blame onto the working buffer so edited
+        // lines become "Uncommitted". If that fails, treat the whole side as uncommitted.
+        let new = match blame.blame_buffer(&working) {
+            Ok(buf) => Self::blame_to_lines(repo, &buf, &working_str),
+            Err(_) => Self::uncommitted_lines(&working_str),
+        };
+
+        Ok((old, new))
+    }
+
+    /// One "Uncommitted" BlameLine per line of `content` (for new/untracked files).
+    fn uncommitted_lines(content: &str) -> Vec<BlameLine> {
+        content
+            .split('\n')
+            .enumerate()
+            .map(|(i, line)| BlameLine {
+                n: i + 1,
+                sha: "0000000".to_string(),
+                author: "Uncommitted".to_string(),
+                when: 0,
+                summary: "Uncommitted changes".to_string(),
+                line: line.to_string(),
+            })
+            .collect()
     }
 
     /// Local branch names, or empty for a non-repo.

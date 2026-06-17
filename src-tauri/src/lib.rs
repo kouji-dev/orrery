@@ -226,6 +226,7 @@ pub fn run() {
             agents::commands::agent_range_files,
             agents::commands::agent_range_file_diff,
             agents::commands::agent_blame,
+            agents::commands::agent_working_blame,
             agents::commands::agent_file_history,
             settings::commands::settings_get,
             settings::commands::settings_set,

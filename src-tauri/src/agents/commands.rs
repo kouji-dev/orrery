@@ -649,6 +649,35 @@ pub async fn agent_file_history(
     .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
+/// Both sides' per-line blame for the working-tree diff of `path`: `old` blamed
+/// at HEAD, `new` blamed against the working tree (uncommitted lines flagged).
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkingBlame {
+    pub old: Vec<crate::git::service::BlameLine>,
+    pub new: Vec<crate::git::service::BlameLine>,
+}
+
+#[tauri::command]
+pub async fn agent_working_blame(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    path: String,
+) -> AppResult<WorkingBlame> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_working_blame", || {
+            let agent = svc.get(id)?;
+            let repo = git2::Repository::open(&agent.worktree)
+                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
+            let (old, new) = crate::git::service::GitService::new().working_blame(&repo, &path)?;
+            Ok(WorkingBlame { old, new })
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
 /// Detection of which CLI coding agents are installed — delegated to the adapter
 /// registry so only-installed tools are offered (and, later, hooked).
 /// Blocking pool: shells out per known tool.
