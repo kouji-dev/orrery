@@ -1,6 +1,6 @@
 import { computed, effect, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS, ORG, WORKTREE_ROOT } from "../data";
-import { ContextMenuState, MenuItem, Tab, Tweaks, VizMode } from "../models";
+import { ContextMenuState, GitView, MenuItem, Tab, Tweaks, VizMode } from "../models";
 import { hexRgb } from "../utils";
 import {
   dropAgent,
@@ -51,6 +51,18 @@ export class UiStore {
   // the "focused" agent within the active tab — drives the sidebar highlight and
   // the right panel scope. A tab can tile several agents; this is the live one.
   readonly scopeAgentId = signal<string | null>(null);
+
+  // Active git-inspection view per agent (commit / range / file-history). Set
+  // when the user picks from the right-panel commit history; the agent's diff
+  // pane renders it in place of the working-tree diff. null = working changes.
+  private readonly gitViews = signal<Record<string, GitView | null>>({});
+  gitViewFor(agentId: string): GitView | null {
+    return this.gitViews()[agentId] ?? null;
+  }
+  setGitView(agentId: string, view: GitView | null): void {
+    this.gitViews.update((m) => ({ ...m, [agentId]: view }));
+  }
+
   private tabSeq = 0;
   private newTabId(): string {
     return "tab" + ++this.tabSeq;

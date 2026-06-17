@@ -20,6 +20,8 @@ import { DiffViewComponent } from "./diff-view.component";
 import { FileViewComponent } from "./file-view.component";
 import { DropSide, PaneCtx, PaneLeaf, PaneNode, PaneSplit } from "./pane-model";
 import { TerminalComponent } from "./terminal.component";
+import { AgentGitViewComponent } from "./git/agent-git-view.component";
+import { UiStore } from "../ui/ui.store";
 
 /**
  * One node of a workspace pane tree, rendered recursively. A `leaf` is a single
@@ -30,7 +32,7 @@ import { TerminalComponent } from "./terminal.component";
 @Component({
   selector: "app-pane-node",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ToolBadgeComponent, TerminalComponent, DiffViewComponent, FileViewComponent],
+  imports: [IconComponent, ToolBadgeComponent, TerminalComponent, DiffViewComponent, FileViewComponent, AgentGitViewComponent],
   template: `
     @if (asLeaf(); as lf) {
       @let ag = agent();
@@ -147,6 +149,8 @@ import { TerminalComponent } from "./terminal.component";
             <app-file-view [agent]="ag" [path]="lf.activeFile" />
           } @else if (lf.view === 'terminal') {
             <app-terminal [agent]="ag" />
+          } @else if (ui.gitViewFor(ag.id); as gv) {
+            <app-agent-git-view [agent]="ag" [gitView]="gv" (close)="ui.setGitView(ag.id, null)" />
           } @else {
             <app-diff-view [agent]="ag" />
           }
@@ -363,6 +367,7 @@ export class PaneNodeComponent {
   private host = inject(ElementRef<HTMLElement>);
   private drag = inject(DragService);
   private agentActions = inject(AgentActionsService);
+  readonly ui = inject(UiStore);
   private picker = viewChild<ElementRef<HTMLElement>>("picker");
   private splitEl = viewChild<ElementRef<HTMLElement>>("splitEl");
   private fileStrip = viewChild<ElementRef<HTMLElement>>("fileStrip");

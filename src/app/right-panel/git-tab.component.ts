@@ -7,6 +7,7 @@ import { IconComponent } from "../shared/icon.component";
 import { fileDir, fileName } from "../utils";
 import { CommitFeedComponent } from "./commit-feed.component";
 import { AgentCommitHistoryComponent } from "./agent-commit-history.component";
+import { UiStore } from "../ui/ui.store";
 
 @Component({
   selector: "app-git-tab",
@@ -224,7 +225,18 @@ export class GitTabComponent {
   }
 
   // ---- AgentCommitHistory output handlers (no-op: wired to diff tab later) ----
-  onOpenCommit(_event: { sha: string; path?: string }): void { /* TODO: route to diff tab */ }
-  onOpenRange(_shas: string[]): void { /* TODO: route to range-diff tab */ }
-  onOpenFileHistory(_path: string): void { /* TODO: route to file-history tab */ }
+  readonly ui = inject(UiStore);
+
+  onOpenCommit(event: { sha: string; path?: string }): void {
+    const ag = this.agent();
+    if (ag) this.ui.setGitView(ag.id, { kind: "commit", sha: event.sha, path: event.path });
+  }
+  onOpenRange(shas: string[]): void {
+    const ag = this.agent();
+    if (ag) this.ui.setGitView(ag.id, { kind: "range", shas });
+  }
+  onOpenFileHistory(path: string): void {
+    const ag = this.agent();
+    if (ag) this.ui.setGitView(ag.id, { kind: "filehistory", path });
+  }
 }
