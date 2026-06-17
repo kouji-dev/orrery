@@ -1,4 +1,4 @@
-import { TestBed } from "@angular/core/testing";
+import { Injector, runInInjectionContext } from "@angular/core";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GitInspectStore } from "./git-inspect.store";
 import { BRIDGE } from "../data-source/bridge";
@@ -37,10 +37,8 @@ describe("GitInspectStore", () => {
     resolveFn = null;
     rejectFn = null;
 
-    TestBed.configureTestingModule({
-      providers: [{ provide: BRIDGE, useValue: mockBridge }],
-    });
-    store = TestBed.inject(GitInspectStore);
+    const injector = Injector.create({ providers: [{ provide: BRIDGE, useValue: mockBridge }] });
+    store = runInInjectionContext(injector, () => new GitInspectStore());
   });
 
   // -------------------------------------------------------------------------
