@@ -161,7 +161,7 @@ import { fileName } from "../utils";
   `],
 })
 export class AgentCommitHistoryComponent {
-  private readonly work = inject(AgentWorkStore);
+  readonly work = inject(AgentWorkStore);
   private readonly gitInspect = inject(GitInspectStore);
 
   readonly agent = input.required<Agent>();

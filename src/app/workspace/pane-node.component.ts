@@ -149,8 +149,8 @@ import { UiStore } from "../ui/ui.store";
             <app-file-view [agent]="ag" [path]="lf.activeFile" />
           } @else if (lf.view === 'terminal') {
             <app-terminal [agent]="ag" />
-          } @else if (ui.gitViewFor(ag.id); as gv) {
-            <app-agent-git-view [agent]="ag" [gitView]="gv" (close)="ui.setGitView(ag.id, null)" />
+          } @else if (ui.gitViewFor(ag!.id); as gv) {
+            <app-agent-git-view [agent]="ag!" [gitView]="gv" (close)="ui.setGitView(ag!.id, null)" />
           } @else {
             <app-diff-view [agent]="ag" />
           }

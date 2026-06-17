@@ -6,6 +6,7 @@ import {
   output,
   signal,
 } from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
 import { CommitFile } from "../../models";
 import { fileDir, fileName } from "../../utils";
 import { IconComponent } from "../../shared/icon.component";
@@ -78,7 +79,7 @@ function buildTree(files: CommitFile[]): TreeNode[] {
   selector: "app-diff-file-list",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, StateBadgeComponent, AddDelComponent],
+  imports: [NgTemplateOutlet, IconComponent, StateBadgeComponent, AddDelComponent],
   template: `
     <div style="display:flex;flex-direction:column;min-height:0;height:100%">
 

@@ -89,7 +89,6 @@ function relTime(when: number): string {
         <!-- right: diff or blame -->
         @if (selPath(); as path) {
           <app-diff-or-blame
-            [key]="path"
             [agent]="agent().id"
             [path]="path"
             [diff]="selDiff()"

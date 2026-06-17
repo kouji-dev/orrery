@@ -57,7 +57,7 @@ import { FileBlameComponent } from "./file-blame.component";
           [style.border]="'1px solid ' + (blame() ? 'color-mix(in oklch, var(--accent), transparent 60%)' : 'var(--hair)')"
           style="margin-left:auto;gap:var(--sp-2);border-radius:var(--r-sm)"
         >
-          <app-icon name="git" size="sm" [px]="12" [color]="blame() ? 'var(--accent)' : undefined" />
+          <app-icon name="git" size="sm" [px]="12" [color]="blame() ? 'var(--accent)' : null" />
           Annotate
         </button>
 
