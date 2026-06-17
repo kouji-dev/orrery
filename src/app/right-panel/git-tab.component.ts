@@ -6,11 +6,13 @@ import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
 import { fileDir, fileName } from "../utils";
 import { CommitFeedComponent } from "./commit-feed.component";
+import { AgentCommitHistoryComponent } from "./agent-commit-history.component";
+import { UiStore } from "../ui/ui.store";
 
 @Component({
   selector: "app-git-tab",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, CommitFeedComponent],
+  imports: [IconComponent, CommitFeedComponent, AgentCommitHistoryComponent],
   template: `
     @if (!agent()) {
       <div class="scroll-y" style="flex:1;padding:var(--sp-4) 0">
@@ -128,20 +130,13 @@ import { CommitFeedComponent } from "./commit-feed.component";
           </button>
         </div>
 
-        <!-- this branch's commits (lazy first page + Load more) -->
-        <div class="up" style="font-size:var(--fs-2xs);color:var(--ink-3);padding:var(--sp-2) var(--sp-6)">Commits on this branch</div>
-        <app-commit-feed [commits]="agentCommits()" [compact]="true" />
-        @if (commitsEntry()?.status === 'loading' && !agentCommits().length) {
-          <div style="padding:var(--sp-1) var(--sp-6) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">loading commits…</div>
-        } @else if (!agentCommits().length) {
-          <div style="padding:var(--sp-1) var(--sp-6) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">no commits yet</div>
-        }
-        @if (commitsEntry()?.hasMore) {
-          <button class="btn ghost-hair" style="margin:var(--sp-2) var(--sp-6) var(--sp-6);justify-content:center"
-            [disabled]="commitsEntry()?.status === 'loading'" (click)="work.loadMoreCommits(ag.id)">
-            {{ commitsEntry()?.status === 'loading' ? 'loading…' : 'Load more' }}
-          </button>
-        }
+        <!-- this branch's commits — expandable per-commit view -->
+        <app-agent-commit-history
+          [agent]="ag"
+          (openCommit)="onOpenCommit($event)"
+          (openRange)="onOpenRange($event)"
+          (openFileHistory)="onOpenFileHistory($event)"
+        />
       </div>
     }
   `,
@@ -227,5 +222,21 @@ export class GitTabComponent {
 
   stateInk(state: string): string {
     return state === "A" ? "var(--code-add-ink)" : state === "D" ? "var(--code-del-ink)" : "var(--accent-2)";
+  }
+
+  // ---- AgentCommitHistory output handlers (no-op: wired to diff tab later) ----
+  readonly ui = inject(UiStore);
+
+  onOpenCommit(event: { sha: string; path?: string }): void {
+    const ag = this.agent();
+    if (ag) this.ui.setGitView(ag.id, { kind: "commit", sha: event.sha, path: event.path });
+  }
+  onOpenRange(shas: string[]): void {
+    const ag = this.agent();
+    if (ag) this.ui.setGitView(ag.id, { kind: "range", shas });
+  }
+  onOpenFileHistory(path: string): void {
+    const ag = this.agent();
+    if (ag) this.ui.setGitView(ag.id, { kind: "filehistory", path });
   }
 }

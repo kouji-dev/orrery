@@ -72,6 +72,14 @@ export const Commands = {
   /** Channel-aware download + install + relaunch (may never resolve on Windows —
    *  the installer exits the process). */
   UpdateInstall: 'update_install',
+  // ---- git-inspection commands ----
+  AgentCommitDiff: 'agent_commit_diff',
+  AgentCommitFileDiff: 'agent_commit_file_diff',
+  AgentRangeFiles: 'agent_range_files',
+  AgentRangeFileDiff: 'agent_range_file_diff',
+  AgentBlame: 'agent_blame',
+  AgentWorkingBlame: 'agent_working_blame',
+  AgentFileHistory: 'agent_file_history',
 } as const;
 
 /** One agent's coalesced PTY output inside a multiplexed `agent://output`

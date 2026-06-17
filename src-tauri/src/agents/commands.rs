@@ -8,6 +8,9 @@ use crate::hooks::{hook_binary, HookBridge};
 use crate::projects::service::ProjectService;
 use crate::runtime::RuntimeService;
 use crate::settings::SettingsService;
+
+// git2 is used directly in the git-inspection commands below
+use git2;
 use crate::tickets::service::TicketService;
 use crate::watch::WatchService;
 
@@ -475,6 +478,204 @@ pub fn agent_dir(
 #[tauri::command(async)]
 pub fn agents_interrupted(state: State<'_, InterruptedAgents>) -> AppResult<Vec<Uuid>> {
     crate::perf::timed("agents_interrupted", || Ok(state.drain()))
+}
+
+// ── git-inspection commands ────────────────────────────────────────────────
+
+/// Files changed by a single commit in the agent's worktree.
+/// Returns the same `FileChange[]` shape as `agent_changes`.
+#[tauri::command]
+pub async fn agent_commit_diff(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    sha: String,
+) -> AppResult<Vec<crate::git::service::FileChange>> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_commit_diff", || {
+            let agent = svc.get(id)?;
+            let repo = git2::Repository::open(&agent.worktree)
+                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
+            crate::git::service::GitService::new().commit_files(&repo, &sha)
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Old/new content for a single file at a given commit in the agent's worktree.
+#[tauri::command]
+pub async fn agent_commit_file_diff(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    sha: String,
+    path: String,
+) -> AppResult<crate::git::service::FileDiff> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_commit_file_diff", || {
+            let agent = svc.get(id)?;
+            let repo = git2::Repository::open(&agent.worktree)
+                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
+            crate::git::service::GitService::new().commit_file_diff(&repo, &sha, &path)
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Return value for `agent_range_files`: the aggregate file change list plus
+/// the boundary commit shas (oldest → newest, after sorting by commit time).
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RangeFiles {
+    pub files: Vec<crate::git::service::FileChange>,
+    pub from: String,
+    pub to: String,
+}
+
+/// Files changed across a set of commit shas. Shas are sorted by commit time
+/// (oldest first); the diff is from the oldest commit's tree to the newest
+/// commit's tree. Returns `{ files, from, to }`.
+#[tauri::command]
+pub async fn agent_range_files(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    shas: Vec<String>,
+) -> AppResult<RangeFiles> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_range_files", || {
+            if shas.is_empty() {
+                return Err(AppError::Other("shas must not be empty".into()));
+            }
+            let agent = svc.get(id)?;
+            let repo = git2::Repository::open(&agent.worktree)
+                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
+            let git = crate::git::service::GitService::new();
+
+            // Resolve all shas and sort by commit time (ascending)
+            let mut commits: Vec<(i64, String)> = shas
+                .iter()
+                .map(|sha| {
+                    let oid = repo
+                        .revparse_single(sha)
+                        .map_err(|e| AppError::Other(format!("resolve '{sha}': {e}")))?
+                        .id();
+                    let commit = repo
+                        .find_commit(oid)
+                        .map_err(|e| AppError::Other(format!("find '{sha}': {e}")))?;
+                    Ok((commit.time().seconds(), oid.to_string()))
+                })
+                .collect::<AppResult<Vec<_>>>()?;
+            commits.sort_by_key(|(t, _)| *t);
+            let from = commits.first().map(|(_, s)| s.clone()).unwrap();
+            let to = commits.last().map(|(_, s)| s.clone()).unwrap();
+            let files = git.range_diff(&repo, &from, &to)?;
+            Ok(RangeFiles { files, from, to })
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Old/new content of `path` across the range `from`..`to` (commit shas).
+#[tauri::command]
+pub async fn agent_range_file_diff(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    from: String,
+    to: String,
+    path: String,
+) -> AppResult<crate::git::service::FileDiff> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_range_file_diff", || {
+            let agent = svc.get(id)?;
+            let repo = git2::Repository::open(&agent.worktree)
+                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
+            crate::git::service::GitService::new().range_file_diff(&repo, &from, &to, &path)
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Blame for `path` at `rev` (or HEAD when omitted) in the agent's worktree.
+#[tauri::command]
+pub async fn agent_blame(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    path: String,
+    rev: Option<String>,
+) -> AppResult<Vec<crate::git::service::BlameLine>> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_blame", || {
+            let agent = svc.get(id)?;
+            let repo = git2::Repository::open(&agent.worktree)
+                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
+            crate::git::service::GitService::new().blame(&repo, &path, rev.as_deref())
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Commits that touch `path` in the agent's worktree, paged.
+#[tauri::command]
+pub async fn agent_file_history(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    path: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> AppResult<Vec<crate::git::service::FileHistoryEntry>> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_file_history", || {
+            let agent = svc.get(id)?;
+            let repo = git2::Repository::open(&agent.worktree)
+                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
+            crate::git::service::GitService::new().file_history(
+                &repo,
+                &path,
+                limit.unwrap_or(100),
+                offset.unwrap_or(0),
+            )
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Both sides' per-line blame for the working-tree diff of `path`: `old` blamed
+/// at HEAD, `new` blamed against the working tree (uncommitted lines flagged).
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkingBlame {
+    pub old: Vec<crate::git::service::BlameLine>,
+    pub new: Vec<crate::git::service::BlameLine>,
+}
+
+#[tauri::command]
+pub async fn agent_working_blame(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    path: String,
+) -> AppResult<WorkingBlame> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_working_blame", || {
+            let agent = svc.get(id)?;
+            let repo = git2::Repository::open(&agent.worktree)
+                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
+            let (old, new) = crate::git::service::GitService::new().working_blame(&repo, &path)?;
+            Ok(WorkingBlame { old, new })
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
 /// Detection of which CLI coding agents are installed — delegated to the adapter

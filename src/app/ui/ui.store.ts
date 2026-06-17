@@ -1,6 +1,6 @@
 import { computed, effect, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS, ORG, WORKTREE_ROOT } from "../data";
-import { ContextMenuState, MenuItem, Tab, Tweaks, VizMode } from "../models";
+import { ContextMenuState, GitView, MenuItem, Tab, Tweaks, VizMode } from "../models";
 import { hexRgb } from "../utils";
 import {
   dropAgent,
@@ -51,6 +51,25 @@ export class UiStore {
   // the "focused" agent within the active tab — drives the sidebar highlight and
   // the right panel scope. A tab can tile several agents; this is the live one.
   readonly scopeAgentId = signal<string | null>(null);
+
+  // Active git-inspection view per agent (commit / range / file-history). Set
+  // when the user picks from the right-panel commit history; the agent's diff
+  // pane renders it in place of the working-tree diff. null = working changes.
+  private readonly gitViews = signal<Record<string, GitView | null>>({});
+  gitViewFor(agentId: string): GitView | null {
+    return this.gitViews()[agentId] ?? null;
+  }
+  setGitView(agentId: string, view: GitView | null): void {
+    this.gitViews.update((m) => ({ ...m, [agentId]: view }));
+    // The inspection view only renders inside the agent's DIFF pane (pane-node
+    // shows <app-agent-git-view> in the diff branch). Picking a commit/range
+    // from the right panel while that pane sits in terminal mode would set this
+    // state but show nothing — so when OPENING (non-null), bring the agent's
+    // pane into diff view (reusing/activating its tab, same path as "Review
+    // diff"). Closing (null) leaves the current pane mode untouched.
+    if (view) this.openAgent(agentId, "diff");
+  }
+
   private tabSeq = 0;
   private newTabId(): string {
     return "tab" + ++this.tabSeq;

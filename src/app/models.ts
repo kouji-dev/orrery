@@ -379,3 +379,47 @@ export interface UpdateInfo {
   date?: string | null;
   notes?: string | null;
 }
+
+// ---- git-inspection models (serde camelCase from backend) ----
+
+/** One file entry in a commit's changed-file list. */
+export interface CommitFile {
+  path: string;
+  state: string;
+  add: number;
+  del: number;
+}
+
+/** One line of blame output for a file. */
+export interface BlameLine {
+  n: number;
+  sha: string;
+  author: string;
+  when: number;
+  summary: string;
+  line: string;
+}
+
+/** One commit entry in a file's history. */
+export interface FileHistoryEntry {
+  sha: string;
+  author: string;
+  email: string;
+  when: number;
+  summary: string;
+  add: number;
+  del: number;
+}
+
+/** Changed files across a commit range (from..to). */
+export interface RangeFiles {
+  files: CommitFile[];
+  from: string;
+  to: string;
+}
+
+/** Discriminated union describing which git surface is currently displayed. */
+export type GitView =
+  | { kind: 'commit'; sha: string; path?: string }
+  | { kind: 'range'; shas: string[] }
+  | { kind: 'filehistory'; path: string };
