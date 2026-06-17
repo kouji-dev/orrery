@@ -678,8 +678,12 @@ impl GitService {
             .tree()
             .map_err(|e| AppError::Other(format!("commit tree: {e}")))?;
         let from_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
+        // Limit the diff to `path` so we don't compute the whole commit's tree
+        // diff just to extract one file (cuts latency on large commits).
+        let mut opts = git2::DiffOptions::new();
+        opts.pathspec(path);
         let diff = repo
-            .diff_tree_to_tree(from_tree.as_ref(), Some(&to_tree), None)
+            .diff_tree_to_tree(from_tree.as_ref(), Some(&to_tree), Some(&mut opts))
             .map_err(|e| AppError::Other(format!("diff: {e}")))?;
         let (old, new) = Self::hunks_from_diff(&diff, path)?;
         Ok(FileDiff {
@@ -731,8 +735,11 @@ impl GitService {
             .map_err(|e| AppError::Other(format!("to commit: {e}")))?
             .tree()
             .map_err(|e| AppError::Other(format!("to tree: {e}")))?;
+        // Limit the diff to `path` — single-file extraction, not a full range diff.
+        let mut opts = git2::DiffOptions::new();
+        opts.pathspec(path);
         let diff = repo
-            .diff_tree_to_tree(Some(&from_tree), Some(&to_tree), None)
+            .diff_tree_to_tree(Some(&from_tree), Some(&to_tree), Some(&mut opts))
             .map_err(|e| AppError::Other(format!("diff: {e}")))?;
         let (old, new) = Self::hunks_from_diff(&diff, path)?;
         Ok(FileDiff {

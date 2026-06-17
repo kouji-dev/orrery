@@ -130,16 +130,17 @@ export class CodeDiffComponent implements OnDestroy {
     // Building the MergeView is SYNCHRONOUS and scales with document size — the
     // diff algorithm + DOM construction can block the main thread for hundreds
     // of ms on a large file. Until here we've only awaited microtasks (the
-    // cached core load), so without yielding the build runs in the same frame as
-    // Angular's change detection: no paint, no input = a hard UI freeze. For
-    // heavy diffs, hand the browser a macrotask first so it can paint a
-    // "rendering…" hint and stay responsive; small diffs build inline (no flash).
+    // cached core load), so the build would otherwise run in the same frame as
+    // the change detection that triggered this render: no paint, no input = a
+    // hard UI freeze. ALWAYS hand the browser a macrotask first so the build
+    // runs in its own task — the triggering frame paints and stays responsive.
+    // This matters most for hosts that render <app-code-diff> inline (e.g. a
+    // file opened from a commit in the right panel), which — unlike the main
+    // diff view — aren't wrapped in @defer to provide that boundary.
     const heavy = oldText.length + newText.length > 80_000;
-    if (heavy) {
-      el.textContent = "rendering diff…";
-      await new Promise<void>((r) => setTimeout(r, 0));
-      if (token !== this.renderToken) return;
-    }
+    if (heavy) el.textContent = "rendering diff…";
+    await new Promise<void>((r) => setTimeout(r, 0));
+    if (token !== this.renderToken) return;
     el.textContent = "";
 
     try {
