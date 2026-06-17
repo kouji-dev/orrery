@@ -61,6 +61,13 @@ export class UiStore {
   }
   setGitView(agentId: string, view: GitView | null): void {
     this.gitViews.update((m) => ({ ...m, [agentId]: view }));
+    // The inspection view only renders inside the agent's DIFF pane (pane-node
+    // shows <app-agent-git-view> in the diff branch). Picking a commit/range
+    // from the right panel while that pane sits in terminal mode would set this
+    // state but show nothing — so when OPENING (non-null), bring the agent's
+    // pane into diff view (reusing/activating its tab, same path as "Review
+    // diff"). Closing (null) leaves the current pane mode untouched.
+    if (view) this.openAgent(agentId, "diff");
   }
 
   private tabSeq = 0;

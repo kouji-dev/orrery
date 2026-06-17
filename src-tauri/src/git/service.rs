@@ -1554,6 +1554,88 @@ mod tests {
         assert_eq!(changes[0].state, "A", "root commit file is Added");
     }
 
+    // ── commit_file_diff tests (pathspec-limited) ──────────────────────────
+
+    /// Helper: stage `name` with `content` and commit it onto HEAD, returning the sha.
+    fn commit_content(repo_path: &Path, name: &str, content: &str, msg: &str) -> String {
+        std::fs::create_dir_all(repo_path.join(name).parent().unwrap()).ok();
+        std::fs::write(repo_path.join(name), content).unwrap();
+        let repo = git2::Repository::open(repo_path).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(name)).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = git2::Signature::now("T", "t@t").unwrap();
+        let parent = repo
+            .head()
+            .ok()
+            .and_then(|h| h.target())
+            .and_then(|oid| repo.find_commit(oid).ok());
+        let parents: Vec<&git2::Commit> = parent.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents)
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn commit_file_diff_returns_old_and_new_for_nested_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_content(dir.path(), "src/foo.txt", "line1\n", "init");
+        let sha = commit_content(dir.path(), "src/foo.txt", "line1\nline2\n", "add line2");
+        let repo = git2::Repository::open(dir.path()).unwrap();
+
+        let fd = svc.commit_file_diff(&repo, &sha, "src/foo.txt").unwrap();
+        assert!(fd.new.contains("line2"), "new content has line2: {fd:?}");
+        assert!(fd.new.contains("line1"));
+        assert!(fd.old.contains("line1"));
+        assert!(!fd.old.contains("line2"), "old content lacks line2");
+    }
+
+    #[test]
+    fn commit_file_diff_isolates_one_file_among_many() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_content(dir.path(), "a.txt", "aaa\n", "init a");
+        // a commit that touches BOTH a.txt and b.txt
+        std::fs::write(dir.path().join("a.txt"), "aaa\nAAA\n").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "bbb\n").unwrap();
+        let repo = git2::Repository::open(dir.path()).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("a.txt")).unwrap();
+        index.add_path(Path::new("b.txt")).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = git2::Signature::now("T", "t@t").unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+        let sha = repo
+            .commit(Some("HEAD"), &sig, &sig, "touch both", &tree, &[&parent])
+            .unwrap()
+            .to_string();
+
+        let fd = svc.commit_file_diff(&repo, &sha, "a.txt").unwrap();
+        assert!(fd.new.contains("AAA"), "a.txt diff has its own content: {fd:?}");
+        assert!(!fd.new.contains("bbb"), "a.txt diff must not bleed b.txt content");
+    }
+
+    #[test]
+    fn range_file_diff_returns_content_for_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        let from = commit_content(dir.path(), "f.txt", "v1\n", "v1");
+        commit_content(dir.path(), "f.txt", "v1\nv2\n", "v2");
+        let to = commit_content(dir.path(), "f.txt", "v1\nv2\nv3\n", "v3");
+        let repo = git2::Repository::open(dir.path()).unwrap();
+
+        let fd = svc.range_file_diff(&repo, &from, &to, "f.txt").unwrap();
+        assert!(fd.new.contains("v3"), "range new has latest content: {fd:?}");
+        assert!(fd.old.contains("v1"));
+        assert!(!fd.old.contains("v3"), "range old is the from-side");
+    }
+
     // ── file_history tests ─────────────────────────────────────────────────
 
     #[test]
