@@ -1,33 +1,35 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
+  inject,
   input,
   output,
   signal,
+  untracked,
 } from "@angular/core";
-import { FileDiff } from "../../models";
+import { BlameLine, FileDiff } from "../../models";
+import { GitInspectStore } from "../../agents/git-inspect.store";
 import { fileDir, fileName, langId } from "../../utils";
 import { IconComponent } from "../../shared/icon.component";
 import { AddDelComponent } from "../../shared/git/add-del.component";
 import { CodeDiffComponent } from "../code-diff.component";
-import { FileBlameComponent } from "./file-blame.component";
 
 /**
- * Diff-or-blame panel for a single file within a commit/range diff view.
+ * Diff panel for a single file within a commit/range diff view.
  *
- * Renders:
- *  - A sticky DiffFileHeader band: dir/name + lang chip + "Annotate" toggle.
- *  - When annotate is OFF → `<app-code-diff>` with the file diff.
- *  - When annotate is ON  → `<app-file-blame>` blame gutter.
- *
- * The annotate toggle resets to OFF whenever `path` changes.
+ * Always renders `<app-code-diff>`. The "Annotate" toggle overlays a per-line
+ * committer gutter on BOTH sides of the diff — the old side blamed at `oldRev`
+ * (parent / range-from) and the new side at `newRev` (commit / range-to), since
+ * the same line can have different authors on each side. Blame is loaded lazily
+ * the first time annotate is turned on for a file.
  */
 @Component({
   selector: "app-diff-or-blame",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AddDelComponent, CodeDiffComponent, FileBlameComponent],
+  imports: [IconComponent, AddDelComponent, CodeDiffComponent],
   template: `
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--bg)">
 
@@ -49,7 +51,7 @@ import { FileBlameComponent } from "./file-blame.component";
           class="btn"
           [class.ghost-hair]="!blame()"
           (click)="blame.set(!blame())"
-          title="Toggle blame / annotate"
+          title="Annotate — show who last changed each line on both sides"
           [style.padding]="'var(--sp-1) var(--sp-4)'"
           [style.font-size]="'var(--fs-xs)'"
           [style.color]="blame() ? 'var(--ink)' : 'var(--ink-3)'"
@@ -65,27 +67,21 @@ import { FileBlameComponent } from "./file-blame.component";
         <span class="chip" style="font-size:var(--fs-2xs)">{{ lang() }}</span>
       </div>
 
-      <!-- ---- body: diff or blame ---- -->
-      @if (blame()) {
-        <app-file-blame
-          [agent]="agent()"
-          [path]="path()"
-          (openCommit)="openCommit.emit($event)"
+      <!-- ---- body: the diff, optionally annotated ---- -->
+      @if (diff(); as d) {
+        <app-code-diff
           style="flex:1;min-height:0"
+          [oldText]="d.old"
+          [newText]="d.new"
+          [lang]="lang()"
+          [showBlame]="blame()"
+          [oldBlame]="oldBlameData()"
+          [newBlame]="newBlameData()"
         />
       } @else {
-        @if (diff()) {
-          <app-code-diff
-            style="flex:1;min-height:0"
-            [oldText]="diff()!.old"
-            [newText]="diff()!.new"
-            [lang]="lang()"
-          />
-        } @else {
-          <div style="display:grid;place-items:center;flex:1;color:var(--ink-4);font-size:var(--fs-sm)">
-            no textual diff
-          </div>
-        }
+        <div style="display:grid;place-items:center;flex:1;color:var(--ink-4);font-size:var(--fs-sm)">
+          no textual diff
+        </div>
       }
 
     </div>
@@ -103,7 +99,7 @@ import { FileBlameComponent } from "./file-blame.component";
   ],
 })
 export class DiffOrBlameComponent {
-  /** Agent id — forwarded to file-blame. */
+  /** Agent id — keys the blame store. */
   readonly agent = input.required<string>();
   /** Repo-relative file path. */
   readonly path = input.required<string>();
@@ -114,18 +110,48 @@ export class DiffOrBlameComponent {
   readonly add = input<number | null>(null);
   readonly del = input<number | null>(null);
 
-  /** Emitted when the blame gutter's "open commit" is clicked. */
+  /** Revision to blame the OLD (left) side at — parent commit / range "from". */
+  readonly oldRev = input<string | null>(null);
+  /** Revision to blame the NEW (right) side at — the commit / range "to". */
+  readonly newRev = input<string | null>(null);
+
+  /** Reserved: clicking a blame cell to open its commit (not wired yet). */
   readonly openCommit = output<string>();
 
-  /** Annotate (blame) mode toggle — resets to false on path change. */
+  private readonly store = inject(GitInspectStore);
+
+  /** Annotate (blame) mode toggle — sticky across file switches. */
   readonly blame = signal(false);
 
+  readonly oldBlameData = computed<BlameLine[]>(() => {
+    const rev = this.oldRev();
+    if (!this.blame() || !rev) return [];
+    return this.store.blameFor(this.agent(), this.path(), rev).data;
+  });
+  readonly newBlameData = computed<BlameLine[]>(() => {
+    const rev = this.newRev();
+    if (!this.blame() || !rev) return [];
+    return this.store.blameFor(this.agent(), this.path(), rev).data;
+  });
+
   constructor() {
+    // Lazily load both sides' blame the first time annotate is on for this file.
+    // untracked() keeps the store reads/writes out of the effect's deps (the load
+    // methods read+write the blame signal — see the freeze fix).
     effect(() => {
-      // Reactive on path; reset the toggle whenever the path changes.
-      // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-      this.path();
-      this.blame.set(false);
+      if (!this.blame()) return;
+      const id = this.agent();
+      const path = this.path();
+      const oldRev = this.oldRev();
+      const newRev = this.newRev();
+      untracked(() => {
+        if (id && path && oldRev && this.store.blameFor(id, path, oldRev).status === "idle") {
+          this.store.loadBlame(id, path, oldRev);
+        }
+        if (id && path && newRev && this.store.blameFor(id, path, newRev).status === "idle") {
+          this.store.loadBlame(id, path, newRev);
+        }
+      });
     });
   }
 
@@ -133,6 +159,6 @@ export class DiffOrBlameComponent {
   readonly namePart = () => fileName(this.path());
   readonly lang = () => {
     const d = this.diff();
-    return (d?.lang) || langId(this.path());
+    return d?.lang || langId(this.path());
   };
 }

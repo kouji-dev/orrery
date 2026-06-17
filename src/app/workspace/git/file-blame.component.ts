@@ -7,6 +7,7 @@ import {
   input,
   output,
   signal,
+  untracked,
 } from "@angular/core";
 import { ScrollingModule } from "@angular/cdk/scrolling";
 import { BlameLine } from "../../models";
@@ -94,7 +95,7 @@ interface HoverState {
         style="flex:1;min-height:0;font-family:var(--font-mono);font-size:12px;line-height:1.7"
       >
         <div
-          *cdkVirtualFor="let ln of rows(); track ln.n"
+          *cdkVirtualFor="let ln of rows(); trackBy: trackByLine"
           style="display:flex;height:21px;overflow:hidden"
         >
           <!-- gutter cell: age-shaded, author bar + (on first line of run) avatar/name/rel/sha -->
@@ -225,6 +226,11 @@ export class FileBlameComponent {
   /** Exposed so the template can read lineH without a ts class member dance. */
   readonly lineH = LINE_H;
 
+  /** trackBy for the virtualized blame rows (cdkVirtualFor needs a function, not
+   *  the @for-only `track` keyword — the latter desugars to a binding evaluated in
+   *  the component context where `ln` is undefined and throws every render). */
+  readonly trackByLine = (_: number, ln: BlameRow): number => ln.n;
+
   /** Hover signal — ONE object drives the shared tooltip; null = no tooltip. */
   readonly hover = signal<HoverState | null>(null);
 
@@ -256,12 +262,14 @@ export class FileBlameComponent {
   });
 
   constructor() {
-    // Re-fetch blame whenever agent or path changes.
+    // Re-fetch blame whenever agent or path changes. `loadBlame` reads+writes the
+    // store's blameMap signal; untracked() keeps that out of this effect's deps so
+    // the write can't re-trigger it (else: infinite effect loop → wedged thread).
     effect(() => {
       const agent = this.agent();
       const path = this.path();
       if (agent && path) {
-        this.store.loadBlame(agent, path);
+        untracked(() => this.store.loadBlame(agent, path));
       }
     });
   }

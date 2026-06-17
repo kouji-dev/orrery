@@ -6,6 +6,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
 } from "@angular/core";
 import { Agent, Commit, CommitFile, FileDiff } from "../../models";
 import { GitInspectStore } from "../../agents/git-inspect.store";
@@ -94,6 +95,8 @@ function relTime(when: number): string {
             [diff]="selDiff()"
             [add]="selFile()?.add ?? null"
             [del]="selFile()?.del ?? null"
+            [oldRev]="sha() + '^'"
+            [newRev]="sha()"
           />
         } @else {
           <div style="display:grid;place-items:center;color:var(--ink-4);background:var(--bg);font-size:var(--fs-sm)">
@@ -164,11 +167,15 @@ export class CommitDiffViewComponent {
 
   constructor() {
     // Load file list whenever agent or sha changes.
+    // `loadCommitFiles` READS (commitFilesFor) and WRITES (patch) the store's
+    // commitFilesMap signal. Without untracked(), the read makes commitFilesMap a
+    // dependency of this effect and the write re-invalidates it → infinite effect
+    // loop that wedges the main thread. untracked() scopes deps to agent()/sha().
     effect(() => {
       const id = this.agent().id;
       const sha = this.sha();
       if (id && sha) {
-        this.gitStore.loadCommitFiles(id, sha);
+        untracked(() => this.gitStore.loadCommitFiles(id, sha));
       }
     });
 
@@ -195,7 +202,7 @@ export class CommitDiffViewComponent {
       if (!path || !id || !sha) return;
       const loadable = this.gitStore.commitFileDiffFor(id, sha, path);
       if (loadable.status === "idle") {
-        this.gitStore.loadCommitFileDiff(id, sha, path);
+        untracked(() => this.gitStore.loadCommitFileDiff(id, sha, path));
       }
     });
   }

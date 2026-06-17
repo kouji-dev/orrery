@@ -7,10 +7,11 @@ import {
   input,
   signal,
 } from "@angular/core";
-import { Agent, AgentFile, FileDiff } from "../models";
+import { Agent, AgentFile, BlameLine, FileDiff } from "../models";
 import { IconComponent } from "../shared/icon.component";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
+import { BRIDGE, Commands } from "../data-source/bridge";
 import { fileDir, fileName, fileStateLabel, hunkHeader, langId, langTag, mix } from "../utils";
 import { CodeDiffComponent } from "./code-diff.component";
 
@@ -148,6 +149,21 @@ const LIST_DEFAULT = 236;
               <span style="color:var(--ink-4);font-size:var(--fs-sm)">—</span>
             }
           </div>
+          @if (current()) {
+            <button
+              class="btn"
+              [class.ghost-hair]="!annotate()"
+              (click)="annotate.set(!annotate())"
+              title="Annotate — show who last changed each line on both sides"
+              [style.color]="annotate() ? 'var(--ink)' : 'var(--ink-3)'"
+              [style.background]="annotate() ? 'color-mix(in oklch, var(--accent), transparent 86%)' : 'transparent'"
+              [style.border]="'1px solid ' + (annotate() ? 'color-mix(in oklch, var(--accent), transparent 60%)' : 'var(--hair)')"
+              style="align-self:flex-start;padding:var(--sp-1) var(--sp-4);gap:var(--sp-2);border-radius:var(--r-sm);font-size:var(--fs-xs)"
+            >
+              <app-icon name="git" size="sm" [px]="12" [color]="annotate() ? 'var(--accent)' : null" />
+              Annotate
+            </button>
+          }
           @if (current() && langLabel()) {
             <span class="chip tnum" style="align-self:flex-start;font-size:var(--fs-2xs)">{{ langLabel() }}</span>
           }
@@ -155,7 +171,15 @@ const LIST_DEFAULT = 236;
 
         @if (current() && diff(); as d) {
           @defer (on immediate) {
-            <app-code-diff style="flex:1;min-height:0" [oldText]="d.old" [newText]="d.new" [lang]="langId()" />
+            <app-code-diff
+              style="flex:1;min-height:0"
+              [oldText]="d.old"
+              [newText]="d.new"
+              [lang]="langId()"
+              [showBlame]="annotate()"
+              [oldBlame]="oldBlame()"
+              [newBlame]="newBlame()"
+            />
           } @placeholder {
             <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">loading diff…</div>
           }
@@ -321,6 +345,14 @@ export class DiffViewComponent {
   private gen = 0;
   private lastId: string | null = null;
 
+  // ----- annotate (blame) -----
+  private bridge = inject(BRIDGE);
+  /** Annotate toggle — overlays a committer gutter on both sides of the diff. */
+  readonly annotate = signal(false);
+  readonly oldBlame = signal<BlameLine[]>([]);
+  readonly newBlame = signal<BlameLine[]>([]);
+  private blameGen = 0;
+
   // ----- header derivations -----
   readonly langLabel = computed(() => {
     const f = this.current();
@@ -394,6 +426,34 @@ export class DiffViewComponent {
             this.diff.set(null);
             this.loading.set(false);
           }
+        });
+    });
+
+    // Load both-side blame when annotate is on (or the file/agent changes).
+    // `working_blame` returns old (HEAD) + new (working-tree, via blame_buffer)
+    // so each side of the diff gets correct authorship; uncommitted lines show
+    // "Uncommitted". Superseded by gen guard on rapid switches.
+    effect(() => {
+      const on = this.annotate();
+      const id = this.agentId();
+      const f = this.current();
+      if (!on || !f) {
+        this.oldBlame.set([]);
+        this.newBlame.set([]);
+        return;
+      }
+      const g = ++this.blameGen;
+      void this.bridge
+        .invoke<{ old: BlameLine[]; new: BlameLine[] }>(Commands.AgentWorkingBlame, { id, path: f.path })
+        .then((r) => {
+          if (this.blameGen !== g) return;
+          this.oldBlame.set(r.old ?? []);
+          this.newBlame.set(r.new ?? []);
+        })
+        .catch(() => {
+          if (this.blameGen !== g) return;
+          this.oldBlame.set([]);
+          this.newBlame.set([]);
         });
     });
   }

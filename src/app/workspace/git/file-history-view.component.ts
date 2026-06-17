@@ -6,6 +6,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
 } from "@angular/core";
 import { Agent, FileHistoryEntry, FileDiff } from "../../models";
 import { GitInspectStore } from "../../agents/git-inspect.store";
@@ -371,11 +372,13 @@ export class FileHistoryViewComponent {
   private diffGen = 0;
 
   constructor() {
-    // On path or agent change: load history + reset selection
+    // On path or agent change: load history + reset selection. `loadFileHistory`
+    // reads+writes the store's fileHistoryMap signal — untracked() keeps it out of
+    // this effect's deps (else the write re-triggers the effect → infinite loop).
     effect(() => {
       const id = this.agent().id;
       const p = this.path();
-      this.store.loadFileHistory(id, p);
+      untracked(() => this.store.loadFileHistory(id, p));
       this.baseSha.set(null);
       this.compareSha.set(null);
       this.activeDiff.set(null);
@@ -404,7 +407,9 @@ export class FileHistoryViewComponent {
       }
       const gen = ++this.diffGen;
       this.diffLoading.set(true);
-      void this.loadRevisionDiff(id, cSha, p, gen);
+      // loadRevisionDiff synchronously calls loadCommitFileDiff (reads+writes the
+      // store's commitFileDiffMap); untracked() keeps that out of this effect's deps.
+      untracked(() => void this.loadRevisionDiff(id, cSha, p, gen));
     });
   }
 

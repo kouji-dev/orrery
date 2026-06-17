@@ -6,6 +6,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
 } from "@angular/core";
 import { Agent, CommitFile, FileDiff, RangeFiles } from "../../models";
 import { GitInspectStore } from "../../agents/git-inspect.store";
@@ -77,6 +78,8 @@ import { DiffOrBlameComponent } from "./diff-or-blame.component";
             [diff]="selDiff()"
             [add]="selFile()?.add ?? null"
             [del]="selFile()?.del ?? null"
+            [oldRev]="rangeFilesResult()?.from ?? null"
+            [newRev]="rangeFilesResult()?.to ?? null"
           />
         } @else {
           <div style="display:grid;place-items:center;color:var(--ink-4);background:var(--bg);font-size:var(--fs-sm)">
@@ -144,11 +147,16 @@ export class RangeDiffViewComponent {
 
   constructor() {
     // Load range files whenever agent or shas changes.
+    // `loadRangeFiles` both READS (rangeFilesFor) and WRITES (patch) the store's
+    // rangeFilesMap signal. Without untracked(), that read makes rangeFilesMap a
+    // dependency of THIS effect and the write then re-invalidates it → infinite
+    // effect loop that wedges the main thread. untracked() scopes the effect's
+    // deps to agent()/shas() only.
     effect(() => {
       const id = this.agent().id;
       const shas = this.shas();
       if (id && shas.length) {
-        this.gitStore.loadRangeFiles(id, shas);
+        untracked(() => this.gitStore.loadRangeFiles(id, shas));
       }
     });
 
@@ -170,7 +178,7 @@ export class RangeDiffViewComponent {
       if (!path || !result || !id) return;
       const loadable = this.gitStore.rangeFileDiffFor(id, result.from, result.to, path);
       if (loadable.status === "idle") {
-        this.gitStore.loadRangeFileDiff(id, result.from, result.to, path);
+        untracked(() => this.gitStore.loadRangeFileDiff(id, result.from, result.to, path));
       }
     });
   }

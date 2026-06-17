@@ -41,6 +41,20 @@ import { FileHistoryViewComponent } from "./file-history-view.component";
       }
     </div>
   `,
+  styles: [
+    `
+      /* Fill the pane body (a flex column). Without an explicit :host flex rule
+         the host collapses to content height, so the view only looked full when
+         a file's content was tall enough to stretch it. */
+      :host {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+      }
+    `,
+  ],
 })
 export class AgentGitViewComponent {
   readonly agent = input.required<Agent>();

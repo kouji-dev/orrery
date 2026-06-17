@@ -7,6 +7,7 @@ import {
   input,
   output,
   signal,
+  untracked,
 } from "@angular/core";
 import { Agent, Commit, CommitFile } from "../models";
 import { AgentWorkStore } from "../agents/agent-work.store";
@@ -49,7 +50,7 @@ import { fileName } from "../utils";
     <!-- commit rows -->
     @for (c of commits(); track c.sha; let i = $index) {
       @let isHead = i === 0;
-      @let expanded = expandedSha() === c.sha;
+      @let expanded = isExpanded(c.sha);
       @let selected = sel().includes(c.sha);
       <div
         style="margin:0 var(--sp-3);border-radius:var(--r-sm)"
@@ -175,8 +176,16 @@ export class AgentCommitHistoryComponent {
   readonly openFileHistory = output<string>();
 
   // ---- local ui state ----
-  readonly expandedSha = signal<string | null>(null);
+  // Set of expanded commit shas — every commit toggles independently. (Was a
+  // single `expandedSha`, which only allowed one open at a time AND fought manual
+  // collapse: the auto-expand effect re-opened HEAD the instant it went null.)
+  readonly expanded = signal<Set<string>>(new Set());
+  private didAutoExpand = false;
   readonly sel = signal<string[]>([]);
+
+  isExpanded(sha: string): boolean {
+    return this.expanded().has(sha);
+  }
 
   readonly fname = fileName;
 
@@ -193,12 +202,14 @@ export class AgentCommitHistoryComponent {
       this.work.ensureCommits(id);
     });
 
-    // Auto-expand first (HEAD) commit when commits arrive for the first time.
+    // Auto-expand the HEAD commit ONCE on first load. A plain flag (not a signal
+    // read) gates it so collapsing HEAD afterwards is NOT undone by this effect.
     effect(() => {
       const cs = this.commits();
-      if (cs.length && this.expandedSha() === null) {
-        this.expandedSha.set(cs[0].sha);
-        this.loadFilesIfNeeded(cs[0].sha);
+      if (cs.length && !this.didAutoExpand) {
+        this.didAutoExpand = true;
+        this.expanded.set(new Set([cs[0].sha]));
+        untracked(() => this.loadFilesIfNeeded(cs[0].sha));
       }
     });
   }
@@ -238,9 +249,16 @@ export class AgentCommitHistoryComponent {
 
   // ---- interaction ----
   toggleExpand(sha: string): void {
-    const next = this.expandedSha() === sha ? null : sha;
-    this.expandedSha.set(next);
-    if (next) this.loadFilesIfNeeded(next);
+    this.expanded.update((s) => {
+      const next = new Set(s);
+      if (next.has(sha)) {
+        next.delete(sha);
+      } else {
+        next.add(sha);
+        this.loadFilesIfNeeded(sha);
+      }
+      return next;
+    });
   }
 
   toggleSel(sha: string): void {
@@ -254,6 +272,13 @@ export class AgentCommitHistoryComponent {
   }
 
   emitRange(): void {
-    this.openRange.emit(this.sel());
+    const sel = this.sel();
+    // A single selected commit can't be a meaningful range (diffing it against
+    // itself is empty) — show that commit's own changes (vs its parent) instead.
+    if (sel.length === 1) {
+      this.openCommit.emit({ sha: sel[0] });
+    } else {
+      this.openRange.emit(sel);
+    }
   }
 }

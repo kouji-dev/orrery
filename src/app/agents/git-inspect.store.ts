@@ -146,15 +146,17 @@ export class GitInspectStore {
   // blame (AgentBlame)
   // =========================================================================
 
-  blameFor(id: string, path: string): Loadable<BlameLine[]> {
-    return this.blameMap()[`${id}/${path}`] ?? IDLE_ARR<BlameLine>();
+  blameFor(id: string, path: string, rev?: string): Loadable<BlameLine[]> {
+    return this.blameMap()[`${id}/${path}/${rev ?? ""}`] ?? IDLE_ARR<BlameLine>();
   }
 
   loadBlame(id: string, path: string, rev?: string): void {
-    const key = `${id}/${path}`;
+    // Key includes rev: annotate blames the OLD side (parent/from) and the NEW
+    // side (commit/to) of the same file — different revs, must not collide.
+    const key = `${id}/${path}/${rev ?? ""}`;
     const gen = (this.blameGen[key] ?? 0) + 1;
     this.blameGen[key] = gen;
-    const prev = this.blameFor(id, path);
+    const prev = this.blameFor(id, path, rev);
     this.patch(this.blameMap, key, { status: "loading", data: prev.data });
     const payload: Record<string, unknown> = { id, path };
     if (rev !== undefined) payload["rev"] = rev;

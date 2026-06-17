@@ -78,6 +78,7 @@ export const Commands = {
   AgentRangeFiles: 'agent_range_files',
   AgentRangeFileDiff: 'agent_range_file_diff',
   AgentBlame: 'agent_blame',
+  AgentWorkingBlame: 'agent_working_blame',
   AgentFileHistory: 'agent_file_history',
 } as const;
 
