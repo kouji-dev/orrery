@@ -107,6 +107,19 @@ export const ALLOWLIST = [
   // breaks the visual and interaction geometry. All dims kept fully fixed.
   { file: "settings-modal.component.ts", value: "4px" },
   { file: "settings-modal.component.ts", value: "14px" },
+  // file-blame is a fixed-metric CODE viewer: the row height (21px) equals the
+  // virtual-scroll itemSize and the monospace line metrics (12px) drive it — like
+  // the terminal / CodeMirror diff, code surfaces are not density-scaled. The
+  // gutter label/spacing px live inside that fixed 21px row, so they stay fixed too.
+  { file: "file-blame.component.ts", value: "12px" },
+  { file: "file-blame.component.ts", value: "21px" },
+  { file: "file-blame.component.ts", value: "10.5px" },
+  { file: "file-blame.component.ts", value: "11px" },
+  { file: "file-blame.component.ts", value: "10px" },
+  { file: "file-blame.component.ts", value: "9px" },
+  { file: "file-blame.component.ts", value: "7px" },
+  { file: "file-blame.component.ts", value: "5px" },
+  { file: "file-blame.component.ts", value: "14px" },
 ];
 
 export function scanText(text, file = "") {
