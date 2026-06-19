@@ -13,7 +13,12 @@ import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
 import { fileDir, fileName, fileStateLabel, hunkHeader, langId, langTag, mix } from "../utils";
-import { CodeDiffComponent } from "./code-diff.component";
+import { diffWouldStall } from "./code-diff.component";
+import { UiStore } from "../ui/ui.store";
+import { ReviewCodeComponent } from "./review/review-code.component";
+import { AnnotateBlameComponent } from "./review/annotate-blame.component";
+import { SendReviewButtonComponent } from "./review/send-review.component";
+import { diffToHunks, diffToRows, fileToRows } from "./review/unified-diff";
 
 const LIST_MIN = 160; // px — narrowest the file-list panel may get
 const LIST_MAX = 520; // px — widest before the diff body is too cramped
@@ -22,7 +27,7 @@ const LIST_DEFAULT = 236;
 @Component({
   selector: "app-diff-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, CodeDiffComponent],
+  imports: [IconComponent, ReviewCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent],
   template: `
     <div
       class="diff-grid"
@@ -164,24 +169,25 @@ const LIST_DEFAULT = 236;
               Annotate
             </button>
           }
+          @if (current()) {
+            <app-send-review-button [agent]="agent().id" [agentName]="agent().name" />
+          }
           @if (current() && langLabel()) {
             <span class="chip tnum" style="align-self:flex-start;font-size:var(--fs-2xs)">{{ langLabel() }}</span>
           }
         </div>
 
         @if (current() && diff(); as d) {
-          @defer (on immediate) {
-            <app-code-diff
-              style="flex:1;min-height:0"
-              [oldText]="d.old"
-              [newText]="d.new"
-              [lang]="langId()"
-              [showBlame]="annotate()"
-              [oldBlame]="oldBlame()"
-              [newBlame]="newBlame()"
-            />
-          } @placeholder {
-            <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">loading diff…</div>
+          @if (annotate()) {
+            <app-annotate-blame [lines]="newBlame()" (openCommit)="onOpenCommit($event)" />
+          } @else if (stall()) {
+            <div class="diff-toobig">
+              <span>Large file with long lines — review rendered without inline diff.</span>
+              <button class="db-btn" (click)="forceReview.set(true)">Review anyway</button>
+            </div>
+            <app-review-code [agent]="agent().id" [file]="current()!.path" view="file" [rows]="fileRows()" [lang]="langId()" />
+          } @else {
+            <app-review-code [agent]="agent().id" [file]="current()!.path" view="diff" [rows]="rows()" [lang]="langId()" />
           }
         } @else if (!current()) {
           <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">no changed files</div>
@@ -291,6 +297,7 @@ const LIST_DEFAULT = 236;
 export class DiffViewComponent {
   private agents = inject(AgentsStore);
   private work = inject(AgentWorkStore);
+  private ui = inject(UiStore);
   readonly agent = input.required<Agent>();
   // selection by PATH (works across both flat + tree views); treeMode toggles them
   readonly selPath = signal<string | null>(null);
@@ -349,9 +356,20 @@ export class DiffViewComponent {
   private bridge = inject(BRIDGE);
   /** Annotate toggle — overlays a committer gutter on both sides of the diff. */
   readonly annotate = signal(false);
-  readonly oldBlame = signal<BlameLine[]>([]);
   readonly newBlame = signal<BlameLine[]>([]);
   private blameGen = 0;
+
+  // ----- inline review signals -----
+  readonly forceReview = signal(false);
+  readonly rows = computed(() => {
+    const d = this.diff();
+    return d ? diffToRows(diffToHunks(d.old, d.new)) : [];
+  });
+  readonly stall = computed(() => {
+    const d = this.diff();
+    return !!d && !this.forceReview() && diffWouldStall(d.old, d.new);
+  });
+  readonly fileRows = computed(() => fileToRows(this.diff()?.new ?? ""));
 
   // ----- header derivations -----
   readonly langLabel = computed(() => {
@@ -407,6 +425,7 @@ export class DiffViewComponent {
     effect(() => {
       const id = this.agentId();
       const f = this.current();
+      this.forceReview.set(false);
       if (!f) {
         this.diff.set(null);
         return;
@@ -429,7 +448,7 @@ export class DiffViewComponent {
         });
     });
 
-    // Load both-side blame when annotate is on (or the file/agent changes).
+    // Load new-side blame when annotate is on (or the file/agent changes).
     // `working_blame` returns old (HEAD) + new (working-tree, via blame_buffer)
     // so each side of the diff gets correct authorship; uncommitted lines show
     // "Uncommitted". Superseded by gen guard on rapid switches.
@@ -438,7 +457,6 @@ export class DiffViewComponent {
       const id = this.agentId();
       const f = this.current();
       if (!on || !f) {
-        this.oldBlame.set([]);
         this.newBlame.set([]);
         return;
       }
@@ -447,12 +465,10 @@ export class DiffViewComponent {
         .invoke<{ old: BlameLine[]; new: BlameLine[] }>(Commands.AgentWorkingBlame, { id, path: f.path })
         .then((r) => {
           if (this.blameGen !== g) return;
-          this.oldBlame.set(r.old ?? []);
           this.newBlame.set(r.new ?? []);
         })
         .catch(() => {
           if (this.blameGen !== g) return;
-          this.oldBlame.set([]);
           this.newBlame.set([]);
         });
     });
@@ -480,6 +496,10 @@ export class DiffViewComponent {
   }
   resetWidth() {
     this.listW.set(LIST_DEFAULT);
+  }
+
+  onOpenCommit(sha: string) {
+    this.ui.setGitView(this.agent().id, { kind: "commit", sha });
   }
 
   stateInk(state: string): string {

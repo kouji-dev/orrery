@@ -3,3 +3,8 @@
 // compiler facade; importing this once globally satisfies them. The AOT build
 // (@angular/build) does not use this path.
 import '@angular/compiler';
+
+import { getTestBed } from "@angular/core/testing";
+import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
+
+getTestBed().initTestEnvironment(BrowserTestingModule, platformBrowserTesting());

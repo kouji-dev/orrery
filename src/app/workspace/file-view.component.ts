@@ -3,38 +3,37 @@ import {
   Component,
   computed,
   effect,
-  ElementRef,
   inject,
   input,
-  OnDestroy,
   signal,
-  viewChild,
 } from "@angular/core";
-import type { EditorView } from "@codemirror/view";
 import { marked } from "marked";
-import { Agent } from "../models";
+import { Agent, BlameLine } from "../models";
 import { AgentsStore } from "../stores/agents.store";
 import { IconComponent } from "../shared/icon.component";
 import { UiStore } from "../ui/ui.store";
 import { fileDir, fileName, langId, langTag } from "../utils";
-import { buildTheme, CMCore, loadCMCore, loadLangExt } from "./code-lang";
+import { BRIDGE, Commands } from "../data-source/bridge";
+import { fileToRows } from "./review/unified-diff";
+import { ReviewCodeComponent } from "./review/review-code.component";
+import { AnnotateBlameComponent } from "./review/annotate-blame.component";
+import { SendReviewButtonComponent } from "./review/send-review.component";
 
 /** Don't try to render megabyte-scale documents in the editor. */
 const MAX_CHARS = 1_500_000;
 
 /**
- * Read-only single-file view for a pane's file tab (reincarnation of the old
- * standalone file-viewer, now living INSIDE the pane tree). Content is the
+ * Read-only single-file view for a pane's file tab. Content is the
  * working-tree text — fetched through the existing `agent_diff` command whose
- * `.new` side is exactly that — highlighted by the same lazily-loaded
- * CodeMirror core the diff view uses. Markdown gets a Raw / Preview toggle.
+ * `.new` side is exactly that — rendered by the shared ReviewCodeComponent.
+ * Markdown gets a Raw / Preview toggle. Annotate overlays per-line blame.
  */
 @Component({
   selector: "app-file-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, ReviewCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent],
   template: `
-    <!-- slim toolbar: path · changed-state · (md toggle) · lang · refresh -->
+    <!-- slim toolbar: path · changed-state · (md toggle) · annotate · lang · refresh -->
     <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-6);background:var(--panel);border-bottom:1px solid var(--hair);font-size:var(--fs-sm);flex:none;min-width:0">
       <app-icon name="file" size="sm" [px]="12" color="var(--ink-3)" />
       <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="path()">
@@ -53,10 +52,24 @@ const MAX_CHARS = 1_500_000;
               style="padding:var(--sp-1) var(--sp-3);border-radius:4px;font-size:var(--fs-xs)">Preview</button>
           </div>
         }
+        <button
+          class="btn"
+          [class.ghost-hair]="!annotate()"
+          (click)="annotate.set(!annotate())"
+          title="Annotate — show who last changed each line"
+          [style.color]="annotate() ? 'var(--ink)' : 'var(--ink-3)'"
+          [style.background]="annotate() ? 'color-mix(in oklch, var(--accent), transparent 86%)' : 'transparent'"
+          [style.border]="'1px solid ' + (annotate() ? 'color-mix(in oklch, var(--accent), transparent 60%)' : 'var(--hair)')"
+          style="padding:var(--sp-1) var(--sp-4);gap:var(--sp-2);border-radius:var(--r-sm);font-size:var(--fs-xs)"
+        >
+          <app-icon name="git" size="sm" [px]="12" [color]="annotate() ? 'var(--accent)' : null" />
+          Annotate
+        </button>
         @if (tag()) { <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ tag() }}</span> }
         <button class="btn" (click)="reload()" title="Reload from the worktree" style="padding:var(--sp-1);border-radius:4px">
           <app-icon name="refresh" size="sm" [px]="12" [class.set-spin]="loading()" />
         </button>
+        <app-send-review-button [agent]="agent().id" [agentName]="agent().name" />
       </div>
     </div>
 
@@ -65,8 +78,10 @@ const MAX_CHARS = 1_500_000;
       <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-sm);padding:var(--sp-7);text-align:center">{{ n }}</div>
     } @else if (isMarkdown() && preview()) {
       <div class="scroll-y md-body" style="flex:1;padding:var(--sp-7) var(--sp-8)" [innerHTML]="mdHtml()"></div>
+    } @else if (annotate()) {
+      <app-annotate-blame [lines]="blame()" (openCommit)="onOpenCommit($event)" />
     } @else {
-      <div #host style="flex:1;min-height:0;overflow:auto;font-size:var(--fs-ui)"></div>
+      <app-review-code [agent]="agent().id" [file]="path()" view="file" [rows]="rows()" [lang]="lid()" />
     }
   `,
   styles: [
@@ -78,9 +93,6 @@ const MAX_CHARS = 1_500_000;
         flex-direction: column;
         background: var(--bg);
       }
-      :host ::ng-deep .cm-editor { height: 100%; background-color: var(--bg) !important; }
-      :host ::ng-deep .cm-gutters { min-height: 100%; background-color: var(--bg) !important; }
-      :host ::ng-deep .cm-content { min-height: 100%; }
       .md-body { font-size: var(--fs-ui); line-height: 1.7; color: var(--ink-2); }
       .md-body ::ng-deep h1, .md-body ::ng-deep h2, .md-body ::ng-deep h3 { color: var(--ink); margin: var(--sp-6) 0 var(--sp-3); }
       .md-body ::ng-deep code { background: var(--panel-2); padding: 1px var(--sp-2); border-radius: 4px; font-size: var(--fs-sm); }
@@ -89,24 +101,29 @@ const MAX_CHARS = 1_500_000;
     `,
   ],
 })
-export class FileViewComponent implements OnDestroy {
+export class FileViewComponent {
   readonly agent = input.required<Agent>();
   readonly path = input.required<string>();
 
   private agents = inject(AgentsStore);
   private ui = inject(UiStore);
-  private host = viewChild<ElementRef<HTMLElement>>("host");
+  private bridge = inject(BRIDGE);
 
   readonly loading = signal(false);
   readonly preview = signal(true); // markdown opens rendered; Raw is one click
+  readonly annotate = signal(false);
   private readonly content = signal<string | null>(null);
   private readonly error = signal<string | null>(null);
+  readonly blame = signal<BlameLine[]>([]);
 
   readonly fdir = fileDir;
   readonly fname = fileName;
   readonly isMarkdown = computed(() => /\.(md|markdown)$/i.test(this.path()));
   readonly tag = computed(() => langTag(this.path()));
   readonly mdHtml = computed(() => (this.content() ? (marked.parse(this.content()!) as string) : ""));
+
+  readonly rows = computed(() => fileToRows(this.content() ?? ""));
+  readonly lid = computed(() => langId(this.path()));
 
   /** Block rendering for unloadable / oversized / binary content. */
   readonly notice = computed<string | null>(() => {
@@ -118,8 +135,8 @@ export class FileViewComponent implements OnDestroy {
     return null;
   });
 
-  private view?: EditorView;
-  private gen = 0; // invalidates in-flight loads AND late lazy-parser arrivals
+  private gen = 0;
+  private blameGen = 0;
 
   constructor() {
     // (re)load when the pane shows a different agent/file
@@ -128,24 +145,36 @@ export class FileViewComponent implements OnDestroy {
       const path = this.path();
       void this.load(id, path);
     });
-    // (re)build the editor on content / theme / view-mode changes
-    effect(() => {
-      const c = this.content();
-      const theme = this.ui.tweaks().theme;
-      const md = this.isMarkdown() && this.preview();
-      const blocked = this.notice() !== null;
-      const el = this.host()?.nativeElement;
-      if (c === null || md || blocked || !el) return;
-      void this.render(el, c, theme);
-    });
-  }
 
-  ngOnDestroy() {
-    this.view?.destroy();
+    // Load blame when annotate is on (or file/agent changes while on).
+    effect(() => {
+      const on = this.annotate();
+      const id = this.agent().id;
+      const path = this.path();
+      if (!on) {
+        this.blame.set([]);
+        return;
+      }
+      const g = ++this.blameGen;
+      void this.bridge
+        .invoke<{ old: BlameLine[]; new: BlameLine[] }>(Commands.AgentWorkingBlame, { id, path })
+        .then((r) => {
+          if (this.blameGen !== g) return;
+          this.blame.set(r.new ?? []);
+        })
+        .catch(() => {
+          if (this.blameGen !== g) return;
+          this.blame.set([]);
+        });
+    });
   }
 
   reload() {
     void this.load(this.agent().id, this.path());
+  }
+
+  onOpenCommit(sha: string) {
+    this.ui.setGitView(this.agent().id, { kind: "commit", sha });
   }
 
   private async load(id: string, path: string) {
@@ -162,52 +191,6 @@ export class FileViewComponent implements OnDestroy {
       this.error.set("could not read file: " + (e instanceof Error ? e.message : e));
     } finally {
       if (g === this.gen) this.loading.set(false);
-    }
-  }
-
-  private async render(el: HTMLElement, doc: string, theme: "dark" | "light") {
-    const g = this.gen;
-    this.view?.destroy();
-    this.view = undefined;
-    el.textContent = "loading…";
-    let cm: CMCore;
-    try {
-      cm = await loadCMCore();
-    } catch {
-      // CDN unavailable — plain text beats nothing
-      if (g === this.gen) el.textContent = doc;
-      return;
-    }
-    if (g !== this.gen || el !== this.host()?.nativeElement) return;
-    el.textContent = "";
-    try {
-      const { EditorState, Compartment } = cm.state;
-      const { EditorView, lineNumbers } = cm.view;
-      const langComp = new Compartment();
-      const view = new EditorView({
-        state: EditorState.create({
-          doc,
-          extensions: [
-            lineNumbers(),
-            buildTheme(cm, theme),
-            EditorView.editable.of(false),
-            EditorState.readOnly.of(true),
-            EditorView.lineWrapping,
-            langComp.of([]),
-          ],
-        }),
-        parent: el,
-      });
-      this.view = view;
-      const lang = langId(this.path());
-      if (lang) {
-        void loadLangExt(lang).then((ext) => {
-          if (g !== this.gen || this.view !== view) return; // stale
-          view.dispatch({ effects: langComp.reconfigure(ext) });
-        });
-      }
-    } catch {
-      el.textContent = doc;
     }
   }
 }

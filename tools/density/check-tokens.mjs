@@ -120,6 +120,65 @@ export const ALLOWLIST = [
   { file: "file-blame.component.ts", value: "7px" },
   { file: "file-blame.component.ts", value: "5px" },
   { file: "file-blame.component.ts", value: "14px" },
+  // review-code is a fixed-metric CODE viewer (inline-review renderer): row
+  // heights, gutter widths, font sizes, and chip dimensions are driven by
+  // monospace line metrics and design-reference constants — like the diff /
+  // file-blame surfaces, code viewers are intentionally NOT density-scaled.
+  { file: "review-code.component.ts", value: "5px" },
+  { file: "review-code.component.ts", value: "7px" },
+  { file: "review-code.component.ts", value: "8px" },
+  { file: "review-code.component.ts", value: "8.5px" },
+  { file: "review-code.component.ts", value: "9px" },
+  { file: "review-code.component.ts", value: "9.5px" },
+  { file: "review-code.component.ts", value: "10px" },
+  { file: "review-code.component.ts", value: "10.5px" },
+  { file: "review-code.component.ts", value: "11px" },
+  { file: "review-code.component.ts", value: "12px" },
+  { file: "review-code.component.ts", value: "14px" },
+  { file: "review-code.component.ts", value: "15px" },
+  { file: "review-code.component.ts", value: "16px" },
+  { file: "review-code.component.ts", value: "17px" },
+  { file: "review-code.component.ts", value: "38px" },
+  { file: "review-code.component.ts", value: "56px" },
+  // annotate-blame is a fixed-metric CODE viewer (annotate/blame renderer): author
+  // gutter widths (196px, 44px), font sizes, chip dimensions, and popup geometry
+  // are ported 1:1 from the design reference. Like file-blame and review-code,
+  // code surfaces are intentionally NOT density-scaled.
+  { file: "annotate-blame.component.ts", value: "4px" },
+  { file: "annotate-blame.component.ts", value: "5px" },
+  { file: "annotate-blame.component.ts", value: "6px" },
+  { file: "annotate-blame.component.ts", value: "7px" },
+  { file: "annotate-blame.component.ts", value: "8px" },
+  { file: "annotate-blame.component.ts", value: "9px" },
+  { file: "annotate-blame.component.ts", value: "9.5px" },
+  { file: "annotate-blame.component.ts", value: "10px" },
+  { file: "annotate-blame.component.ts", value: "10.5px" },
+  { file: "annotate-blame.component.ts", value: "11px" },
+  { file: "annotate-blame.component.ts", value: "12px" },
+  { file: "annotate-blame.component.ts", value: "14px" },
+  // send-review modal is a fixed-metric UI panel: the grouped-file list, comment
+  // rows, global-note textarea, and footer all carry bespoke pixel geometry ported
+  // 1:1 from the design reference. Like review-code, the comment-list surface is
+  // intentionally NOT density-scaled — comment card heights, gutter widths and
+  // font sizes must stay visually stable across density modes.
+  { file: "send-review.component.ts", value: "2px" },
+  { file: "send-review.component.ts", value: "3px" },
+  { file: "send-review.component.ts", value: "4px" },
+  { file: "send-review.component.ts", value: "5px" },
+  { file: "send-review.component.ts", value: "6px" },
+  { file: "send-review.component.ts", value: "7px" },
+  { file: "send-review.component.ts", value: "8px" },
+  { file: "send-review.component.ts", value: "9px" },
+  { file: "send-review.component.ts", value: "9.5px" },
+  { file: "send-review.component.ts", value: "10px" },
+  { file: "send-review.component.ts", value: "10.5px" },
+  { file: "send-review.component.ts", value: "11px" },
+  { file: "send-review.component.ts", value: "11.5px" },
+  { file: "send-review.component.ts", value: "12px" },
+  { file: "send-review.component.ts", value: "14px" },
+  { file: "send-review.component.ts", value: "18px" },
+  { file: "send-review.component.ts", value: "24px" },
+  { file: "send-review.component.ts", value: "40px" },
 ];
 
 export function scanText(text, file = "") {
