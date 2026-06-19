@@ -179,6 +179,17 @@ export const ALLOWLIST = [
   { file: "send-review.component.ts", value: "18px" },
   { file: "send-review.component.ts", value: "24px" },
   { file: "send-review.component.ts", value: "40px" },
+  // The update toast + What's-new digest are bespoke fixed-metric overlay panels
+  // (icon boxes, button heights, badge/chip padding, the hero accent line) ported
+  // pixel-for-pixel from the design — small visual constants, not control-height /
+  // spacing tokens.
+  { file: "update-toast.component.ts", value: "34px" },
+  { file: "update-toast.component.ts", value: "28px" },
+  { file: "update-toast.component.ts", value: "2px" },
+  { file: "whats-new-modal.component.ts", value: "28px" },
+  { file: "whats-new-modal.component.ts", value: "6px" },
+  { file: "whats-new-modal.component.ts", value: "3px" },
+  { file: "whats-new-modal.component.ts", value: "2px" },
 ];
 
 export function scanText(text, file = "") {

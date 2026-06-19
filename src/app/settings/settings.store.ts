@@ -115,6 +115,8 @@ export class SettingsStore {
   readonly updateKnown = computed(() => this.updateInfo() !== null);
   /** The update card's content, or null after "Later" hid it. */
   readonly updateCard = computed(() => (this.updateDismissed() ? null : this.updateInfo()));
+  /** The in-app "What's new" / release-notes modal is open. */
+  readonly whatsNewOpen = signal(false);
 
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   /** True once the user edited anything — a late `settings_get` must not clobber. */
@@ -288,5 +290,13 @@ export class SettingsStore {
   /** "Later": hide the card; the nav dot (update KNOWN) stays. */
   dismissUpdate(): void {
     this.updateDismissed.set(true);
+  }
+
+  /** Open / close the in-app "What's new" release-notes modal. */
+  openWhatsNew(): void {
+    this.whatsNewOpen.set(true);
+  }
+  closeWhatsNew(): void {
+    this.whatsNewOpen.set(false);
   }
 }

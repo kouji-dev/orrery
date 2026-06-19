@@ -31,85 +31,39 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    env:
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-      SERVICE_NAME: orrery-landing
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0 # full history + tags for the local-git changelog append
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - name: Generate changelog entry
+      - name: Update changelog.json in orrery-releases
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           SUMMARY: ${{ inputs.summary }}
           CHANNEL: ${{ inputs.channel }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          args=(--summary "$SUMMARY" --channel "$CHANNEL")
-          if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
-          node scripts/landing/gen-changelog.mjs "${args[@]}"
-
-      - name: Commit regenerated changelog
-        id: commit
-        env:
-          TAG: ${{ inputs.tag }}
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- landing/changelog.html; then
+          git clone --depth 1 "https://x-access-token:${RELEASES_TOKEN}@github.com/kouji-dev/orrery-releases.git" releases-repo
+          if [ -f releases-repo/changelog.json ]; then
+            args=(append --summary "$SUMMARY" --channel "$CHANNEL" --out releases-repo/changelog.json)
+            if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
+            node scripts/release/changelog-json.mjs "${args[@]}"
+          else
+            node scripts/release/changelog-json.mjs migrate --channel "$CHANNEL" --out releases-repo/changelog.json
+          fi
+          cd releases-repo
+          if git diff --quiet -- changelog.json; then
             echo "No changelog changes; nothing to commit."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add landing/changelog.html
-          git commit -m "chore(landing): sync changelog for ${TAG:-latest} [skip ci]"
-          git push origin HEAD:main
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-
-      - name: Trigger Render deploy
-        if: steps.commit.outputs.changed == 'true'
-        run: |
-          set -euo pipefail
-          if [ -z "${RENDER_API_KEY:-}" ]; then
-            echo "::error::RENDER_API_KEY is not set."
-            exit 1
-          fi
-          API="https://api.render.com/v1"
-          AUTH=(-H "Authorization: Bearer ${RENDER_API_KEY}" \
-                -H "Accept: application/json" \
-                -H "Content-Type: application/json")
-
-          SID="$(curl -fsS "${AUTH[@]}" \
-            "${API}/services?name=${SERVICE_NAME}&type=static_site&limit=1" \
-            | jq -r '.[0].service.id // empty')"
-          if [ -z "${SID}" ]; then
-            echo "::error::static site '${SERVICE_NAME}' not found — run Deploy landing once first."
-            exit 1
-          fi
-
-          DEPLOY="$(curl -fsS "${AUTH[@]}" -X POST \
-            "${API}/services/${SID}/deploys" -d '{"clearCache":"do_not_clear"}')"
-          DID="$(echo "${DEPLOY}" | jq -r '.id // empty')"
-          echo "deploy id: ${DID:-<none>}"
-
-          [ -z "${DID:-}" ] && { echo "Deploy started; no id to poll."; exit 0; }
-
-          for i in $(seq 1 60); do
-            STATUS="$(curl -fsS "${AUTH[@]}" \
-              "${API}/services/${SID}/deploys/${DID}" | jq -r '.status // "unknown"')"
-            echo "[$i] status: ${STATUS}"
-            case "${STATUS}" in
-              live) echo "::notice::Landing deployed — live."; exit 0 ;;
-              build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
-                echo "::error::Deploy ended in '${STATUS}'."; exit 1 ;;
-            esac
-            sleep 10
-          done
-          echo "::warning::Timed out waiting for deploy ${DID}."
+          git add changelog.json
+          git commit -m "chore(changelog): ${TAG:-latest}"
+          git push

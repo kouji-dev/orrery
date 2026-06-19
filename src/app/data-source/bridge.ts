@@ -72,6 +72,9 @@ export const Commands = {
   /** Channel-aware download + install + relaunch (may never resolve on Windows —
    *  the installer exits the process). */
   UpdateInstall: 'update_install',
+  /** Open the app's rolling diagnostics log file (app_log_dir/orrery.log) in the
+   *  OS default handler. */
+  OpenLog: 'open_log',
   // ---- git-inspection commands ----
   AgentCommitDiff: 'agent_commit_diff',
   AgentCommitFileDiff: 'agent_commit_file_diff',

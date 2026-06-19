@@ -3,6 +3,8 @@ import { ContextMenuComponent } from '../context-menu/context-menu.component';
 import { AddProjectModalComponent } from '../modals/add-project-modal.component';
 import { SettingsModalComponent } from '../modals/settings-modal.component';
 import { SpawnModalComponent } from '../modals/spawn-modal.component';
+import { UpdateToastComponent } from '../modals/update-toast.component';
+import { WhatsNewModalComponent } from '../modals/whats-new-modal.component';
 import { SettingsStore } from '../settings/settings.store';
 import { UiStore } from '../ui/ui.store';
 import { OverviewComponent } from '../overview/overview.component';
@@ -35,6 +37,8 @@ declare const ngDevMode: boolean | undefined;
     SpawnModalComponent,
     AddProjectModalComponent,
     SettingsModalComponent,
+    UpdateToastComponent,
+    WhatsNewModalComponent,
     ContextMenuComponent,
     TweaksPanelComponent,
     DevPanelComponent,
@@ -82,6 +86,8 @@ declare const ngDevMode: boolean | undefined;
     @if (settings.open()) {
       <app-settings-modal />
     }
+    <app-whats-new-modal />
+    <app-update-toast />
     <app-context-menu />
     <div class="anchor-rail">
       <app-tweaks-panel />

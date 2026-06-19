@@ -41,7 +41,10 @@ import { TicketsStore } from "../stores/tickets.store";
         <div style="display:flex;flex-direction:column;line-height:1.12;pointer-events:none">
           <span class="disp" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-lg);font-weight:600;letter-spacing:0.005em">
             <span><span style="color:var(--accent)">O</span>rrery</span>
-            <app-version-badge style="pointer-events:auto" />
+            <button type="button" (click)="settings.openWhatsNew()" title="View release changelog"
+              style="pointer-events:auto;border:none;background:transparent;cursor:pointer;padding:0;display:inline-flex;align-items:center;font:inherit;color:inherit">
+              <app-version-badge />
+            </button>
           </span>
           <span style="font-size:var(--fs-2xs);color:var(--ink-3);letter-spacing:0.04em">
             {{ projects.all().length }} projects · {{ runtime.agents().length }} agents

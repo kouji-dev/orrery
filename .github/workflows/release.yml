@@ -145,10 +145,10 @@ jobs:
           --notes-file notes.md
           artifacts/*-setup.exe artifacts/*.msi artifacts/latest.json
 
-  # release => changelog => landing. After the app is published, bake this
-  # release's entry into the landing changelog and commit it to main. The
-  # landing then redeploys when this whole workflow completes (the workflow_run
-  # hook in deploy-landing.yml), so the deployed site includes the new entry.
+  # release => changelog. After the app is published, append this release's entry
+  # to changelog.json in the PUBLIC orrery-releases repo (orrery is private). Both
+  # the app and the landing changelog page fetch that file at runtime, so there's
+  # no landing redeploy to wait on.
   changelog:
     needs: [build, publish]
     runs-on: ubuntu-latest
@@ -156,27 +156,34 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: main
+          fetch-depth: 0 # full history + tags — the append reads commits since the previous tag via local git
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - name: Generate changelog entry (typed summary, else auto-derived)
+      - name: Update changelog.json in orrery-releases
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           SUMMARY: ${{ inputs.summary }}
+          TAG: v${{ needs.build.outputs.version }}
         run: |
           set -euo pipefail
-          args=(--channel beta --tag "v${{ needs.build.outputs.version }}")
-          if [ -n "${SUMMARY:-}" ]; then args+=(--summary "$SUMMARY"); fi
-          node scripts/landing/gen-changelog.mjs "${args[@]}"
-      - name: Commit changelog to main
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- landing/changelog.html; then
+          git clone --depth 1 "https://x-access-token:${RELEASES_TOKEN}@github.com/kouji-dev/orrery-releases.git" releases-repo
+          # First run bootstraps the full history from git tags; afterwards each
+          # release appends one entry (preserving any curated summaries already there).
+          if [ -f releases-repo/changelog.json ]; then
+            args=(append --tag "$TAG" --channel beta --out releases-repo/changelog.json)
+            if [ -n "${SUMMARY:-}" ]; then args+=(--summary "$SUMMARY"); fi
+            node scripts/release/changelog-json.mjs "${args[@]}"
+          else
+            node scripts/release/changelog-json.mjs migrate --channel beta --out releases-repo/changelog.json
+          fi
+          cd releases-repo
+          if git diff --quiet -- changelog.json; then
             echo "No changelog changes; nothing to commit."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add landing/changelog.html
-          git commit -m "chore(landing): changelog for v${{ needs.build.outputs.version }} [skip ci]"
-          git push origin HEAD:main
+          git add changelog.json
+          git commit -m "chore(changelog): ${TAG}"
+          git push

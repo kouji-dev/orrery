@@ -14,6 +14,7 @@ import { AGENT_TOOLS } from "../data";
 import { BRIDGE } from "../data-source/bridge";
 import { AutoApprovePolicy, SettingsEvents } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { DiagnosticsService } from "../shared/diagnostics.service";
 import {
   effectiveEffort,
   effectiveModel,
@@ -27,6 +28,7 @@ import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { RuntimeRowComponent } from "./runtime-row.component";
 import { NotificationAlertService } from "../notifications/notification-alert.service";
 import { VersionService } from "../shared/version.service";
+import { RELEASES_URL } from "../shared/links";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ORCHESTRA settings surface — faithful Angular port of the KJ design bundle v2
@@ -344,8 +346,6 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   { k: "error", label: "Error", help: "An agent hit an error or crashed." },
 ];
 
-const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
-
 @Component({
   selector: "app-settings-modal",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -441,7 +441,7 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
                             <div class="u2">@if (upd.date) { released {{ upd.date }} · } upgrades from v{{ version.version() || '—' }}</div>
                           </div>
                         </div>
-                        <a class="set-upd-notes" [href]="releasesUrl" (click)="openNotes($event)">
+                        <a class="set-upd-notes" [href]="releasesUrl" (click)="openWhatsNew($event)">
                           <app-icon name="file" size="sm" />Read release notes<app-icon name="ext" size="sm" />
                         </a>
                         <div class="set-upd-act">
@@ -462,6 +462,19 @@ const RELEASES_URL = "https://github.com/kouji-dev/orrery-releases/releases";
                       </div>
                     </app-set-row>
                   }
+                </div>
+
+                <div class="set-grp">
+                  <div class="set-grp-h">Diagnostics<span class="ln"></span></div>
+                  <app-set-row>
+                    <ng-container row-label>Log file</ng-container>
+                    <ng-container row-help>
+                      Orrery appends a rolling diagnostics log — orchestrator, updater, git and IPC events. Open it when something needs a closer look.
+                    </ng-container>
+                    <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-5)" (click)="openLog()">
+                      <app-icon name="ext" size="sm" />Open log file
+                    </button>
+                  </app-set-row>
                 </div>
               }
 
@@ -869,6 +882,7 @@ export class SettingsModalComponent {
   readonly version = inject(VersionService);
   private readonly bridge = inject(BRIDGE);
   private readonly alerts = inject(NotificationAlertService);
+  private readonly diag = inject(DiagnosticsService);
 
   /** "Play" on the Cue & volume row: a full test notification (toast + cue)
    *  exactly as the current settings would deliver a real one. */
@@ -966,16 +980,16 @@ export class SettingsModalComponent {
   installPct(): number {
     return Math.round(this.store.installProgress() * 100);
   }
-  openNotes(e: Event): void {
+  /** "Read release notes": open the in-app What's New digest (it carries a
+   *  "View full changelog" link to the releases page). */
+  openWhatsNew(e: Event): void {
     e.preventDefault();
-    // `notes` is the manifest's BODY TEXT (make-latest-json.mjs), not a URL —
-    // only treat it as a link target when it actually is one.
-    const notes = this.store.updateInfo()?.notes;
-    const url = notes && /^https?:\/\//.test(notes) ? notes : this.releasesUrl;
-    // window.open is blocked inside the Tauri webview — route through the opener.
-    import("@tauri-apps/plugin-opener")
-      .then((m) => m.openUrl(url))
-      .catch(() => window.open(url, "_blank"));
+    this.store.openWhatsNew();
+  }
+
+  /** "Open log file": reveal the rolling diagnostics log in the OS handler. */
+  openLog(): void {
+    this.diag.openLog();
   }
 
   // ── agent defaults ──

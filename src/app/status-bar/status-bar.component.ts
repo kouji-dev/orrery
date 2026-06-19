@@ -12,6 +12,8 @@ import { MetricsStore } from "../metrics/metrics.store";
 import { CostStore } from "../metrics/cost.store";
 import { DevPanelStore } from "../dev-tools/dev-panel.store";
 import { VersionBadgeComponent } from "../shared/version-badge.component";
+import { SettingsStore } from "../settings/settings.store";
+import { DiagnosticsService } from "../shared/diagnostics.service";
 
 @Component({
   selector: "app-status-bar",
@@ -52,8 +54,15 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
         }
       </span>
 
-      <!-- app version + channel tag (DEV / BETA) -->
-      <app-version-badge variant="chip" class="tnum" />
+      <!-- open the rolling diagnostics log file -->
+      <button type="button" class="sb-link" (click)="diag.openLog()" title="Open log file">
+        <app-icon name="file" size="sm" [px]="11" />logs
+      </button>
+
+      <!-- app version + channel tag (DEV / BETA) → opens the release changelog -->
+      <button type="button" class="sb-link" (click)="settings.openWhatsNew()" title="View release changelog">
+        <app-version-badge variant="chip" class="tnum" />
+      </button>
 
       <!-- total Claude cost (ccusage); hover → bigger tooltip. hidden when unavailable -->
       @if (cost.cost()?.available) {
@@ -115,6 +124,21 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
       .gauge:hover {
         color: var(--ink-2) !important;
       }
+      .sb-link {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: var(--fs-xs);
+        padding: 0;
+        color: var(--ink-3);
+      }
+      .sb-link:hover {
+        color: var(--ink-2);
+      }
       .cost-tip {
         opacity: 0;
         visibility: hidden;
@@ -139,6 +163,8 @@ export class StatusBarComponent {
   readonly metrics = inject(MetricsStore);
   readonly cost = inject(CostStore);
   readonly devPanel = inject(DevPanelStore);
+  readonly settings = inject(SettingsStore);
+  readonly diag = inject(DiagnosticsService);
 
   readonly running = computed(
     () => this.runtime.agents().filter((a) => a.status === "running").length,
