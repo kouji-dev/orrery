@@ -190,6 +190,12 @@ export const ALLOWLIST = [
   { file: "whats-new-modal.component.ts", value: "6px" },
   { file: "whats-new-modal.component.ts", value: "3px" },
   { file: "whats-new-modal.component.ts", value: "2px" },
+  // The boot/loading splash is a pre-theme screen with fixed, design-exact metrics
+  // (hardcoded colors + px). The "Orrery × Kouji.dev" credit footer's gap + font
+  // sizes are bespoke visual constants, not spacing/font tokens.
+  { file: "loading.component.ts", value: "8px" },
+  { file: "loading.component.ts", value: "13px" },
+  { file: "loading.component.ts", value: "12px" },
 ];
 
 export function scanText(text, file = "") {

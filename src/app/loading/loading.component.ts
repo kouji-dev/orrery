@@ -65,12 +65,43 @@ import { UpdateOutcome } from '../updater/updater';
       background: linear-gradient(90deg, #ff5d9e, #a855f7, #22d3ee);
       transition: width 0.15s linear;
     }
+    /* "Orrery × Kouji.dev" credit — synced with the loading-screen design + landing footer */
+    .ob-credit {
+      position: fixed;
+      bottom: 22px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: #aab2c5;
+    }
+    .ob-cred-mark { filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.35)); display: block; }
+    .ob-cred-wm .o { color: #a855f7; }
+    .ob-cred-x { color: #444b5e; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; margin: 0 1px; }
+    .ob-cred-link {
+      text-decoration: none;
+      cursor: pointer;
+      background: linear-gradient(100deg, #ff5d9e, #a855f7, #22d3ee);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .ob-cred-link:hover { filter: brightness(1.12); text-decoration: underline; text-underline-offset: 2px; }
   `],
   template: `
     <div class="ob-mark"><svg #svg width="168" height="168" viewBox="0 0 100 100" fill="none"></svg></div>
     <div class="ob-word"><span class="o">O</span>rrery</div>
     <div class="ob-status">{{ updater.status() || 'initializing orchestrator' }}</div>
     <div class="ob-bar"><i [style.width.%]="barPct()"></i></div>
+    <div class="ob-credit">
+      <svg #creditMark width="18" height="18" viewBox="0 0 100 100" fill="none" class="ob-cred-mark" aria-hidden="true"></svg>
+      <span class="ob-cred-wm"><span class="o">O</span>rrery</span>
+      <span class="ob-cred-x">×</span>
+      <a class="ob-cred-link" href="https://kouji.dev" (click)="openCredit($event)">Kouji.dev</a>
+    </div>
   `,
 })
 export class LoadingComponent implements AfterViewInit {
@@ -83,6 +114,7 @@ export class LoadingComponent implements AfterViewInit {
   safetyMs = 12_000;
 
   private readonly svg = viewChild<ElementRef<SVGSVGElement>>('svg');
+  private readonly creditMark = viewChild<ElementRef<SVGSVGElement>>('creditMark');
 
   /** Intro epicycle sweep, 0..1, advanced over ~2.2s by the draw loop. */
   private readonly introFrac = signal(0);
@@ -140,6 +172,17 @@ export class LoadingComponent implements AfterViewInit {
       d += (i ? 'L' : 'M') + p[0].toFixed(2) + ' ' + p[1].toFixed(2) + ' ';
     }
     d += 'Z';
+    // small static credit mark (bare epicycle, no tile) for the "Orrery × Kouji.dev" footer
+    const cm = this.creditMark()?.nativeElement;
+    if (cm) {
+      cm.innerHTML =
+        '<defs>' +
+          '<linearGradient id="cm-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>' +
+          '<radialGradient id="cm-c"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#a855f7"/><stop offset="1" stop-color="#a855f7" stop-opacity="0"/></radialGradient>' +
+        '</defs>' +
+        '<path d="' + d + '" fill="none" stroke="url(#cm-g)" stroke-width="6" stroke-linejoin="round"/>' +
+        '<circle cx="50" cy="50" r="13" fill="url(#cm-c)"/>';
+    }
     svg.innerHTML =
       '<defs>' +
         '<linearGradient id="ob-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>' +
@@ -168,5 +211,14 @@ export class LoadingComponent implements AfterViewInit {
       if (p < 1) requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
+  }
+
+  /** Open the Kouji.dev credit in the user's browser (window.open is blocked in
+   *  the Tauri webview, so route through the opener plugin). */
+  openCredit(e: Event): void {
+    e.preventDefault();
+    import('@tauri-apps/plugin-opener')
+      .then((m) => m.openUrl('https://kouji.dev'))
+      .catch(() => window.open('https://kouji.dev', '_blank'));
   }
 }
