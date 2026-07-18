@@ -133,9 +133,9 @@ export function diffWouldStall(oldText: string, newText: string): boolean {
          within-line .cm-changedText mark must stay transparent so there is no
          inner box/overlay/underline. merge-b side = additions (green),
          merge-a side / deleted chunk = deletions (red). */
-      :host ::ng-deep .cm-merge-b .cm-changedLine { background-color: rgba(52, 224, 161, 0.15) !important; }
+      :host ::ng-deep .cm-merge-b .cm-changedLine { background-color: var(--code-add-bg) !important; }
       :host ::ng-deep .cm-merge-a .cm-changedLine,
-      :host ::ng-deep .cm-deletedChunk { background-color: rgba(255, 93, 122, 0.15) !important; }
+      :host ::ng-deep .cm-deletedChunk { background-color: var(--code-del-bg) !important; }
       /* full-line ins/del markers stay flat — the row tint on .cm-changedLine carries it */
       :host ::ng-deep .cm-insertedLine,
       :host ::ng-deep .cm-deletedLine,
@@ -147,12 +147,12 @@ export function diffWouldStall(oldText: string, newText: string): boolean {
       /* within-line changed text: brightly highlight only the changed sub-word
          (word-level diff — e.g. "Humain" in greet → greetHumain) over the row tint */
       :host ::ng-deep .cm-merge-b .cm-changedText {
-        background-color: rgba(52, 224, 161, 0.34) !important;
+        background-color: var(--code-add-word) !important;
         border-radius: 2px;
       }
       :host ::ng-deep .cm-merge-a .cm-changedText,
       :host ::ng-deep .cm-deletedChunk .cm-deletedText {
-        background-color: rgba(255, 93, 122, 0.34) !important;
+        background-color: var(--code-del-word) !important;
         border-radius: 2px;
         text-decoration: none !important;
       }

@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   ElementRef,
   inject,
   Input,
@@ -14,6 +15,12 @@ import { IconComponent } from "../../shared/icon.component";
 import { ReviewStore } from "../../agents/review.store";
 import { isBlock } from "../../agents/review.store";
 import { Row } from "./unified-diff";
+import { highlightRuns, TokRun } from "../code-lang";
+import { buildLineHtml, buildNewLineHtml, segToRanges } from "./code-html";
+
+// Above this many code rows we skip async syntax highlighting (still show the
+// word-diff overlay + plain text) so a giant file can't stall the highlight pass.
+const HL_ROW_CAP = 6000;
 
 function refLines(c: { fromLine: number; toLine: number }): string {
   return c.fromLine === c.toLine ? `${c.fromLine}` : `${c.fromLine}-${c.toLine}`;
@@ -65,6 +72,9 @@ interface ComposerState {
             <div [style.border-top]="i ? '1px solid var(--hair)' : 'none'" style="display:flex;align-items:center;padding:5px 14px 5px 38px;font-size:11px;color:var(--accent-2);background:color-mix(in oklch,var(--accent-2),transparent 93%)">
               <span class="tnum" style="opacity:0.95">{{ r.meta }}</span>
             </div>
+          } @else if (r.type === 'code' && r.k === '-' && r.pairedHidden && view() === 'diff') {
+            <!-- old line folded into its paired new line: shown there as an inline
+                 deletion bar (click to reveal), so render nothing here -->
           } @else {
             <!-- code row -->
             <div
@@ -72,7 +82,7 @@ interface ComposerState {
               (mouseenter)="onRowEnter($index)"
               (mouseleave)="onRowLeave($index)"
               style="display:flex;font-size:12px;line-height:1.7"
-              [style.background]="rowBg($index, r.k)"
+              [style.background]="rowBg($index, r)"
               [style.box-shadow]="commentCovering($index) ? 'inset 2px 0 0 var(--accent)' : 'none'"
             >
               <!-- gutter: hover +, drag handle, saved marker -->
@@ -112,12 +122,14 @@ interface ComposerState {
                   [style.color]="r.k === '+' ? 'var(--code-add-ink)' : r.k === '-' ? 'var(--code-del-ink)' : 'var(--ink-4)'">{{ r.k === ' ' ? '' : r.k }}</span>
               }
 
-              <!-- code text (v1: plain) -->
+              <!-- code text: IntelliJ-style — syntax-highlighted foreground with
+                   an intra-line change overlay (only the changed spans tinted). -->
               <span
-                style="flex:1;white-space:pre-wrap;word-break:break-word;padding-right:14px"
+                style="flex:1;white-space:pre-wrap;word-break:break-word;padding-right:14px;color:var(--ink-2)"
                 [style.padding-left]="view() === 'diff' ? '0' : '14px'"
-                [style.color]="r.k === '+' ? 'var(--code-add-ink)' : r.k === '-' ? 'var(--code-del-ink)' : 'var(--ink-2)'"
-              >{{ r.s || ' ' }}</span>
+                [innerHTML]="htmlRows()[i] || (r.s || ' ')"
+                (click)="onCodeClick(i, $event)"
+              ></span>
             </div>
 
             <!-- saved comment cards under the last row of each comment -->
@@ -177,6 +189,21 @@ interface ComposerState {
       </div>
     </div>
   `,
+  styles: [
+    `
+      /* The host must be a full-height flex column so the inner .scroll-y
+         (flex:1) gets a bounded height and actually scrolls. Without this the
+         host collapses to content height and the diff/file body overflows
+         instead of scrolling. */
+      :host {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+      }
+    `,
+  ],
 })
 export class ReviewCodeComponent implements OnDestroy {
   readonly review = inject(ReviewStore);
@@ -219,14 +246,87 @@ export class ReviewCodeComponent implements OnDestroy {
     return rangeLabel(c, this.rows());
   });
 
+  // ----- syntax highlighting -----
+  // Per-row token runs from the async Lezer highlight pass (index → runs).
+  private readonly hlRuns = signal<Map<number, TokRun[]>>(new Map());
+  private hlToken = 0;
+
+  // Pre-rendered per-row HTML: syntax tokens + intra-line change overlay. Recomputes
+  // when the rows, the highlight pass, or a selection/composer change. `null` for
+  // non-code rows. Indexed by row position (matches template `$index`).
+  readonly htmlRows = computed<(string | null)[]>(() => {
+    const rows = this.rows();
+    const runsMap = this.hlRuns();
+    const revealed = this.revealedInline();
+    return rows.map((r, i) => {
+      if (r.type !== "code") return null;
+      const runs = runsMap.get(i) ?? null;
+      if (r.k === "+") {
+        // New line: syntax + green add overlay + inline deletion bars.
+        return buildNewLineHtml(runs, r.s || " ", segToRanges(r.seg), r.dels ?? [], revealed.has(i));
+      }
+      const chgClass = r.k === "-" ? "rc-chg-del" : "";
+      const changes = chgClass ? segToRanges(r.seg) : [];
+      return buildLineHtml(runs, r.s || " ", changes, chgClass);
+    });
+  });
+
+  // NEW lines whose inline deletion bars are expanded to show the removed text.
+  readonly revealedInline = signal<Set<number>>(new Set());
+  private toggleInlineDel(i: number): void {
+    this.revealedInline.update((s) => {
+      const n = new Set(s);
+      if (n.has(i)) n.delete(i);
+      else n.add(i);
+      return n;
+    });
+  }
+  /** Click delegation on the code text: toggle an inline deletion bar / revealed
+   *  text (they live in [innerHTML], so no direct Angular binding). */
+  onCodeClick(i: number, e: Event): void {
+    const t = e.target as HTMLElement | null;
+    if (t?.closest(".rc-del-caret, .rc-del-shown")) this.toggleInlineDel(i);
+  }
+
   // Window mouseup handler reference (for cleanup)
   private mouseupHandler: (() => void) | null = null;
 
   constructor() {
+    // Recompute syntax highlighting whenever the rows or language change. Async
+    // (grammar fetched on demand); a token guards against stale writes.
+    effect(() => {
+      const rows = this.rows();
+      const lang = this.lang();
+      void this.highlight(rows, lang);
+    });
     // Register window mouseup after first render
     afterNextRender(() => {
       this._installMouseup();
     });
+  }
+
+  /** Highlight every code row for `lang`, then publish the run map in one shot.
+   *  Clears highlighting for unknown languages or files past HL_ROW_CAP. All
+   *  `hlRuns` writes happen after an await (off the effect's sync frame) so the
+   *  effect never self-triggers. */
+  private async highlight(rows: Row[], lang: string): Promise<void> {
+    const token = ++this.hlToken;
+    const map = new Map<number, TokRun[]>();
+    const codeRows = rows.reduce<Array<{ i: number; s: string }>>((acc, r, i) => {
+      if (r.type === "code") acc.push({ i, s: r.s });
+      return acc;
+    }, []);
+    if (lang && codeRows.length <= HL_ROW_CAP) {
+      for (const { i, s } of codeRows) {
+        const runs = await highlightRuns(lang, s);
+        if (token !== this.hlToken) return; // superseded by a newer rows/lang change
+        if (runs && runs.length) map.set(i, runs);
+      }
+    } else {
+      await Promise.resolve(); // yield so the (empty) publish lands off the sync frame
+      if (token !== this.hlToken) return;
+    }
+    if (token === this.hlToken) this.hlRuns.set(map);
   }
 
   private _installMouseup(): void {
@@ -252,12 +352,20 @@ export class ReviewCodeComponent implements OnDestroy {
 
   // ----- Row helpers -----
 
-  rowBg(i: number, k: string): string {
+  rowBg(i: number, r: Extract<Row, { type: "code" }>): string {
     if (this.inSelection(i) || this.inComposer(i)) {
       return "color-mix(in oklch,var(--accent),transparent 84%)";
     }
-    if (k === "+") return "var(--code-add-bg)";
-    if (k === "-") return "var(--code-del-bg)";
+    // Wholly added/removed lines (no seg) get the full tint. A modified new line
+    // gets faint green only if it actually GAINED text; if it only lost text (the
+    // change is an inline deletion bar), it stays neutral so the red bar reads.
+    if (r.k === "+") {
+      if (r.seg == null) return "var(--code-add-bg)";
+      return r.seg.some((s) => s.c) ? "var(--code-add-bg-soft)" : "transparent";
+    }
+    if (r.k === "-") {
+      return r.seg == null ? "var(--code-del-bg)" : "var(--code-del-bg-soft)";
+    }
     return "transparent";
   }
 

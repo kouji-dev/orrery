@@ -42,7 +42,7 @@ const LIST_DEFAULT = 236;
           <div style="margin-left:auto;display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
             <button
               class="btn"
-              (click)="treeMode.set(true)"
+              (click)="setTree(true)"
               title="Tree view"
               [style.background]="treeMode() ? 'var(--panel-3)' : 'transparent'"
               [style.color]="treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
@@ -51,7 +51,7 @@ const LIST_DEFAULT = 236;
             ><app-icon name="graph" size="sm" [px]="12" [color]="treeMode() ? 'var(--accent)' : null" />Tree</button>
             <button
               class="btn"
-              (click)="treeMode.set(false)"
+              (click)="setTree(false)"
               title="Flattened view"
               [style.background]="!treeMode() ? 'var(--panel-3)' : 'transparent'"
               [style.color]="!treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
@@ -301,7 +301,11 @@ export class DiffViewComponent {
   readonly agent = input.required<Agent>();
   // selection by PATH (works across both flat + tree views); treeMode toggles them
   readonly selPath = signal<string | null>(null);
-  readonly treeMode = signal(false);
+  // Tree vs Flat is remembered per agent in UiStore (default Tree).
+  readonly treeMode = computed(() => this.ui.diffTreeFor(this.agentId()));
+  setTree(on: boolean): void {
+    this.ui.setDiffTree(this.agentId(), on);
+  }
 
   readonly fname = fileName;
   readonly fdir = fileDir;

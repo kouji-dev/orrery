@@ -33,6 +33,18 @@ function loadTweaks(): Tweaks {
   }
 }
 
+// Per-agent diff-pane view mode (Tree vs Flat). Persisted separately from
+// tweaks because it's keyed by agent id, not a single global toggle.
+const DIFF_TREE_KEY = "orrery.diffTree";
+function loadDiffTree(): Record<string, boolean> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DIFF_TREE_KEY) || "null");
+    return saved && typeof saved === "object" ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Pure UI / shell state: theme + tweaks, workspace tabs, transient modal flags,
  * the context menu, the toast, and the global run toggle. No domain logic — it
@@ -68,6 +80,15 @@ export class UiStore {
     // pane into diff view (reusing/activating its tab, same path as "Review
     // diff"). Closing (null) leaves the current pane mode untouched.
     if (view) this.openAgent(agentId, "diff");
+  }
+
+  // Diff-pane view mode per agent. Default (no entry) = Tree.
+  private readonly diffTreeModes = signal<Record<string, boolean>>(loadDiffTree());
+  diffTreeFor(agentId: string): boolean {
+    return this.diffTreeModes()[agentId] ?? true;
+  }
+  setDiffTree(agentId: string, on: boolean): void {
+    this.diffTreeModes.update((m) => ({ ...m, [agentId]: on }));
   }
 
   private tabSeq = 0;
@@ -124,6 +145,14 @@ export class UiStore {
     effect(() => {
       try {
         localStorage.setItem(TWEAKS_KEY, JSON.stringify(this.tweaks()));
+      } catch {
+        /* storage unavailable — ignore */
+      }
+    });
+    // persist per-agent diff view mode
+    effect(() => {
+      try {
+        localStorage.setItem(DIFF_TREE_KEY, JSON.stringify(this.diffTreeModes()));
       } catch {
         /* storage unavailable — ignore */
       }

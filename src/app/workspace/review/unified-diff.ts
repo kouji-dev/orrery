@@ -1,8 +1,35 @@
 import { DiffHunk, DiffLine } from "../../models";
 
+/** One slice of a modified line: `c` = this run actually changed vs its pair. */
+export interface Seg {
+  c: boolean;
+  s: string;
+}
+
+/** An inline deletion on a NEW line: `s` was removed at char offset `at`. */
+export interface DelMark {
+  at: number;
+  s: string;
+}
+
 export type Row =
   | { type: "hunk"; meta: string }
-  | { type: "code"; k: "+" | "-" | " "; n: number; s: string; side: "old" | "new" | "file" };
+  | {
+      type: "code";
+      k: "+" | "-" | " ";
+      n: number;
+      s: string;
+      side: "old" | "new" | "file";
+      // intra-line word diff (only on paired modified lines): which spans of `s`
+      // changed. Absent → treat the whole line uniformly (pure add/del/context).
+      seg?: Seg[];
+      // NEW line only: text removed at this line, positioned by offset, shown as
+      // an inline red bar that reveals the deleted text on click.
+      dels?: DelMark[];
+      // OLD line consumed inline into its new-line pair — hidden in the diff view
+      // (its removal is shown as `dels` on the paired new line instead).
+      pairedHidden?: boolean;
+    };
 
 /** Split into lines without a trailing empty element for a final newline. */
 function splitLines(s: string): string[] {
@@ -146,18 +173,110 @@ export function diffToHunks(oldText: string, newText: string, context = 3): Diff
   return hunks;
 }
 
+/** Split a line into word / whitespace / single-punctuation tokens for a
+ *  readable intra-line diff (IntelliJ highlights at roughly this granularity). */
+function tokenizeWords(s: string): string[] {
+  return s.match(/\s+|\w+|[^\w\s]/g) ?? [];
+}
+
+/** Coalescing push: merge into the previous segment when the changed-flag matches. */
+function pushSeg(arr: Seg[], c: boolean, s: string): void {
+  const last = arr[arr.length - 1];
+  if (last && last.c === c) last.s += s;
+  else arr.push({ c, s });
+}
+
+/**
+ * Word-level diff of a modified line pair. Produces per-side changed/unchanged
+ * segments AND the deletions positioned by offset in the NEW line (`delMarks`),
+ * so the new line can show inline "something was removed here" bars.
+ */
+function lineEdit(oldS: string, newS: string): { oldSeg: Seg[]; newSeg: Seg[]; delMarks: DelMark[] } {
+  const ops = lcsOps(tokenizeWords(oldS), tokenizeWords(newS));
+  const oldSeg: Seg[] = [];
+  const newSeg: Seg[] = [];
+  const delMarks: DelMark[] = [];
+  let newOff = 0;
+  for (const op of ops) {
+    if (op.k === " ") {
+      pushSeg(oldSeg, false, op.s);
+      pushSeg(newSeg, false, op.s);
+      newOff += op.s.length;
+    } else if (op.k === "+") {
+      pushSeg(newSeg, true, op.s);
+      newOff += op.s.length;
+    } else {
+      // deletion — sits at the current new-line offset; coalesce runs at one point
+      pushSeg(oldSeg, true, op.s);
+      const last = delMarks[delMarks.length - 1];
+      if (last && last.at === newOff) last.s += op.s;
+      else delMarks.push({ at: newOff, s: op.s });
+    }
+  }
+  return { oldSeg, newSeg, delMarks };
+}
+
 export function diffToRows(hunks: DiffHunk[]): Row[] {
   const rows: Row[] = [];
   for (const h of hunks) {
     rows.push({ type: "hunk", meta: h.meta });
-    for (const ln of h.lines) {
-      rows.push({
-        type: "code",
-        k: ln.k,
-        n: ln.n,
-        s: ln.s,
-        side: ln.k === "-" ? "old" : "new",
-      });
+    const lines = h.lines;
+    let i = 0;
+    while (i < lines.length) {
+      if (lines[i].k === "-") {
+        // A run of deletions optionally followed by a run of additions is a
+        // modification block — pair lines by position and word-diff each pair so
+        // only the truly-changed spans get highlighted (IntelliJ-style).
+        let j = i;
+        while (j < lines.length && lines[j].k === "-") j++;
+        let k = j;
+        while (k < lines.length && lines[k].k === "+") k++;
+        const dels = lines.slice(i, j);
+        const adds = lines.slice(j, k);
+        const oldSegs: (Seg[] | undefined)[] = dels.map(() => undefined);
+        const newSegs: (Seg[] | undefined)[] = adds.map(() => undefined);
+        const newDels: (DelMark[] | undefined)[] = adds.map(() => undefined);
+        const hiddenOld: boolean[] = dels.map(() => false);
+        const pairs = Math.min(dels.length, adds.length);
+        for (let p = 0; p < pairs; p++) {
+          const { oldSeg, newSeg, delMarks } = lineEdit(dels[p].s, adds[p].s);
+          // Only pair when the change is PARTIAL (some run stayed the same);
+          // wholly-different lines fall back to plain full add + full del rows.
+          if (oldSeg.some((s) => !s.c) || newSeg.some((s) => !s.c)) {
+            oldSegs[p] = oldSeg;
+            newSegs[p] = newSeg;
+            newDels[p] = delMarks; // shown inline on the new line
+            hiddenOld[p] = true; // the old line folds into the new one
+          }
+        }
+        dels.forEach((ln, idx) =>
+          rows.push({
+            type: "code",
+            k: "-",
+            n: ln.n,
+            s: ln.s,
+            side: "old",
+            seg: oldSegs[idx],
+            pairedHidden: hiddenOld[idx],
+          }),
+        );
+        adds.forEach((ln, idx) =>
+          rows.push({
+            type: "code",
+            k: "+",
+            n: ln.n,
+            s: ln.s,
+            side: "new",
+            seg: newSegs[idx],
+            dels: newDels[idx],
+          }),
+        );
+        i = k;
+      } else {
+        const ln = lines[i];
+        rows.push({ type: "code", k: ln.k, n: ln.n, s: ln.s, side: ln.k === "-" ? "old" : "new" });
+        i++;
+      }
     }
   }
   return rows;

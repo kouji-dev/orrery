@@ -155,10 +155,35 @@
   --ink-2: #aab2c5;
   --ink-3: #6b7488;
   --ink-4: #444b5e;
-  --code-add-bg: rgba(52, 224, 161, 0.1);
-  --code-add-ink: #5ef0bb;
-  --code-del-bg: rgba(255, 93, 122, 0.1);
-  --code-del-ink: #ff8ba0;
+  /* IntelliJ Darcula-derived diff colors: muted olive-green / muted-red row
+     tints (~20%) with a stronger inline word-diff highlight (~42%). */
+  --code-add-bg: rgba(70, 150, 95, 0.2);
+  --code-add-ink: #8ed6a6;
+  --code-add-word: rgba(80, 185, 115, 0.42);
+  --code-del-bg: rgba(190, 80, 100, 0.2);
+  --code-del-ink: #ec9aa8;
+  --code-del-word: rgba(205, 85, 110, 0.44);
+  /* faint line tint for MODIFIED lines — the changed-word overlay carries the
+     emphasis, so a near-unchanged counterpart line nearly disappears. */
+  --code-add-bg-soft: rgba(70, 150, 95, 0.09);
+  --code-del-bg-soft: rgba(190, 80, 100, 0.09);
+  /* IntelliJ Darcula syntax token colors (shared by review-code spans + the
+     CodeMirror classHighlighter). */
+  --tok-keyword: #cc7832;
+  --tok-comment: #808080;
+  --tok-string: #6a8759;
+  --tok-number: #6897bb;
+  --tok-func: #ffc66d;
+  --tok-type: #a9b7c6;
+  --tok-name: #a9b7c6;
+  --tok-prop: #a9b7c6;
+  --tok-const: #9876aa;
+  --tok-tag: #e8bf6a;
+  --tok-attr: #bababa;
+  --tok-meta: #bbb529;
+  --tok-punct: #a9b7c6;
+  --tok-link: #287bde;
+  --tok-invalid: #ff6b68;
   --glow: 0 0 0 1px rgba(var(--accent-rgb), 0.35), 0 0 24px -4px rgba(var(--accent-rgb), 0.45);
   --shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.7);
   --scan: rgba(255, 255, 255, 0.02);
@@ -179,10 +204,32 @@
   --ink-2: #4a5266;
   --ink-3: #7b8398;
   --ink-4: #aab0bf;
-  --code-add-bg: rgba(20, 160, 110, 0.12);
-  --code-add-ink: #0a8f5e;
-  --code-del-bg: rgba(220, 60, 90, 0.12);
-  --code-del-ink: #c23252;
+  /* IntelliJ Darcula-derived diff colors (light): muted green / red row tints
+     with a stronger inline word-diff highlight. */
+  --code-add-bg: rgba(70, 160, 95, 0.2);
+  --code-add-ink: #2f7d4f;
+  --code-add-word: rgba(60, 165, 95, 0.4);
+  --code-del-bg: rgba(200, 70, 95, 0.18);
+  --code-del-ink: #b23a52;
+  --code-del-word: rgba(205, 70, 100, 0.4);
+  --code-add-bg-soft: rgba(70, 160, 95, 0.09);
+  --code-del-bg-soft: rgba(200, 70, 95, 0.08);
+  /* IntelliJ default light-scheme syntax token colors. */
+  --tok-keyword: #0033b3;
+  --tok-comment: #8c8c8c;
+  --tok-string: #067d17;
+  --tok-number: #1750eb;
+  --tok-func: #00627a;
+  --tok-type: #000000;
+  --tok-name: #000000;
+  --tok-prop: #871094;
+  --tok-const: #871094;
+  --tok-tag: #0033b3;
+  --tok-attr: #174ad4;
+  --tok-meta: #9e880d;
+  --tok-punct: #000000;
+  --tok-link: #006dcc;
+  --tok-invalid: #ff0000;
   --glow: 0 0 0 1px rgba(var(--accent-rgb), 0.3), 0 0 20px -6px rgba(var(--accent-rgb), 0.35);
   --shadow: 0 12px 36px -14px rgba(20, 24, 40, 0.3);
   --scan: rgba(20, 24, 40, 0.015);
@@ -619,6 +666,136 @@ app-timeline-view {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+}
+
+/* ---------- syntax highlighting (Lezer classHighlighter classes) ----------
+   One IntelliJ Darcula-derived palette drives BOTH the review-code diff spans
+   and the CodeMirror diff (which we point at classHighlighter), so every diff
+   surface highlights identically. Colours come from the --tok-* theme vars. */
+.tok-keyword,
+.tok-modifier,
+.tok-operatorKeyword,
+.tok-controlKeyword,
+.tok-definitionKeyword,
+.tok-moduleKeyword,
+.tok-self {
+  color: var(--tok-keyword);
+}
+.tok-comment,
+.tok-lineComment,
+.tok-blockComment,
+.tok-docComment {
+  color: var(--tok-comment);
+  font-style: italic;
+}
+.tok-string,
+.tok-string2,
+.tok-special.tok-string,
+.tok-character {
+  color: var(--tok-string);
+}
+.tok-number,
+.tok-integer,
+.tok-float,
+.tok-literal {
+  color: var(--tok-number);
+}
+.tok-bool,
+.tok-atom,
+.tok-null {
+  color: var(--tok-keyword);
+}
+.tok-constant,
+.tok-standard.tok-variableName,
+.tok-labelName {
+  color: var(--tok-const);
+}
+.tok-typeName,
+.tok-className,
+.tok-namespace {
+  color: var(--tok-type);
+}
+.tok-propertyName,
+.tok-attributeValue {
+  color: var(--tok-prop);
+}
+.tok-variableName,
+.tok-name {
+  color: var(--tok-name);
+}
+.tok-definition.tok-propertyName,
+.tok-function.tok-variableName,
+.tok-function.tok-propertyName {
+  color: var(--tok-func);
+}
+.tok-tagName,
+.tok-angleBracket {
+  color: var(--tok-tag);
+}
+.tok-attributeName {
+  color: var(--tok-attr);
+}
+.tok-meta,
+.tok-annotation,
+.tok-processingInstruction {
+  color: var(--tok-meta);
+}
+.tok-operator,
+.tok-punctuation,
+.tok-separator,
+.tok-bracket,
+.tok-derefOperator {
+  color: var(--tok-punct);
+}
+.tok-link,
+.tok-url {
+  color: var(--tok-link);
+  text-decoration: underline;
+}
+.tok-invalid {
+  color: var(--tok-invalid);
+}
+.tok-strong {
+  font-weight: 700;
+}
+.tok-emphasis {
+  font-style: italic;
+}
+.tok-strikethrough {
+  text-decoration: line-through;
+}
+
+/* Intra-line (word/char) diff: only the actually-changed spans on a modified
+   line get the stronger word tint — the rest of the line stays neutral, like
+   IntelliJ. Sits over the row's --code-*-bg line tint. */
+.rc-chg-add {
+  background-color: var(--code-add-word);
+  border-radius: 2px;
+}
+.rc-chg-del {
+  background-color: var(--code-del-word);
+  border-radius: 2px;
+}
+
+/* Inline deletion bar on a modified NEW line: a thin red vertical bar at the
+   point where text was removed. Hover shows the removed text; click reveals it
+   (rc-del-shown) inline in red. */
+.rc-del-caret {
+  display: inline-block;
+  width: 3px;
+  height: 1.05em;
+  margin: 0 1px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background-color: var(--code-del-ink);
+  cursor: pointer;
+  opacity: 0.7;
+}
+.rc-del-caret:hover {
+  opacity: 1;
+}
+.rc-del-shown {
+  cursor: pointer;
 }
 
 /* gradient text */

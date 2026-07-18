@@ -1,5 +1,23 @@
 import type { Extension } from "@codemirror/state";
 
+// @lezer/common and @lezer/highlight are runtime-only (fetched from esm.sh, not
+// installed as npm deps), so we can't `import` their types. Derive the shapes we
+// touch from the installed @codemirror/language instead, and type the rest loosely.
+type Highlighter = Parameters<typeof import("@codemirror/language")["syntaxHighlighting"]>[0];
+interface LezerParser {
+  parse(input: string): unknown;
+}
+interface LezerHighlight {
+  classHighlighter: Highlighter;
+  highlightCode(
+    code: string,
+    tree: unknown,
+    highlighter: Highlighter,
+    putText: (code: string, classes: string) => void,
+    putBreak: () => void,
+  ): void;
+}
+
 /**
  * Runtime loader for CodeMirror — nothing CodeMirror is bundled or kept in
  * package.json at runtime; the core editor AND the per-language grammars are
@@ -29,6 +47,8 @@ const VER: Record<string, string> = {
   "@lezer/highlight": "1.2.3",
   "@lezer/lr": "1.4.10",
 };
+// @lezer/highlight lives in SHARED (below) but also needs its OWN import-map
+// entry so we can import it directly for standalone highlighting.
 // the packages that must be shared (one instance) across core + every grammar
 const SHARED = [
   "@codemirror/state",
@@ -71,6 +91,7 @@ export interface CMCore {
   language: typeof import("@codemirror/language");
   merge: typeof import("@codemirror/merge");
   themeOneDark: typeof import("@codemirror/theme-one-dark");
+  highlight: LezerHighlight;
 }
 
 let corePromise: Promise<CMCore> | null = null;
@@ -85,12 +106,14 @@ export function loadCMCore(): Promise<CMCore> {
       importDyn("@codemirror/language"),
       importDyn("@codemirror/merge"),
       importDyn("@codemirror/theme-one-dark"),
-    ]).then(([state, view, language, merge, themeOneDark]) => ({
+      importDyn("@lezer/highlight"),
+    ]).then(([state, view, language, merge, themeOneDark, highlight]) => ({
       state,
       view,
       language,
       merge,
       themeOneDark,
+      highlight,
     })) as Promise<CMCore>;
     corePromise.catch(() => (corePromise = null)); // allow a retry on failure
   }
@@ -98,20 +121,21 @@ export function loadCMCore(): Promise<CMCore> {
 }
 
 /**
- * Syntax-highlight theme matched to the app theme. oneDark for dark mode; for
- * light mode a light highlight, since oneDark's light-on-dark palette washes out.
+ * Syntax-highlight theme. We point CodeMirror at Lezer's `classHighlighter`
+ * (emits `tok-*` CLASSES instead of inline colors) so the SAME global `.tok-*`
+ * IntelliJ-Darcula CSS colors both the CodeMirror diff AND the review-code diff
+ * spans — one palette, identical everywhere, and theme (light/dark) switches for
+ * free via the --tok-* CSS vars. `appTheme` is unused now (kept for the caller's
+ * re-render-on-theme-change signature).
  */
-export function buildTheme(cm: CMCore, appTheme: "dark" | "light"): Extension {
-  if (appTheme === "light") {
-    return [
-      cm.view.EditorView.theme({
-        "&": { color: "var(--ink-2)" },
-        ".cm-gutters": { color: "var(--ink-4)" },
-      }),
-      cm.language.syntaxHighlighting(cm.language.defaultHighlightStyle),
-    ];
-  }
-  return cm.themeOneDark.oneDark;
+export function buildTheme(cm: CMCore, _appTheme: "dark" | "light"): Extension {
+  return [
+    cm.view.EditorView.theme({
+      "&": { color: "var(--ink-2)" },
+      ".cm-gutters": { color: "var(--ink-4)" },
+    }),
+    cm.language.syntaxHighlighting(cm.highlight.classHighlighter),
+  ];
 }
 
 /**
@@ -208,4 +232,70 @@ export function loadLangExt(lang: string): Promise<Extension> {
     langCache.set(lang, p);
   }
   return p;
+}
+
+// ---- standalone (non-editor) syntax highlighting, for the review-code diff ----
+
+/** One highlighted token: raw text plus its space-separated `tok-*` classes. */
+export interface TokRun {
+  s: string;
+  cls: string;
+}
+
+const parserCache = new Map<string, Promise<LezerParser | null>>();
+
+/** Resolve a language tag to its Lezer parser (for standalone highlighting),
+ *  mirroring {@link loadLangExt}. Unknown/failed → null (caller renders plain). */
+export function loadParser(lang: string): Promise<LezerParser | null> {
+  const def = LANGS[lang];
+  if (!def) return Promise.resolve(null);
+  let p = parserCache.get(lang);
+  if (!p) {
+    p = (async (): Promise<LezerParser | null> => {
+      ensureImportMap();
+      const m = await importDyn(`${ESM}/${def.pkg}?external=${EXTERNAL}`);
+      const exp = m[def.fn];
+      if (exp == null) return null;
+      let support: unknown;
+      if (def.stream) {
+        const cm = await loadCMCore();
+        support = new cm.language.LanguageSupport(cm.language.StreamLanguage.define(exp as never));
+      } else {
+        support = (exp as (a?: unknown) => unknown)(def.arg);
+      }
+      // LanguageSupport → .language.parser (Language). Guard shape defensively.
+      const language = (support as { language?: { parser?: LezerParser } })?.language;
+      return language?.parser ?? null;
+    })().catch((e: unknown) => {
+      console.warn("[code-lang] parser load failed for", lang, e);
+      parserCache.delete(lang);
+      return null;
+    });
+    parserCache.set(lang, p);
+  }
+  return p;
+}
+
+/**
+ * Highlight ONE line of `code` in `lang` into `tok-*`-classed runs (via the same
+ * Lezer `classHighlighter` CodeMirror uses, so colors match). Returns null when
+ * the language is unknown/unavailable — the caller then renders plain text.
+ * Per-line (no cross-line state) is fine for a diff view and keeps it simple.
+ */
+export async function highlightRuns(lang: string, code: string): Promise<TokRun[] | null> {
+  if (!code) return [];
+  const parser = await loadParser(lang);
+  if (!parser) return null;
+  const cm = await loadCMCore();
+  const { highlightCode, classHighlighter } = cm.highlight;
+  const tree = parser.parse(code);
+  const runs: TokRun[] = [];
+  highlightCode(
+    code,
+    tree,
+    classHighlighter,
+    (text: string, cls: string) => runs.push({ s: text, cls }),
+    () => runs.push({ s: "\n", cls: "" }),
+  );
+  return runs;
 }

@@ -156,6 +156,22 @@ export class TerminalService implements OnDestroy {
       //  • Paste: Ctrl/Cmd+V or Ctrl/Cmd+Shift+V.
       term.attachCustomKeyEventHandler((e) => {
         if (e.type !== "keydown") return true;
+        // Shift+Enter → insert a newline in the Claude prompt instead of
+        // submitting. xterm sends plain \r for both Enter and Shift+Enter, so
+        // we intercept here and send ESC+CR (Meta/Alt+Return), which Claude
+        // Code interprets as "newline in buffer". onData won't fire once we
+        // return false, so write the bytes ourselves.
+        if (
+          e.key === "Enter" &&
+          e.shiftKey &&
+          !e.ctrlKey &&
+          !e.metaKey &&
+          !e.altKey
+        ) {
+          void this.agents.input(id, "\x1b\r").catch(() => {});
+          e.preventDefault();
+          return false;
+        }
         const mod = e.ctrlKey || e.metaKey;
         if (!mod) return true;
         const k = e.key.toLowerCase();
