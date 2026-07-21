@@ -41,6 +41,18 @@ impl AgentAdapter for CodexAdapter {
         v
     }
 
+    // Resume a prior Codex session by id: `codex resume <id>` re-opens that
+    // rollout and continues the conversation (no new prompt). Per the codex CLI
+    // docs (`codex resume --last` targets the most recent when no id is known).
+    // Not verified against a local `--help` here (codex absent on this box).
+    fn resume_argv(&self, session_id: &str) -> Option<Vec<String>> {
+        Some(vec![
+            "codex".to_string(),
+            "resume".to_string(),
+            session_id.to_string(),
+        ])
+    }
+
     // autoApprove "everything" → `--dangerously-bypass-approvals-and-sandbox`.
     // NOT verifiable from this adapter file (nothing here names a bypass flag);
     // the flag is per the codex CLI's own docs/`--help` (alias `--yolo`), which
@@ -132,6 +144,14 @@ mod tests {
     fn read_config(home: &Path) -> toml_edit::DocumentMut {
         let body = std::fs::read_to_string(home.join(".codex/config.toml")).unwrap();
         body.parse().unwrap()
+    }
+
+    #[test]
+    fn resume_argv_is_codex_resume_session_id() {
+        assert_eq!(
+            CodexAdapter.resume_argv("abc"),
+            Some(vec!["codex".into(), "resume".into(), "abc".into()])
+        );
     }
 
     #[test]

@@ -12,4 +12,12 @@ export class DiagnosticsService {
   openLog(): void {
     void this.bridge.invoke(Commands.OpenLog).catch(() => this.ui.flash("couldn't open log file"));
   }
+
+  /** Open a worktree (or any) directory in the OS file manager. */
+  openWorktree(path: string): void {
+    if (!path) return;
+    void this.bridge
+      .invoke(Commands.OpenPath, { path })
+      .catch(() => this.ui.flash("couldn't open folder"));
+  }
 }

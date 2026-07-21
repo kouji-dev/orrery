@@ -24,3 +24,13 @@ pub fn open_log(app: tauri::AppHandle) -> Result<(), String> {
         .open_path(path.to_string_lossy().to_string(), None::<&str>)
         .map_err(|e| format!("open log failed: {e}"))
 }
+
+/// Open an arbitrary filesystem path (e.g. an agent's worktree directory) in the
+/// OS default handler — for a folder that means the file manager. Same
+/// `OpenerExt` route as `open_log`; the caller supplies the absolute path.
+#[tauri::command]
+pub fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| format!("open path failed: {e}"))
+}

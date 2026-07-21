@@ -90,6 +90,11 @@ impl ProjectService {
         } else {
             Vec::new()
         };
+        let default_branch = if has_git {
+            self.git.default_branch(path)
+        } else {
+            None
+        };
         Project {
             id: rec.id,
             name: rec.name,
@@ -101,6 +106,7 @@ impl ProjectService {
             branch,
             head,
             branches,
+            default_branch,
         }
     }
 

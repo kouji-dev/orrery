@@ -1,20 +1,11 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  ElementRef,
-  HostListener,
-  inject,
-  input,
-  signal,
-  viewChild,
-} from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
 import { Agent, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
+import { DiagnosticsService } from "../shared/diagnostics.service";
 import { RingComponent } from "../shared/ring.component";
 import { StatusPillComponent } from "../shared/status-pill.component";
 import { fmtDur, mix, STATUS_META } from "../utils";
@@ -98,36 +89,25 @@ import { MiniTermComponent } from "./mini-term.component";
                 <app-icon name="pause" size="sm" />Pause
               </button>
             } @else {
-              <!-- Start/Resume + a session-continuation dropdown (claude --resume), opening upward -->
-              <div style="position:relative;display:flex;gap:1px;flex:1">
-                <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, ag.started ? 'resume' : 'start')">
-                  <app-icon name="play" size="sm" />{{ ag.started ? 'Resume' : 'Start' }}
+              <!-- Start/Resume + a visible Continue button that resumes the captured CLI session -->
+              <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, ag.started ? 'resume' : 'start')">
+                <app-icon name="play" size="sm" />{{ ag.started ? 'Resume' : 'Start' }}
+              </button>
+              @if (ag.sessionId) {
+                <button
+                  class="btn ghost-hair"
+                  (click)="continueSession(ag.id)"
+                  [title]="'continue last session · ' + ag.tool + ' (' + ag.sessionId + ')'"
+                  style="padding:var(--sp-2) var(--sp-4)"
+                >
+                  <app-icon name="refresh" size="sm" />Continue
                 </button>
-                <button class="btn ghost-hair" (click)="toggleResumeMenu($event)" title="Session options" style="padding-left:var(--sp-2);padding-right:var(--sp-2)">
-                  <app-icon name="chevronD" size="sm" />
-                </button>
-                @if (resumeMenuOpen()) {
-                  <div
-                    #resumeMenu
-                    class="rise"
-                    style="position:absolute;bottom:calc(100% + 4px);right:0;z-index:80;min-width:184px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:var(--sp-2)"
-                  >
-                    <button
-                      [disabled]="!ag.sessionId"
-                      (click)="continueSession(ag.id)"
-                      [style.color]="!ag.sessionId ? 'var(--ink-4)' : 'var(--ink-2)'"
-                      [style.cursor]="!ag.sessionId ? 'default' : 'pointer'"
-                      [title]="ag.sessionId ? ('claude --resume ' + ag.sessionId) : 'no captured session yet'"
-                      style="display:flex;align-items:center;gap:var(--sp-4);width:100%;text-align:left;padding:var(--sp-3) var(--sp-4);border-radius:6px;border:none;background:transparent;font-family:var(--font-mono);font-size:var(--fs-ui)"
-                    >
-                      <app-icon name="refresh" size="sm" [color]="!ag.sessionId ? 'var(--ink-4)' : 'var(--ink-3)'" style="flex:none" />
-                      <span style="flex:1">Continue session</span>
-                    </button>
-                  </div>
-                }
-              </div>
+              }
             }
           }
+        }
+        @if (ag.worktree) {
+          <button class="btn ghost-hair" (click)="diagnostics.openWorktree(ag.worktree)" title="Open worktree folder" style="padding:var(--sp-2) var(--sp-4)"><app-icon name="folderOpen" size="sm" /></button>
         }
         <button class="btn ghost-hair" (click)="ui.openAgent(ag.id)" style="padding:var(--sp-2) var(--sp-4)"><app-icon name="terminal" size="sm" />Open</button>
       </div>
@@ -158,6 +138,7 @@ import { MiniTermComponent } from "./mini-term.component";
 export class AgentCardComponent {
   readonly ui = inject(UiStore);
   readonly agentActions = inject(AgentActionsService);
+  readonly diagnostics = inject(DiagnosticsService);
   private work = inject(AgentWorkStore);
   readonly agent = input.required<Agent>();
   readonly proj = input<Project | undefined>(undefined);
@@ -205,32 +186,8 @@ export class AgentCardComponent {
   readonly totAdd = computed(() => this.ch().data.reduce((s, f) => s + f.add, 0));
   readonly totDel = computed(() => this.ch().data.reduce((s, f) => s + f.del, 0));
 
-  // Start/Resume arrow dropdown (Continue session → claude --resume <id>)
-  readonly resumeMenuOpen = signal(false);
-  private resumeMenu = viewChild<ElementRef<HTMLDivElement>>("resumeMenu");
-
-  toggleResumeMenu(e: MouseEvent) {
-    e.stopPropagation(); // don't open the agent (card click) or bubble to the row
-    this.resumeMenuOpen.update((v) => !v);
-  }
+  // Continue the captured CLI session (claude --resume <id>, codex resume <id>, …).
   continueSession(id: string) {
-    this.resumeMenuOpen.set(false);
     this.agentActions.act(id, "continueSession");
-  }
-
-  @HostListener("document:mousedown", ["$event"])
-  onDocDown(e: MouseEvent) {
-    if (!this.resumeMenuOpen()) return;
-    const el = this.resumeMenu()?.nativeElement;
-    // the chevron trigger lives outside #resumeMenu; close only when the click is
-    // outside both the menu and its trigger (its parent flex wrapper).
-    const target = e.target as Node;
-    if (el && !el.contains(target) && !el.parentElement?.contains(target)) {
-      this.resumeMenuOpen.set(false);
-    }
-  }
-  @HostListener("document:keydown.escape")
-  onEsc() {
-    this.resumeMenuOpen.set(false);
   }
 }

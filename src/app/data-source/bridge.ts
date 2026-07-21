@@ -75,6 +75,9 @@ export const Commands = {
   /** Open the app's rolling diagnostics log file (app_log_dir/orrery.log) in the
    *  OS default handler. */
   OpenLog: 'open_log',
+  /** Open an arbitrary filesystem path (e.g. an agent's worktree dir) in the OS
+   *  file manager. */
+  OpenPath: 'open_path',
   // ---- git-inspection commands ----
   AgentCommitDiff: 'agent_commit_diff',
   AgentCommitFileDiff: 'agent_commit_file_diff',

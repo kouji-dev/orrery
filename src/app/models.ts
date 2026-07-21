@@ -68,6 +68,9 @@ export interface Project {
   hasGit: boolean;
   branch?: string;
   head?: string;
+  /** repo default branch (origin/HEAD → main/master → HEAD); pre-selected base
+   *  when spawning. Undefined → fall back to the first entry in `branches`. */
+  defaultBranch?: string;
   // --- ui-only extras (mock/demo data) ---
   org?: string;
   repo?: string;

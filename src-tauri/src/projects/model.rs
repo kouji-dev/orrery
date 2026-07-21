@@ -31,6 +31,10 @@ pub struct Project {
     pub branch: Option<String>,
     pub head: Option<String>,
     pub branches: Vec<String>,
+    /// The repo's default branch (origin/HEAD → main/master → current HEAD).
+    /// Used as the pre-selected base when spawning an agent; `None` → callers
+    /// fall back to the first entry in `branches`.
+    pub default_branch: Option<String>,
 }
 
 /// A commit shaped for the frontend feed (matches the FE `Commit` model).

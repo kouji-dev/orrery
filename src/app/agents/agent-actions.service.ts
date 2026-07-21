@@ -138,7 +138,7 @@ export class AgentActionsService {
 
   // ---- spawn / duplicate / remove ----
   async spawn(req: SpawnRequest) {
-    const name = req.name; // user-given, unique per project, drives the worktree name
+    const name = req.name; // user-given (duplicates allowed), drives the worktree name
     const proj = this.projects.all().find((p) => p.id === req.projectId);
     this.ui.closeSpawn();
 
@@ -213,9 +213,11 @@ export class AgentActionsService {
   }
 
   duplicateAgent(src: Agent) {
+    const proj = this.projects.all().find((p) => p.id === src.projectId);
     void this.spawn({
       projectId: src.projectId,
-      branch: "main",
+      // the project's resolved default branch, mirroring the spawn modal's default
+      branch: proj?.defaultBranch ?? proj?.branches?.[0] ?? "main",
       toolId: src.tool,
       model: src.model,
       effort: src.effort ?? null,

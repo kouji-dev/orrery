@@ -168,15 +168,15 @@ impl AgentService {
         if req.name.trim().is_empty() {
             return Err(AgentError::Required("name is empty".into()).into());
         }
-        if self.name_exists_in_project(req.project_id, &req.name)? {
-            return Err(AgentError::Invalid(format!(
-                "an agent named '{}' already exists in this project",
-                req.name
-            ))
-            .into());
-        }
         let id = Uuid::new_v4();
-        let wt_name = Self::worktree_name(&req.name, &id);
+        // Duplicate names ARE allowed (agents are keyed by their uuid id). When the
+        // name is already taken in this project, disambiguate the worktree slug with
+        // a short uuid fragment so BOTH the worktree dir and the template-derived
+        // branch (built from wt_name below) stay unique.
+        let mut wt_name = Self::worktree_name(&req.name, &id);
+        if self.name_exists_in_project(req.project_id, &req.name)? {
+            wt_name = format!("{}-{}", wt_name, &id.to_string()[..6]);
+        }
         // settings are best-effort consumers: a read failure falls back to
         // defaults (the historical branch shape + ctor root), never blocks spawn.
         let prefs = self.settings.get().unwrap_or_default();
@@ -768,13 +768,22 @@ mod tests {
     }
 
     #[test]
-    fn spawn_rejects_duplicate_name_in_project() {
+    fn spawn_allows_duplicate_name_with_distinct_worktrees() {
         let s = svc();
         let pid = Uuid::new_v4();
-        s.spawn(req(pid, "dup"), &nogit()).unwrap();
-        let err = s.spawn(req(pid, "dup"), &nogit()).unwrap_err();
-        assert!(matches!(err, AppError::Agent(AgentError::Invalid(_))));
-        // same name in a different project is fine
+        // duplicate names in the same project are allowed now...
+        let a = s.spawn(req(pid, "dup"), &nogit()).unwrap();
+        let b = s.spawn(req(pid, "dup"), &nogit()).unwrap();
+        assert_eq!(a.name, b.name, "both keep the requested name");
+        assert_ne!(a.id, b.id, "each agent has its own id");
+        // ...but their worktrees (and thus branches) must be disambiguated
+        assert_ne!(
+            a.worktree, b.worktree,
+            "second worktree gets a uuid-suffixed slug: {} vs {}",
+            a.worktree, b.worktree
+        );
+        assert_ne!(a.branch, b.branch, "branches stay unique too");
+        // same name in a different project is fine as well
         s.spawn(req(Uuid::new_v4(), "dup"), &nogit()).unwrap();
     }
 

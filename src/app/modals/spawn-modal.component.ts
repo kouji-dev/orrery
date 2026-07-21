@@ -10,7 +10,7 @@ import {
   viewChild,
 } from "@angular/core";
 import { AGENT_TOOLS } from "../data";
-import { Agent, AgentTool, Ticket } from "../models";
+import { Agent, AgentTool, Project, Ticket } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
@@ -81,7 +81,7 @@ function slugName(title: string): string {
             </div>
             <div style="flex:1">
               <label class="field-label">Source branch</label>
-              <select class="osel" [value]="branch()" (change)="branch.set($any($event.target).value)">
+              <select class="osel" (change)="branch.set($any($event.target).value)">
                 @for (b of proj.branches; track b) { <option [value]="b" [selected]="b === branch()">{{ b }}</option> }
               </select>
               @if (!proj.branches?.length) {
@@ -259,8 +259,9 @@ export class SpawnModalComponent implements AfterViewInit, OnInit {
 
   readonly model = signal<string>(this.prefillModel(this.currentTool()));
   readonly effort = signal<string | null>(this.prefillEffort(this.currentTool()));
-  // the backend guarantees a git project has ≥1 branch ("main"); take the first.
-  readonly branch = signal<string>(this.project().branches?.[0] ?? "");
+  // Pre-select the repo's default branch (origin/HEAD → main/master → HEAD);
+  // fall back to the first branch in the list when no default resolves.
+  readonly branch = signal<string>(this.defaultBranchFor(this.project()));
 
   /** Open tickets (todo + inprogress), same-project first, then rest. */
   private readonly openTickets = computed<Ticket[]>(() => {
@@ -347,7 +348,7 @@ export class SpawnModalComponent implements AfterViewInit, OnInit {
     // Switch to the ticket's project if it has one
     if (tk.projectId) {
       this.projectId.set(tk.projectId);
-      this.branch.set(this.project().branches?.[0] ?? "");
+      this.branch.set(this.defaultBranchFor(this.project()));
     }
 
     // Prefill name only if the user hasn't manually typed anything
@@ -359,7 +360,13 @@ export class SpawnModalComponent implements AfterViewInit, OnInit {
 
   setProject(id: string) {
     this.projectId.set(id);
-    this.branch.set(this.project().branches?.[0] ?? "");
+    this.branch.set(this.defaultBranchFor(this.project()));
+  }
+
+  /** The pre-selected source branch for a project: its resolved default branch,
+   *  else the first branch in the list, else "" (non-git project). */
+  private defaultBranchFor(project: Project): string {
+    return project.defaultBranch ?? project.branches?.[0] ?? "";
   }
   setTool(id: Agent["tool"]) {
     this.toolId.set(id);

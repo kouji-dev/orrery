@@ -36,6 +36,18 @@ impl AgentAdapter for CursorAdapter {
         v
     }
 
+    // Resume a prior cursor-agent chat by id: `cursor-agent --resume <id>`
+    // continues that conversation. Per cursor's CLI docs (cursor.com/docs/cli);
+    // NOT verified against a local `--help` here (cursor-agent absent on this
+    // box) — switch to the `--resume=<id>` equals form if the parser requires it.
+    fn resume_argv(&self, session_id: &str) -> Option<Vec<String>> {
+        Some(vec![
+            "cursor-agent".to_string(),
+            "--resume".to_string(),
+            session_id.to_string(),
+        ])
+    }
+
     // autoApprove "everything" → `--force` (cursor-agent's documented
     // run-without-confirmations flag). "off"/"allowlist" add nothing: off keeps
     // cursor's own confirm flow, and allowlist defers to the user's own cursor
@@ -165,6 +177,14 @@ mod tests {
     fn read_hooks(home: &Path) -> serde_json::Value {
         let body = std::fs::read_to_string(home.join(".cursor/hooks.json")).unwrap();
         serde_json::from_str(&body).unwrap()
+    }
+
+    #[test]
+    fn resume_argv_is_cursor_resume_session_id() {
+        assert_eq!(
+            CursorAdapter.resume_argv("abc"),
+            Some(vec!["cursor-agent".into(), "--resume".into(), "abc".into()])
+        );
     }
 
     fn is_orrery(cmd: &str) -> bool {

@@ -91,6 +91,7 @@ function setup(
     available?: (id: string) => boolean;
     tickets?: Ticket[];
     spawnTicketId?: string | null;
+    project?: Partial<typeof PROJECT> & { defaultBranch?: string };
   } = {},
 ): Setup {
   const settings = signal<Settings>({ ...settingsDefaults(), ...opts.settings });
@@ -99,7 +100,7 @@ function setup(
     providers: [
       provideZonelessChangeDetection(),
       { provide: UiStore, useValue: makeUiStore({ spawnTicketId: opts.spawnTicketId }) },
-      { provide: ProjectActionsService, useValue: { all: signal([PROJECT]) } },
+      { provide: ProjectActionsService, useValue: { all: signal([{ ...PROJECT, ...opts.project }]) } },
       { provide: AgentRuntimeService, useValue: { toolAvailable: opts.available ?? (() => true) } },
       { provide: AgentActionsService, useValue: { spawn } },
       { provide: SettingsStore, useValue: { settings } },
@@ -296,6 +297,16 @@ describe("SpawnModal — Ticket field", () => {
     expect(cmp.openTicketsInProgress().map((t) => t.id)).toEqual(["t2"]);
   });
 
+  it("switching to a ticket's project re-derives the branch default", () => {
+    const { cmp } = setup({
+      tickets: [TICKET_TODO],
+      project: { branches: ["aaa", "main", "dev"], defaultBranch: "main" },
+    });
+    cmp.branch.set("dev"); // user had picked something else
+    cmp.applyTicket("t1"); // t1 targets p1 → reset to that project's default
+    expect(cmp.branch()).toBe("main");
+  });
+
   it("strips HTML from the ticket notes in the composed prompt", () => {
     const { cmp, spawn } = setup({ tickets: [TICKET_INPROG] });
     cmp.applyTicket("t2");
@@ -305,5 +316,59 @@ describe("SpawnModal — Ticket field", () => {
     expect(prompt).toContain("Refactor auth module");
     expect(prompt).toContain("See RFC doc"); // HTML stripped
     expect(prompt).not.toContain("<strong>");
+  });
+});
+
+describe("SpawnModal — source branch", () => {
+  /** The branch <select> is the one whose options are exactly the project's branches. */
+  function branchSelect(fixture: ComponentFixture<SpawnModalComponent>, branches: string[]) {
+    const selects = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll("select"),
+    ) as HTMLSelectElement[];
+    return selects.find(
+      (s) => s.options.length === branches.length && s.options[0]?.value === branches[0],
+    )!;
+  }
+
+  it("defaults to the repo's defaultBranch, not the first branch in the list", () => {
+    const { cmp } = setup({
+      project: { branches: ["agent/aaa", "dev", "main"], defaultBranch: "main" },
+    });
+    expect(cmp.branch()).toBe("main");
+  });
+
+  it("falls back to the first branch when no defaultBranch resolves", () => {
+    const { cmp } = setup({ project: { branches: ["dev", "trunk"], defaultBranch: undefined } });
+    expect(cmp.branch()).toBe("dev");
+  });
+
+  it("renders the default branch as the selected option", () => {
+    const branches = ["agent/aaa", "dev", "main"];
+    const { fixture } = setup({ project: { branches, defaultBranch: "main" } });
+    const sel = branchSelect(fixture, branches);
+    expect(sel.value).toBe("main");
+  });
+
+  it("a user's selection via the rendered <select> survives to submit (regression)", () => {
+    const branches = ["agent/aaa", "dev", "main"];
+    const { fixture, cmp, spawn } = setup({ project: { branches, defaultBranch: "main" } });
+    const sel = branchSelect(fixture, branches);
+    // simulate the user picking a NON-default branch in the real DOM control
+    sel.value = "dev";
+    sel.dispatchEvent(new Event("change"));
+    fixture.detectChanges();
+    expect(cmp.branch()).toBe("dev");
+    cmp.name.set("agent-x");
+    cmp.submit(true);
+    expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ branch: "dev" }));
+  });
+
+  it("switching project resets the branch to THAT project's default", () => {
+    const { cmp } = setup({
+      project: { branches: ["agent/aaa", "dev", "main"], defaultBranch: "main" },
+    });
+    cmp.branch.set("dev");
+    cmp.setProject("p1"); // re-selecting resolves the (single) test project again
+    expect(cmp.branch()).toBe("main");
   });
 });

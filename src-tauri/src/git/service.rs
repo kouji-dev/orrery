@@ -965,6 +965,41 @@ impl GitService {
             .collect()
     }
 
+    /// The repository's default branch — the sensible base for a new worktree:
+    /// `origin/HEAD`'s target when a remote sets one, else a conventional local
+    /// `main`/`master`, else the currently checked-out branch (when it is a real
+    /// local branch). `None` for a non-repo / when nothing resolves, in which case
+    /// callers fall back to the first branch in the list.
+    pub fn default_branch(&self, path: &Path) -> Option<String> {
+        let repo = Repository::open(path).ok()?;
+        // 1. the remote's declared default: refs/remotes/origin/HEAD → "origin/<x>"
+        if let Ok(reference) = repo.find_reference("refs/remotes/origin/HEAD") {
+            if let Some(name) = reference
+                .symbolic_target()
+                .ok()
+                .flatten()
+                .and_then(|t| t.strip_prefix("refs/remotes/origin/"))
+            {
+                return Some(name.to_string());
+            }
+        }
+        let locals = self.branches(path);
+        // 2. a conventional default that exists locally
+        for cand in ["main", "master"] {
+            if locals.iter().any(|b| b == cand) {
+                return Some(cand.to_string());
+            }
+        }
+        // 3. the current HEAD branch, but only when it's a genuine local branch
+        //    (guards against a detached HEAD shorthand that isn't a branch name)
+        if let Some((b, _)) = self.head_info(path) {
+            if locals.iter().any(|x| *x == b) {
+                return Some(b);
+            }
+        }
+        None
+    }
+
     /// (branch, short-sha) of HEAD, or None for a repo with no commits / no repo.
     pub fn head_info(&self, path: &Path) -> Option<(String, String)> {
         let repo = Repository::open(path).ok()?;
@@ -1327,6 +1362,62 @@ mod tests {
         let bs = svc.branches(dir.path());
         assert!(bs.contains(&"feature".to_string()), "branches: {bs:?}");
         assert!(bs.len() >= 2, "default branch + feature: {bs:?}");
+    }
+
+    #[test]
+    fn default_branch_prefers_origin_head() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_file(dir.path(), "a.txt", "first");
+        let repo = Repository::open(dir.path()).unwrap();
+        // simulate a clone whose remote declares `develop` as its default
+        repo.reference_symbolic(
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/develop",
+            true,
+            "test",
+        )
+        .unwrap();
+        assert_eq!(svc.default_branch(dir.path()).as_deref(), Some("develop"));
+    }
+
+    #[test]
+    fn default_branch_prefers_main_over_alphabetical_first() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_file(dir.path(), "a.txt", "first");
+        let repo = Repository::open(dir.path()).unwrap();
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        // the conventional default this repo actually has (main or master,
+        // depending on the git2/system default)
+        let default = repo.head().unwrap().shorthand().unwrap().to_string();
+        assert!(matches!(default.as_str(), "main" | "master"), "{default}");
+        // a branch that sorts before it alphabetically must not win
+        repo.branch("aaa-feature", &head, false).unwrap();
+        assert_eq!(svc.default_branch(dir.path()), Some(default));
+    }
+
+    #[test]
+    fn default_branch_falls_back_to_head_branch() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_file(dir.path(), "a.txt", "first");
+        let repo = Repository::open(dir.path()).unwrap();
+        // no origin/HEAD, no main/master: rename the default branch to `trunk`
+        let head = repo.head().unwrap().shorthand().unwrap().to_string();
+        let mut b = repo.find_branch(&head, git2::BranchType::Local).unwrap();
+        b.rename("trunk", false).unwrap();
+        repo.set_head("refs/heads/trunk").unwrap();
+        assert_eq!(svc.default_branch(dir.path()).as_deref(), Some("trunk"));
+    }
+
+    #[test]
+    fn default_branch_none_for_non_repo() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(GitService::new().default_branch(dir.path()), None);
     }
 
     #[test]

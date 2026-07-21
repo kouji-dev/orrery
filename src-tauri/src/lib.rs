@@ -236,6 +236,7 @@ pub fn run() {
             update::update_check,
             update::update_install,
             core::commands::open_log,
+            core::commands::open_path,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

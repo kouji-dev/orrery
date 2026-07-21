@@ -857,14 +857,21 @@ mod tests {
                 "abc".to_string()
             ])
         );
-        // Other tools have no resume-by-id flow → None (fall back to a normal launch).
-        for tool in ["codex", "cursor", "gemini"] {
-            assert_eq!(
-                adapter_for(tool).unwrap().resume_argv("abc"),
-                None,
-                "{tool} has no resume_argv"
-            );
-        }
+        // codex/cursor resume by id too (their own command shapes).
+        assert_eq!(
+            adapter_for("codex").unwrap().resume_argv("abc"),
+            Some(vec!["codex".into(), "resume".into(), "abc".into()])
+        );
+        assert_eq!(
+            adapter_for("cursor").unwrap().resume_argv("abc"),
+            Some(vec!["cursor-agent".into(), "--resume".into(), "abc".into()])
+        );
+        // gemini has no resume-by-id flow → None (fall back to a normal launch).
+        assert_eq!(
+            adapter_for("gemini").unwrap().resume_argv("abc"),
+            None,
+            "gemini has no resume_argv"
+        );
     }
 
     #[test]
