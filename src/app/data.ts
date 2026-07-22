@@ -11,8 +11,9 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: "Claude Code",
     short: "claude",
     accent: "#d98a5b",
-    // aliases (not dated IDs) so they always resolve to the latest — opus is 4.8 today
-    models: ["opus", "sonnet", "haiku"],
+    // aliases (not dated IDs) so they always resolve to the latest — fable is
+    // Fable 5 (claude-fable-5), opus is 4.8 today. First entry = spawn default.
+    models: ["fable", "opus", "sonnet", "haiku"],
     effort: false,
   },
   {
@@ -20,15 +21,17 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: "Codex",
     short: "codex",
     accent: "#10a37f",
-    models: ["gpt-5.1-codex", "gpt-5.1-codex-mini"],
-    effort: ["low", "medium", "high"],
+    // gpt-5.6 tier (Sol = flagship/CLI default, Terra = balanced, Luna = fast)
+    // GA July 2026; gpt-5.5 kept for pinned workflows
+    models: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
+    effort: ["low", "medium", "high", "xhigh"],
   },
   {
     id: "cursor",
     name: "Cursor",
     short: "cursor",
     accent: "#6e9bff",
-    models: ["composer-1", "auto"],
+    models: ["composer-2.5", "composer-2", "auto"],
     effort: false,
   },
   {
@@ -36,7 +39,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: "Gemini",
     short: "gemini",
     accent: "#8a7cff",
-    models: ["gemini-2.5-pro", "gemini-2.5-flash"],
+    models: ["gemini-3-pro", "gemini-3-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash"],
     effort: false,
   },
 ];

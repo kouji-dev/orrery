@@ -120,14 +120,14 @@ describe("SpawnModal — settings prefill", () => {
   it("no saved defaults: keeps the hardcoded claude / first model / no effort", () => {
     const { cmp } = setup();
     expect(cmp.toolId()).toBe("claude");
-    expect(cmp.model()).toBe("opus");
+    expect(cmp.model()).toBe("fable");
     expect(cmp.effort()).toBeNull();
   });
 
   it("defaultTool prefills the initial tool (with its model + effort defaults)", () => {
     const { cmp } = setup({ settings: { defaultTool: "codex" } });
     expect(cmp.toolId()).toBe("codex");
-    expect(cmp.model()).toBe("gpt-5.1-codex"); // curated first model
+    expect(cmp.model()).toBe("gpt-5.6-sol"); // curated first model
     expect(cmp.effort()).toBe("high"); // hardcoded effort default
   });
 
@@ -135,11 +135,11 @@ describe("SpawnModal — settings prefill", () => {
     const { cmp } = setup({
       settings: {
         defaultTool: "codex",
-        toolModel: { codex: "gpt-5.1-codex-mini" },
+        toolModel: { codex: "gpt-5.6-luna" },
         toolEffort: { codex: "low" },
       },
     });
-    expect(cmp.model()).toBe("gpt-5.1-codex-mini");
+    expect(cmp.model()).toBe("gpt-5.6-luna");
     expect(cmp.effort()).toBe("low");
   });
 
@@ -158,14 +158,14 @@ describe("SpawnModal — settings prefill", () => {
 
   it("switching tool applies THAT tool's settings defaults", () => {
     const { cmp } = setup({
-      settings: { toolModel: { codex: "gpt-5.1-codex-mini", claude: "haiku" }, toolEffort: { codex: "medium" } },
+      settings: { toolModel: { codex: "gpt-5.6-luna", claude: "haiku" }, toolEffort: { codex: "medium" } },
     });
     expect(cmp.model()).toBe("haiku"); // claude override applies on open
     cmp.setTool("codex");
-    expect(cmp.model()).toBe("gpt-5.1-codex-mini");
+    expect(cmp.model()).toBe("gpt-5.6-luna");
     expect(cmp.effort()).toBe("medium");
     cmp.setTool("cursor"); // no override → curated default, effort unsupported
-    expect(cmp.model()).toBe("composer-1");
+    expect(cmp.model()).toBe("composer-2.5");
     expect(cmp.effort()).toBeNull();
   });
 
@@ -177,7 +177,7 @@ describe("SpawnModal — settings prefill", () => {
         toolEffort: { codex: "ultra" },
       },
     });
-    expect(cmp.model()).toBe("gpt-5.1-codex"); // first curated
+    expect(cmp.model()).toBe("gpt-5.6-sol"); // first curated
     expect(cmp.effort()).toBe("high");
   });
 });
