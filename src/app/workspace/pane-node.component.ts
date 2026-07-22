@@ -6,12 +6,13 @@ import {
   ElementRef,
   HostListener,
   inject,
-  input,
+  Input,
   signal,
   viewChild,
 } from "@angular/core";
 import { Agent, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { DiagnosticsService } from "../shared/diagnostics.service";
 import { DragService } from "../shared/drag.service";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
@@ -125,6 +126,20 @@ import { UiStore } from "../ui/ui.store";
             <div style="flex:1"></div>
           }
           @if (ag) {
+            @if (ag.worktree) {
+              <button
+                class="pane-btn"
+                (click)="$event.stopPropagation(); diagnostics.openWorktree(ag.worktree)"
+                title="Open worktree folder"
+              ><app-icon name="folderOpen" size="sm" [px]="13" /></button>
+            }
+            @if (ag.sessionId && ag.status !== 'running') {
+              <button
+                class="pane-btn"
+                (click)="$event.stopPropagation(); continueSession(ag.id)"
+                [title]="'Continue last session · ' + ag.tool + ' (' + ag.sessionId + ')'"
+              ><app-icon name="refresh" size="sm" [px]="13" /></button>
+            }
             <button
               class="pane-btn primary"
               (click)="$event.stopPropagation(); toggleRun(ag)"
@@ -353,8 +368,19 @@ import { UiStore } from "../ui/ui.store";
   ],
 })
 export class PaneNodeComponent {
-  readonly node = input.required<PaneNode>();
-  readonly ctx = input.required<PaneCtx>();
+  // Decorator inputs backed by signals (same pattern as RuntimeRowComponent /
+  // ReviewCodeComponent) so the component is testable under vitest JIT —
+  // signal `input.required` doesn't wire through `componentRef.setInput()` there.
+  private readonly nodeSig = signal<PaneNode | undefined>(undefined);
+  private readonly ctxSig = signal<PaneCtx | undefined>(undefined);
+  @Input({ alias: "node", required: true }) set nodeInput(v: PaneNode) {
+    this.nodeSig.set(v);
+  }
+  @Input({ alias: "ctx", required: true }) set ctxInput(v: PaneCtx) {
+    this.ctxSig.set(v);
+  }
+  readonly node = computed(() => this.nodeSig()!);
+  readonly ctx = computed(() => this.ctxSig()!);
 
   readonly pickOpen = signal(false);
   readonly dragging = signal(false);
@@ -367,6 +393,7 @@ export class PaneNodeComponent {
   private host = inject(ElementRef<HTMLElement>);
   private drag = inject(DragService);
   private agentActions = inject(AgentActionsService);
+  readonly diagnostics = inject(DiagnosticsService);
   readonly ui = inject(UiStore);
   private picker = viewChild<ElementRef<HTMLElement>>("picker");
   private splitEl = viewChild<ElementRef<HTMLElement>>("splitEl");
@@ -423,12 +450,12 @@ export class PaneNodeComponent {
   });
 
   readonly asLeaf = computed<PaneLeaf | null>(() => {
-    const n = this.node();
-    return n.type === "leaf" ? n : null;
+    const n = this.nodeSig();
+    return n?.type === "leaf" ? n : null;
   });
   readonly asSplit = computed<PaneSplit | null>(() => {
-    const n = this.node();
-    return n.type === "split" ? n : null;
+    const n = this.nodeSig();
+    return n?.type === "split" ? n : null;
   });
   readonly agent = computed<Agent | undefined>(() => {
     const lf = this.asLeaf();
@@ -447,6 +474,11 @@ export class PaneNodeComponent {
   }
   runTitle(ag: Agent): string {
     return ag.status === "running" ? "Pause agent" : ag.started ? "Resume agent" : "Start agent";
+  }
+  // Continue the captured CLI session (claude --resume <id>, codex resume <id>, …)
+  // — unlike play, which starts a fresh run without the previous session.
+  continueSession(id: string) {
+    this.agentActions.act(id, "continueSession");
   }
   agentsOf(projectId: string): Agent[] {
     return this.ctx().agents().filter((a) => a.projectId === projectId);
