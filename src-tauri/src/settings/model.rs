@@ -76,10 +76,10 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             channel: "stable".into(),
-            // Updates install themselves by default — the per-user MSI/NSIS need
-            // no UAC, so "auto" is safe. (The design contract's original default
-            // was "notify"; changed 2026-06-11.) Auto-resume on, remote approval on.
-            update_policy: "auto".into(),
+            // Startup surfaces an "update available" toast; the user chooses to
+            // install or skip — no silent self-install. Auto-resume on, remote
+            // approval on. (Mirror of the frontend settingsDefaults().)
+            update_policy: "notify".into(),
             default_tool: String::new(), // spawn modal keeps its own hardcoded default
             tool_model: BTreeMap::new(),
             tool_effort: BTreeMap::new(),
@@ -128,7 +128,7 @@ mod tests {
     fn default_matches_plan_schema() {
         let s = Settings::default();
         assert_eq!(s.channel, "stable");
-        assert_eq!(s.update_policy, "auto");
+        assert_eq!(s.update_policy, "notify");
         assert_eq!(s.branch_template, "agent/{name}");
         assert_eq!(s.worktree_root, "", "empty = fall back to the ctor root");
         assert!(s.auto_resume);
@@ -145,7 +145,7 @@ mod tests {
         let s: Settings =
             serde_json::from_str(r#"{"channel":"beta","someFutureKey":{"x":1}}"#).unwrap();
         assert_eq!(s.channel, "beta");
-        assert_eq!(s.update_policy, "auto", "missing key takes the default");
+        assert_eq!(s.update_policy, "notify", "missing key takes the default");
         assert_eq!(s.events, EventToggles::default());
     }
 

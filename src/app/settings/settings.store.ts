@@ -22,9 +22,9 @@ export type SettingsMapKey = "toolModel" | "toolEffort" | "autoApprove" | "toolP
 export function settingsDefaults(): Settings {
   return {
     channel: "stable",
-    // Updates install themselves by default (per-user installers — no UAC).
-    // Mirror of the backend default; changed from "notify" 2026-06-11.
-    updatePolicy: "auto",
+    // Startup surfaces a "update available" toast and lets the user choose to
+    // install or skip — no silent self-install. Mirror of the backend default.
+    updatePolicy: "notify",
     defaultTool: "", // "" = spawn modal keeps its own hardcoded default
     toolModel: {},
     toolEffort: {},

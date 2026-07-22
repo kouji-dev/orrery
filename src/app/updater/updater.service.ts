@@ -34,12 +34,16 @@ export class UpdaterService {
    *
    *  The settings `updatePolicy` branches the startup flow:
    *  - `manual`: no startup check at all;
-   *  - `notify`: check on the configured channel, surface the result in the
-   *    settings modal (update card + nav dot), but never install;
-   *  - `auto` (default): today's behavior — check, install, relaunch, with the
-   *    tight-loop guard below. The dev-skip stays in `updater.isAvailable()`. */
+   *  - `notify` (default): check on the configured channel, surface the result via
+   *    the bottom-center toast (+ settings card / nav dot), but never install —
+   *    the user chooses "Install" or "Later";
+   *  - `auto`: check, install, relaunch, with the tight-loop guard below.
+   *
+   *  The check runs regardless of `updater.isAvailable()` so a dev/local build
+   *  still surfaces the toast at startup (a non-Tauri `ng serve` simply throws
+   *  inside `check()` → caught below → `no-update`). Only the auto-INSTALL is
+   *  gated on `isAvailable()`, so a dev build never self-installs a release. */
   async run(): Promise<UpdateOutcome> {
-    if (!this.updater.isAvailable()) return 'no-update';
     const { updatePolicy, channel } = await this.settings.ready();
     if (updatePolicy === 'manual') return 'no-update';
     try {
@@ -49,9 +53,11 @@ export class UpdaterService {
         return 'no-update';
       }
       // Whatever happens next (notify / loop-guard / install), make the update
-      // discoverable in Settings → Updates.
+      // discoverable via the toast + Settings → Updates.
       this.settings.noteUpdate({ version: update.version, date: update.date, notes: update.notes });
-      if (updatePolicy === 'notify') {
+      // Surface-only path: the notify default, or any build we can't install onto
+      // (dev/local — `isAvailable()` false). Show the toast; never install.
+      if (updatePolicy === 'notify' || !this.updater.isAvailable()) {
         this.status.set(`update ${update.version} available`);
         return 'no-update';
       }
