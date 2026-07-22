@@ -90,6 +90,24 @@ export class TerminalService implements OnDestroy {
     });
   }
 
+  /** The agent whose terminal currently holds the typing focus (fast-path), or
+   *  null. Used as the fallback target when a file is dropped somewhere that
+   *  isn't over a specific terminal. */
+  focusedAgentId(): string | null {
+    return this.sentFocusId;
+  }
+
+  /** Paste text into an agent's terminal — it flows to the PTY through the same
+   *  `onData` path as a keyboard paste (bracketed-paste aware). No-op (returns
+   *  false) if that agent has no live terminal. */
+  pasteToAgent(id: string, text: string): boolean {
+    const h = this.handles.get(id);
+    if (!h) return false;
+    h.term.paste(text);
+    h.term.focus();
+    return true;
+  }
+
   // Per-agent live search result { index (0-based, -1 = none), count } — bumped by
   // the SearchAddon's onDidChangeResults so the search box can show "n / total".
   private searchRes = signal<Record<string, { index: number; count: number }>>(

@@ -31,7 +31,7 @@ import { UiStore } from "../ui/ui.store";
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--bg)">
       <div style="color:var(--ink-4);padding:var(--sp-4) var(--sp-6) var(--sp-2);font-size:var(--fs-xs)">── session: {{ agent().worktree }} · {{ agent().branch }} ──</div>
       <div style="flex:1;min-height:0;position:relative">
-        <div #host style="position:absolute;inset:0;padding:var(--sp-1) var(--sp-5) var(--sp-4)"></div>
+        <div #host [attr.data-agent-id]="agent().id" style="position:absolute;inset:0;padding:var(--sp-1) var(--sp-5) var(--sp-4)"></div>
 
         @if (searchOpen()) {
           <div

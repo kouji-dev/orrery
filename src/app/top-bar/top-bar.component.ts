@@ -182,7 +182,7 @@ import { TicketsStore } from "../stores/tickets.store";
       /* pending-update dot on the settings gear (mirrors the in-modal nav dot) */
       .tb-settings { position: relative; }
       .tb-upd-dot {
-        position: absolute; top: 3px; right: 3px; width: 6px; height: 6px;
+        position: absolute; top: 3px; right: 3px; width: var(--sp-3); height: var(--sp-3);
         border-radius: 50%; background: var(--set-amber, var(--accent));
         box-shadow: 0 0 7px -1px var(--set-amber, var(--accent));
       }
