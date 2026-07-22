@@ -4,8 +4,19 @@ import {
   detectTitleStatus,
   isAwaitingInput,
   isPermissionPrompt,
+  langId,
+  langTag,
   stripAnsi,
 } from "./utils";
+
+describe("langId / langTag", () => {
+  it("routes Angular CLI templates to the angular grammar, plain html stays html", () => {
+    expect(langId("src/app/foo.component.html")).toBe("angular");
+    expect(langTag("src/app/foo.component.html")).toBe("angular");
+    expect(langId("public/index.html")).toBe("html");
+    expect(langId("src/main.ts")).toBe("javascript");
+  });
+});
 
 describe("stripAnsi", () => {
   it("removes CSI color / SGR sequences", () => {

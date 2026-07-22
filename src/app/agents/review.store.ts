@@ -5,11 +5,12 @@ export interface ReviewComment {
   file: string;
   view: "diff" | "file";
   lang: string;
-  fromIdx: number;
-  toIdx: number;
+  // 1-based line numbers in the CURRENT (new-side / working-tree) content —
+  // deleted old-side lines are not commentable (they render as widgets, not
+  // real document lines, in the unified merge view).
   fromLine: number;
   toLine: number;
-  side: "old" | "new" | "file";
+  side: "new" | "file";
   snippet: string;
   lines: string[];
   note: string;
@@ -29,8 +30,8 @@ export interface ReviewPayload {
   global: string;
 }
 
-export function isBlock(c: { fromIdx: number; toIdx: number }): boolean {
-  return c.toIdx > c.fromIdx;
+export function isBlock(c: { fromLine: number; toLine: number }): boolean {
+  return c.toLine > c.fromLine;
 }
 
 function refLines(c: { fromLine: number; toLine: number }): string {

@@ -128,7 +128,9 @@ interface LangDef {
   stream?: boolean;
 }
 
-const L = (pkg: string, fn: string, arg?: unknown): LangDef => ({ pkg: `@codemirror/lang-${pkg}@6`, fn, arg });
+// `ver` overrides the major pin — most official grammars are 6.x, but a few
+// (vue, angular) never left 0.x and 404 on esm.sh when requested as @6.
+const L = (pkg: string, fn: string, arg?: unknown, ver = "6"): LangDef => ({ pkg: `@codemirror/lang-${pkg}@${ver}`, fn, arg });
 const S = (mode: string, fn: string): LangDef => ({ pkg: `@codemirror/legacy-modes@6/mode/${mode}`, fn, stream: true });
 
 // keyed by the canonical tag from `langId()` in utils.ts
@@ -150,7 +152,8 @@ const LANGS: Record<string, LangDef> = {
   cpp: L("cpp", "cpp"),
   php: L("php", "php"),
   go: L("go", "go"),
-  vue: L("vue", "vue"),
+  vue: L("vue", "vue", undefined, "0"),
+  angular: L("angular", "angular", undefined, "0"), // Angular templates (bindings, @if/@for, interpolation)
   wast: L("wast", "wast"),
   // @codemirror/legacy-modes (CM5 modes via StreamLanguage)
   shell: S("shell", "shell"),

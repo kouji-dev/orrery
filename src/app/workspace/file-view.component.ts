@@ -14,8 +14,7 @@ import { IconComponent } from "../shared/icon.component";
 import { UiStore } from "../ui/ui.store";
 import { fileDir, fileName, langId, langTag } from "../utils";
 import { BRIDGE, Commands } from "../data-source/bridge";
-import { fileToRows } from "./review/unified-diff";
-import { ReviewCodeComponent } from "./review/review-code.component";
+import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
 
@@ -25,13 +24,13 @@ const MAX_CHARS = 1_500_000;
 /**
  * Read-only single-file view for a pane's file tab. Content is the
  * working-tree text — fetched through the existing `agent_diff` command whose
- * `.new` side is exactly that — rendered by the shared ReviewCodeComponent.
+ * `.new` side is exactly that — rendered by the shared UnifiedCodeComponent.
  * Markdown gets a Raw / Preview toggle. Annotate overlays per-line blame.
  */
 @Component({
   selector: "app-file-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ReviewCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent],
+  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent],
   template: `
     <!-- slim toolbar: path · changed-state · (md toggle) · annotate · lang · refresh -->
     <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-6);background:var(--panel);border-bottom:1px solid var(--hair);font-size:var(--fs-sm);flex:none;min-width:0">
@@ -81,7 +80,7 @@ const MAX_CHARS = 1_500_000;
     } @else if (annotate()) {
       <app-annotate-blame [lines]="blame()" (openCommit)="onOpenCommit($event)" />
     } @else {
-      <app-review-code [agent]="agent().id" [file]="path()" view="file" [rows]="rows()" [lang]="lid()" />
+      <app-unified-code [agent]="agent().id" [file]="path()" view="file" [newText]="content() ?? ''" [lang]="lid()" />
     }
   `,
   styles: [
@@ -112,7 +111,7 @@ export class FileViewComponent {
   readonly loading = signal(false);
   readonly preview = signal(true); // markdown opens rendered; Raw is one click
   readonly annotate = signal(false);
-  private readonly content = signal<string | null>(null);
+  readonly content = signal<string | null>(null);
   private readonly error = signal<string | null>(null);
   readonly blame = signal<BlameLine[]>([]);
 
@@ -122,7 +121,6 @@ export class FileViewComponent {
   readonly tag = computed(() => langTag(this.path()));
   readonly mdHtml = computed(() => (this.content() ? (marked.parse(this.content()!) as string) : ""));
 
-  readonly rows = computed(() => fileToRows(this.content() ?? ""));
   readonly lid = computed(() => langId(this.path()));
 
   /** Block rendering for unloadable / oversized / binary content. */

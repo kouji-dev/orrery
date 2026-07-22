@@ -12,13 +12,13 @@ import { IconComponent } from "../shared/icon.component";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
-import { fileDir, fileName, fileStateLabel, hunkHeader, langId, langTag, mix } from "../utils";
+import { fileDir, fileName, fileStateLabel, langId, langTag, mix } from "../utils";
 import { diffWouldStall } from "./code-diff.component";
 import { UiStore } from "../ui/ui.store";
-import { ReviewCodeComponent } from "./review/review-code.component";
+import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
-import { diffToHunks, diffToRows, fileToRows } from "./review/unified-diff";
+import { DiffStats } from "./review/chunk-stats";
 
 const LIST_MIN = 160; // px — narrowest the file-list panel may get
 const LIST_MAX = 520; // px — widest before the diff body is too cramped
@@ -27,7 +27,7 @@ const LIST_DEFAULT = 236;
 @Component({
   selector: "app-diff-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ReviewCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent],
+  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent],
   template: `
     <div
       class="diff-grid"
@@ -185,9 +185,9 @@ const LIST_DEFAULT = 236;
               <span>Large file with long lines — review rendered without inline diff.</span>
               <button class="db-btn" (click)="forceReview.set(true)">Review anyway</button>
             </div>
-            <app-review-code [agent]="agent().id" [file]="current()!.path" view="file" [rows]="fileRows()" [lang]="langId()" />
+            <app-unified-code [agent]="agent().id" [file]="current()!.path" view="file" [newText]="d.new" [lang]="langId()" />
           } @else {
-            <app-review-code [agent]="agent().id" [file]="current()!.path" view="diff" [rows]="rows()" [lang]="langId()" />
+            <app-unified-code [agent]="agent().id" [file]="current()!.path" view="diff" [oldText]="d.old" [newText]="d.new" [lang]="langId()" (stats)="stats.set($event)" />
           }
         } @else if (!current()) {
           <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">no changed files</div>
@@ -361,15 +361,12 @@ export class DiffViewComponent {
 
   // ----- inline review signals -----
   readonly forceReview = signal(false);
-  readonly rows = computed(() => {
-    const d = this.diff();
-    return d ? diffToRows(diffToHunks(d.old, d.new)) : [];
-  });
+  /** Exact header stats emitted by the unified merge view's own diff. */
+  readonly stats = signal<DiffStats | null>(null);
   readonly stall = computed(() => {
     const d = this.diff();
     return !!d && !this.forceReview() && diffWouldStall(d.old, d.new);
   });
-  readonly fileRows = computed(() => fileToRows(this.diff()?.new ?? ""));
 
   // ----- header derivations -----
   readonly langLabel = computed(() => {
@@ -381,26 +378,18 @@ export class DiffViewComponent {
     const f = this.current();
     return f ? langId(f.path) : "";
   });
-  // hunk header from the loaded diff content (falls back to file state pre-load)
+  // hunk header from the merge view's diff (falls back to file state pre-load)
   readonly headerHunk = computed(() => {
-    const d = this.diff();
-    if (d) return hunkHeader(d.old, d.new);
+    const s = this.stats();
+    if (s) return s.hunks > 1 ? `${s.hunk} · ${s.hunks} hunks` : s.hunk;
     const f = this.current();
     if (f?.state === "A") return "@@ -0,0 +1,? @@";
     if (f?.state === "D") return "@@ -1,? +0,0 @@";
     return "@@ … @@";
   });
-  // counts: prefer the exact diff content, fall back to the backend file stat
-  readonly addCount = computed(() => {
-    const d = this.diff();
-    if (d) return countLines(d.new) - sharedLines(d.old, d.new);
-    return this.current()?.add ?? 0;
-  });
-  readonly delCount = computed(() => {
-    const d = this.diff();
-    if (d) return countLines(d.old) - sharedLines(d.old, d.new);
-    return this.current()?.del ?? 0;
-  });
+  // counts: prefer the merge view's exact diff, fall back to the backend file stat
+  readonly addCount = computed(() => this.stats()?.add ?? this.current()?.add ?? 0);
+  readonly delCount = computed(() => this.stats()?.del ?? this.current()?.del ?? 0);
 
   // ----- resizable separator (signal-backed width, pointer drag) -----
   readonly listW = signal(LIST_DEFAULT);
@@ -426,6 +415,7 @@ export class DiffViewComponent {
       const id = this.agentId();
       const f = this.current();
       this.forceReview.set(false);
+      this.stats.set(null); // stale counts must not survive a file switch
       if (!f) {
         this.diff.set(null);
         return;
@@ -566,26 +556,4 @@ function buildDiffTree(files: AgentFile[]): DiffNode[] {
   };
   sortRec(root.children);
   return root.children;
-}
-
-// ----- line-count helpers (header counts) -----
-function countLines(s: string): number {
-  return s.length ? s.replace(/\n$/, "").split("\n").length : 0;
-}
-// crude shared-line estimate: lines present (as a multiset) in both old and new
-function sharedLines(oldText: string, newText: string): number {
-  if (!oldText.length || !newText.length) return 0;
-  const counts = new Map<string, number>();
-  for (const l of oldText.replace(/\n$/, "").split("\n")) {
-    counts.set(l, (counts.get(l) ?? 0) + 1);
-  }
-  let shared = 0;
-  for (const l of newText.replace(/\n$/, "").split("\n")) {
-    const c = counts.get(l) ?? 0;
-    if (c > 0) {
-      shared++;
-      counts.set(l, c - 1);
-    }
-  }
-  return shared;
 }

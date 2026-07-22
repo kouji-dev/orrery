@@ -338,6 +338,7 @@ const LANG_LABELS: Record<string, string> = {
 export function langTag(path: string): string {
   const name = path.replace(/\/$/, "").split("/").pop() ?? "";
   if (/^dockerfile$/i.test(name)) return "dockerfile";
+  if (/\.component\.html$/i.test(name)) return "angular";
   const dot = name.lastIndexOf(".");
   if (dot < 0) return ""; // no extension
   const ext = name.slice(dot + 1).toLowerCase();
@@ -373,6 +374,8 @@ const LANG_ID: Record<string, string> = {
 export function langId(path: string): string {
   const name = path.replace(/\/$/, "").split("/").pop() ?? "";
   if (/^dockerfile$/i.test(name) || /\.dockerfile$/i.test(name)) return "dockerfile";
+  // Angular CLI template convention → the Angular grammar (html + bindings)
+  if (/\.component\.html$/i.test(name)) return "angular";
   const dot = name.lastIndexOf(".");
   if (dot < 0) return "";
   return LANG_ID[name.slice(dot + 1).toLowerCase()] ?? "";
@@ -386,18 +389,4 @@ export function fileStateLabel(state: string): string {
       state
     ] ?? "modified"
   );
-}
-
-// ---- hunk header (diff header) ----
-// Build a `@@ -a,b +c,d @@` style hunk header from old/new line counts. The
-// backend FileDiff carries only old/new content (not the raw patch header), so
-// for a whole-file view we synthesize a single hunk spanning both versions.
-// A new file → `@@ -0,0 +1,N @@`; a deleted file → `@@ -1,M +0,0 @@`.
-export function hunkHeader(oldText: string, newText: string): string {
-  const count = (s: string) => (s.length ? s.replace(/\n$/, "").split("\n").length : 0);
-  const o = count(oldText);
-  const n = count(newText);
-  const oldRange = o ? `-1,${o}` : "-0,0";
-  const newRange = n ? `+1,${n}` : "+0,0";
-  return `@@ ${oldRange} ${newRange} @@`;
 }

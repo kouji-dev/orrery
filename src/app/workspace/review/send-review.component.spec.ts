@@ -36,7 +36,7 @@ describe("SendReviewButtonComponent", () => {
     f.componentRef.setInput("agent", "a"); f.componentRef.setInput("agentName", "Bee");
     f.detectChanges();
     expect(f.nativeElement.querySelector("button")).toBeNull();
-    store.add("a", { file: "f", view: "diff", lang: "ts", fromIdx: 0, toIdx: 0, fromLine: 1, toLine: 1, side: "new", snippet: "s", lines: ["s"], note: "n" });
+    store.add("a", { file: "f", view: "diff", lang: "ts", fromLine: 1, toLine: 1, side: "new", snippet: "s", lines: ["s"], note: "n" });
     f.detectChanges();
     expect(f.nativeElement.textContent).toContain("Send review");
     expect(f.nativeElement.textContent).toContain("1");

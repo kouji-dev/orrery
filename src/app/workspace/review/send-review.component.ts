@@ -169,7 +169,7 @@ export class SendReviewModalComponent {
   nameOf(path: string): string { return fileName(path); }
   dirOf(path: string): string { return fileDir(path); }
   linesOf(c: { fromLine: number; toLine: number }): string { return refLines(c); }
-  blockComment(c: { fromIdx: number; toIdx: number }): boolean { return isBlock(c); }
+  blockComment(c: { fromLine: number; toLine: number }): boolean { return isBlock(c); }
 
   onGlobalInput(e: Event): void {
     this.global.set((e.target as HTMLTextAreaElement).value);
