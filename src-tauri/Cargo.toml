@@ -3,7 +3,7 @@ members = ["updater-stub"]
 
 [package]
 name = "orrery"
-version = "0.11.0"
+version = "0.12.0"
 description = "Orrery - agent orchestration"
 authors = ["you"]
 edition = "2021"
