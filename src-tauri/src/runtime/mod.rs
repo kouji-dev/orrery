@@ -189,6 +189,20 @@ impl RuntimeService {
         let mut cmd = resolve_program_command(cmd);
         cmd.cwd(worktree);
 
+        // Agents render in orrery's own xterm.js pane, which always supports
+        // truecolor — so sanitize the inherited color env instead of trusting
+        // it. NO_COLOR leaks in when orrery itself was launched from a shell
+        // that sets it (CI, a Claude Code session, …) and would silently strip
+        // ANSI from every node-based CLI; TERM/COLORTERM are how terminals
+        // advertise capability, and a programmatic ConPTY sets neither, leaving
+        // node CLIs to guess "monochrome" even on a working TTY.
+        cmd.env_remove("NO_COLOR");
+        cmd.env_remove("NODE_DISABLE_COLORS");
+        if cmd.get_env("TERM").is_none() {
+            cmd.env("TERM", "xterm-256color");
+        }
+        cmd.env("COLORTERM", "truecolor");
+
         // Hooks are installed GLOBALLY at app startup (merged into the user's real
         // config), so the runtime no longer installs them per-launch. It only
         // stamps the ORRERY_* env so a orrery-launched agent's hook brokers with
@@ -537,10 +551,12 @@ fn tool_command(
 /// that precedes winget's) AND winget (a real `claude.exe`), it picks the npm shell
 /// script and the spawn dies with 193.
 ///
-/// We resolve argv[0] ourselves before spawning: a real executable anywhere on PATH
-/// beats a script shim anywhere, and `.cmd`/`.bat`/`.ps1` shims are wrapped in their
-/// interpreter so they actually run. No-op when argv[0] already names a path, when
-/// nothing resolves, or off Windows.
+/// We resolve argv[0] ourselves before spawning: PATH dirs are walked in order and
+/// the first dir with a runnable candidate wins (preferring `.exe` over shims WITHIN
+/// a dir), so orrery launches the same version the user's terminal would. `.cmd`/
+/// `.bat`/`.ps1` shims are wrapped in their interpreter so they actually run; the
+/// extensionless file is a global last resort. No-op when argv[0] already names a
+/// path, when nothing resolves, or off Windows.
 #[cfg(windows)]
 fn resolve_program_command(cmd: CommandBuilder) -> CommandBuilder {
     let argv: Vec<String> = cmd
@@ -583,36 +599,70 @@ fn resolve_program(argv: Vec<String>) -> Vec<String> {
     let dirs: Vec<std::path::PathBuf> = std::env::var_os("PATH")
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default();
-    match find_program(prog, &dirs) {
+    let prefer_ps1 = crate::agents::adapters::prefers_pwsh();
+    match find_program(prog, &dirs, &executable_exts(prefer_ps1)) {
         Some(found) => wrap_for_ext(&found, &argv[1..]),
         None => argv, // nothing better to offer; let portable-pty try
     }
 }
 
-/// Locate `prog` on `dirs`, preferring a real executable over a script shim and a
-/// script shim over an extensionless file. ACROSS extensions a higher-priority kind
-/// anywhere beats a lower one in an earlier dir (so winget's `claude.exe` wins over
-/// npm's bare `claude`); within one extension the earliest PATH dir wins.
+/// Candidate extensions in launchability order: PE images CreateProcessW runs
+/// directly, then the script kinds we wrap in a known interpreter, then whatever
+/// else the machine's PATHEXT declares executable (launched via cmd.exe file
+/// association). Honoring PATHEXT means a `claude.vbs`/`.py`-style install the
+/// user's shell would run is not invisible to us. With PowerShell 7 installed
+/// (`prefer_ps1`) the `.ps1` shim outranks `.cmd` — pwsh runs npm's ps1 shim
+/// more smoothly than cmd.exe runs the batch one.
 #[cfg(windows)]
-fn find_program(prog: &str, dirs: &[std::path::PathBuf]) -> Option<std::path::PathBuf> {
-    for ext in ["exe", "com", "cmd", "bat", "ps1", ""] {
-        for dir in dirs {
-            let cand = if ext.is_empty() {
-                dir.join(prog)
-            } else {
-                dir.join(format!("{prog}.{ext}"))
-            };
+fn executable_exts(prefer_ps1: bool) -> Vec<String> {
+    let base: [&str; 5] = if prefer_ps1 {
+        ["exe", "com", "ps1", "cmd", "bat"]
+    } else {
+        ["exe", "com", "cmd", "bat", "ps1"]
+    };
+    let mut exts: Vec<String> = base.iter().map(|e| e.to_string()).collect();
+    if let Some(pathext) = std::env::var_os("PATHEXT") {
+        for e in pathext.to_string_lossy().split(';') {
+            let e = e.trim().trim_start_matches('.').to_ascii_lowercase();
+            if !e.is_empty() && !exts.iter().any(|k| k == &e) {
+                exts.push(e);
+            }
+        }
+    }
+    exts
+}
+
+/// Locate `prog` on `dirs`, respecting PATH order: the FIRST dir with any runnable
+/// candidate wins, and within that dir a real executable beats a script shim
+/// (`exe` > `com` > `cmd` > `bat` > `ps1`). This matches what the user's shell
+/// resolves — so when npm's `claude.cmd` (kept current by `npm update`) precedes a
+/// stale winget `claude.exe`, orrery launches the same version the terminal does.
+/// An extensionless file is a global LAST resort (CreateProcessW can't run it, and
+/// npm's bare shim always has a runnable `.cmd`/`.ps1` sibling in the same dir).
+/// `exts` comes from [`executable_exts`] — PE images first, then wrappable scripts,
+/// then the rest of the machine's PATHEXT.
+#[cfg(windows)]
+fn find_program(
+    prog: &str,
+    dirs: &[std::path::PathBuf],
+    exts: &[String],
+) -> Option<std::path::PathBuf> {
+    for dir in dirs {
+        for ext in exts {
+            let cand = dir.join(format!("{prog}.{ext}"));
             if cand.is_file() {
                 return Some(cand);
             }
         }
     }
-    None
+    dirs.iter().map(|d| d.join(prog)).find(|c| c.is_file())
 }
 
 /// Build the launch argv for a resolved program path: a real executable runs
-/// directly; `.cmd`/`.bat` go through `cmd.exe /c`; `.ps1` through PowerShell;
-/// anything else (incl. an extensionless file) is handed back as-is, best effort.
+/// directly; `.cmd`/`.bat` go through `cmd.exe /c`; `.ps1` through PowerShell
+/// (pwsh when installed); any other PATHEXT kind through `cmd.exe /c call`,
+/// which launches it via its file association; an extensionless file is handed
+/// back as-is, best effort.
 #[cfg(windows)]
 fn wrap_for_ext(found: &std::path::Path, args_tail: &[String]) -> Vec<String> {
     let full = found.to_string_lossy().into_owned();
@@ -621,6 +671,7 @@ fn wrap_for_ext(found: &std::path::Path, args_tail: &[String]) -> Vec<String> {
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase());
     let mut out = match ext.as_deref() {
+        Some("exe") | Some("com") => vec![full],
         // `cmd.exe /c call <shim> <args>` — NOT `/c <shim>`. The npm/pnpm shim often
         // lives in a spaced dir (e.g. `C:\Program Files\nodejs\`), so portable-pty
         // quotes its path; with a spaced task prompt that is 4 quote chars total, and
@@ -630,14 +681,16 @@ fn wrap_for_ext(found: &std::path::Path, args_tail: &[String]) -> Vec<String> {
         // and quoted args survive intact.
         Some("cmd") | Some("bat") => vec!["cmd.exe".into(), "/c".into(), "call".into(), full],
         Some("ps1") => vec![
-            "powershell.exe".into(),
+            crate::agents::adapters::powershell_program(),
             "-NoProfile".into(),
             "-ExecutionPolicy".into(),
             "Bypass".into(),
             "-File".into(),
             full,
         ],
-        _ => vec![full],
+        // Other PATHEXT kinds (.vbs, .js, .py, …): cmd resolves the association.
+        Some(_) => vec!["cmd.exe".into(), "/c".into(), "call".into(), full],
+        None => vec![full],
     };
     out.extend(args_tail.iter().cloned());
     out
@@ -994,13 +1047,15 @@ mod tests {
         }
     }
 
-    // The 193 fix: when `claude` is installed by both npm (extensionless Node shim +
-    // .cmd/.ps1) and winget (real .exe), the real .exe MUST win even though its PATH
-    // dir comes LATER and a bare `claude` sits in an earlier dir. This is the exact
-    // shadowing that handed portable-pty a shell script and produced os error 193.
+    // PATH order wins: when `claude` is installed by both npm (extensionless Node
+    // shim + .cmd/.ps1, in an EARLIER PATH dir) and winget (real .exe, later), the
+    // npm dir's runnable `.cmd` shim is chosen — same version the terminal resolves.
+    // The 193 fix survives because the extensionless shell script is never picked
+    // while a runnable sibling exists; the stale-winget-version bug is fixed because
+    // a later-dir .exe no longer shadows the earlier dir the user keeps current.
     #[cfg(windows)]
     #[test]
-    fn find_program_prefers_real_exe_over_npm_shims() {
+    fn find_program_respects_path_order_over_later_exe() {
         use std::fs;
         use std::path::PathBuf;
         let npm = tempfile::tempdir().unwrap();
@@ -1013,9 +1068,77 @@ mod tests {
         fs::write(winget.path().join("claude.exe"), b"MZ").unwrap();
         let dirs: Vec<PathBuf> = vec![npm.path().into(), winget.path().into()];
         assert_eq!(
-            find_program("claude", &dirs),
+            find_program("claude", &dirs, &executable_exts(false)),
+            Some(npm.path().join("claude.cmd")),
+            "earlier dir's runnable .cmd beats a later dir's .exe"
+        );
+        assert_eq!(
+            find_program("claude", &dirs, &executable_exts(true)),
+            Some(npm.path().join("claude.ps1")),
+            "with pwsh installed the earlier dir's .ps1 shim is preferred"
+        );
+    }
+
+    // Within ONE dir a real .exe still beats the script shims — the per-dir kind
+    // preference only kicks in after PATH order has picked the dir.
+    #[cfg(windows)]
+    #[test]
+    fn find_program_prefers_exe_within_same_dir() {
+        use std::fs;
+        use std::path::PathBuf;
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("claude.cmd"), b"@echo off\n").unwrap();
+        fs::write(dir.path().join("claude.exe"), b"MZ").unwrap();
+        let dirs: Vec<PathBuf> = vec![dir.path().into()];
+        for prefer_ps1 in [false, true] {
+            assert_eq!(
+                find_program("claude", &dirs, &executable_exts(prefer_ps1)),
+                Some(dir.path().join("claude.exe")),
+                ".exe beats .cmd in the same dir (prefer_ps1={prefer_ps1})"
+            );
+        }
+    }
+
+    // A dir holding ONLY the extensionless file must not capture resolution — a
+    // runnable candidate in a LATER dir wins, and the extensionless file is used
+    // only when nothing runnable exists anywhere (CreateProcessW can't start it).
+    #[cfg(windows)]
+    #[test]
+    fn find_program_skips_extensionless_only_dir_for_later_runnable() {
+        use std::fs;
+        use std::path::PathBuf;
+        let bare = tempfile::tempdir().unwrap();
+        let winget = tempfile::tempdir().unwrap();
+        fs::write(bare.path().join("claude"), b"#!/bin/sh\n").unwrap();
+        fs::write(winget.path().join("claude.exe"), b"MZ").unwrap();
+        let dirs: Vec<PathBuf> = vec![bare.path().into(), winget.path().into()];
+        assert_eq!(
+            find_program("claude", &dirs, &executable_exts(false)),
             Some(winget.path().join("claude.exe")),
-            "real .exe beats the bare npm shim in an earlier dir"
+            "later runnable .exe beats an earlier extensionless-only dir"
+        );
+        let only_bare: Vec<PathBuf> = vec![bare.path().into()];
+        assert_eq!(
+            find_program("claude", &only_bare, &executable_exts(false)),
+            Some(bare.path().join("claude")),
+            "extensionless file returned only as last resort"
+        );
+    }
+
+    // The candidate-extension list honors the pwsh preference (ps1 outranks cmd
+    // only when PowerShell 7 is around) and appends the machine's PATHEXT extras
+    // after the known kinds.
+    #[cfg(windows)]
+    #[test]
+    fn executable_exts_orders_ps1_by_pwsh_preference() {
+        let pos = |exts: &[String], e: &str| exts.iter().position(|x| x == e).unwrap();
+        let with = executable_exts(true);
+        assert!(pos(&with, "exe") < pos(&with, "ps1"), "exe always first: {with:?}");
+        assert!(pos(&with, "ps1") < pos(&with, "cmd"), "pwsh: ps1 before cmd: {with:?}");
+        let without = executable_exts(false);
+        assert!(
+            pos(&without, "cmd") < pos(&without, "ps1"),
+            "no pwsh: cmd before ps1: {without:?}"
         );
     }
 
@@ -1031,7 +1154,7 @@ mod tests {
         fs::write(npm.path().join("claude.cmd"), b"@echo off\n").unwrap();
         let dirs: Vec<PathBuf> = vec![npm.path().into()];
         assert_eq!(
-            find_program("claude", &dirs),
+            find_program("claude", &dirs, &executable_exts(false)),
             Some(npm.path().join("claude.cmd")),
             ".cmd shim beats the extensionless file"
         );
@@ -1073,12 +1196,24 @@ mod tests {
         assert_eq!(
             wrap_for_ext(Path::new(r"C:\npm\claude.ps1"), &[]),
             vec![
-                "powershell.exe".to_string(),
+                // pwsh.exe on machines with PowerShell 7, powershell.exe otherwise.
+                crate::agents::adapters::powershell_program(),
                 "-NoProfile".into(),
                 "-ExecutionPolicy".into(),
                 "Bypass".into(),
                 "-File".into(),
                 r"C:\npm\claude.ps1".into()
+            ]
+        );
+        // Any other PATHEXT kind launches via cmd.exe's file association.
+        assert_eq!(
+            wrap_for_ext(Path::new(r"C:\tools\claude.py"), &["task".into()]),
+            vec![
+                "cmd.exe".to_string(),
+                "/c".into(),
+                "call".into(),
+                r"C:\tools\claude.py".into(),
+                "task".into()
             ]
         );
     }
