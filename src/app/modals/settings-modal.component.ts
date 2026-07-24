@@ -574,6 +574,18 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                     <app-set-tgl [value]="s.autoResume" (changed)="store.set({ autoResume: $event })" />
                   </app-set-row>
                 </div>
+
+                <div class="set-grp">
+                  <div class="set-grp-h">Projects<span class="ln"></span></div>
+                  <app-set-row [dirty]="s.projectsRoot !== D.projectsRoot" (reset)="store.set({ projectsRoot: D.projectsRoot })">
+                    <ng-container row-label>Projects folder</ng-container>
+                    <ng-container row-help>Where the folder picker opens when adding a project.</ng-container>
+                    <div style="display:flex;align-items:center;gap:var(--sp-4);width:300px">
+                      <div class="set-path"><app-icon name="folder" size="sm" /><span class="pt">{{ s.projectsRoot || 'OS default' }}</span></div>
+                      <button class="btn ghost-hair" style="flex:none;padding:var(--sp-2) var(--sp-5)" (click)="browseProjects()"><app-icon name="folderOpen" size="sm" />Browse</button>
+                    </div>
+                  </app-set-row>
+                </div>
               }
 
               <!-- ── Permissions & safety ────────────────────────────────── -->
@@ -995,8 +1007,18 @@ export class SettingsModalComponent {
   // ── agent defaults ──
   async browse(): Promise<void> {
     try {
-      const dir = await this.bridge.pickDirectory();
+      const dir = await this.bridge.pickDirectory(this.store.settings().worktreeRoot || undefined);
       if (dir) this.store.set({ worktreeRoot: dir });
+    } catch {
+      /* picker unavailable (plain browser) — ignore */
+    }
+  }
+
+  /** Pick the default folder the add-project picker opens in. */
+  async browseProjects(): Promise<void> {
+    try {
+      const dir = await this.bridge.pickDirectory(this.store.settings().projectsRoot || undefined);
+      if (dir) this.store.set({ projectsRoot: dir });
     } catch {
       /* picker unavailable (plain browser) — ignore */
     }

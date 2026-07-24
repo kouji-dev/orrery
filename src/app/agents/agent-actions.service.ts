@@ -226,12 +226,24 @@ export class AgentActionsService {
     });
   }
 
-  removeAgent(id: string) {
+  /** Confirmed worktree delete: stop the agent, close its tabs, remove the
+   *  worktree on disk, then tear down local state. Called by the delete-worktree
+   *  confirm modal — never directly from a menu item. */
+  async confirmRemoveAgent(id: string) {
     const ag = this.agents().find((a) => a.id === id);
-    void this.agentsStore.remove(id).catch(() => {});
+    this.ui.closeDeleteWorktree();
+    // stoppingByUser keeps the exit from being recorded as "finished"; the
+    // backend kills the PTY again inside agent_remove as the hard guarantee.
+    if (ag?.status === "running") this.runtime.stopProcess(id);
+    this.ui.closeTabsForAgent(id);
+    try {
+      await this.agentsStore.remove(id);
+    } catch {
+      this.ui.flash("delete failed — worktree kept for " + (ag ? ag.name : id));
+      return;
+    }
     this.runtime.dispose(id);
     this.notifications.clearAgent(id);
-    this.ui.closeTab(id);
     this.ui.flash("removed worktree " + (ag ? ag.name : id));
   }
 
@@ -282,7 +294,7 @@ export class AgentActionsService {
         disabled: !this.work.changesFor(id).data.length,
         onClick: () => this.act(id, "discard"),
       },
-      { label: "Delete worktree", icon: "trash", danger: true, onClick: () => this.removeAgent(id) },
+      { label: "Delete worktree", icon: "trash", danger: true, onClick: () => this.ui.openDeleteWorktree(id) },
     ];
   }
 }

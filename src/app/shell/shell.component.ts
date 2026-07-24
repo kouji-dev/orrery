@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ContextMenuComponent } from '../context-menu/context-menu.component';
 import { AddProjectModalComponent } from '../modals/add-project-modal.component';
+import { DeleteWorktreeModalComponent } from '../modals/delete-worktree-modal.component';
 import { SettingsModalComponent } from '../modals/settings-modal.component';
 import { SpawnModalComponent } from '../modals/spawn-modal.component';
 import { UpdateToastComponent } from '../modals/update-toast.component';
@@ -36,6 +37,7 @@ declare const ngDevMode: boolean | undefined;
     StatusBarComponent,
     SpawnModalComponent,
     AddProjectModalComponent,
+    DeleteWorktreeModalComponent,
     SettingsModalComponent,
     UpdateToastComponent,
     WhatsNewModalComponent,
@@ -82,6 +84,9 @@ declare const ngDevMode: boolean | undefined;
     }
     @if (ui.addingProject()) {
       <app-add-project-modal />
+    }
+    @if (ui.deletingWorktree(); as deletingId) {
+      <app-delete-worktree-modal [agentId]="deletingId" />
     }
     @if (settings.open()) {
       <app-settings-modal />

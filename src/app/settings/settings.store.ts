@@ -31,6 +31,7 @@ export function settingsDefaults(): Settings {
     toolPath: {}, // absent tool = auto-detect on PATH
     branchTemplate: "agent/{name}",
     worktreeRoot: "", // "" = ctor root (app-data/worktrees)
+    projectsRoot: "", // "" = picker opens at the OS default
     autoResume: true,
     autoApprove: {}, // absent tool = "off" (the tool's own flow)
     remoteApproval: true,

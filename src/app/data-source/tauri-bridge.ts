@@ -20,8 +20,8 @@ export class TauriBridge implements Bridge {
     return listen<T>(event, e => handler(e.payload));
   }
 
-  async pickDirectory(): Promise<string | null> {
-    const selected = await open({ directory: true, multiple: false });
+  async pickDirectory(defaultPath?: string): Promise<string | null> {
+    const selected = await open({ directory: true, multiple: false, defaultPath });
     // dialog returns string (path) | string[] | null; we requested a single dir.
     return typeof selected === 'string' ? selected : null;
   }

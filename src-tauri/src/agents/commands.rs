@@ -82,12 +82,16 @@ pub async fn agent_remove<R: Runtime>(
     svc: State<'_, AgentService>,
     projects: State<'_, ProjectService>,
     watch: State<'_, WatchService>,
+    rt: State<'_, RuntimeService>,
     id: Uuid,
 ) -> AppResult<()> {
     let project_path = svc
         .get(id)
         .ok()
         .and_then(|a| projects.path_of(a.project_id).ok());
+    // Kill the agent's PTY first (no-op when idle) — a live process holds its
+    // cwd open, which makes remove_dir_all fail on Windows.
+    rt.stop(id);
     watch.unwatch(id); // stop watching its worktree before tearing it down
     let svc = svc.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {

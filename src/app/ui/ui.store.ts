@@ -194,6 +194,19 @@ export class UiStore {
     if (this.activeTab() === id) this.activeTab.set("orchestrator");
   }
 
+  /** Remove an agent from every tab showing it: a tab tiling only this agent
+   *  closes; a grouped tab just drops the agent's panes and lives on. */
+  closeTabsForAgent(agentId: string) {
+    const roots = this.paneRoots();
+    for (const [tabId, root] of Object.entries(roots)) {
+      const ids = treeAgentIds(root);
+      if (!ids.includes(agentId)) continue;
+      if (ids.length === 1) this.closeTab(tabId);
+      else this.setRoot(tabId, dropAgent(root, agentId));
+    }
+    if (this.scopeAgentId() === agentId) this.scopeAgentId.set(null);
+  }
+
   /** Focus the always-present pinned backlog tab. */
   openBacklog() {
     this.activeTab.set("backlog");
@@ -367,5 +380,13 @@ export class UiStore {
   }
   closeAddProject() {
     this.addingProject.set(false);
+  }
+  /** Agent id awaiting delete-worktree confirmation (null = modal closed). */
+  readonly deletingWorktree = signal<string | null>(null);
+  openDeleteWorktree(id: string) {
+    this.deletingWorktree.set(id);
+  }
+  closeDeleteWorktree() {
+    this.deletingWorktree.set(null);
   }
 }
