@@ -6,8 +6,28 @@ import {
   isPermissionPrompt,
   langId,
   langTag,
+  quotePath,
   stripAnsi,
 } from "./utils";
+
+describe("quotePath", () => {
+  it("leaves whitespace-free paths bare", () => {
+    expect(quotePath("/home/u/proj/src/main.ts")).toBe("/home/u/proj/src/main.ts");
+    expect(quotePath("C:/Users/u/file.ts")).toBe("C:/Users/u/file.ts");
+  });
+
+  it("double-quotes paths containing spaces", () => {
+    expect(quotePath("C:/My Documents/a.txt")).toBe('"C:/My Documents/a.txt"');
+  });
+
+  it("escapes embedded double quotes", () => {
+    expect(quotePath('a "b" c')).toBe('"a \\"b\\" c"');
+  });
+
+  it("quotes the empty string", () => {
+    expect(quotePath("")).toBe('""');
+  });
+});
 
 describe("langId / langTag", () => {
   it("routes Angular CLI templates to the angular grammar, plain html stays html", () => {

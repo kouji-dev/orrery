@@ -200,7 +200,7 @@ export class DiffFileListComponent {
 
   readonly select = output<string>();
 
-  readonly treeMode = signal(false);
+  readonly treeMode = signal(true);
 
   readonly totalAdd = computed(() => this.files().reduce((s, f) => s + f.add, 0));
   readonly totalDel = computed(() => this.files().reduce((s, f) => s + f.del, 0));

@@ -301,7 +301,7 @@ export class DiffViewComponent {
   readonly agent = input.required<Agent>();
   // selection by PATH (works across both flat + tree views); treeMode toggles them
   readonly selPath = signal<string | null>(null);
-  readonly treeMode = signal(false);
+  readonly treeMode = signal(true);
 
   readonly fname = fileName;
   readonly fdir = fileDir;

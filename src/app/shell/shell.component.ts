@@ -7,6 +7,7 @@ import { SpawnModalComponent } from '../modals/spawn-modal.component';
 import { UpdateToastComponent } from '../modals/update-toast.component';
 import { WhatsNewModalComponent } from '../modals/whats-new-modal.component';
 import { SettingsStore } from '../settings/settings.store';
+import { FileDropService } from '../shared/file-drop.service';
 import { UiStore } from '../ui/ui.store';
 import { OverviewComponent } from '../overview/overview.component';
 import { BacklogComponent } from '../backlog/backlog.component';
@@ -127,4 +128,10 @@ declare const ngDevMode: boolean | undefined;
 export class ShellComponent {
   readonly ui = inject(UiStore);
   readonly settings = inject(SettingsStore);
+
+  constructor() {
+    // Route OS file drops (absolute paths) into the terminal / prompt under the
+    // drop point. Started here — the shell is the app's root UI surface.
+    inject(FileDropService).start();
+  }
 }

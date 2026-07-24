@@ -36,6 +36,13 @@ export function fileDir(p: string): string {
   return parts.length ? parts.join("/") + "/" : "";
 }
 
+/** Shell/CLI-safe rendering of a filesystem path: double-quote it when it
+ *  contains whitespace (or is empty), escaping any embedded quotes. Used when a
+ *  dropped file's absolute path is inserted into a terminal or prompt. */
+export function quotePath(p: string): string {
+  return p === "" || /\s/.test(p) ? `"${p.replace(/"/g, '\\"')}"` : p;
+}
+
 export function logColor(t: LogKind | string): string {
   return (
     (

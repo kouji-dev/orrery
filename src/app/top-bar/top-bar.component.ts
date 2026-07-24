@@ -161,8 +161,9 @@ import { TicketsStore } from "../stores/tickets.store";
               <app-icon [name]="ui.tweaks().theme === 'dark' ? 'sun' : 'moon'" size="sm" />
             </button>
             <span class="pill-div"></span>
-            <button class="pill-seg" (click)="settings.openModal()" title="Settings" aria-label="Settings">
+            <button class="pill-seg tb-settings" (click)="settings.openModal()" title="Settings" aria-label="Settings">
               <app-icon name="settings" size="sm" />
+              @if (settings.updateKnown()) { <span class="tb-upd-dot" title="Update available"></span> }
             </button>
           </div>
         </div>
@@ -178,6 +179,13 @@ import { TicketsStore } from "../stores/tickets.store";
       .tab-x:hover { color: var(--ink) !important; }
       .tab-strip { scrollbar-width: none; }
       .tab-strip::-webkit-scrollbar { display: none; }
+      /* pending-update dot on the settings gear (mirrors the in-modal nav dot) */
+      .tb-settings { position: relative; }
+      .tb-upd-dot {
+        position: absolute; top: 3px; right: 3px; width: var(--sp-3); height: var(--sp-3);
+        border-radius: 50%; background: var(--set-amber, var(--accent));
+        box-shadow: 0 0 7px -1px var(--set-amber, var(--accent));
+      }
     `,
   ],
 })

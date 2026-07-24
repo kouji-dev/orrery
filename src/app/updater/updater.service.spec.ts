@@ -20,8 +20,8 @@ function make(updater: Partial<Updater>, settings: Partial<Settings> = {}): Made
     ...updater,
   };
   const noteUpdate = vi.fn();
-  // Install-path tests pin "auto" (also the real default since 2026-06-11)
-  // unless a test passes its own policy.
+  // The real default is "notify"; the install-path tests pin "auto" here so they
+  // exercise the download/relaunch branch, unless a test passes its own policy.
   const store = {
     ready: async () => ({ ...settingsDefaults(), updatePolicy: "auto", ...settings }),
     noteUpdate,
@@ -158,11 +158,22 @@ describe('UpdaterService.run policy branching', () => {
     expect(noteUpdate).not.toHaveBeenCalled();
   });
 
-  it('manual: the dev-skip still wins first (isAvailable short-circuits)', async () => {
-    const check = vi.fn(async () => null);
-    const { svc } = make({ isAvailable: () => false, check }, { updatePolicy: 'auto' });
+  it('dev/non-installable build: checks + surfaces the toast, but never installs', async () => {
+    // isAvailable() is false in a dev/local build. The startup check still RUNS so
+    // the toast appears, but the auto-install branch is gated off — no download,
+    // no relaunch, no loop-guard marker.
+    const downloadAndInstall = vi.fn(async () => {});
+    const relaunch = vi.fn(async () => {});
+    const handle: UpdateHandle = { version: '2.0.0', downloadAndInstall };
+    const { svc, noteUpdate } = make(
+      { isAvailable: () => false, check: async () => handle, relaunch },
+      { updatePolicy: 'auto' },
+    );
     expect(await svc.run()).toBe('no-update');
-    expect(check).not.toHaveBeenCalled();
+    expect(noteUpdate).toHaveBeenCalledWith(expect.objectContaining({ version: '2.0.0' }));
+    expect(downloadAndInstall).not.toHaveBeenCalled();
+    expect(relaunch).not.toHaveBeenCalled();
+    expect(localStorage.getItem(ATTEMPT_KEY)).toBeNull();
   });
 
   it('notify: checks, surfaces the update for the settings card, but never installs', async () => {
