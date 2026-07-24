@@ -511,6 +511,25 @@ pub fn launch_prefix(path: &str) -> (String, Vec<String>) {
     }
 }
 
+/// The PowerShell used to run `.ps1` shims: PowerShell 7 (`pwsh.exe`) when it is
+/// on PATH — noticeably faster startup and better ANSI/UTF-8 handling than
+/// Windows PowerShell — falling back to the always-present `powershell.exe`.
+#[cfg(windows)]
+pub fn powershell_program() -> String {
+    if which_path("pwsh").is_some() {
+        "pwsh.exe".into()
+    } else {
+        "powershell.exe".into()
+    }
+}
+
+/// Whether PowerShell 7 is available — when it is, a `.ps1` shim run under pwsh
+/// is preferred over the `.cmd` shim (smoother than cmd.exe's batch machinery).
+#[cfg(windows)]
+pub fn prefers_pwsh() -> bool {
+    powershell_program() == "pwsh.exe"
+}
+
 #[cfg(windows)]
 fn windows_launch_prefix(path: &str) -> (String, Vec<String>) {
     let p = Path::new(path);
@@ -525,7 +544,7 @@ fn windows_launch_prefix(path: &str) -> (String, Vec<String>) {
             vec!["/c".into(), "call".into(), path.to_string()],
         ),
         Some("ps1") => (
-            "powershell.exe".into(),
+            powershell_program(),
             vec![
                 "-NoProfile".into(),
                 "-ExecutionPolicy".into(),
@@ -537,7 +556,13 @@ fn windows_launch_prefix(path: &str) -> (String, Vec<String>) {
         _ => {
             // Extensionless (or unknown) shim — prefer a runnable sibling with
             // the same stem (npm installs `claude` + `claude.cmd` side by side).
-            for sib in ["cmd", "exe", "bat", "ps1"] {
+            // With pwsh installed the .ps1 sibling outranks .cmd.
+            let sibs: [&str; 4] = if prefers_pwsh() {
+                ["exe", "ps1", "cmd", "bat"]
+            } else {
+                ["exe", "cmd", "bat", "ps1"]
+            };
+            for sib in sibs {
                 let cand = p.with_extension(sib);
                 if cand.is_file() {
                     return windows_launch_prefix(&cand.to_string_lossy());
@@ -630,7 +655,8 @@ mod tests {
             ("cmd.exe".into(), vec!["/c".into(), "call".into(), r"C:\bin\claude.cmd".into()]),
         );
         let (prog, args) = launch_prefix(r"C:\bin\claude.ps1");
-        assert_eq!(prog, "powershell.exe");
+        // pwsh.exe on machines with PowerShell 7, powershell.exe otherwise.
+        assert_eq!(prog, powershell_program());
         assert_eq!(args.last().unwrap(), r"C:\bin\claude.ps1");
     }
 
