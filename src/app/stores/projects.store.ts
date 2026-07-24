@@ -68,7 +68,7 @@ export class ProjectsStore {
   commits(id: string, limit?: number): Promise<Commit[]> {
     return this.bridge.invoke<Commit[]>(Commands.ProjectCommits, { id, limit });
   }
-  pickDirectory(): Promise<string | null> {
-    return this.bridge.pickDirectory();
+  pickDirectory(defaultPath?: string): Promise<string | null> {
+    return this.bridge.pickDirectory(defaultPath);
   }
 }

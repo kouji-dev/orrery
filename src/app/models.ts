@@ -358,6 +358,8 @@ export interface Settings {
   branchTemplate: string;
   /** Absolute dir new worktrees are created under; "" = the built-in app-data root. */
   worktreeRoot: string;
+  /** Absolute dir the add-project folder picker opens in; "" = the OS default. */
+  projectsRoot: string;
   /** Relaunch agents that were running when the app last quit/crashed. */
   autoResume: boolean;
   /** Per-tool permission policy. Absent key = "off" (the tool's own flow). */

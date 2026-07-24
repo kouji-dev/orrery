@@ -12,8 +12,9 @@ export class BridgeError extends Error {
 export interface Bridge {
   invoke<R>(command: string, payload?: Record<string, unknown>): Promise<R>;
   on<T>(event: string, handler: (payload: T) => void): Promise<() => void>;
-  /** Open a native folder picker. Resolves the absolute path, or null if cancelled. */
-  pickDirectory(): Promise<string | null>;
+  /** Open a native folder picker, optionally starting at `defaultPath`.
+   *  Resolves the absolute path, or null if cancelled. */
+  pickDirectory(defaultPath?: string): Promise<string | null>;
   /** Open a native file picker, optionally starting at `defaultPath` (a file or
    *  dir). Resolves the absolute path, or null if cancelled. */
   pickFile(defaultPath?: string): Promise<string | null>;

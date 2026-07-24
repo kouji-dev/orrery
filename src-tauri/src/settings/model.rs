@@ -31,6 +31,8 @@ pub struct Settings {
     pub branch_template: String,
     /// Absolute dir new worktrees are created under; "" = the built-in app-data root.
     pub worktree_root: String,
+    /// Absolute dir the add-project folder picker opens in; "" = the OS default.
+    pub projects_root: String,
     /// Relaunch agents that were running when the app last quit/crashed.
     pub auto_resume: bool,
     /// Per-tool permission policy: "off" | "allowlist" | "everything".
@@ -86,6 +88,7 @@ impl Default for Settings {
             tool_paths: BTreeMap::new(),
             branch_template: "agent/{name}".into(), // the historical branch shape
             worktree_root: String::new(),           // "" = ctor root (app-data/worktrees)
+            projects_root: String::new(),           // "" = picker opens at the OS default
             auto_resume: true,
             auto_approve: BTreeMap::new(), // absent tool = "off" (tool's own flow)
             remote_approval: true,
@@ -113,6 +116,7 @@ mod tests {
             "toolPaths",
             "branchTemplate",
             "worktreeRoot",
+            "projectsRoot",
             "autoResume",
             "autoApprove",
             "remoteApproval",

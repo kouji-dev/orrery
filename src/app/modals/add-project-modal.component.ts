@@ -14,6 +14,7 @@ import { ProjectActionsService } from "../projects/project-actions.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ProjectsStore } from "../stores/projects.store";
+import { SettingsStore } from "../settings/settings.store";
 import { mix } from "../utils";
 
 @Component({
@@ -147,6 +148,7 @@ export class AddProjectModalComponent implements AfterViewInit {
   readonly ui = inject(UiStore);
   private projectActions = inject(ProjectActionsService);
   private projects = inject(ProjectsStore);
+  private settings = inject(SettingsStore);
   readonly icons = PROJECT_ICONS;
   readonly colors = PROJECT_COLORS;
   readonly mix = mix;
@@ -184,7 +186,10 @@ export class AddProjectModalComponent implements AfterViewInit {
   }
 
   async browse() {
-    const dir = await this.projects.pickDirectory();
+    // Start where the user already is (typed/picked dir), else the configured
+    // projects folder, else the OS default.
+    const start = this.dir().trim() || this.settings.settings().projectsRoot || undefined;
+    const dir = await this.projects.pickDirectory(start);
     if (dir) this.dir.set(dir);
   }
 
