@@ -218,9 +218,12 @@ body {
   height: 100%;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: grid;
   grid-template-rows: 44px 1fr 24px;
-  grid-template-columns: 1fr;
+  /* minmax(0,…) — otherwise the column's automatic minimum is the header's
+     min-content (~1160px) and every row overflows a narrower window */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .workspace {

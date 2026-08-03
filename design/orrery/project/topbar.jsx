@@ -198,16 +198,17 @@ function TopBar({ nav, onSearchEverywhere, tabs, activeTab, onTab, onCloseTab, o
             <Icon name="columns" size="sm" style={{ width: 12, height: 12 }} />drag a tab onto another to tile them
           </div>
         )}
-        {/* nav stack + search everywhere */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 7, padding: "0 12px", flex: "none" }}>
-          {nav && <NavArrows {...nav} />}
-          {onSearchEverywhere && (
-            <button className="btn ghost-hair" onClick={onSearchEverywhere} title={"Search Everywhere · " + kbdLabel("Shift Shift")}
-              style={{ height: 26, padding: "0 7px", gap: 5, fontSize: 10.5, color: "var(--ink-3)" }}>
-              <Icon name="search" size="sm" /><span className="kbd">{kbdLabel("Shift Shift")}</span>
-            </button>
-          )}
-        </div>
+      </div>
+
+      {/* nav stack + search everywhere — outside the scrolling tab strip so they stay put */}
+      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 12px", flex: "none" }}>
+        {nav && <NavArrows {...nav} />}
+        {onSearchEverywhere && (
+          <button className="btn ghost-hair" onClick={onSearchEverywhere} title={"Search Everywhere · " + kbdLabel("Shift Shift")}
+            style={{ height: 26, padding: "0 7px", gap: 5, fontSize: 10.5, color: "var(--ink-3)" }}>
+            <Icon name="search" size="sm" /><span className="kbd">{kbdLabel("Shift Shift")}</span>
+          </button>
+        )}
       </div>
 
       {/* right cluster — column-aligned to the right panel */}

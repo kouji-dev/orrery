@@ -263,9 +263,9 @@ function useListNav(count, onPick, onClose) {
   return [sel, setSel, onKeyDown];
 }
 
-function RowShell({ active, onClick, onMouseEnter, children, danger }) {
+function RowShell({ active, onClick, onMouseEnter, children, danger, ...rest }) {
   return (
-    <div onClick={onClick} onMouseEnter={onMouseEnter}
+    <div onClick={onClick} onMouseEnter={onMouseEnter} {...rest}
       style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px", cursor: "pointer", borderLeft: "2px solid " + (active ? "var(--accent)" : "transparent"),
         background: active ? "var(--panel-3)" : "transparent", color: danger ? "var(--st-blocked)" : "inherit" }}>
       {children}
@@ -324,15 +324,26 @@ function CommandPalette({ commands, onClose }) {
 
 // --------------------------------------------------------- Search Everywhere
 const SE_TABS = [
-  { k: "all", label: "All" }, { k: "files", label: "Files" }, { k: "symbols", label: "Symbols" },
-  { k: "agents", label: "Agents" }, { k: "tickets", label: "Tickets" }, { k: "commands", label: "Actions" }, { k: "git", label: "Git" },
+  { k: "commands", label: "Actions" }, { k: "files", label: "Files" }, { k: "symbols", label: "Symbols" },
+  { k: "agents", label: "Agents" }, { k: "tickets", label: "Tickets" }, { k: "git", label: "Git" },
 ];
+// tabs whose corpus is too large to be useful empty — they stay blank until you type
+const SE_LAZY = { files: 1, symbols: 1 };
+// …and the same two group their results by project, IntelliJ workspace-style
+const SE_GROUPED = { files: 1, symbols: 1 };
+
+// which project owns a path — projects declare their file list in data.js
+function projectOfPath(path, projects) {
+  if (!path) return null;
+  const list = projects || window.PROJECTS || [];
+  return list.find((p) => (p.files || []).indexOf(path) >= 0) || null;
+}
 
 function SearchEverywhere({ ctx, commands, initialTab, onClose }) {
-  const [tab, setTab] = useStateC(initialTab || "all");
+  const [tab, setTab] = useStateC(initialTab || "commands");
   const [q, setQ] = useStateC("");
   const corpus = useMemoC(() => {
-    const files = repoFilePaths().map((p) => ({ type: "file", key: "f:" + p, text: p, label: fileName(p), sub: fileDir(p), meta: langOf(p) }));
+    const files = repoFilePaths().map((p) => ({ type: "file", key: "f:" + p, text: p, path: p, label: fileName(p), sub: fileDir(p), meta: langOf(p) }));
     const symbols = allSymbols().map((s) => ({ type: "symbol", key: "s:" + s.path + ":" + s.line, text: s.name, label: s.name, sub: s.path + ":" + s.line, meta: s.kind, path: s.path, line: s.line }));
     const agents = (ctx.agents || []).map((a) => ({ type: "agent", key: "a:" + a.id, text: a.name + " " + a.branch + " " + (a.task || ""), label: a.name, sub: a.branch, meta: a.status, agent: a }));
     const tickets = (ctx.tickets || []).map((t) => ({ type: "ticket", key: "t:" + t.id, text: t.title, label: t.title, sub: (t.tags || []).join(" · ") || t.status, meta: t.status, ticket: t }));
@@ -344,10 +355,9 @@ function SearchEverywhere({ ctx, commands, initialTab, onClose }) {
     return { files, symbols, agents, tickets, commands: cmds, git: refs };
   }, [ctx.agents, ctx.tickets, ctx.projects, commands]);
 
-  const pool = tab === "all"
-    ? [].concat(corpus.files, corpus.symbols, corpus.agents, corpus.tickets, corpus.commands, corpus.git)
-    : corpus[tab] || [];
+  const pool = corpus[tab] || [];
   const items = useMemoC(() => {
+    if (SE_LAZY[tab] && !q) return [];
     const scored = pool.map((it) => {
       const m = fzMatch(it.label, q) || fzMatch(it.text, q);
       if (!m) return null;
@@ -355,7 +365,7 @@ function SearchEverywhere({ ctx, commands, initialTab, onClose }) {
       return { it, score: m.score + bump, idx: fzMatch(it.label, q) ? m.idx : [] };
     }).filter(Boolean);
     scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, tab === "all" ? 40 : 80);
+    return scored.slice(0, 80);
   }, [pool, q, tab]);
 
   const open = (r) => {
@@ -375,9 +385,22 @@ function SearchEverywhere({ ctx, commands, initialTab, onClose }) {
     if (e.key === "Tab") { e.preventDefault(); const i = SE_TABS.findIndex((t) => t.k === tab); setTab(SE_TABS[(i + (e.shiftKey ? -1 + SE_TABS.length : 1)) % SE_TABS.length].k); return; }
     listKeys(e);
   };
+  // group by project (files/symbols): groups ordered by their best hit, rows keep score order
+  const groups = useMemoC(() => {
+    if (!SE_GROUPED[tab]) return null;
+    const byId = new Map();
+    items.forEach((r, i) => {
+      const p = projectOfPath(r.it.path || r.it.text, ctx.projects);
+      const key = p ? p.id : "_other";
+      if (!byId.has(key)) byId.set(key, { project: p, rows: [] });
+      byId.get(key).rows.push({ r, i });
+    });
+    return Array.from(byId.values());
+  }, [items, tab, ctx.projects]);
+
   const listRef = useRefC(null);
   useEffectC(() => {
-    const el = listRef.current && listRef.current.children[sel];
+    const el = listRef.current && listRef.current.querySelectorAll("[data-se-row]")[sel];
     if (!el || !listRef.current) return;
     if (el.offsetTop < listRef.current.scrollTop) listRef.current.scrollTop = el.offsetTop;
     else if (el.offsetTop + el.offsetHeight > listRef.current.scrollTop + listRef.current.clientHeight) listRef.current.scrollTop = el.offsetTop + el.offsetHeight - listRef.current.clientHeight;
@@ -386,13 +409,30 @@ function SearchEverywhere({ ctx, commands, initialTab, onClose }) {
   const rowIcon = (it) => it.type === "file" ? "file" : it.type === "symbol" ? (SYM_ICON[it.meta] || "spark")
     : it.type === "ticket" ? "archive" : it.type === "command" ? "bolt" : it.type === "ref" ? (it.sha ? "commit" : "branch") : "agent";
 
+  const renderRow = (r, i) => {
+    const it = r.it;
+    return (
+      <RowShell key={it.key} data-se-row="" active={i === sel} onMouseEnter={() => setSel(i)} onClick={() => open(r)}>
+        {it.type === "agent"
+          ? <ToolBadge tool={it.agent.tool} size={15} />
+          : <Icon name={rowIcon(it)} size="sm" style={{ color: i === sel ? "var(--accent)" : "var(--ink-3)" }} />}
+        <span style={{ fontSize: 12.5, flex: "none", maxWidth: "52%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <FzText text={it.label} idx={r.idx} />
+        </span>
+        {it.sub && <span style={{ fontSize: 10, color: "var(--ink-4)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.sub}</span>}
+        {it.type === "agent" && <StatusDot status={it.agent.status} />}
+        {it.meta && <span className="chip" style={{ fontSize: 9, flex: "none", padding: "1px 6px" }}>{it.meta}</span>}
+      </RowShell>
+    );
+  };
+
   return (
     <OverlayShell width={720} top="9vh" onClose={onClose} label="Search everywhere">
-      <OverlayInput value={q} onChange={setQ} onKeyDown={onKeyDown} placeholder="Search files, symbols, agents, tickets, actions, refs…" />
+      <OverlayInput value={q} onChange={setQ} onKeyDown={onKeyDown} placeholder="Search actions, files, symbols, agents, tickets, refs…" />
       <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "0 10px", borderBottom: "1px solid var(--hair)", background: "var(--panel)", flex: "none" }}>
         {SE_TABS.map((t) => {
           const on = tab === t.k;
-          const n = t.k === "all" ? null : (corpus[t.k] || []).length;
+          const n = SE_LAZY[t.k] && !q ? null : (corpus[t.k] || []).length;
           return (
             <button key={t.k} className="btn" onClick={() => setTab(t.k)}
               style={{ padding: "8px 10px", borderRadius: 0, position: "relative", fontSize: 11.5, color: on ? "var(--ink)" : "var(--ink-3)" }}>
@@ -403,24 +443,20 @@ function SearchEverywhere({ ctx, commands, initialTab, onClose }) {
         })}
       </div>
       <div ref={listRef} className="scroll-y" style={{ flex: 1, padding: "5px 0", minHeight: 120 }}>
-        {items.length === 0 && <div style={{ padding: "18px 14px", fontSize: 11.5, color: "var(--ink-4)" }}>{q ? "nothing matches “" + q + "”" : "start typing to search everything"}</div>}
-        {items.map((r, i) => {
-          const it = r.it;
-          return (
-            <RowShell key={it.key} active={i === sel} onMouseEnter={() => setSel(i)} onClick={() => open(r)}>
-              {it.type === "agent"
-                ? <ToolBadge tool={it.agent.tool} size={15} />
-                : <Icon name={rowIcon(it)} size="sm" style={{ color: i === sel ? "var(--accent)" : "var(--ink-3)" }} />}
-              <span style={{ fontSize: 12.5, flex: "none", maxWidth: "52%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                <FzText text={it.label} idx={r.idx} />
-              </span>
-              {it.sub && <span style={{ fontSize: 10, color: "var(--ink-4)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.sub}</span>}
-              {it.type === "agent" && <StatusDot status={it.agent.status} />}
-              {it.meta && <span className="chip" style={{ fontSize: 9, flex: "none", padding: "1px 6px" }}>{it.meta}</span>}
-              {tab === "all" && <span className="up" style={{ fontSize: 8.5, color: "var(--ink-4)", flex: "none", width: 52, textAlign: "right" }}>{it.type}</span>}
-            </RowShell>
-          );
-        })}
+        {items.length === 0 && <div style={{ padding: "18px 14px", fontSize: 11.5, color: "var(--ink-4)" }}>{q ? "nothing matches “" + q + "”" : "start typing to search " + (tab === "symbols" ? "symbols" : "files")}</div>}
+        {groups
+          ? groups.map((g, gi) => (
+              <React.Fragment key={g.project ? g.project.id : "_other:" + gi}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px 4px", position: "sticky", top: 0, zIndex: 1, background: "var(--panel)", borderTop: gi ? "1px solid var(--hair)" : "none" }}>
+                  <Icon name={g.project ? g.project.icon : "folder"} size="sm" style={{ color: g.project ? g.project.color : "var(--ink-4)" }} />
+                  <span className="up" style={{ fontSize: 9, letterSpacing: ".07em", color: "var(--ink-3)" }}>{g.project ? g.project.name : "Outside project"}</span>
+                  {g.project && <span style={{ fontSize: 9.5, color: "var(--ink-4)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.project.path}</span>}
+                  <span className="tnum" style={{ fontSize: 9, color: "var(--ink-4)", marginLeft: "auto", flex: "none" }}>{g.rows.length}</span>
+                </div>
+                {g.rows.map(({ r, i }) => renderRow(r, i))}
+              </React.Fragment>
+            ))
+          : items.map((r, i) => renderRow(r, i))}
       </div>
       <OverlayFooter hints={[["↑↓", "navigate"], ["⏎", "open"], ["⇥", "next tab"], ["esc", "close"]]} />
     </OverlayShell>
