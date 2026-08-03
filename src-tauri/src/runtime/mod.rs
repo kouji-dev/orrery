@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, PtySize};
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
 
 use crate::agents::adapters::{self, HookEnv};
@@ -54,7 +54,7 @@ fn ensure_drain_thread<R: Runtime>(app: &AppHandle<R>) {
 fn emit_output_frame<R: Runtime>(app: &AppHandle<R>, frame: Vec<output_mux::OutputEntry>) {
     let bytes: u64 = frame.iter().map(|e| e.chunk.len() as u64).sum();
     let t = std::time::Instant::now();
-    let _ = app.emit("agent://output", &frame);
+    let _ = crate::core::emit::emit_tracked(app, "agent://output", &frame);
     crate::perf::record_io("agent_output_emit", t.elapsed(), bytes);
 }
 
@@ -337,7 +337,12 @@ impl RuntimeService {
                     }
                 }
             }
-            let _ = app_exit.emit("agent://exit", serde_json::json!({ "id": exit_id }));
+            let _ = crate::core::emit::emit_keyed(
+                &app_exit,
+                "agent://exit",
+                Some(exit_id.as_str()),
+                &serde_json::json!({ "id": exit_id }),
+            );
         });
 
         Ok(())

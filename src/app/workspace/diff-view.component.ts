@@ -8,7 +8,11 @@ import {
   signal,
 } from "@angular/core";
 import { Agent, AgentFile, BlameLine, FileDiff } from "../models";
+import { AgentActionsService } from "../agents/agent-actions.service";
+import { EstimateInput } from "../cost/estimate.service";
 import { IconComponent } from "../shared/icon.component";
+import { GitActionButtonComponent } from "../shared/git/git-action-button.component";
+import { ProjectActionsService } from "../projects/project-actions.service";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
@@ -27,7 +31,7 @@ const LIST_DEFAULT = 236;
 @Component({
   selector: "app-diff-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent],
+  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionButtonComponent],
   template: `
     <div
       class="diff-grid"
@@ -172,6 +176,43 @@ const LIST_DEFAULT = 236;
           @if (current()) {
             <app-send-review-button [agent]="agent().id" [agentName]="agent().name" />
           }
+          <!-- agent-level git actions on the review surface (A4 dual-path,
+               design agent-git.jsx adapted to the split-button contract).
+               Native commit (message box) lives in the Git tab; HERE commit is
+               the AI variant — you just reviewed the diff, the model writes
+               the message. Merge's primary press is the free native path. -->
+          @if (current()) {
+            <div style="align-self:flex-start;display:flex;gap:var(--sp-3);flex:none">
+              <app-git-action-button
+                label="Commit"
+                icon="commit"
+                [small]="true"
+                [aiOnly]="true"
+                [estimateInput]="commitEstimate()"
+                [variants]="[{ id: 'commit', label: 'Commit with AI (write the message)', op: 'commit', icon: 'sparkles' }]"
+                (ai)="agentActions.aiAction(agent().id, 'commit')"
+              />
+              <app-git-action-button
+                [label]="'Rebase onto ' + baseBranch()"
+                icon="sparkles"
+                [small]="true"
+                [aiOnly]="true"
+                [estimateInput]="rebaseEstimate()"
+                [variants]="[{ id: 'rebase', label: 'Rebase with AI', icon: 'sparkles' }]"
+                (ai)="agentActions.aiAction(agent().id, 'rebase')"
+              />
+              <app-git-action-button
+                [label]="'Merge ' + baseBranch()"
+                icon="branch"
+                [small]="true"
+                [title]="'Merge ' + baseBranch() + ' into ' + agent().branch + ' · native, 0 tokens'"
+                [estimateInput]="mergeEstimate()"
+                [variants]="[{ id: 'merge', label: 'Merge with AI (agent resolves conflicts)', icon: 'sparkles' }]"
+                (native)="agentActions.mergeAgent(agent().id, baseBranch())"
+                (ai)="agentActions.aiAction(agent().id, 'merge')"
+              />
+            </div>
+          }
           @if (current() && langLabel()) {
             <span class="chip tnum" style="align-self:flex-start;font-size:var(--fs-2xs)">{{ langLabel() }}</span>
           }
@@ -298,7 +339,37 @@ export class DiffViewComponent {
   private agents = inject(AgentsStore);
   private work = inject(AgentWorkStore);
   private ui = inject(UiStore);
+  readonly agentActions = inject(AgentActionsService);
+  private projects = inject(ProjectActionsService);
   readonly agent = input.required<Agent>();
+
+  // ---- agent-level git actions on the review surface (A4.3 estimates) ----
+  readonly baseBranch = computed(
+    () => this.projects.projectOf(this.agent().projectId)?.branch ?? "main",
+  );
+  // Why *40: status carries line counts, not bytes — 40 bytes/line is the same
+  // conservative envelope the Git tab uses (a cost ENVELOPE, not an invoice).
+  private readonly estDiffBytes = computed(() =>
+    this.changes().reduce((a, f) => a + (f.add + f.del) * 40, 0),
+  );
+  readonly commitEstimate = computed<EstimateInput>(() => ({
+    op: "commit",
+    files: this.changes().length,
+    diffBytes: this.estDiffBytes(),
+    model: this.agent().model,
+  }));
+  readonly rebaseEstimate = computed<EstimateInput>(() => ({
+    op: "rebase",
+    files: this.changes().length,
+    diffBytes: this.estDiffBytes(),
+    model: this.agent().model,
+  }));
+  readonly mergeEstimate = computed<EstimateInput>(() => ({
+    op: "merge",
+    files: this.changes().length,
+    diffBytes: this.estDiffBytes(),
+    model: this.agent().model,
+  }));
   // selection by PATH (works across both flat + tree views); treeMode toggles them
   readonly selPath = signal<string | null>(null);
   readonly treeMode = signal(true);

@@ -49,6 +49,32 @@ pub struct Settings {
     pub sound_name: String,
     /// 0–100.
     pub volume: u8,
+    /// Per-project budget cap in USD for AI git actions; 0 = no cap. When the
+    /// session's estimated spend reaches it, AI variants disable (native stays).
+    pub budget_cap_usd: f64,
+    /// AI git actions estimated above this USD amount require a second
+    /// confirming click; 0 = never confirm.
+    pub confirm_above_usd: f64,
+    /// User-editable provider rate table (model id → $/Mtok). Absent model =
+    /// the frontend's built-in default rates (rates change faster than releases).
+    pub cost_rates: BTreeMap<String, CostRate>,
+    /// Opt-in raw emit trace (A0.7 Phase 1): one NDJSON line per emit
+    /// (`ts · name · key · bytes` — NEVER payload contents) appended to
+    /// app-data/telemetry/. Auto-disables after 30 min or 200 MB and writes
+    /// itself back to `false` so the toggle never lies across restarts.
+    pub telemetry_raw_trace: bool,
+}
+
+/// $ per million tokens for one model (mirrors the frontend rate table shape).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CostRate {
+    /// Input $/Mtok.
+    #[serde(rename = "in")]
+    pub input: f64,
+    /// Output $/Mtok.
+    #[serde(rename = "out")]
+    pub output: f64,
 }
 
 /// Which notification kinds are raised at all (see plan: these gate the alert
@@ -97,6 +123,13 @@ impl Default for Settings {
             sound: true,
             sound_name: "Ping".into(),
             volume: 70,
+            // Why 0: no cap by default — capping silently would surprise; the
+            // user opts into a budget. Why 1.0: a dollar is where an accidental
+            // click starts to hurt, so confirm above it out of the box.
+            budget_cap_usd: 0.0,
+            confirm_above_usd: 1.0,
+            cost_rates: BTreeMap::new(), // absent = frontend built-in defaults
+            telemetry_raw_trace: false,  // tracing a flood amplifies it — always opt-in
         }
     }
 }
@@ -122,6 +155,7 @@ mod tests {
             "remoteApproval",
             "osNotifications",
             "soundName",
+            "telemetryRawTrace",
         ] {
             assert!(v.get(key).is_some(), "camelCase key {key} present: {v}");
         }

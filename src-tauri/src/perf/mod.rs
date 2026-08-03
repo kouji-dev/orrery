@@ -154,8 +154,7 @@ pub fn spawn_push_loop<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
         std::thread::sleep(Duration::from_secs(2));
         let snap = snapshot();
         if !snap.is_empty() {
-            use tauri::Emitter;
-            let _ = app.emit("perf://stats", &snap);
+            let _ = crate::core::emit::emit_tracked(&app, "perf://stats", &snap);
         }
     });
 }

@@ -298,6 +298,62 @@ export interface SystemMetrics {
   procs: ProcMetric[];
 }
 
+// ---- A7.7 process tree (`process_tree` command; polled while the perf panel is open) ----
+
+/** One node in the recursive process tree. `privBytes` (private, no shared-page
+ *  double count) is the headline; `rssBytes` is secondary and NEVER rolled up —
+ *  subtree totals sum private bytes only. */
+export interface ProcessNode {
+  pid: number;
+  name: string;
+  /** Self-explaining kind annotation ("webview2 · not our code", …) or null. */
+  note: string | null;
+  /** Machine-relative % (already ÷ cores, like Task Manager). */
+  cpu: number;
+  privBytes: number;
+  rssBytes: number;
+  subtreeCpu: number;
+  subtreePrivBytes: number;
+  subtreeProcs: number;
+  /** In the Job Object but unreachable via the parent-pid walk (surfaced so
+   *  nothing we spawned can hide). */
+  detached: boolean;
+  children: ProcessNode[];
+}
+
+/** One tree root: the app ("app"/"Orrery") or an agent (uuid / display name). */
+export interface ProcessTreeRoot {
+  id: string;
+  label: string;
+  node: ProcessNode;
+}
+
+export interface ProcessTreeSnapshot {
+  roots: ProcessTreeRoot[];
+  tsMs: number;
+}
+
+// ---- A0.7 emit telemetry (`telemetry_emits` / `telemetry_trace_state`) ----
+
+/** One event name's aggregate row (session-cumulative; calls10s is a rolling rate). */
+export interface EmitAggRow {
+  name: string;
+  count: number;
+  totalBytes: number;
+  maxBytes: number;
+  p50Bytes: number;
+  p95Bytes: number;
+  calls10s: number;
+  peakPerSec: number;
+}
+
+/** Raw emit-trace indicator state (also pushed on `telemetry://trace` changes). */
+export interface TelemetryTraceState {
+  active: boolean;
+  startedMs: number;
+  bytes: number;
+}
+
 // A cost snapshot pushed on `system://cost` (~every 5 minutes). `available` is false
 // when ccusage could not run — the status bar then hides the readout.
 export interface CostSnapshot {
@@ -375,6 +431,19 @@ export interface Settings {
   soundName: string;
   /** 0–100. */
   volume: number;
+  /** Budget cap (USD) for AI git actions; 0 = no cap. At the cap, AI variants
+   *  disable (native stays fully usable). */
+  budgetCapUsd: number;
+  /** AI actions estimated above this USD amount need a confirming second
+   *  click; 0 = never confirm. */
+  confirmAboveUsd: number;
+  /** User-editable provider rate table (model id → $/Mtok). Absent model =
+   *  the built-in default rates in EstimateService. */
+  costRates: Record<string, CostRate>;
+  /** Opt-in raw emit trace (A0.7): NDJSON `ts·name·key·bytes` lines in
+   *  app-data/telemetry (NEVER payload contents). Auto-disables after
+   *  30min/200MB — the backend then writes this back to false. */
+  telemetryRawTrace: boolean;
 }
 
 /** An available app update as resolved by `update_check` (date/notes optional —
@@ -427,4 +496,56 @@ export interface RangeFiles {
 export type GitView =
   | { kind: 'commit'; sha: string; path?: string }
   | { kind: 'range'; shas: string[] }
-  | { kind: 'filehistory'; path: string };
+  | { kind: 'filehistory'; path: string }
+  | { kind: 'conflict' };
+
+// ---- native merge + conflict session (serde camelCase from backend) ----
+
+/** One conflicted file in a merge session: full stage-1/2/3 contents plus the
+ *  working-tree text with diff3 conflict markers (parsed into segments by the
+ *  3-way view). `resolved` is false in backend listings; the store flips it
+ *  after `conflict_resolve`. */
+export interface ConflictFile {
+  path: string;
+  ours: string;
+  theirs: string;
+  base: string;
+  merged: string;
+  resolved: boolean;
+  lang: string;
+}
+
+/** Result of a native merge. Empty `conflicts` = merged clean (or FF/up to
+ *  date); otherwise a session is in progress (continue or abort). */
+export interface MergeSession {
+  ours: string;
+  theirs: string;
+  conflicts: ConflictFile[];
+}
+
+/** Whether a merge / rebase / cherry-pick is in progress in a worktree. */
+export interface GitSessionState {
+  state: "none" | "merge" | "rebase" | "cherrypick" | "revert" | "other";
+  conflicts: number;
+  ours: string;
+}
+
+// ---- AI cost estimation (A4.3) ----
+
+/** $ per million tokens for one model (user-editable in settings). */
+export interface CostRate {
+  in: number;
+  out: number;
+}
+
+/** A cost envelope for an AI git action, shown on the dropdown row BEFORE the
+ *  action runs. `confidence` is "heuristic" until calibration lands (A6). */
+export interface CostEstimate {
+  op: string;
+  model: string;
+  tokensLow: number;
+  tokensHigh: number;
+  usdLow: number;
+  usdHigh: number;
+  confidence: string;
+}

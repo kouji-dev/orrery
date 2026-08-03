@@ -190,6 +190,36 @@ export const ALLOWLIST = [
   { file: "whats-new-modal.component.ts", value: "6px" },
   { file: "whats-new-modal.component.ts", value: "3px" },
   { file: "whats-new-modal.component.ts", value: "2px" },
+  // Find-in-files results list: 180px min-height is a structural viewport
+  // constraint for the overlay's results area (like .set-modal's 600px); the
+  // 26px match-row left indent aligns match text under the sticky file header
+  // (sp-6 padding + 14px icon) — an alignment constant, not a spacing token.
+  { file: "find-in-files.component.ts", value: "180px" },
+  { file: "find-in-files.component.ts", value: "26px" },
+  // Search-everywhere results list: 120px min-height is a structural viewport
+  // constraint for the overlay (keeps the empty state from collapsing).
+  { file: "search-everywhere.component.ts", value: "120px" },
+  // .dvc-pdot process-tree status dot is a 7×7px rounded square mirroring the
+  // conflict-view .sq — a fixed pip visual constant, not a spacing token.
+  { file: "dev-panel.component.ts", value: "7px" },
+  // Conflict-view fixed-geometry mini-widgets: .sq status square (7×7),
+  // .meter progress track (4px, like the settings slider track), .cf-dot
+  // (15×15 circle) + .pip (5×5) form a fixed unit that must stay round,
+  // .st-dot block-status dot (8×8). All are pips/tracks whose geometry is
+  // ported 1:1 from the design reference and must not density-scale.
+  { file: "conflict-view.component.ts", value: "7px" },
+  { file: "conflict-view.component.ts", value: "4px" },
+  { file: "conflict-view.component.ts", value: "15px" },
+  { file: "conflict-view.component.ts", value: "5px" },
+  { file: "conflict-view.component.ts", value: "8px" },
+  // .cf-edit inline-resolution textarea: 70px min-height is a structural
+  // constraint (~3 monospace lines) so the editor never collapses.
+  { file: "conflict-view.component.ts", value: "70px" },
+  // Commit-graph rows are exactly 30px tall — locked to the lane-SVG cell
+  // geometry (the svg is 30 high so lane lines join seamlessly row-to-row,
+  // design git-panels.jsx ROW_H). Like code surfaces, the graph rendering is a
+  // fixed-metric surface and intentionally NOT density-scaled (--row-h scales).
+  { file: "commit-graph-panel.component.ts", value: "30px" },
   // The boot/loading splash is a pre-theme screen with fixed, design-exact metrics
   // (hardcoded colors + px). The "Orrery × Kouji.dev" credit footer's gap + font
   // sizes are bespoke visual constants, not spacing/font tokens.

@@ -14,6 +14,8 @@ import {
   writeScheduled,
 } from "../terminal-output-scheduler";
 import { MetricsStore } from "../metrics/metrics.store";
+import { TelemetryStore } from "../metrics/telemetry.store";
+import { BRIDGE } from "../data-source/bridge";
 import { SystemMetrics } from "../models";
 import { DevPanelComponent } from "./dev-panel.component";
 
@@ -68,6 +70,10 @@ function setup(rows: PerfRow[] = [], metrics: SystemMetrics | null = null): Comp
       { provide: AgentRuntimeService, useValue: { agents: signal([]), elapsedFor: () => 0 } },
       { provide: ProjectsStore, useValue: { all: signal([]) } },
       { provide: MetricsStore, useValue: { metrics: signal(metrics) } },
+      // Processes/Emits tabs poll through the bridge only while visible; specs
+      // never open those tabs, so a rejecting stub is enough.
+      { provide: BRIDGE, useValue: { invoke: () => Promise.reject(new Error("stub")), on: () => Promise.resolve(() => {}) } },
+      { provide: TelemetryStore, useValue: { traceActive: signal(false), traceReason: signal(null), setTrace() {} } },
     ],
   });
   TestBed.overrideComponent(DevPanelComponent, {

@@ -19,7 +19,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use protocol::{parse, read_request, AgentEvent, HookEnvelope};
 use transcript::latest_content;
@@ -67,7 +67,7 @@ impl HookBridge {
     pub fn start<R: Runtime>(app: AppHandle<R>) -> std::io::Result<Self> {
         let emit_app = app.clone();
         let emit: Emit = Arc::new(move |name: &str, payload: serde_json::Value| {
-            let _ = emit_app.emit(name, payload);
+            let _ = crate::core::emit::emit_tracked(&emit_app, name, &payload);
         });
         // Persist a captured CLI session id DIRECTLY (the bridge owns this — no
         // frontend round-trip). After storing, re-emit the refreshed agent as

@@ -4,6 +4,7 @@ import { IconComponent } from "../../shared/icon.component";
 import { CommitDiffViewComponent } from "./commit-diff-view.component";
 import { RangeDiffViewComponent } from "./range-diff-view.component";
 import { FileHistoryViewComponent } from "./file-history-view.component";
+import { ConflictViewComponent } from "./conflict-view.component";
 
 /**
  * Center "Diff tab" dispatcher: when a {@link GitView} is active for an agent
@@ -14,7 +15,7 @@ import { FileHistoryViewComponent } from "./file-history-view.component";
 @Component({
   selector: "app-agent-git-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, CommitDiffViewComponent, RangeDiffViewComponent, FileHistoryViewComponent],
+  imports: [IconComponent, CommitDiffViewComponent, RangeDiffViewComponent, FileHistoryViewComponent, ConflictViewComponent],
   template: `
     @let ag = agent();
     @let gv = gitView();
@@ -37,6 +38,9 @@ import { FileHistoryViewComponent } from "./file-history-view.component";
         }
         @case ('filehistory') {
           <app-file-history-view [agent]="ag" [path]="gv.path" />
+        }
+        @case ('conflict') {
+          <app-conflict-view [agent]="ag" (close)="close.emit()" />
         }
       }
     </div>

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::{RecursiveMode, Watcher};
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Runtime};
 use uuid::Uuid;
 
 use crate::git::service::FileChange;
@@ -76,9 +76,11 @@ impl WatchService {
     ) {
         let ids = id.to_string();
         self.watch_with_emit(id, path, scan, move |s| {
-            let _ = app.emit(
+            let _ = crate::core::emit::emit_keyed(
+                &app,
                 "agent://changed",
-                serde_json::json!({ "id": ids, "changes": s.changes, "head": s.head }),
+                Some(ids.as_str()),
+                &serde_json::json!({ "id": ids, "changes": s.changes, "head": s.head }),
             );
         });
     }

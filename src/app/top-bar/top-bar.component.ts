@@ -10,6 +10,8 @@ import {
 } from "@angular/core";
 import { Agent, MenuItem, Tab } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { CommandRegistryService } from "../commands/command-registry.service";
+import { kbdLabel } from "../commands/fuzzy";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { SettingsStore } from "../settings/settings.store";
@@ -137,6 +139,22 @@ import { TicketsStore } from "../stores/tickets.store";
         }
       </div>
 
+      <!-- Search Everywhere entry point (design: topbar.jsx "nav stack + search
+           everywhere"). Sits at the right end of the tab area, pinned outside the
+           scrolling strip so overflowing tabs never push it away. -->
+      <div style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);flex:none">
+        <button
+          class="btn ghost-hair tb-search"
+          (click)="commands.open('search')"
+          [title]="'Search Everywhere · ' + searchKbd"
+          aria-label="Search Everywhere"
+          style="gap:var(--sp-3);padding:var(--sp-1) var(--sp-3);font-size:var(--fs-xs);color:var(--ink-3)"
+        >
+          <app-icon name="search" size="sm" />
+          <span class="kbd">{{ searchKbd }}</span>
+        </button>
+      </div>
+
       <div class="vdiv"></div>
 
       <!-- right group: its measured width is mirrored into --right-w (see below) so
@@ -196,7 +214,11 @@ export class TopBarComponent implements AfterViewInit, OnDestroy {
   readonly projects = inject(ProjectActionsService);
   readonly agentActions = inject(AgentActionsService);
   readonly tickets = inject(TicketsStore);
+  readonly commands = inject(CommandRegistryService);
   private readonly drag = inject(DragService);
+
+  /** Platform-aware chip label for the Search Everywhere button ("Shift Shift" / ⇧⇧). */
+  readonly searchKbd = kbdLabel("Shift Shift");
 
   // tab drag state: which tab is being dragged + the live drop zone on a target.
   readonly dragId = signal<string | null>(null);

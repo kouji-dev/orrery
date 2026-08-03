@@ -63,6 +63,13 @@ export const Commands = {
   DetectTools: 'detect_tools',
   VerifyToolPath: 'verify_tool_path',
   SystemMetrics: 'system_metrics',
+  /** A7.7 recursive process tree (Orrery + each agent PTY child as roots).
+   *  PULL-based: poll only while the perf panel is open (A1.7 gating). */
+  ProcessTree: 'process_tree',
+  /** A0.7 emit-telemetry aggregate table (per event name: count/bytes/p50/p95/rate). */
+  TelemetryEmits: 'telemetry_emits',
+  /** Raw emit-trace indicator state `{active, startedMs, bytes}`. */
+  TelemetryTraceState: 'telemetry_trace_state',
   SystemCost: 'system_cost',
   SetWindowIcon: 'set_window_icon',
   SettingsGet: 'settings_get',
@@ -87,6 +94,29 @@ export const Commands = {
   AgentBlame: 'agent_blame',
   AgentWorkingBlame: 'agent_working_blame',
   AgentFileHistory: 'agent_file_history',
+  // ---- native merge + conflict session (A3.5 / A3.6) ----
+  /** Native merge of a branch into the agent's branch → MergeSession (empty
+   *  conflicts = merged clean; non-empty = session in progress). */
+  AgentMerge: 'agent_merge',
+  /** Still-conflicted files of the in-progress session (stages 1/2/3 + markers). */
+  AgentConflicts: 'agent_conflicts',
+  /** Write a file's resolution and stage it. */
+  AgentConflictResolve: 'agent_conflict_resolve',
+  /** Abort the merge: drop session state, hard-reset to HEAD. */
+  AgentMergeAbort: 'agent_merge_abort',
+  /** Commit the fully-resolved merge → short sha. */
+  AgentMergeContinue: 'agent_merge_continue',
+  /** Merge/rebase/cherry-pick in progress? + remaining conflict count. */
+  AgentSessionState: 'agent_session_state',
+  // ---- find in files / search everywhere (B3.1 / B2.1) ----
+  /** Start a streaming search → search id; results arrive on `search://results`
+   *  batches and the run ends with one `search://done`. */
+  SearchStart: 'search_start',
+  /** Cancel a running search by id (no-op when already done). */
+  SearchCancel: 'search_cancel',
+  /** All gitignore-filtered file paths of an agent's worktree (capped 20k) —
+   *  the Files corpus for Search Everywhere / Go to File. */
+  SearchFiles: 'search_files',
 } as const;
 
 /** One agent's coalesced PTY output inside a multiplexed `agent://output`
@@ -123,6 +153,9 @@ export const Events = {
   SystemCost: 'system://cost',
   /** Per-command backend exec aggregates (pushed every 2s; dev + prod). */
   PerfStats: 'perf://stats',
+  /** Raw emit-trace state change `{active, reason}` — drives the visible
+   *  "recording" indicator (trace auto-disables after 30min / 200MB). */
+  TelemetryTrace: 'telemetry://trace',
   TicketCreated: 'ticket://created',
   TicketUpdated: 'ticket://updated',
   TicketDeleted: 'ticket://deleted',
@@ -132,6 +165,41 @@ export const Events = {
   /** Install handoff: payload `"installing"` once the download is done and the
    *  installer is about to take over (the process exits shortly after). */
   UpdatePhase: 'update://phase',
+  /** A batch of streamed find-in-files matches: `{searchId, items, files}`. */
+  SearchResults: 'search://results',
+  /** A search finished: `{searchId, files, matches, truncated, cancelled}`. */
+  SearchDone: 'search://done',
 } as const;
+
+// ---- find-in-files payloads (serde camelCase from src-tauri/src/search) ----
+
+/** One find-in-files match line. `ranges` are UTF-16 [start, end) offsets into
+ *  `text` (JS string indexing), so highlighting needs no client re-match. */
+export interface SearchMatchEntry {
+  /** Root-relative path, forward-slash separated. */
+  path: string;
+  /** Agent owning the worktree the match came from (absent = project checkout). */
+  agentId?: string;
+  /** Human label of the root (agent name); absent = project checkout. */
+  root?: string;
+  line: number;
+  text: string;
+  ranges: [number, number][];
+}
+
+export interface SearchResultsPayload {
+  searchId: string;
+  items: SearchMatchEntry[];
+  /** Cumulative files scanned so far. */
+  files: number;
+}
+
+export interface SearchDonePayload {
+  searchId: string;
+  files: number;
+  matches: number;
+  truncated: boolean;
+  cancelled: boolean;
+}
 
 export const BRIDGE = new InjectionToken<Bridge>('BRIDGE');

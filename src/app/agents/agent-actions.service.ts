@@ -8,6 +8,7 @@ import { toolMeta } from "../utils";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { AgentRuntimeService } from "./agent-runtime.service";
 import { AgentWorkStore } from "./agent-work.store";
+import { ConflictStore } from "./conflict.store";
 
 export interface SpawnRequest {
   projectId: string;
@@ -34,6 +35,7 @@ export class AgentActionsService {
   private agentsStore = inject(AgentsStore);
   private runtime = inject(AgentRuntimeService);
   private work = inject(AgentWorkStore);
+  private conflicts = inject(ConflictStore);
   private projects = inject(ProjectActionsService);
   private terminals = inject(TerminalService);
   private notifications = inject(NotificationStore);
@@ -70,9 +72,15 @@ export class AgentActionsService {
         this.pushAgent(id);
         break;
       case "rebase":
-      case "merge":
-        this.aiAction(id, action as "rebase" | "merge");
+        this.aiAction(id, "rebase");
         break;
+      case "merge": {
+        // native path is the default (A4); the AI variant lives in the
+        // git-tab dropdown (aiAction "merge") and stays available there.
+        const proj = ag ? this.projects.all().find((p) => p.id === ag.projectId) : undefined;
+        this.mergeAgent(id, proj?.branch ?? proj?.defaultBranch ?? "main");
+        break;
+      }
     }
   }
 
@@ -112,6 +120,34 @@ export class AgentActionsService {
       .push(id)
       .then(() => this.ui.flash("pushed " + (ag?.name ?? id)))
       .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "push failed"));
+  }
+
+  /** NATIVE merge of `branch` (the project base) into the agent's branch —
+   *  instant, free, deterministic (A3.5). A clean/FF merge just refreshes; a
+   *  conflicted merge keeps the session open backend-side and flips the
+   *  agent's diff pane to the 3-way conflict view (B4.2). */
+  mergeAgent(id: string, branch: string) {
+    const ag = this.agents().find((a) => a.id === id);
+    void this.agentsStore
+      .merge(id, branch)
+      .then((session) => {
+        if (session.conflicts.length) {
+          this.conflicts.open(id, session.ours, session.theirs, session.conflicts);
+          this.ui.setGitView(id, { kind: "conflict" });
+          this.ui.flash(
+            session.conflicts.length +
+              " conflict" +
+              (session.conflicts.length === 1 ? "" : "s") +
+              " — resolve in the 3-way view",
+          );
+          return;
+        }
+        this.ui.flash("merged " + branch + " into " + (ag?.name ?? id));
+        // optimistic instant refresh; the watcher push follows and supersedes
+        this.work.loadChanges(id);
+        this.work.refreshCommits(id);
+      })
+      .catch((e: { message?: string }) => this.ui.flash(e?.message ?? "merge failed"));
   }
 
   /** AI-driven completion action: type the predefined prompt into the agent's PTY,
@@ -243,6 +279,7 @@ export class AgentActionsService {
       return;
     }
     this.runtime.dispose(id);
+    this.conflicts.dispose(id);
     this.notifications.clearAgent(id);
     this.ui.flash("removed worktree " + (ag ? ag.name : id));
   }

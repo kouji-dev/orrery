@@ -1,3 +1,5 @@
 disallowed-methods = [
     { path = "std::process::Command::new", reason = "use crate::core::proc::cmd() — it pre-flags CREATE_NO_WINDOW so child processes never flash a console window on Windows (core::proc::cmd is the only sanctioned constructor)" },
+    { path = "tauri::Emitter::emit", reason = "use crate::core::emit::emit_tracked()/emit_keyed() — the A0.7 telemetry funnel records every emit (name + byte count) before forwarding; core/emit.rs is the only sanctioned call site" },
+    { path = "tauri::Emitter::emit_to", reason = "use crate::core::emit::emit_tracked()/emit_keyed() — the A0.7 telemetry funnel records every emit (name + byte count) before forwarding; core/emit.rs is the only sanctioned call site" },
 ]

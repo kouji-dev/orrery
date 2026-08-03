@@ -1,6 +1,6 @@
 import { Injectable, signal } from "@angular/core";
 
-export type DevPanelTab = "perf" | "agents" | "projects" | "resources";
+export type DevPanelTab = "perf" | "agents" | "projects" | "resources" | "processes" | "emits";
 
 /**
  * Visibility + active tab of the floating dev console, lifted out of the
@@ -14,6 +14,12 @@ export class DevPanelStore {
 
   openResources() {
     this.tab.set("resources");
+    this.open.set(true);
+  }
+
+  /** Deep-link for the status-bar raw-trace chip (A0.7 visible indicator). */
+  openEmits() {
+    this.tab.set("emits");
     this.open.set(true);
   }
 }
