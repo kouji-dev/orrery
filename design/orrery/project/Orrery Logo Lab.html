@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Orrery — Logo Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --accent:#a855f7; --accent-2:#22d3ee;
+    --accent-rgb:168,85,247; --accent-2-rgb:34,211,238;
+    --font-mono:'JetBrains Mono',ui-monospace,monospace;
+    --font-disp:'Space Grotesk',sans-serif;
+  }
+  [data-theme="dark"]{
+    --bg:#090a0f; --panel:#0e1018; --panel-2:#11141e; --panel-3:#161a26;
+    --hair:rgba(255,255,255,.08); --hair-2:rgba(255,255,255,.14);
+    --ink:#e8ebf2; --ink-2:#aab2c5; --ink-3:#6b7488; --ink-4:#444b5e;
+    --grid:rgba(255,255,255,.02);
+  }
+  [data-theme="light"]{
+    --bg:#eef0f4; --panel:#fff; --panel-2:#f6f7fa; --panel-3:#eceef3;
+    --hair:rgba(20,24,40,.10); --hair-2:rgba(20,24,40,.18);
+    --ink:#161a26; --ink-2:#4a5266; --ink-3:#7b8398; --ink-4:#aab0bf;
+    --grid:rgba(20,24,40,.022);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font-mono); background:var(--bg); color:var(--ink);
+    -webkit-font-smoothing:antialiased; min-height:100vh;
+    background-image:
+      linear-gradient(var(--grid) 1px,transparent 1px),
+      linear-gradient(90deg,var(--grid) 1px,transparent 1px),
+      radial-gradient(60% 50% at 20% 0%,rgba(var(--accent-rgb),.08),transparent 70%),
+      radial-gradient(50% 50% at 100% 100%,rgba(var(--accent-2-rgb),.06),transparent 70%);
+    background-size:34px 34px,34px 34px,100% 100%,100% 100%;
+  }
+  .wrap{max-width:1160px;margin:0 auto;padding:40px 32px 80px}
+  .topbar{display:flex;align-items:center;gap:14px;margin-bottom:36px}
+  .eyebrow{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--ink-3)}
+  .toggle{margin-left:auto;display:flex;gap:4px;padding:4px;background:var(--panel-2);border:1px solid var(--hair);border-radius:9px}
+  .toggle button{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);background:transparent;border:none;padding:6px 12px;border-radius:6px;cursor:pointer}
+  .toggle button.on{background:var(--panel-3);color:var(--ink);box-shadow:0 0 0 1px var(--hair-2)}
+
+  h1{font-family:var(--font-disp);font-size:30px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px}
+  .sub{color:var(--ink-3);font-size:13px;max-width:620px;line-height:1.6;margin-bottom:40px}
+
+  .section-label{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);
+    display:flex;align-items:center;gap:10px;margin:46px 0 18px}
+  .section-label::after{content:"";flex:1;height:1px;background:var(--hair)}
+
+  /* hero */
+  .hero{display:grid;grid-template-columns:300px 1fr;gap:0;border:1px solid var(--hair);border-radius:18px;overflow:hidden;background:var(--panel)}
+  .hero .mark-cell{display:grid;place-items:center;padding:48px;background:
+      radial-gradient(70% 70% at 50% 40%,rgba(var(--accent-rgb),.12),transparent 70%);
+    border-right:1px solid var(--hair)}
+  .hero .lock{display:flex;flex-direction:column;justify-content:center;gap:26px;padding:48px}
+  .lockup{display:flex;align-items:center;gap:20px}
+  .wordmark{font-family:var(--font-disp);font-weight:600;letter-spacing:-.01em;line-height:1}
+  .wordmark .o{color:var(--accent)}
+  .tagline{font-size:11px;color:var(--ink-3);letter-spacing:.04em;margin-top:8px}
+
+  /* concept grid */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .card{border:1px solid var(--hair);border-radius:14px;background:var(--panel);overflow:hidden;
+    transition:border-color .15s,transform .15s;cursor:default}
+  .card:hover{border-color:var(--hair-2);transform:translateY(-2px)}
+  .card .stage{display:grid;place-items:center;height:150px;
+    background:radial-gradient(60% 60% at 50% 45%,rgba(var(--accent-rgb),.10),transparent 72%);
+    border-bottom:1px solid var(--hair)}
+  .card .meta{padding:12px 14px;display:flex;align-items:center;gap:8px}
+  .card .tag{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);
+    border:1px solid color-mix(in oklch,var(--accent),transparent 60%);border-radius:999px;padding:2px 8px}
+  .card .name{font-family:var(--font-disp);font-size:13px;font-weight:600}
+  .card .desc{font-size:10.5px;color:var(--ink-3);margin-left:auto;text-align:right;max-width:130px;line-height:1.4}
+
+  /* lockup variants */
+  .locks{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .lockcard{border:1px solid var(--hair);border-radius:14px;background:var(--panel);padding:30px;display:flex;align-items:center;justify-content:center;min-height:130px}
+  .lockcard.stacked{flex-direction:column;gap:14px}
+
+  /* sizes row */
+  .sizes{display:flex;align-items:flex-end;gap:30px;flex-wrap:wrap;border:1px solid var(--hair);border-radius:14px;background:var(--panel);padding:30px}
+  .sizeitem{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .sizeitem span{font-size:9px;color:var(--ink-4);letter-spacing:.1em}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;padding:6px 11px}
+  .chip .ttl{font-family:var(--font-disp);font-weight:600;font-size:13px}
+
+  .swatches{display:flex;gap:10px;flex-wrap:wrap}
+  .sw{display:flex;align-items:center;gap:10px;border:1px solid var(--hair);border-radius:10px;padding:10px 14px;background:var(--panel);min-width:150px}
+  .sw .dot{width:26px;height:26px;border-radius:7px;flex:none}
+  .sw small{display:block;color:var(--ink-3);font-size:9.5px;margin-top:2px}
+  .sw b{font-size:11px;font-weight:500}
+
+  .spin{transform-box:fill-box;transform-origin:center}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes spinR{to{transform:rotate(-360deg)}}
+  .o1{animation:spin 18s linear infinite}
+  .o2{animation:spinR 26s linear infinite}
+  .o3{animation:spin 34s linear infinite}
+  @media (prefers-reduced-motion:reduce){.o1,.o2,.o3{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="eyebrow">Orrery · brand mark exploration</div>
+    <div class="toggle">
+      <button id="bd" class="on" onclick="setTheme('dark')">Dark</button>
+      <button id="bl" onclick="setTheme('light')">Light</button>
+    </div>
+  </div>
+
+  <h1>A clockwork mark for <span style="color:var(--accent)">Orrery</span></h1>
+  <p class="sub">An orrery is a mechanism that drives many planets in coordinated orbit — one core, many bodies. The mark leans on that: a luminous core (your console) with agents orbiting on precise rings. The name opens on <b>O</b>, so the letter itself becomes an orbit.</p>
+
+  <!-- HERO: primary direction -->
+  <div class="section-label">Primary direction · “O as orbit”</div>
+  <div class="hero">
+    <div class="mark-cell">
+      <!-- Mark E: O-monogram orbit, large -->
+      <svg width="150" height="150" viewBox="0 0 100 100" fill="none" aria-label="Orrery mark">
+        <defs>
+          <linearGradient id="gA" x1="0" y1="0" x2="100" y2="100">
+            <stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent-2)"/>
+          </linearGradient>
+          <radialGradient id="core" cx="50%" cy="50%">
+            <stop offset="0" stop-color="#fff" stop-opacity=".95"/>
+            <stop offset=".4" stop-color="var(--accent)"/>
+            <stop offset="1" stop-color="var(--accent)" stop-opacity=".25"/>
+          </radialGradient>
+        </defs>
+        <g class="o1">
+          <circle cx="50" cy="50" r="34" stroke="url(#gA)" stroke-width="2.4" stroke-dasharray="178 36" stroke-linecap="round"/>
+          <circle cx="84" cy="50" r="5.4" fill="var(--accent-2)"/>
+        </g>
+        <circle cx="50" cy="50" r="22" stroke="var(--ink-3)" stroke-width="1" stroke-opacity=".5"/>
+        <g class="o2"><circle cx="28" cy="50" r="3.4" fill="var(--ink-2)"/></g>
+        <circle cx="50" cy="50" r="8.5" fill="url(#core)"/>
+        <circle cx="50" cy="50" r="8.5" stroke="var(--accent)" stroke-width="1.2" stroke-opacity=".6"/>
+      </svg>
+    </div>
+    <div class="lock">
+      <div class="lockup">
+        <svg width="46" height="46" viewBox="0 0 100 100" fill="none">
+          <g class="o1">
+            <circle cx="50" cy="50" r="34" stroke="url(#gA)" stroke-width="3" stroke-dasharray="178 36" stroke-linecap="round"/>
+            <circle cx="84" cy="50" r="6" fill="var(--accent-2)"/>
+          </g>
+          <circle cx="50" cy="50" r="9" fill="url(#core)"/>
+        </svg>
+        <div>
+          <div class="wordmark" style="font-size:42px"><span class="o">O</span>rrery</div>
+          <div class="tagline">MULTI-AGENT ORCHESTRATION CONSOLE</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="chip"><svg width="18" height="18" viewBox="0 0 100 100"><circle cx="50" cy="50" r="34" stroke="url(#gA)" stroke-width="6" stroke-dasharray="178 36" stroke-linecap="round" fill="none"/><circle cx="84" cy="50" r="9" fill="var(--accent-2)"/><circle cx="50" cy="50" r="13" fill="var(--accent)"/></svg><span class="ttl">Orrery</span></div>
+        <div class="chip" style="background:#000"><span class="ttl" style="color:#fff">○ App tab</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONCEPTS -->
+  <div class="section-label">Six mark concepts</div>
+  <div class="grid" id="concepts"></div>
+
+  <!-- LOCKUPS -->
+  <div class="section-label">Wordmark lockups</div>
+  <div class="locks">
+    <div class="lockcard">
+      <div class="lockup">
+        <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+          <g class="o1"><circle cx="50" cy="50" r="34" stroke="url(#gA)" stroke-width="3" stroke-dasharray="178 36" stroke-linecap="round"/><circle cx="84" cy="50" r="6" fill="var(--accent-2)"/></g>
+          <circle cx="50" cy="50" r="9" fill="url(#core)"/>
+        </svg>
+        <div class="wordmark" style="font-size:34px"><span class="o">O</span>rrery</div>
+      </div>
+    </div>
+    <div class="lockcard">
+      <div class="lockup">
+        <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+          <g class="o1"><circle cx="50" cy="50" r="34" stroke="url(#gA)" stroke-width="3" stroke-dasharray="178 36" stroke-linecap="round"/><circle cx="84" cy="50" r="6" fill="var(--accent-2)"/></g>
+          <circle cx="50" cy="50" r="9" fill="url(#core)"/>
+        </svg>
+        <div style="font-family:var(--font-mono);font-size:26px;font-weight:600;letter-spacing:.02em">orrery<span style="color:var(--accent-2)">_</span></div>
+      </div>
+    </div>
+    <div class="lockcard stacked">
+      <svg width="40" height="40" viewBox="0 0 100 100" fill="none">
+        <g class="o1"><circle cx="50" cy="50" r="34" stroke="url(#gA)" stroke-width="3" stroke-dasharray="178 36" stroke-linecap="round"/><circle cx="84" cy="50" r="6" fill="var(--accent-2)"/></g>
+        <circle cx="50" cy="50" r="9" fill="url(#core)"/>
+      </svg>
+      <div class="wordmark" style="font-size:24px"><span class="o">O</span>rrery</div>
+    </div>
+    <div class="lockcard stacked">
+      <div class="wordmark" style="font-size:24px;letter-spacing:.34em;text-transform:uppercase"><span class="o">O</span>rrery</div>
+      <div style="font-size:9px;letter-spacing:.3em;color:var(--ink-3)">ORCHESTRATION</div>
+    </div>
+  </div>
+
+  <!-- SIZES -->
+  <div class="section-label">Scales down to a favicon</div>
+  <div class="sizes" id="sizes"></div>
+
+  <!-- COLOR -->
+  <div class="section-label">Palette</div>
+  <div class="swatches">
+    <div class="sw"><span class="dot" style="background:#a855f7"></span><div><b>Pulsar Violet</b><small>#A855F7 · primary</small></div></div>
+    <div class="sw"><span class="dot" style="background:#22d3ee"></span><div><b>Ion Cyan</b><small>#22D3EE · orbit</small></div></div>
+    <div class="sw"><span class="dot" style="background:linear-gradient(135deg,#a855f7,#22d3ee)"></span><div><b>Gradient</b><small>core → orbit</small></div></div>
+    <div class="sw"><span class="dot" style="background:#090a0f;border:1px solid var(--hair-2)"></span><div><b>Void</b><small>#090A0F · ground</small></div></div>
+  </div>
+</div>
+
+<script>
+function setTheme(t){
+  document.documentElement.setAttribute('data-theme',t);
+  document.getElementById('bd').classList.toggle('on',t==='dark');
+  document.getElementById('bl').classList.toggle('on',t==='light');
+}
+
+// shared defs available to all inline svgs via one hidden svg
+const DEFS = `<defs>
+  <linearGradient id="g" x1="0" y1="0" x2="100" y2="100"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent-2)"/></linearGradient>
+  <radialGradient id="c" cx="50%" cy="50%"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".42" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent)" stop-opacity=".22"/></radialGradient>
+</defs>`;
+
+// six concepts as functions returning inner svg markup (100x100)
+const CONCEPTS = [
+  { tag:'A', name:'Concentric', desc:'Three rings, three agents, glowing core', svg:`
+    ${DEFS}
+    <circle cx="50" cy="50" r="38" stroke="var(--ink-3)" stroke-width="1" stroke-opacity=".4"/>
+    <circle cx="50" cy="50" r="27" stroke="var(--ink-3)" stroke-width="1" stroke-opacity=".5"/>
+    <circle cx="50" cy="50" r="16" stroke="var(--ink-3)" stroke-width="1" stroke-opacity=".6"/>
+    <g class="o3"><circle cx="88" cy="50" r="4.4" fill="url(#g)"/></g>
+    <g class="o2"><circle cx="50" cy="23" r="3.6" fill="var(--accent-2)"/></g>
+    <g class="o1"><circle cx="66" cy="50" r="3" fill="var(--accent)"/></g>
+    <circle cx="50" cy="50" r="7.5" fill="url(#c)"/>` },
+  { tag:'B', name:'Ecliptic', desc:'Tilted elliptical orbits, dimensional', svg:`
+    ${DEFS}
+    <g transform="rotate(-22 50 50)">
+      <ellipse cx="50" cy="50" rx="40" ry="16" stroke="url(#g)" stroke-width="2" fill="none"/>
+      <ellipse cx="50" cy="50" rx="26" ry="10" stroke="var(--ink-3)" stroke-width="1" stroke-opacity=".55" fill="none"/>
+      <circle cx="90" cy="50" r="4.6" fill="var(--accent-2)"/>
+      <circle cx="24" cy="50" r="3.2" fill="var(--accent)"/>
+    </g>
+    <circle cx="50" cy="50" r="8" fill="url(#c)"/>` },
+  { tag:'C', name:'Minimal orbit', desc:'One ring, one body — ultra scalable', svg:`
+    ${DEFS}
+    <g class="o1">
+      <circle cx="50" cy="50" r="32" stroke="url(#g)" stroke-width="3" fill="none"/>
+      <circle cx="82" cy="50" r="6.5" fill="var(--accent-2)" stroke="var(--bg)" stroke-width="2"/>
+    </g>
+    <circle cx="50" cy="50" r="10" fill="url(#c)"/>` },
+  { tag:'D', name:'Hex core', desc:'Evolves the current console hex', svg:`
+    ${DEFS}
+    <path d="M50 16 L79 33 L79 67 L50 84 L21 67 L21 33 Z" stroke="url(#g)" stroke-width="2" fill="none"/>
+    <g class="o2"><circle cx="50" cy="16" r="3.6" fill="var(--accent-2)"/><circle cx="79" cy="67" r="3" fill="var(--accent)"/><circle cx="21" cy="67" r="3" fill="var(--accent)"/></g>
+    <circle cx="50" cy="50" r="8" fill="url(#c)"/>` },
+  { tag:'E', name:'O-monogram', desc:'The letter O is the orbit (primary)', svg:`
+    ${DEFS}
+    <g class="o1"><circle cx="50" cy="50" r="34" stroke="url(#g)" stroke-width="2.6" stroke-dasharray="178 36" stroke-linecap="round" fill="none"/><circle cx="84" cy="50" r="5.4" fill="var(--accent-2)"/></g>
+    <circle cx="50" cy="50" r="22" stroke="var(--ink-3)" stroke-width="1" stroke-opacity=".45" fill="none"/>
+    <g class="o2"><circle cx="28" cy="50" r="3.2" fill="var(--ink-2)"/></g>
+    <circle cx="50" cy="50" r="8.5" fill="url(#c)"/>` },
+  { tag:'F', name:'Armillary', desc:'Crossed rings — a sphere of orbits', svg:`
+    ${DEFS}
+    <circle cx="50" cy="50" r="34" stroke="url(#g)" stroke-width="2" fill="none"/>
+    <ellipse cx="50" cy="50" rx="14" ry="34" stroke="var(--ink-3)" stroke-width="1.2" stroke-opacity=".6" fill="none"/>
+    <ellipse cx="50" cy="50" rx="34" ry="14" stroke="var(--accent-2)" stroke-width="1.4" fill="none" opacity=".8"/>
+    <circle cx="84" cy="50" r="4" fill="var(--accent-2)"/>
+    <circle cx="50" cy="50" r="7.5" fill="url(#c)"/>` },
+];
+
+document.getElementById('concepts').innerHTML = CONCEPTS.map(c=>`
+  <div class="card">
+    <div class="stage"><svg width="104" height="104" viewBox="0 0 100 100" fill="none">${c.svg}</svg></div>
+    <div class="meta"><span class="tag">${c.tag}</span><span class="name">${c.name}</span><span class="desc">${c.desc}</span></div>
+  </div>`).join('');
+
+// size tests using primary mark E
+const markE = (s)=>`<svg width="${s}" height="${s}" viewBox="0 0 100 100" fill="none">${DEFS}
+  <g class="o1"><circle cx="50" cy="50" r="34" stroke="url(#g)" stroke-width="${s<40?5:2.8}" stroke-dasharray="178 36" stroke-linecap="round" fill="none"/><circle cx="84" cy="50" r="${s<40?8:5.4}" fill="var(--accent-2)"/></g>
+  ${s>=40?'<circle cx="50" cy="50" r="22" stroke="var(--ink-3)" stroke-width="1" stroke-opacity=".45" fill="none"/>':''}
+  <circle cx="50" cy="50" r="${s<40?12:8.5}" fill="url(#c)"/></svg>`;
+document.getElementById('sizes').innerHTML = [128,72,48,32,20,16].map(s=>`
+  <div class="sizeitem">${markE(s)}<span>${s}px</span></div>`).join('');
+</script>
+</body>
+</html>

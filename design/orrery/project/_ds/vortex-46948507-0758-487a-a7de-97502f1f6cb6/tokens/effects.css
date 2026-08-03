@@ -1,0 +1,48 @@
+/* ============================================================
+   Vortex — Effects: radii, borders, shadows, glows, motion
+   The Prism glow and faint grid are Vortex's signature textures.
+   ============================================================ */
+
+:root {
+  /* corner radii — small & technical, not pill-soft */
+  --vx-radius-xs: 3px;
+  --vx-radius-sm: 5px;   /* buttons, chips, inputs */
+  --vx-radius:    8px;   /* cards, composer */
+  --vx-radius-lg: 12px;  /* panels, demo frames */
+  --vx-radius-xl: 14px;  /* hero app frame */
+  --vx-radius-pill: 999px;
+
+  /* borders */
+  --vx-border:   1px solid var(--vx-line);   /* @kind other */
+  --vx-border-2: 1px solid var(--vx-line-2);   /* @kind other */
+
+  /* elevation shadows (dark-tuned) */
+  --vx-shadow-sm: 0 1px 0 rgba(255,255,255,0.03) inset;
+  --vx-shadow-md: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.6);
+  --vx-shadow-lg: 0 40px 80px -30px rgba(0,0,0,0.6);
+  --vx-shadow-pop:0 12px 40px -12px rgba(0,0,0,0.7);
+
+  /* brand glows — the Prism halo */
+  --vx-glow-violet: 0 0 24px -4px rgba(var(--vx-violet-rgb), 0.5);
+  --vx-glow-pink:   0 0 24px -4px rgba(var(--vx-pink-rgb), 0.5);
+  --vx-glow-blue:   0 0 24px -4px rgba(var(--vx-blue-rgb), 0.5);
+  --vx-glow-ring:   0 0 0 3px rgba(var(--vx-violet-rgb), 0.14);   /* focus ring */
+  --vx-glow-soft:   0 0 120px -30px rgba(var(--vx-violet-rgb), 0.35);
+
+  /* ambient background layers (compose on a dark stage) */
+  --vx-atmosphere:
+    radial-gradient(ellipse 900px 700px at 10% -5%, rgba(var(--vx-pink-rgb), 0.10), transparent 60%),
+    radial-gradient(ellipse 800px 700px at 100% 10%, rgba(var(--vx-blue-rgb), 0.09), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 60% 120%, rgba(var(--vx-violet-rgb), 0.09), transparent 60%);   /* @kind other */
+  --vx-grid-lines:
+    linear-gradient(to right, var(--vx-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--vx-grid) 1px, transparent 1px);   /* @kind other */
+  --vx-grid-size: 64px 64px;   /* @kind other */
+
+  /* motion — quick, confident, cubic ease-out */
+  --vx-ease:      cubic-bezier(0.2, 0.8, 0.2, 1);   /* @kind other */
+  --vx-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);   /* @kind other */
+  --vx-dur-fast:  120ms;   /* @kind other */
+  --vx-dur:       200ms;   /* @kind other */
+  --vx-dur-slow:  400ms;   /* @kind other */
+}

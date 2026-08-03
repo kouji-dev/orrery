@@ -1,0 +1,106 @@
+/* ============================================================
+   Vortex — Color tokens
+   Brand spectrum: pink → violet → blue on deep space black.
+   Dark is the canonical brand surface. A light theme is provided
+   for embedded/enterprise contexts.
+   ============================================================ */
+
+:root {
+  /* ---- Brand spectrum (the three rays of the Prism) ----
+     Pink is BRAND-ONLY: the Prism mark, the gradient, marketing.
+     In product/console UI the accent is a single trustworthy hue
+     (violet, aliased to --vx-accent). Do not tint working UI pink. */
+  --vx-pink:      #f472b6;
+  --vx-violet:    #a78bfa;
+  --vx-blue:      #60a5fa;
+  --vx-pink-deep: #db2777;
+  --vx-violet-deep:#7c3aed;
+  --vx-blue-deep: #2563eb;
+  --vx-core:      #e0d7ff;   /* prism core dot / near-white lavender */
+
+  /* rgb channels for glows / alpha compositing */
+  --vx-pink-rgb:   244, 114, 182;   /* @kind color */
+  --vx-violet-rgb: 167, 139, 250;   /* @kind color */
+  --vx-blue-rgb:   96, 165, 250;    /* @kind color */
+
+  /* the signature gradient */
+  --vx-grad:   linear-gradient(90deg, #f472b6 0%, #a78bfa 50%, #60a5fa 100%);   /* @kind color */
+  --vx-grad-br:linear-gradient(135deg, #f472b6 0%, #a78bfa 55%, #60a5fa 100%);  /* @kind color */
+  --vx-grad-soft: linear-gradient(90deg, rgba(244,114,182,0.12), rgba(167,139,250,0.12), rgba(96,165,250,0.12));   /* @kind color */
+
+  /* ---- Semantic status ---- */
+  --vx-good:  #22c55e;
+  --vx-good-rgb: 34, 197, 94;   /* @kind color */
+  --vx-warn:  #f5b544;
+  --vx-warn-rgb: 245, 181, 68;   /* @kind color */
+  --vx-err:   #f2555a;
+  --vx-err-rgb: 242, 85, 90;   /* @kind color */
+  --vx-info:  #60a5fa;
+
+  /* provider marks (kept from the real Vortex model catalog) */
+  --vx-prov-anthropic: #cc785c;
+  --vx-prov-openai:    #10a37f;
+  --vx-prov-google:    #4285f4;
+  --vx-prov-mistral:   #fa6d3c;
+}
+
+/* ---------- DARK  (brand + marketing stage) ---------- */
+[data-theme="dark"], :root {
+  --vx-bg:       #040407;   /* deep space black */
+  --vx-bg-2:     #07070e;
+  --vx-bg-3:     #0b0b16;
+  --vx-panel:    #0d0d1a;   /* card / surface */
+  --vx-panel-2:  #12122a;   /* raised surface */
+  --vx-elev:     #161630;   /* menus, popovers */
+
+  --vx-line:     #161628;   /* hairline border */
+  --vx-line-2:   #1e1e35;   /* stronger border */
+  --vx-line-3:   #2a2a3e;
+
+  --vx-ink:      #e8e4ff;   /* primary text */
+  --vx-ink-2:    #b8b4d8;   /* secondary text */
+  --vx-ink-3:    #8b93a7;   /* muted / meta (lifted for AA on dark) */
+  --vx-ink-4:    #4d5262;   /* faint / disabled */
+
+  --vx-accent:      var(--vx-violet);
+  --vx-accent-ink:  #0b0b16;   /* text on accent fills */
+  --vx-accent-soft: rgba(167, 139, 250, 0.14);   /* quiet accent tint */
+  --vx-hl:          rgba(167, 139, 250, 0.12);   /* selected row tint */
+  --vx-grid:        rgba(255, 255, 255, 0.03);
+
+  /* tool tints — theme-aware so chat surfaces work in light too */
+  --vx-tool-memory-fg: #93c5fd;  --vx-tool-memory-bg: rgba(59,130,246,0.14);  --vx-tool-memory-bd: rgba(59,130,246,0.35);   /* @kind color */
+  --vx-tool-kb-fg:     #c4b5fd;  --vx-tool-kb-bg:     rgba(126,34,206,0.22);  --vx-tool-kb-bd:     rgba(126,34,206,0.4);    /* @kind color */
+  --vx-tool-web-fg:    #6ee7b7;  --vx-tool-web-bg:    rgba(52,211,153,0.16);  --vx-tool-web-bd:    rgba(52,211,153,0.3);    /* @kind color */
+  color-scheme: dark;
+}
+
+/* ---------- LIGHT  (product console — default for admin/governance) ---------- */
+[data-theme="light"] {
+  --vx-bg:       #f7f7fb;
+  --vx-bg-2:     #f0f0f6;
+  --vx-bg-3:     #e9e9f2;
+  --vx-panel:    #ffffff;
+  --vx-panel-2:  #fbfbfe;
+  --vx-elev:     #ffffff;
+
+  --vx-line:     #e4e4ef;
+  --vx-line-2:   #d6d6e4;
+  --vx-line-3:   #c4c4d6;
+
+  --vx-ink:      #1a1830;
+  --vx-ink-2:    #4a4766;
+  --vx-ink-3:    #6b6885;
+  --vx-ink-4:    #a2a0b8;
+
+  --vx-accent:      var(--vx-violet-deep);
+  --vx-accent-ink:  #ffffff;
+  --vx-accent-soft: rgba(124, 58, 237, 0.10);
+  --vx-hl:          rgba(124, 58, 237, 0.07);
+  --vx-grid:        rgba(20, 24, 40, 0.03);
+
+  --vx-tool-memory-fg: #2563eb;  --vx-tool-memory-bg: rgba(37,99,235,0.08);   --vx-tool-memory-bd: rgba(37,99,235,0.25);   /* @kind color */
+  --vx-tool-kb-fg:     #7c3aed;  --vx-tool-kb-bg:     rgba(124,58,237,0.08);   --vx-tool-kb-bd:     rgba(124,58,237,0.28);   /* @kind color */
+  --vx-tool-web-fg:    #0a8f5e;  --vx-tool-web-bg:    rgba(16,160,110,0.09);   --vx-tool-web-bd:    rgba(16,160,110,0.28);   /* @kind color */
+  color-scheme: light;
+}

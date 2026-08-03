@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Orrery — Updater Banner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#07080d;
+    --ink:#e8ebf2;
+    --ink-2:#aab2c5;
+    --ink-3:#6b7488;
+    --ink-4:#444b5e;
+    --accent:#a855f7;
+    --accent-2:#22d3ee;
+    --accent-3:#ff5d9e;
+    --danger:#ff5d6c;
+    --grad:linear-gradient(90deg,#ff5d9e,#a855f7,#22d3ee);
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --disp:'Space Grotesk',var(--mono);
+  }
+  html,body{min-height:100%}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--mono);
+    background-image:
+      linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px),
+      radial-gradient(46% 38% at 50% 18%,rgba(168,85,247,.13),transparent 72%);
+    background-size:34px 34px,34px 34px,100% 100%,100% 100%;
+    padding:54px 40px 80px;
+  }
+
+  /* ---------- page chrome ---------- */
+  .page{max-width:1180px;margin:0 auto}
+  .ph{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .ph h1{font-family:var(--disp);font-weight:600;font-size:24px;letter-spacing:-.01em}
+  .ph h1 .o{color:var(--accent)}
+  .ph .exe{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.04em;
+    border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:4px 11px}
+  .lede{margin-top:14px;max-width:640px;font-size:12.5px;line-height:1.7;color:var(--ink-2)}
+  .rule{height:1px;background:rgba(255,255,255,.07);margin:34px 0}
+  .kicker{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-4);
+    display:flex;align-items:center;gap:10px;margin-bottom:22px}
+  .kicker::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.06)}
+
+  /* ---------- the updater window ---------- */
+  .frame{
+    width:340px; min-height:110px; border-radius:14px; position:relative; overflow:hidden;
+    background:#0b0d14;
+    background-image:
+      linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px),
+      radial-gradient(70% 120% at 14% 0%,rgba(168,85,247,.17),transparent 70%);
+    background-size:22px 22px,22px 22px,100% 100%,100% 100%;
+    border:1px solid rgba(255,255,255,.07);
+    box-shadow:0 20px 54px -14px rgba(0,0,0,.82), 0 0 0 1px rgba(168,85,247,.05),
+               0 0 34px -10px rgba(168,85,247,.32);
+    padding:18px 20px;
+    display:flex; align-items:center; gap:15px;
+    transition:opacity .55s ease, transform .55s ease, box-shadow .4s ease;
+  }
+  .frame.fail{
+    box-shadow:0 20px 54px -14px rgba(0,0,0,.82), 0 0 0 1px rgba(255,93,108,.10),
+               0 0 36px -10px rgba(255,93,108,.34);
+    background-image:
+      linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px),
+      radial-gradient(70% 120% at 14% 0%,rgba(255,93,108,.16),transparent 70%);
+  }
+  .frame.closing{opacity:0; transform:scale(.97) translateY(-4px)}
+
+  .logo{flex:0 0 auto;width:44px;height:44px;filter:drop-shadow(0 0 12px rgba(168,85,247,.42))}
+  .frame.fail .logo{filter:drop-shadow(0 0 12px rgba(255,93,108,.45)) saturate(.65)}
+  .col{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:9px}
+
+  .title{font-family:var(--disp);font-weight:600;font-size:14.5px;color:var(--ink);
+    letter-spacing:.005em;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .frame.fail .title{color:#ffd8dc}
+
+  .statusrow{display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-height:13px}
+  .status{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .frame.fail .status{color:#e89aa1;text-transform:none;letter-spacing:.02em;font-size:10.5px;white-space:normal}
+  .pct{font-family:var(--mono);font-size:10.5px;font-weight:500;color:var(--ink);
+    font-variant-numeric:tabular-nums;flex:0 0 auto}
+
+  /* progress bar */
+  .bar{height:3px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;position:relative}
+  .bar > i{display:block;height:100%;border-radius:3px;width:0;background:var(--grad);
+    transition:width .25s linear}
+  /* determinate fill keeps a tiny glow head */
+  .bar.det > i{box-shadow:0 0 10px -1px rgba(168,85,247,.6)}
+
+  /* indeterminate — sliding segment (NSIS) */
+  .bar.indet::after{content:'';position:absolute;top:0;bottom:0;width:38%;border-radius:3px;
+    background:var(--grad);animation:indet 1.25s cubic-bezier(.65,0,.35,1) infinite}
+  @keyframes indet{0%{left:-40%}100%{left:100%}}
+
+  /* shimmer — faint base + passing sheen (Preparing) */
+  .bar.shim > i{width:100%;background:rgba(168,85,247,.16)}
+  .bar.shim::after{content:'';position:absolute;top:0;bottom:0;left:0;width:55%;border-radius:3px;
+    background:linear-gradient(90deg,transparent,rgba(168,85,247,.55),rgba(34,211,238,.45),transparent);
+    animation:shim 1.4s ease-in-out infinite}
+  @keyframes shim{0%{transform:translateX(-100%)}100%{transform:translateX(282%)}}
+
+  /* restarting — full bar with pulse */
+  .bar.full > i{width:100%}
+  .bar.pulse > i{animation:barpulse 1s ease-in-out infinite}
+  @keyframes barpulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.5) saturate(1.2)}}
+
+  /* fail bar — static dim red */
+  .bar.failbar > i{width:100%;background:linear-gradient(90deg,#ff5d6c,#c23252)}
+
+  /* core pulse on logo */
+  .core-pulse{transform-box:fill-box;transform-origin:50% 50%;animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.92}50%{opacity:.55}}
+
+  /* fail actions */
+  .actions{display:flex;gap:8px;margin-top:2px}
+  .btn{font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;border-radius:7px;
+    padding:6px 12px;cursor:pointer;border:1px solid transparent;transition:filter .12s,background .12s,border-color .12s}
+  .btn.primary{color:#1a0608;font-weight:600;
+    background:linear-gradient(180deg,#ff7a86,#e5484d);box-shadow:0 0 18px -6px rgba(255,93,108,.8)}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.ghost{background:transparent;color:var(--ink-3);border-color:rgba(255,255,255,.12)}
+  .btn.ghost:hover{color:var(--ink);border-color:rgba(255,255,255,.24);background:rgba(255,255,255,.04)}
+
+  /* ---------- hero stage ---------- */
+  .stage{display:flex;align-items:center;gap:46px;flex-wrap:wrap}
+  .stage-side{flex:1 1 240px;min-width:220px}
+  .stage-side h2{font-family:var(--disp);font-weight:600;font-size:15px;margin-bottom:10px;color:var(--ink)}
+  .stage-side p{font-size:12px;line-height:1.7;color:var(--ink-2);max-width:340px}
+  .hero-hold{position:relative;display:flex;flex-direction:column;align-items:center;gap:14px}
+  .taskbar{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:6px 11px 6px 8px;
+    font-size:10.5px;color:var(--ink-2);letter-spacing:.02em}
+  .taskbar .dot{width:18px;height:18px;border-radius:5px;background:#0b0d14;display:grid;place-items:center}
+  .taskbar .dot svg{width:14px;height:14px}
+  .taskbar .lbl{opacity:.85}
+  .taskbar .ind{width:4px;height:4px;border-radius:50%;background:var(--accent-2);
+    box-shadow:0 0 7px 1px rgba(34,211,238,.7);margin-left:2px;animation:pulse 1.6s ease-in-out infinite}
+  .replay{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-4);cursor:pointer;border:none;background:none;display:inline-flex;align-items:center;gap:7px}
+  .replay:hover{color:var(--ink-2)}
+
+  /* ---------- catalog ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:38px 44px}
+  .cell{display:flex;flex-direction:column;gap:16px}
+  .cap{display:flex;gap:12px;align-items:flex-start}
+  .cap .n{font-family:var(--disp);font-weight:600;font-size:13px;color:var(--accent-2);
+    font-variant-numeric:tabular-nums;flex:0 0 auto;line-height:1.45}
+  .cap .ct .name{font-family:var(--disp);font-weight:600;font-size:13.5px;color:var(--ink);margin-bottom:4px}
+  .cap .ct .desc{font-size:11px;line-height:1.6;color:var(--ink-3);max-width:300px}
+  .cell.fail .cap .n{color:var(--danger)}
+
+  .foot{margin-top:64px;font-size:10.5px;line-height:1.8;color:var(--ink-4);letter-spacing:.02em}
+  .foot b{color:var(--ink-3);font-weight:500}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="ph">
+    <h1><span class="o">O</span>rrery Updater</h1>
+    <span class="exe">orrery-updater.exe</span>
+  </div>
+  <p class="lede">A frameless, always-on-top mini-window shown while the app is closed and the new
+  version installs. No close or minimize chrome — it's a viewer, not a controller. Lifetime is
+  3–10 seconds with zero interaction; the only decision point is the failed state.</p>
+
+  <div class="rule"></div>
+
+  <!-- HERO -->
+  <div class="kicker">Happy path · live</div>
+  <div class="stage">
+    <div class="stage-side">
+      <h2>The 3-second life</h2>
+      <p>Preparing waits for the old app to exit, the installer drives a real 0→100%, the bar pulses
+      full, and the window dissolves the instant the new Orrery appears. It loops here for preview.</p>
+    </div>
+    <div class="hero-hold">
+      <div id="hero"></div>
+      <div class="taskbar">
+        <span class="dot"><svg id="taskMark" viewBox="0 0 100 100"></svg></span>
+        <span class="lbl">Orrery Update</span>
+        <span class="ind"></span>
+      </div>
+      <button class="replay" id="replay">↻ replay sequence</button>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- CATALOG -->
+  <div class="kicker">Every state</div>
+  <div class="grid" id="grid"></div>
+
+  <p class="foot">
+    <b>Window</b> — 340 × 110, frameless, rounded 14px, drop shadow, always-on-top, centered, not resizable, dark-only.<br>
+    <b>Progress</b> — MSI emits a real percent (clamped to move only forward); NSIS emits none, so the bar stays indeterminate.<br>
+    <b>Type</b> — Space Grotesk titles · JetBrains Mono status &amp; tabular percent. <b>Accent</b> #a855f7, danger #ff5d6c.
+  </p>
+
+</div>
+
+<script>
+/* ---------- epicycle geometry (shared with the splash) ---------- */
+var A=22,B=13,K=-4,TAU=Math.PI*2;
+function epi(t){return [50+A*Math.cos(t)+B*Math.cos(K*t),50+A*Math.sin(t)+B*Math.sin(K*t)];}
+var EPI_D=(function(){var N=260,d="";for(var i=0;i<=N;i++){var t=i/N*TAU,p=epi(t);d+=(i?"L":"M")+p[0].toFixed(2)+" "+p[1].toFixed(2)+" ";}return d+"Z";})();
+var REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches;
+var uid=0;
+
+function makeLogo(px, danger){
+  var id=++uid;
+  var grad = danger
+    ? '<stop offset="0" stop-color="#ff8a94"/><stop offset=".5" stop-color="#ff5d6c"/><stop offset="1" stop-color="#c23252"/>'
+    : '<stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/>';
+  var core = danger ? '#ff5d6c' : '#a855f7';
+  var pen = danger ? '#ff8a94' : '#22d3ee';
+  var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox','0 0 100 100'); svg.setAttribute('width',px); svg.setAttribute('height',px);
+  svg.innerHTML=
+    '<defs>'+
+      '<linearGradient id="g'+id+'" x1="0" y1="0" x2="1" y2="1">'+grad+'</linearGradient>'+
+      '<radialGradient id="c'+id+'"><stop offset="0" stop-color="#fff"/><stop offset=".42" stop-color="'+core+'"/><stop offset="1" stop-color="'+core+'" stop-opacity="0"/></radialGradient>'+
+    '</defs>'+
+    '<circle cx="50" cy="50" r="22" fill="none" stroke="#6b7488" stroke-width=".7" stroke-opacity=".3"/>'+
+    '<path id="p'+id+'" d="'+EPI_D+'" fill="none" stroke="url(#g'+id+')" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+
+    '<circle id="e'+id+'" r="13" fill="none" stroke="#6b7488" stroke-width=".7" stroke-opacity=".4"/>'+
+    '<line id="a'+id+'" stroke="'+pen+'" stroke-width="1.2" stroke-opacity=".6"/>'+
+    '<circle class="core-pulse" cx="50" cy="50" r="8.5" fill="url(#c'+id+')"/>'+
+    '<circle id="n'+id+'" r="4.2" fill="'+pen+'"/>';
+  var path=svg.querySelector('#p'+id), L=path.getTotalLength();
+  var penC=svg.querySelector('#n'+id), epc=svg.querySelector('#e'+id), arm=svg.querySelector('#a'+id);
+  function ease(x){return 1-Math.pow(1-x,3);}
+  var raf=null, to1=null, to2=null;
+  function still(){
+    path.style.strokeDasharray='none'; path.style.strokeDashoffset=0;
+    epc.style.opacity=0; arm.style.opacity=0;
+    var s=epi(0); penC.setAttribute('cx',s[0]); penC.setAttribute('cy',s[1]);
+  }
+  function loop(){
+    var DUR=2000,HOLD=1100,start=performance.now();
+    path.style.strokeDasharray=L; path.style.strokeDashoffset=L;
+    epc.style.transition='none'; arm.style.transition='none'; epc.style.opacity=1; arm.style.opacity=1;
+    function frame(now){
+      var p=Math.min(1,(now-start)/DUR),e=ease(p);
+      path.style.strokeDashoffset=L*(1-e);
+      var t=e*TAU, def=[50+A*Math.cos(t),50+A*Math.sin(t)], pp=epi(t);
+      epc.setAttribute('cx',def[0]);epc.setAttribute('cy',def[1]);
+      penC.setAttribute('cx',pp[0]);penC.setAttribute('cy',pp[1]);
+      arm.setAttribute('x1',def[0]);arm.setAttribute('y1',def[1]);arm.setAttribute('x2',pp[0]);arm.setAttribute('y2',pp[1]);
+      if(p<1) raf=requestAnimationFrame(frame);
+      else{ epc.style.transition=arm.style.transition='opacity .3s'; epc.style.opacity=0; arm.style.opacity=0;
+            var s=epi(0); penC.setAttribute('cx',s[0]); penC.setAttribute('cy',s[1]); to1=setTimeout(loop,HOLD); }
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  if(REDUCED){ still(); } else { loop(); }
+  return svg;
+}
+
+/* ---------- banner builder ---------- */
+/* mode: prepare | msi | nsis | restart | fail */
+function makeBanner(opts){
+  var fail = opts.mode==='fail';
+  var f=document.createElement('div'); f.className='frame'+(fail?' fail':'');
+  var logo=makeLogo(44, fail); logo.classList.add('logo');
+  var col=document.createElement('div'); col.className='col';
+
+  var title=document.createElement('div'); title.className='title'; title.textContent=opts.title;
+  var srow=document.createElement('div'); srow.className='statusrow';
+  var status=document.createElement('div'); status.className='status'; status.textContent=opts.status;
+  srow.appendChild(status);
+  var pct=null;
+  if(opts.mode==='msi'){ pct=document.createElement('div'); pct.className='pct'; pct.textContent='0%'; srow.appendChild(pct); }
+
+  var bar=document.createElement('div'); bar.className='bar'; var fill=document.createElement('i'); bar.appendChild(fill);
+  if(opts.mode==='prepare') bar.className='bar shim';
+  if(opts.mode==='nsis')    bar.className='bar indet';
+  if(opts.mode==='msi')     bar.className='bar det';
+  if(opts.mode==='restart') bar.className='bar full pulse';
+  if(opts.mode==='fail')    bar.className='bar failbar';
+
+  col.appendChild(title); col.appendChild(srow); col.appendChild(bar);
+
+  if(fail){
+    var act=document.createElement('div'); act.className='actions';
+    var b1=document.createElement('button'); b1.className='btn primary'; b1.textContent='Relaunch now';
+    var b2=document.createElement('button'); b2.className='btn ghost'; b2.textContent='View log';
+    act.appendChild(b1); act.appendChild(b2); col.appendChild(act);
+  }
+
+  f.appendChild(logo); f.appendChild(col);
+  return {el:f, title:title, status:status, pct:pct, bar:bar, fill:fill};
+}
+
+/* drive MSI progress for catalog (loops) */
+function driveMsi(b){
+  if(REDUCED){ b.fill.style.width='64%'; b.pct.textContent='64%'; b.status.textContent='copying files'; return; }
+  var steps=[[0.25,'copying files'],[0.55,'copying files'],[0.78,'registering components'],[0.93,'updating shortcuts'],[1,'finishing up']];
+  function run(){
+    var start=performance.now(), DUR=4200, shown=0, last=0;
+    function frame(now){
+      var p=Math.min(1,(now-start)/DUR);
+      // jitter source clamped forward
+      var v=Math.max(last, p*100); last=v;
+      b.fill.style.width=v.toFixed(1)+'%'; b.pct.textContent=Math.round(v)+'%';
+      var msg=steps[0][1]; for(var i=0;i<steps.length;i++){ if(p<=steps[i][0]){msg=steps[i][1];break;} }
+      b.status.textContent=msg;
+      if(p<1) requestAnimationFrame(frame);
+      else setTimeout(function(){ b.fill.style.transition='none'; b.fill.style.width='0%'; b.pct.textContent='0%';
+        requestAnimationFrame(function(){ b.fill.style.transition='width .25s linear'; run(); }); }, 900);
+    }
+    requestAnimationFrame(frame);
+  }
+  run();
+}
+
+/* fail countdown (loops) */
+function driveFail(b){
+  var base='installer exited with an error — keeping v0.2.2';
+  if(REDUCED){ b.status.textContent=base+' · relaunching in 5s'; return; }
+  function run(){
+    var n=5;
+    b.status.textContent=base+' · relaunching in '+n+'s';
+    var iv=setInterval(function(){
+      n--; if(n<=0){ clearInterval(iv); b.status.textContent=base+' · relaunching…'; setTimeout(run,1600); return; }
+      b.status.textContent=base+' · relaunching in '+n+'s';
+    },1000);
+  }
+  run();
+}
+
+/* ---------- catalog ---------- */
+var CAT=[
+  {n:'01',name:'Preparing',mode:'prepare',title:'Updating Orrery',status:'preparing…',
+   desc:'Brief sub-second beat while the stub waits for the old app to fully exit. Indeterminate shimmer.'},
+  {n:'02',name:'Installing — MSI',mode:'msi',title:'Updating to v0.2.3',status:'copying files',
+   desc:'Windows Installer supplies the live action and a real 0→100%. Percent is tabular and only moves forward.'},
+  {n:'03',name:'Installing — NSIS',mode:'nsis',title:'Updating to v0.2.3',status:'installing…',
+   desc:'Identical layout, but this installer emits no progress data — so the bar stays indeterminate, no percent.'},
+  {n:'04',name:'Restarting',mode:'restart',title:'Updating to v0.2.3',status:'restarting Orrery…',
+   desc:'Bar full with a brief pulse. The window auto-closes the moment the new app window appears.'},
+  {n:'05',name:'Failed',mode:'fail',title:'Update failed',status:'',
+   desc:'Accent shifts to danger red. The old version relaunches after a 5s countdown; two quiet actions are the only buttons in the component.'}
+];
+var grid=document.getElementById('grid');
+CAT.forEach(function(c){
+  var cell=document.createElement('div'); cell.className='cell'+(c.mode==='fail'?' fail':'');
+  var cap=document.createElement('div'); cap.className='cap';
+  cap.innerHTML='<div class="n">'+c.n+'</div><div class="ct"><div class="name">'+c.name+'</div><div class="desc">'+c.desc+'</div></div>';
+  var b=makeBanner(c);
+  cell.appendChild(cap); cell.appendChild(b.el); grid.appendChild(cell);
+  if(c.mode==='msi') driveMsi(b);
+  if(c.mode==='fail') driveFail(b);
+});
+
+/* taskbar mini mark (static) */
+(function(){
+  var s=document.getElementById('taskMark');
+  s.innerHTML='<defs><linearGradient id="tg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>'+
+    '<radialGradient id="tc"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#a855f7"/><stop offset="1" stop-color="#a855f7" stop-opacity="0"/></radialGradient></defs>'+
+    '<path d="'+EPI_D+'" fill="none" stroke="url(#tg)" stroke-width="6" stroke-linejoin="round"/>'+
+    '<circle cx="50" cy="50" r="13" fill="url(#tc)"/>';
+})();
+
+/* ---------- hero: happy-path state machine ---------- */
+(function(){
+  var hero=document.getElementById('hero');
+  var b=makeBanner({mode:'prepare',title:'Updating Orrery',status:'preparing…'});
+  hero.appendChild(b.el);
+  var timers=[];
+  function clearAll(){ timers.forEach(clearTimeout); timers.forEach(clearInterval); timers=[]; }
+  function T(fn,ms){ var id=setTimeout(fn,ms); timers.push(id); return id; }
+  function setBar(cls){ b.bar.className='bar '+cls; }
+
+  function reset(){
+    b.el.classList.remove('closing');
+    b.title.textContent='Updating Orrery'; b.status.textContent='preparing…';
+    setBar('shim'); if(b.pct) b.pct.textContent='';
+  }
+  function run(){
+    clearAll(); reset();
+    if(REDUCED){ // settle on installing mid-state
+      b.title.textContent='Updating to v0.2.3'; b.status.textContent='copying files'; setBar('det'); b.fill.style.width='64%'; return;
+    }
+    // 1) preparing ~0.9s
+    T(function(){
+      // 2) installing MSI
+      b.title.textContent='Updating to v0.2.3'; setBar('det');
+      var start=performance.now(), DUR=3600, last=0;
+      var steps=[[0.3,'copying files'],[0.62,'registering components'],[0.86,'updating shortcuts'],[1,'finishing up']];
+      (function frame(now){
+        var p=Math.min(1,(now-start)/DUR), v=Math.max(last,p*100); last=v;
+        b.fill.style.width=v.toFixed(1)+'%';
+        var msg=steps[0][1]; for(var i=0;i<steps.length;i++){ if(p<=steps[i][0]){msg=steps[i][1];break;} }
+        b.status.textContent=msg;
+        if(p<1) requestAnimationFrame(frame);
+        else {
+          // 3) restarting ~1.1s
+          b.status.textContent='restarting Orrery…'; setBar('full pulse'); b.fill.style.width='100%';
+          T(function(){
+            // 4) window dissolves as the app appears
+            b.el.classList.add('closing');
+            T(run, 1400); // pause then loop
+          }, 1150);
+        }
+      })(requestAnimationFrame ? performance.now() : 0);
+    }, 900);
+  }
+  run();
+  document.getElementById('replay').addEventListener('click', run);
+})();
+</script>
+</body>
+</html>

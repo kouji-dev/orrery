@@ -1,0 +1,65 @@
+/* ============================================================
+   Vortex — Base reset + brand atmosphere + utility atoms
+   Applied globally. Dark stage by default.
+   ============================================================ */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  font-family: var(--vx-font-sans);
+  font-size: var(--vx-text-ui);
+  line-height: var(--vx-lh-body);
+  background: var(--vx-bg);
+  color: var(--vx-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv11", "ss01";
+}
+
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+input, textarea, select { font: inherit; color: inherit; }
+
+/* ---- brand atmosphere: drop on any full-bleed dark stage ---- */
+.vx-atmosphere {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: var(--vx-atmosphere);
+}
+.vx-grid {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0.6;
+  background-image: var(--vx-grid-lines);
+  background-size: var(--vx-grid-size);
+  -webkit-mask-image: radial-gradient(ellipse 1200px 900px at 50% 20%, #000 30%, transparent 80%);
+  mask-image: radial-gradient(ellipse 1200px 900px at 50% 20%, #000 30%, transparent 80%);
+}
+
+/* ---- utility atoms ---- */
+.vx-mono   { font-family: var(--vx-font-mono); font-size: var(--vx-text-sm); }
+.vx-serif  { font-family: var(--vx-font-serif); }
+.vx-display{ font-family: var(--vx-font-display); letter-spacing: var(--vx-track-display); }
+.vx-tnum   { font-variant-numeric: tabular-nums; }
+.vx-label  {
+  font-family: var(--vx-font-mono);
+  font-size: var(--vx-text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--vx-track-label);
+  color: var(--vx-ink-3);
+}
+.vx-grad-text {
+  background: var(--vx-grad);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+
+/* ---- custom scrollbars ---- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--vx-line-2); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--vx-line-3); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- shared keyframes ---- */
+@keyframes vx-spin { to { transform: rotate(360deg); } }
+@keyframes vx-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes vx-blink { 50% { opacity: 0; } }
+@keyframes vx-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
