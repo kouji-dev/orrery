@@ -7,6 +7,7 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use uuid::Uuid;
 
 pub mod commands;
+pub mod tree;
 
 /// One-shot freshness window: the push loop refreshes every 5s while agents
 /// run, so a snapshot at most one period old is as good as a fresh sweep.
@@ -127,27 +128,35 @@ impl MetricsSampler {
     /// Sample the app subtree (pid `app_pid`, labelled "Orrery") plus one subtree
     /// per agent. Each row aggregates the pid AND all its descendants — so the
     /// "Orrery" row rolls up the Rust core PLUS its WebView2 child processes (the UI
-    /// renderer/GPU procs), which hold the bulk of the app's memory. Per-row cpu% is
-    /// normalized by the logical core count (machine-relative, like Task Manager).
-    /// Totals are the SUM of the rows — the cpu/memory used by orrery + its agents.
+    /// renderer/GPU procs), which hold the bulk of the app's memory. Agent roots are
+    /// CARVED OUT of the app row (agents spawn as direct children of orrery, so
+    /// without the carve the app row double-counts every agent — and disagrees with
+    /// the A7.7 tree, which carves). Per-row cpu% is normalized by the logical core
+    /// count (machine-relative, like Task Manager). Totals are the SUM of the rows —
+    /// the cpu/memory used by orrery + its agents.
     pub fn sample(&self, app_pid: u32, agents: &[(Uuid, u32)]) -> SystemMetrics {
         let map = self.process_map();
         let cores = self.cpu_count.max(1) as f32;
 
+        let agent_pids: std::collections::HashSet<u32> =
+            agents.iter().map(|(_, pid)| *pid).collect();
         let mut procs = Vec::with_capacity(agents.len() + 1);
         procs.push(subtree_metric(
             "app".into(),
             "Orrery".into(),
             app_pid,
             &map,
+            &agent_pids,
             cores,
         ));
+        let no_stop = std::collections::HashSet::new();
         for (id, pid) in agents {
             procs.push(subtree_metric(
                 id.to_string(),
                 id.to_string(),
                 *pid,
                 &map,
+                &no_stop,
                 cores,
             ));
         }
@@ -159,6 +168,27 @@ impl MetricsSampler {
             cores: self.cpu_count as u32,
             procs,
         }
+    }
+
+    /// Test-only view of the raw per-pid tree inputs (same mapping as
+    /// `SharedSampler::refresh_and_procs`) for the real-system probe.
+    #[cfg(test)]
+    pub(crate) fn probe_proc_infos(&self) -> HashMap<u32, tree::ProcInfo> {
+        self.sys
+            .processes()
+            .iter()
+            .map(|(pid, proc_)| {
+                (
+                    pid.as_u32(),
+                    tree::ProcInfo {
+                        parent: proc_.parent().map(|p| p.as_u32()),
+                        cpu: proc_.cpu_usage(),
+                        rss: proc_.memory(),
+                        name: proc_.name().to_string_lossy().into_owned(),
+                    },
+                )
+            })
+            .collect()
     }
 
     fn process_map(&self) -> HashMap<u32, ProcSample> {
@@ -180,15 +210,17 @@ impl MetricsSampler {
 }
 
 /// Build one `ProcMetric` by rolling up `root`'s whole subtree (root + descendants).
-/// `cores` divides the summed (one-core-relative) cpu into a machine-relative %.
+/// Pids in `stop` (and their subtrees) are excluded — the app row carves out agent
+/// roots. `cores` divides the summed (one-core-relative) cpu into a machine-relative %.
 fn subtree_metric(
     id: String,
     label: String,
     root: u32,
     map: &HashMap<u32, ProcSample>,
+    stop: &std::collections::HashSet<u32>,
     cores: f32,
 ) -> ProcMetric {
-    let (cpu, mem_bytes) = aggregate_subtree(root, map);
+    let (cpu, mem_bytes) = aggregate_subtree(root, map, stop);
     ProcMetric {
         id,
         label,
@@ -308,6 +340,44 @@ impl SharedSampler {
     fn put_snapshot(&self, m: SystemMetrics) {
         self.inner.lock().unwrap().snapshot = Some((m, Instant::now()));
     }
+
+    /// Scoped refresh + a per-pid snapshot (parent/cpu/rss/name) for the A7.7
+    /// process-tree builder. Reuses the SAME warm sampler and scoped-refresh
+    /// discipline as the metrics loop: only known pids + their discovered
+    /// descendants are refreshed each call, and descendant REdiscovery happens
+    /// at the slower `DISCOVERY_EVERY` cadence — never a full sweep per poll.
+    ///
+    /// `discover` forces a full sweep instead: the panel passes it on tab
+    /// reveal, because children spawned since the last sweep (the WebView2
+    /// family right after startup — most of the app's memory) are otherwise
+    /// invisible for up to DISCOVERY_EVERY polls. User-triggered + once per
+    /// reveal, so the sweep cost is off the steady-state path.
+    pub fn refresh_and_procs(&self, roots: &[u32], discover: bool) -> HashMap<u32, tree::ProcInfo> {
+        let mut s = self.inner.lock().unwrap();
+        if discover {
+            s.sampler.refresh();
+        } else {
+            s.sampler.refresh_scoped(roots);
+        }
+        let cores = s.sampler.cpu_count.max(1) as f32;
+        s.sampler
+            .sys
+            .processes()
+            .iter()
+            .map(|(pid, proc_)| {
+                (
+                    pid.as_u32(),
+                    tree::ProcInfo {
+                        parent: proc_.parent().map(|p| p.as_u32()),
+                        // machine-relative %, like the flat metrics rows
+                        cpu: proc_.cpu_usage() / cores,
+                        rss: proc_.memory(),
+                        name: proc_.name().to_string_lossy().into_owned(),
+                    },
+                )
+            })
+            .collect()
+    }
 }
 
 /// Returns `true` when a full discovery sweep is required: either a root pid is
@@ -319,9 +389,14 @@ fn needs_full_sweep(roots: &[u32], map: &HashMap<u32, ProcSample>, streak: u32) 
 }
 
 /// Pure roll-up: sum cpu% and memory over `root` and every process whose ancestry
-/// chain reaches `root`. Built from a parent->child adjacency so it's testable from
-/// a synthetic process map without touching the real machine.
-fn aggregate_subtree(root: u32, map: &HashMap<u32, ProcSample>) -> (f32, u64) {
+/// chain reaches `root`, skipping `stop` pids and their subtrees (the agent
+/// carve-out). Built from a parent->child adjacency so it's testable from a
+/// synthetic process map without touching the real machine.
+fn aggregate_subtree(
+    root: u32,
+    map: &HashMap<u32, ProcSample>,
+    stop: &std::collections::HashSet<u32>,
+) -> (f32, u64) {
     // parent pid -> its direct children
     let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
     for (pid, s) in map {
@@ -344,7 +419,7 @@ fn aggregate_subtree(root: u32, map: &HashMap<u32, ProcSample>) -> (f32, u64) {
             mem += s.mem_bytes;
         }
         if let Some(kids) = children.get(&pid) {
-            stack.extend(kids.iter().copied());
+            stack.extend(kids.iter().filter(|k| !stop.contains(k)).copied());
         }
     }
     (cpu, mem)
@@ -427,7 +502,7 @@ mod tests {
     fn aggregates_full_subtree_including_grandchildren() {
         let m = fixture();
         // app subtree = 1 + 2 + 3 + 4 + 10 + 11 (10 is parented to 1 in this fixture)
-        let (cpu, mem) = aggregate_subtree(1, &m);
+        let (cpu, mem) = aggregate_subtree(1, &m, &std::collections::HashSet::new());
         assert_eq!(cpu, 1.0 + 2.0 + 3.0 + 4.0 + 10.0 + 11.0);
         assert_eq!(mem, 100 + 200 + 300 + 400 + 1000 + 1100);
     }
@@ -436,7 +511,7 @@ mod tests {
     fn aggregates_a_nested_branch() {
         let m = fixture();
         // node 2 + its child 4
-        let (cpu, mem) = aggregate_subtree(2, &m);
+        let (cpu, mem) = aggregate_subtree(2, &m, &std::collections::HashSet::new());
         assert_eq!(cpu, 2.0 + 4.0);
         assert_eq!(mem, 200 + 400);
     }
@@ -444,7 +519,7 @@ mod tests {
     #[test]
     fn missing_root_yields_zero() {
         let m = fixture();
-        let (cpu, mem) = aggregate_subtree(123456, &m);
+        let (cpu, mem) = aggregate_subtree(123456, &m, &std::collections::HashSet::new());
         assert_eq!(cpu, 0.0);
         assert_eq!(mem, 0);
     }
@@ -469,7 +544,7 @@ mod tests {
                 mem_bytes: 20,
             },
         );
-        let (cpu, mem) = aggregate_subtree(1, &m);
+        let (cpu, mem) = aggregate_subtree(1, &m, &std::collections::HashSet::new());
         assert_eq!(cpu, 3.0);
         assert_eq!(mem, 30);
     }
@@ -482,16 +557,30 @@ mod tests {
         let m = fixture();
         // cores = 1.0 → cpu stays the raw subtree sum (the /cores normalization is a
         // no-op here, so the roll-up math is asserted directly).
-        let app = subtree_metric("app".into(), "Orrery".into(), 1, &m, 1.0);
+        let none = std::collections::HashSet::new();
+        let app = subtree_metric("app".into(), "Orrery".into(), 1, &m, &none, 1.0);
         let agent_id = Uuid::new_v4();
 
         // point the agent row at node 10's branch directly.
-        let agent = subtree_metric(agent_id.to_string(), "nova".into(), 10, &m, 1.0);
+        let agent = subtree_metric(agent_id.to_string(), "nova".into(), 10, &m, &none, 1.0);
 
         assert_eq!(app.id, "app");
         assert_eq!(app.label, "Orrery");
         assert_eq!(agent.cpu, 10.0 + 11.0);
         assert_eq!(agent.mem_bytes, 1000 + 1100);
+    }
+
+    // The app row carves agent roots out (agents are direct children of orrery;
+    // without the carve the app row double-counts every agent and disagrees
+    // with the A7.7 tree — the "Resources says 1.1GB, tree says 14MB" bug).
+    #[test]
+    fn app_row_carves_agent_subtrees_out() {
+        let m = fixture();
+        let stop: std::collections::HashSet<u32> = [10].into();
+        let app = subtree_metric("app".into(), "Orrery".into(), 1, &m, &stop, 1.0);
+        // 1 + 2 + 3 + 4 only — the agent branch (10 + 11) is excluded
+        assert_eq!(app.mem_bytes, 100 + 200 + 300 + 400);
+        assert_eq!(app.cpu, 1.0 + 2.0 + 3.0 + 4.0);
     }
 
     // cpu% is normalized by the logical core count → a subtree summing to 20%
@@ -501,7 +590,7 @@ mod tests {
     fn cpu_is_normalized_by_core_count() {
         let m = fixture();
         // node 10 + child 11 = 10.0 + 11.0 = 21.0 raw; /20 cores = 1.05.
-        let row = subtree_metric("a".into(), "nova".into(), 10, &m, 20.0);
+        let row = subtree_metric("a".into(), "nova".into(), 10, &m, &std::collections::HashSet::new(), 20.0);
         assert!((row.cpu - (21.0 / 20.0)).abs() < f32::EPSILON);
         // memory is NOT divided by cores.
         assert_eq!(row.mem_bytes, 1000 + 1100);

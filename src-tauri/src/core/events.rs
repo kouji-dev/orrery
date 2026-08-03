@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Runtime};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Change {
@@ -28,7 +28,7 @@ pub fn emit_entity<R: Runtime, T: Serialize + Clone>(
     change: Change,
     payload: T,
 ) {
-    let _ = app.emit(&event_name(entity, change), payload);
+    let _ = crate::core::emit::emit_tracked(app, &event_name(entity, change), &payload);
 }
 
 #[cfg(test)]

@@ -5,8 +5,11 @@ import {
   Agent,
   AgentFile,
   Commit,
+  ConflictFile,
   FileDiff,
   FileNode,
+  GitSessionState,
+  MergeSession,
   PermissionQuestion,
   PermissionSuggestion,
   ToolDetection,
@@ -127,6 +130,32 @@ export class AgentsStore {
    *  (commit/push/rebase/merge) into the agent's running PTY. */
   action(id: string, kind: "commit" | "push" | "rebase" | "merge"): Promise<void> {
     return this.bridge.invoke(Commands.AgentAction, { id, kind });
+  }
+  // ---- native merge + conflict session (A3.5 / A3.6) ----
+  /** Native merge of `branch` into the agent's branch. Empty `conflicts` =
+   *  merged clean (or FF/up to date); non-empty = session now in progress. */
+  merge(id: string, branch: string): Promise<MergeSession> {
+    return this.bridge.invoke<MergeSession>(Commands.AgentMerge, { id, branch });
+  }
+  /** Still-conflicted files of the in-progress session. */
+  conflicts(id: string): Promise<ConflictFile[]> {
+    return this.bridge.invoke<ConflictFile[]>(Commands.AgentConflicts, { id });
+  }
+  /** Write `content` as the resolution of `path` and stage it. */
+  conflictResolve(id: string, path: string, content: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentConflictResolve, { id, path, content });
+  }
+  /** Abort the in-progress merge (drop state, hard-reset to HEAD). */
+  mergeAbort(id: string): Promise<void> {
+    return this.bridge.invoke(Commands.AgentMergeAbort, { id });
+  }
+  /** Commit the fully-resolved merge → short sha. */
+  mergeContinue(id: string, message?: string): Promise<string> {
+    return this.bridge.invoke<string>(Commands.AgentMergeContinue, { id, message });
+  }
+  /** Merge/rebase/cherry-pick in progress? + remaining conflict count. */
+  sessionState(id: string): Promise<GitSessionState> {
+    return this.bridge.invoke<GitSessionState>(Commands.AgentSessionState, { id });
   }
   /** Old/new content of a file for the diff view. `oldPath` (the pre-move path)
    *  is passed for renamed/moved files so the OLD side reads the right content. */

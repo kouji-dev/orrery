@@ -1,0 +1,36 @@
+/* ============================================================
+   Vortex — Spacing & layout tokens
+   4px base grid. Dense by default (enterprise product cadence).
+   ============================================================ */
+
+:root {
+  --vx-space-0:  0;
+  --vx-space-1:  2px;
+  --vx-space-2:  4px;
+  --vx-space-3:  6px;
+  --vx-space-4:  8px;
+  --vx-space-5:  10px;
+  --vx-space-6:  12px;
+  --vx-space-7:  14px;
+  --vx-space-8:  16px;
+  --vx-space-10: 20px;
+  --vx-space-12: 24px;
+  --vx-space-16: 32px;
+  --vx-space-20: 40px;
+  --vx-space-24: 48px;
+  --vx-space-32: 64px;
+  --vx-space-40: 80px;
+  --vx-space-48: 96px;
+  --vx-space-60: 120px;
+
+  /* app chrome dimensions (from the real Vortex shell) */
+  --vx-topbar-h:   44px;
+  --vx-sidebar-w:  220px;
+  --vx-control-h:  28px;   /* buttons, inputs, chips */
+  --vx-control-sm: 24px;
+  --vx-row-h:      30px;
+
+  /* content widths */
+  --vx-max-content: 1280px;
+  --vx-max-prose:   680px;
+}

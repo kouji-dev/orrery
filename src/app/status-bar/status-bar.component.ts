@@ -10,10 +10,12 @@ import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { MetricsStore } from "../metrics/metrics.store";
 import { CostStore } from "../metrics/cost.store";
+import { TelemetryStore } from "../metrics/telemetry.store";
 import { DevPanelStore } from "../dev-tools/dev-panel.store";
 import { VersionBadgeComponent } from "../shared/version-badge.component";
 import { SettingsStore } from "../settings/settings.store";
 import { DiagnosticsService } from "../shared/diagnostics.service";
+import { ToolWindowStore } from "../tool-window/tool-window.store";
 
 @Component({
   selector: "app-status-bar",
@@ -44,6 +46,19 @@ import { DiagnosticsService } from "../shared/diagnostics.service";
           ui.worktreeRoot
         }}</span
       >
+
+      <!-- bottom tool-window trigger (design: the dock is command-driven; this
+           is its one discoverable affordance — Branches/Local History stay a
+           tab-switch away once the dock is open). Branch icon by request. -->
+      <button
+        type="button"
+        class="sb-link"
+        [style.color]="toolWindow.panel() ? 'var(--accent)' : null"
+        (click)="toolWindow.toggle('graph')"
+        title="Git Graph (tool window)"
+      >
+        <app-icon name="branch" size="sm" [px]="11" />Git Graph
+      </button>
       <span
         class="tnum"
         style="margin-left:auto;display:flex;gap:var(--sp-2);align-items:center"
@@ -53,6 +68,14 @@ import { DiagnosticsService } from "../shared/diagnostics.service";
           <span style="color:var(--ink-4)">·</span>
         }
       </span>
+
+      <!-- A0.7 visible indicator: the raw emit trace is recording (opt-in,
+           auto-off after 30min/200MB) — click opens the Emits tab -->
+      @if (telemetry.traceActive()) {
+        <button type="button" class="sb-link sb-rec" (click)="devPanel.openEmits()" title="Raw emit trace is recording (auto-off after 30min or 200MB) — click to open the Emits panel">
+          <span class="sb-recdot"></span>TRACE
+        </button>
+      }
 
       <!-- open the rolling diagnostics log file -->
       <button type="button" class="sb-link" (click)="diag.openLog()" title="Open log file">
@@ -106,7 +129,9 @@ import { DiagnosticsService } from "../shared/diagnostics.service";
         style="display:flex;align-items:center;gap:var(--sp-3);border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:var(--fs-xs);padding:0;color:var(--ink-3)"
       >
         <app-icon name="cpu" size="sm" [px]="11" [color]="'var(--accent)'" />
-        <span class="tnum">CPU {{ cpuPct() }}% · MEM {{ totalMem() }}</span>
+        <!-- A0.6: the split is honest — users blame the IDE for the agents'
+             memory; the process tree in the dev console is its drill-down -->
+        <span class="tnum">CPU {{ cpuPct() }}% · Orrery {{ orreryMem() }}@if (agentsMemBytes() > 0) {<span style="color:var(--ink-4)"> · </span>agents {{ agentsMem() }}}</span>
         <!-- mini bar reflecting total cpu (clamped 0–100) -->
         <span
           style="position:relative;width:30px;height:var(--sp-2);border-radius:2px;background:var(--panel-2);overflow:hidden"
@@ -139,6 +164,27 @@ import { DiagnosticsService } from "../shared/diagnostics.service";
       .sb-link:hover {
         color: var(--ink-2);
       }
+      .sb-rec {
+        color: var(--st-blocked);
+        font-weight: 600;
+        letter-spacing: 0.06em;
+      }
+      .sb-recdot {
+        width: var(--sp-3);
+        height: var(--sp-3);
+        border-radius: 50%;
+        background: var(--st-blocked);
+        animation: sbrec 1.5s ease-in-out infinite;
+      }
+      @keyframes sbrec {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.35;
+        }
+      }
       .cost-tip {
         opacity: 0;
         visibility: hidden;
@@ -165,6 +211,8 @@ export class StatusBarComponent {
   readonly devPanel = inject(DevPanelStore);
   readonly settings = inject(SettingsStore);
   readonly diag = inject(DiagnosticsService);
+  readonly telemetry = inject(TelemetryStore);
+  readonly toolWindow = inject(ToolWindowStore);
 
   readonly running = computed(
     () => this.runtime.agents().filter((a) => a.status === "running").length,
@@ -179,10 +227,18 @@ export class StatusBarComponent {
     () => Math.round((this.metrics.metrics()?.totalCpu ?? 0) * 10) / 10,
   );
   readonly cpuBar = computed(() => Math.min(100, Math.max(0, this.cpuPct())));
-  // total memory used by orrery + agents (e.g. "432.3 MB")
-  readonly totalMem = computed(() =>
-    this.fmtMem(this.metrics.metrics()?.totalMemBytes ?? 0),
+  // ---- A0.6 memory split: our subtree vs the agents' (fed from the same
+  // subtree rollups the process tree drills into; "app" is Orrery + WebView2) ----
+  readonly orreryMemBytes = computed(
+    () => this.metrics.metrics()?.procs.find((p) => p.id === "app")?.memBytes ?? 0,
   );
+  readonly agentsMemBytes = computed(() =>
+    (this.metrics.metrics()?.procs ?? [])
+      .filter((p) => p.id !== "app")
+      .reduce((a, p) => a + p.memBytes, 0),
+  );
+  readonly orreryMem = computed(() => this.fmtMem(this.orreryMemBytes()));
+  readonly agentsMem = computed(() => this.fmtMem(this.agentsMemBytes()));
 
   /** Human-readable bytes: B / KB / MB / GB, one decimal above KB. */
   fmtMem(bytes: number): string {

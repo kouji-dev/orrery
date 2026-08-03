@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { CommandRegistryService } from '../commands/command-registry.service';
+import { CommandOverlaysComponent } from '../commands/overlays.component';
 import { ContextMenuComponent } from '../context-menu/context-menu.component';
 import { AddProjectModalComponent } from '../modals/add-project-modal.component';
 import { DeleteWorktreeModalComponent } from '../modals/delete-worktree-modal.component';
@@ -20,6 +22,8 @@ import { TweaksPanelComponent } from '../tweaks/tweaks-panel.component';
 import { DevPanelComponent } from '../dev-tools/dev-panel.component';
 import { PaneManagerComponent } from '../workspace/pane-manager.component';
 import { TicketPageComponent } from '../backlog/ticket-page.component';
+import { ToolWindowComponent } from '../tool-window/tool-window.component';
+import { ToolWindowStore } from '../tool-window/tool-window.store';
 
 declare const ngDevMode: boolean | undefined;
 
@@ -45,6 +49,8 @@ declare const ngDevMode: boolean | undefined;
     ContextMenuComponent,
     TweaksPanelComponent,
     DevPanelComponent,
+    CommandOverlaysComponent,
+    ToolWindowComponent,
   ],
   template: `
     <div class="bg-texture"></div>
@@ -63,14 +69,21 @@ declare const ngDevMode: boolean | undefined;
           <app-sidebar />
         }
 
-        @switch (ui.activeTabKind()) {
-          @case ('orchestrator') { <app-overview /> }
-          @case ('backlog') { <app-backlog /> }
-          @case ('ticket') {
-            <app-ticket-page [ticketId]="ui.activeTicketId()!" />
+        <!-- center column: the active tab's content with the bottom tool
+             window (IntelliJ-style dock) docked under it when open -->
+        <div class="center-col">
+          @switch (ui.activeTabKind()) {
+            @case ('orchestrator') { <app-overview /> }
+            @case ('backlog') { <app-backlog /> }
+            @case ('ticket') {
+              <app-ticket-page [ticketId]="ui.activeTicketId()!" />
+            }
+            @default { <app-pane-manager [tabId]="ui.activeTab()" /> }
           }
-          @default { <app-pane-manager [tabId]="ui.activeTab()" /> }
-        }
+          @if (toolWindow.panel()) {
+            <app-tool-window />
+          }
+        </div>
 
         @if (ui.tweaks().rightPanel) {
           <app-right-panel />
@@ -94,6 +107,7 @@ declare const ngDevMode: boolean | undefined;
     }
     <app-whats-new-modal />
     <app-update-toast />
+    <app-command-overlays />
     <app-context-menu />
     <div class="anchor-rail">
       <app-tweaks-panel />
@@ -102,6 +116,18 @@ declare const ngDevMode: boolean | undefined;
   `,
   styles: [
     `
+      /* The workspace's middle column: the active tab content in the 1fr row,
+         the bottom tool window (when open) in the auto row underneath. The tab
+         content components are display:contents hosts, so their roots become
+         the grid children directly. */
+      .center-col {
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+
       /* One fixed, bottom-right, vertical flex container for the floating action
          buttons (Tweaks + DevConsole/Perf). The DevConsole renders in EVERY build
          with NO tier trimming — feed, row expand, and the Resources tab show in
@@ -128,10 +154,14 @@ declare const ngDevMode: boolean | undefined;
 export class ShellComponent {
   readonly ui = inject(UiStore);
   readonly settings = inject(SettingsStore);
+  readonly toolWindow = inject(ToolWindowStore);
 
   constructor() {
     // Route OS file drops (absolute paths) into the terminal / prompt under the
     // drop point. Started here — the shell is the app's root UI surface.
     inject(FileDropService).start();
+    // Global keybindings (command palette, Search Everywhere, recent files…)
+    // dispatch from the command registry — one window-level listener.
+    inject(CommandRegistryService).start();
   }
 }

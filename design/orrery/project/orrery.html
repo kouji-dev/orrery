@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-density="regular" data-motion="on">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orrery — Multi-Agent Orchestration Console</title>
+  <link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg/%3E" />
+  <script>
+    (function () {
+      var A = 22, B = 13, K = -4, TAU = Math.PI * 2, d = "";
+      for (var i = 0; i <= 140; i++) {
+        var t = i / 140 * TAU;
+        var x = 50 + A * Math.cos(t) + B * Math.cos(K * t);
+        var y = 50 + A * Math.sin(t) + B * Math.sin(K * t);
+        d += (i ? "L" : "M") + x.toFixed(2) + " " + y.toFixed(2) + " ";
+      }
+      d += "Z";
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+        '<defs><linearGradient id="r" x1="0" y1="0" x2="1" y2="1">' +
+        '<stop offset="0" stop-color="%23ff5d9e"/><stop offset=".5" stop-color="%23a855f7"/><stop offset="1" stop-color="%2322d3ee"/></linearGradient>' +
+        '<radialGradient id="c"><stop offset="0" stop-color="%23ffffff"/><stop offset=".45" stop-color="%23a855f7"/><stop offset="1" stop-color="%23a855f7" stop-opacity="0"/></radialGradient></defs>' +
+        '<rect width="100" height="100" rx="22" fill="%23090a0f"/>' +
+        '<path d="' + d + '" fill="none" stroke="url(%23r)" stroke-width="5" stroke-linejoin="round"/>' +
+        '<circle cx="50" cy="50" r="13" fill="url(%23c)"/></svg>';
+      document.getElementById("favicon").setAttribute("href", "data:image/svg+xml," + svg.replace(/#/g, "%23"));
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    [data-motion="off"] *,
+    [data-motion="off"] *::after,
+    [data-motion="off"] *::before { animation: none !important; transition: none !important; }
+
+    /* ---- boot / loading screen ---- */
+    #boot{
+      position:fixed; inset:0; z-index:9999;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      background:#07080d;
+      background-image:
+        linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px),
+        radial-gradient(46% 38% at 50% 43%,rgba(168,85,247,.16),transparent 72%);
+      background-size:34px 34px,34px 34px,100% 100%,100% 100%;
+      transition:opacity .6s ease, visibility .6s;
+    }
+    #boot.done{opacity:0; visibility:hidden; pointer-events:none}
+    .boot-mark{filter:drop-shadow(0 0 26px rgba(168,85,247,.40))}
+    .boot-core-pulse{transform-box:fill-box; transform-origin:50% 50%; animation:bootpulse 2.4s ease-in-out infinite}
+    @keyframes bootpulse{0%,100%{opacity:.9}50%{opacity:.55}}
+    .boot-word{
+      font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:34px;
+      letter-spacing:.01em; color:#e8ebf2; margin-top:28px;
+      opacity:0; transform:translateY(8px); transition:opacity .7s ease, transform .7s ease;
+    }
+    .boot-word.in{opacity:1; transform:none}
+    .boot-word .o{color:#a855f7}
+    .boot-status{
+      font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.2em;
+      text-transform:uppercase; color:#6b7488; margin-top:15px; height:13px;
+      opacity:0; transition:opacity .5s;
+    }
+    .boot-status.in{opacity:1}
+    .boot-bar{margin-top:20px; width:188px; height:2px; border-radius:2px; background:rgba(255,255,255,.08); overflow:hidden}
+    .boot-bar > i{display:block; height:100%; width:0; border-radius:2px; background:linear-gradient(90deg,#ff5d9e,#a855f7,#22d3ee)}
+  </style>
+</head>
+<body>
+  <div id="boot">
+    <div class="boot-mark">
+      <svg id="bootSvg" width="156" height="156" viewBox="0 0 100 100" fill="none" aria-label="Orrery"></svg>
+    </div>
+    <div class="boot-word" id="bootWord"><span class="o">O</span>rrery</div>
+    <div class="boot-status" id="bootStatus">initializing orchestrator</div>
+    <div class="boot-bar"><i id="bootBar"></i></div>
+  </div>
+  <script>
+    (function () {
+      var A = 22, B = 13, K = -4, TAU = Math.PI * 2;
+      function epi(t){ return [50 + A*Math.cos(t) + B*Math.cos(K*t), 50 + A*Math.sin(t) + B*Math.sin(K*t)]; }
+      var N = 260, d = "";
+      for (var i = 0; i <= N; i++){ var t = i/N*TAU, p = epi(t); d += (i?"L":"M") + p[0].toFixed(2) + " " + p[1].toFixed(2) + " "; }
+      d += "Z";
+      var svg = document.getElementById('bootSvg');
+      svg.innerHTML =
+        '<defs>' +
+          '<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>' +
+          '<radialGradient id="bc"><stop offset="0" stop-color="#fff"/><stop offset=".42" stop-color="#a855f7"/><stop offset="1" stop-color="#a855f7" stop-opacity="0"/></radialGradient>' +
+        '</defs>' +
+        '<circle cx="50" cy="50" r="22" fill="none" stroke="#6b7488" stroke-width=".6" stroke-opacity=".3"/>' +
+        '<path id="bPath" d="' + d + '" fill="none" stroke="url(#bg)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '<circle id="bEpi" r="13" fill="none" stroke="#6b7488" stroke-width=".6" stroke-opacity=".4"/>' +
+        '<line id="bArm" stroke="#22d3ee" stroke-width="1" stroke-opacity=".6"/>' +
+        '<circle class="boot-core-pulse" cx="50" cy="50" r="8.5" fill="url(#bc)"/>' +
+        '<circle id="bPen" r="4" fill="#22d3ee"/>';
+      var path = svg.querySelector('#bPath');
+      var L = path.getTotalLength();
+      path.style.strokeDasharray = L; path.style.strokeDashoffset = L;
+      var pen = svg.querySelector('#bPen'), epc = svg.querySelector('#bEpi'), arm = svg.querySelector('#bArm');
+      var word = document.getElementById('bootWord'), status = document.getElementById('bootStatus'), bar = document.getElementById('bootBar');
+      var boot = document.getElementById('boot');
+      var msgs = ['initializing orchestrator','mounting worktrees','linking agents','warming terminals','ready'];
+      var DUR = 2200, start = performance.now(), wordIn = false, mi = -1;
+      function ease(x){ return 1 - Math.pow(1 - x, 3); }
+      var dismissed = false;
+      function dismiss(){
+        if (dismissed) return; dismissed = true;
+        boot.classList.add('done');
+        setTimeout(function(){ if (boot && boot.parentNode) boot.parentNode.removeChild(boot); }, 700);
+      }
+      function finish(){
+        epc.style.transition = arm.style.transition = 'opacity .3s';
+        epc.style.opacity = 0; arm.style.opacity = 0;
+        var s = epi(0); pen.setAttribute('cx', s[0]); pen.setAttribute('cy', s[1]);
+        setTimeout(dismiss, 520);
+      }
+      function frame(now){
+        var p = Math.min(1, (now - start) / DUR), e = ease(p);
+        path.style.strokeDashoffset = L * (1 - e);
+        var t = e * TAU, def = [50 + A*Math.cos(t), 50 + A*Math.sin(t)], pp = epi(t);
+        epc.setAttribute('cx', def[0]); epc.setAttribute('cy', def[1]);
+        pen.setAttribute('cx', pp[0]); pen.setAttribute('cy', pp[1]);
+        arm.setAttribute('x1', def[0]); arm.setAttribute('y1', def[1]);
+        arm.setAttribute('x2', pp[0]); arm.setAttribute('y2', pp[1]);
+        bar.style.width = (e * 100).toFixed(1) + '%';
+        var idx = Math.min(msgs.length - 1, Math.floor(p * msgs.length));
+        if (idx !== mi){ mi = idx; status.textContent = msgs[idx]; }
+        if (p >= 0.45 && !wordIn){ wordIn = true; word.classList.add('in'); }
+        if (p < 1) requestAnimationFrame(frame); else finish();
+      }
+      setTimeout(function(){ status.classList.add('in'); }, 140);
+      if (window.matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches){
+        path.style.strokeDashoffset = 0; word.classList.add('in'); status.classList.add('in');
+        bar.style.width = '100%'; epc.style.opacity = 0; arm.style.opacity = 0;
+        setTimeout(dismiss, 800);
+      } else {
+        requestAnimationFrame(frame);
+      }
+      boot.addEventListener('click', dismiss); // click to skip
+    })();
+  </script>
+
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script src="data.js"></script>
+  <script src="repo-data.js"></script>
+  <script src="agent-git-data.js"></script>
+  <script src="changelog-data.js"></script>
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel" src="repo-diff.jsx"></script>
+  <script type="text/babel" src="repo-conflict.jsx"></script>
+  <script type="text/babel" src="repo-extra.jsx"></script>
+  <script type="text/babel" src="agent-git.jsx"></script>
+  <script type="text/babel" src="review.jsx"></script>
+  <script type="text/babel" src="extras.jsx"></script>
+  <script type="text/babel" src="topbar.jsx"></script>
+  <script type="text/babel" src="sidebar.jsx"></script>
+  <script type="text/babel" src="overview.jsx"></script>
+  <script type="text/babel" src="workspace.jsx"></script>
+  <script type="text/babel" src="panes.jsx"></script>
+  <script type="text/babel" src="rightpanel.jsx"></script>
+  <script type="text/babel" src="commands.jsx"></script>
+  <script type="text/babel" src="toolwindow.jsx"></script>
+  <script type="text/babel" src="search-panel.jsx"></script>
+  <script type="text/babel" src="gitactions.jsx"></script>
+  <script type="text/babel" src="git-panels.jsx"></script>
+  <script type="text/babel" src="perf-panels.jsx"></script>
+  <script type="text/babel" src="cost-panel.jsx"></script>
+  <script type="text/babel" src="editor.jsx"></script>
+  <script type="text/babel" src="terminal-plus.jsx"></script>
+  <script type="text/babel" src="github-panel.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="devpanel.jsx"></script>
+  <script type="text/babel" src="settings.jsx"></script>
+  <script type="text/babel" src="whatsnew.jsx"></script>
+  <script type="text/babel" src="richeditor.jsx"></script>
+  <script type="text/babel" src="tags.jsx"></script>
+  <script type="text/babel" src="backlog.jsx"></script>
+  <script type="text/babel" src="ticketpage.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>

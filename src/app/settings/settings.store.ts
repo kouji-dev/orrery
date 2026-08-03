@@ -40,6 +40,13 @@ export function settingsDefaults(): Settings {
     sound: true,
     soundName: "Ping",
     volume: 70,
+    // Why 0: no budget cap by default — capping silently would surprise; the
+    // user opts in. Why 1.0: a dollar is where an accidental click starts to
+    // hurt, so confirm above it out of the box. (Mirror of the Rust defaults.)
+    budgetCapUsd: 0,
+    confirmAboveUsd: 1,
+    costRates: {}, // absent model = EstimateService built-in defaults
+    telemetryRawTrace: false, // tracing a flood amplifies it — always opt-in
   };
 }
 
@@ -155,6 +162,7 @@ export class SettingsStore {
       toolEffort: { ...(p.toolEffort ?? {}) },
       toolPath: { ...(p.toolPath ?? {}) },
       autoApprove: { ...(p.autoApprove ?? {}) },
+      costRates: { ...(p.costRates ?? {}) },
       events: { ...d.events, ...(p.events ?? {}) },
     };
   }

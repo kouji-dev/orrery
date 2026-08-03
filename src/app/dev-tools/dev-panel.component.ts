@@ -19,8 +19,19 @@ import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { PerfStore, PerfRow, PERF_WINDOW_MS } from "../perf/perf.store";
 import { setSchedulerStatsEnabled, terminalSchedulerStats } from "../terminal-output-scheduler";
 import { MetricsStore } from "../metrics/metrics.store";
+import { TelemetryStore } from "../metrics/telemetry.store";
 import { DevPanelStore } from "./dev-panel.store";
-import { Agent, AgentStatus, ProcMetric, Project } from "../models";
+import { BRIDGE, Commands } from "../data-source/bridge";
+import {
+  Agent,
+  AgentStatus,
+  EmitAggRow,
+  ProcessNode,
+  ProcessTreeSnapshot,
+  ProcMetric,
+  Project,
+  TelemetryTraceState,
+} from "../models";
 
 type Sort = { key: string; dir: number };
 
@@ -54,6 +65,8 @@ type Sort = { key: string; dir: number };
             <button class="dvc-tab" [class.on]="tab() === 'agents'" (click)="tab.set('agents')"><app-icon name="agent" size="sm" />Agents<span class="dvc-cnt">{{ agents().length }}</span></button>
             <button class="dvc-tab" [class.on]="tab() === 'projects'" (click)="tab.set('projects')"><app-icon name="box" size="sm" />Projects<span class="dvc-cnt">{{ projects().length }}</span></button>
             <button class="dvc-tab" [class.on]="tab() === 'resources'" (click)="tab.set('resources')"><app-icon name="cpu" size="sm" />Resources<span class="dvc-cnt">{{ procs().length }}</span></button>
+            <button class="dvc-tab" [class.on]="tab() === 'processes'" (click)="tab.set('processes')"><app-icon name="timeline" size="sm" />Processes<span class="dvc-cnt">{{ treeProcCount() }}</span></button>
+            <button class="dvc-tab" [class.on]="tab() === 'emits'" (click)="tab.set('emits')"><app-icon name="spark" size="sm" />Emits<span class="dvc-cnt">{{ emitRows().length }}</span></button>
           </div>
           <span class="dvc-live on"><span class="dvc-ld"></span>live</span>
           <span class="dvc-sp"></span>
@@ -282,6 +295,119 @@ type Sort = { key: string; dir: number };
               </div>
             }
           }
+
+          <!-- ── PROCESSES (A7.7 recursive tree) ── -->
+          @if (tab() === 'processes') {
+            @if (tree(); as t) {
+              <div class="dvc-split">
+                <span class="tnum" style="color:var(--ink-2)">Orrery <b style="color:var(--ink)">{{ fmtMem(orreryPriv()) }}</b></span>
+                <span style="color:var(--ink-4)">·</span>
+                <span class="tnum" style="color:var(--ink-2)">agents <b style="color:var(--accent-2)">{{ fmtMem(agentsPriv()) }}</b></span>
+                <span class="dvc-chip" style="font-size:var(--fs-2xs)">private working set · RSS is secondary</span>
+                <span style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">job-object accounting · descendants rediscovered at slower cadence</span>
+              </div>
+              @for (al of treeAlerts(); track al.id) {
+                <div class="dvc-palert">
+                  <app-icon name="flag" size="sm" [color]="'var(--st-blocked)'" />
+                  <span>agent <b>{{ al.label }}</b> subtree <b>{{ fmtMem(al.priv) }}</b> — {{ fmtMem(al.childPriv) }} of it is {{ al.childNames }} it started</span>
+                </div>
+              }
+              <div class="dvc-scroll">
+              <table class="dvc-tbl">
+                <thead><tr>
+                  <th style="cursor:default">Process</th>
+                  <th style="cursor:default">PID</th>
+                  <th style="cursor:default">CPU</th>
+                  <th style="cursor:default">Private</th>
+                  <th style="cursor:default">RSS</th>
+                  <th style="cursor:default">Subtree</th>
+                </tr></thead>
+                <tbody>
+                  @for (r of treeRows(); track r.key) {
+                    <tr class="dvc-row" style="cursor:default">
+                      <td><span class="dvc-lead" [style.padding-left.px]="r.depth * 15">
+                        @if (r.n.children.length) {
+                          <button type="button" class="dvc-twbtn" (click)="toggleNode(r.key)">
+                            <svg class="dvc-tw" [class.open]="expanded(r.key)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                          </button>
+                        } @else { <span style="width:var(--sp-5);flex:none"></span> }
+                        @if (r.depth === 0 && r.rootId !== 'app' && agentOf(r.rootId); as ag) {
+                          <span class="dvc-kind" style="background:transparent"><app-tool-badge [tool]="ag.tool" [size]="15" /></span>
+                        } @else {
+                          <span class="dvc-pdot" [style.background]="nodeDot(r.n)"></span>
+                        }
+                        <span class="dvc-nm" [style.color]="notOurs(r.n) ? 'var(--ink-3)' : 'var(--ink)'">{{ r.n.name }}</span>
+                        @if (r.n.note) { <span style="font-size:var(--fs-2xs);color:var(--ink-4);flex:none">{{ r.n.note }}</span> }
+                        @if (r.n.detached) { <span class="dvc-chip" style="font-size:var(--fs-3xs);color:var(--lat-a)">detached · found via job object</span> }
+                      </span></td>
+                      <td class="tnum" style="color:var(--ink-4)">{{ r.n.pid }}</td>
+                      <td class="tnum" [style.color]="r.n.cpu > 60 ? 'var(--lat-r)' : r.n.cpu > 25 ? 'var(--lat-a)' : 'var(--ink-2)'">{{ r.n.cpu.toFixed(1) }}%</td>
+                      <td class="tnum" [style.color]="r.n.privBytes > 1073741824 ? 'var(--lat-r)' : 'var(--ink)'">{{ fmtMem(r.n.privBytes) }}</td>
+                      <td class="tnum" style="color:var(--ink-4)">{{ fmtMem(r.n.rssBytes) }}</td>
+                      <td class="tnum" [style.color]="r.n.children.length ? 'var(--accent-2)' : 'var(--ink-4)'">{{ r.n.children.length ? fmtMem(r.n.subtreePrivBytes) : '—' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              </div>
+            } @else {
+              <div class="dvc-empty">
+                <div class="dvc-ring"><app-icon name="timeline" /></div>
+                <h4>No tree yet</h4>
+                <p>The process-tree sampler only runs while this tab is open (known pids + their discovered descendants — never a machine-wide sweep per poll).</p>
+                <span class="dvc-hint"><span class="dvc-ld"></span>sampling…</span>
+              </div>
+            }
+          }
+
+          <!-- ── EMITS (A0.7 phase 1 aggregate) ── -->
+          @if (tab() === 'emits') {
+            <div class="dvc-split">
+              <span class="tnum" style="color:var(--ink-2)">{{ emitRows().length }} event names · {{ fmtBytes(emitTotal()) }} emitted this session</span>
+              <span class="dvc-chip" style="font-size:var(--fs-2xs);color:var(--lat-g)">aggregate always on</span>
+              <span style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-4)">
+                @if (telemetry.traceActive()) {
+                  <span class="tnum" style="display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--lat-r)">
+                    <span class="dvc-recdot"></span>recording{{ traceLine() }}
+                  </span>
+                }
+                <button type="button" class="dvc-ic" [style.color]="telemetry.traceActive() ? 'var(--lat-r)' : null" (click)="toggleTrace()" [title]="telemetry.traceActive() ? 'Stop the raw emit trace' : 'Raw trace: one ts·name·key·bytes line per emit — auto-off after 30min or 200MB'">
+                  <app-icon [name]="telemetry.traceActive() ? 'stop' : 'play'" size="sm" />{{ telemetry.traceActive() ? 'Stop raw trace' : 'Start raw trace' }}
+                </button>
+              </span>
+            </div>
+            @if (emitRows().length) {
+              <div class="dvc-scroll">
+              <table class="dvc-tbl">
+                <thead><tr>
+                  @for (c of ECOLS; track c[0]) {
+                    <th [class.srt]="eSort().key === c[0]" (click)="clickESort(c[0])">{{ c[1] }}@if (eSort().key === c[0]) { <span class="dvc-arr">{{ eSort().dir < 0 ? '▼' : '▲' }}</span> }</th>
+                  }
+                </tr></thead>
+                <tbody>
+                  @for (r of sortedEmits(); track r.name) {
+                    <tr class="dvc-row" style="cursor:default">
+                      <td><span class="dvc-lead"><span class="dvc-nm">{{ r.name }}</span></span></td>
+                      <td class="tnum" style="color:var(--ink-2)">{{ r.count.toLocaleString() }}</td>
+                      <td class="tnum" [style.color]="r.totalBytes > 10000000 ? 'var(--lat-r)' : 'var(--ink-2)'">{{ fmtBytes(r.totalBytes) }}</td>
+                      <td class="tnum" style="color:var(--ink-4)">{{ fmtBytes(r.p50Bytes) }}</td>
+                      <td class="tnum" style="color:var(--ink-4)">{{ fmtBytes(r.p95Bytes) }}</td>
+                      <td class="tnum" style="color:var(--ink-2)">{{ r.peakPerSec }}</td>
+                      <td><span class="dvc-chip" style="font-size:var(--fs-2xs)" [style.color]="clsColor(r)" [style.border-color]="'color-mix(in oklch,' + clsColor(r) + ',transparent 60%)'">{{ suggestClass(r) }}</span></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              </div>
+            } @else {
+              <div class="dvc-empty">
+                <div class="dvc-ring"><app-icon name="spark" /></div>
+                <h4>No emits recorded yet</h4>
+                <p>Every backend event goes through the emit_tracked funnel — rows appear as soon as anything is pushed to the UI.</p>
+                <span class="dvc-hint"><span class="dvc-ld"></span>listening…</span>
+              </div>
+            }
+          }
         </div>
 
         <footer class="dvc-foot">
@@ -311,6 +437,17 @@ type Sort = { key: string; dir: number };
             <span class="dvc-sp"></span>
             <span class="tnum">app {{ appCpu().toFixed(1) }}% · {{ procs().length }} procs · {{ totalCpu().toFixed(1) }}% / {{ cores() }} cores · {{ memGb() }} GB</span>
           }
+          @if (tab() === 'processes') {
+            <span>subtree totals sum private working set — RSS double-counts shared pages and would overstate</span>
+            <span class="dvc-sp"></span>
+            <span class="tnum">{{ treeProcCount() }} procs · refreshed {{ treeAge() }}</span>
+          }
+          @if (tab() === 'emits') {
+            <span>app-data/telemetry/emit-summary-…json</span>
+            <span style="color:var(--lat-g)">names · keys · byte counts only — payload contents are never written</span>
+            <span class="dvc-sp"></span>
+            <span class="tnum">≤50 MB / 7 days · daily rotation</span>
+          }
         </footer>
       </section>
     }
@@ -332,7 +469,7 @@ type Sort = { key: string; dir: number };
 .dvc-fab svg{width:19px;height:19px;}
 .dvc-fab .dvc-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 var(--sp-2);border-radius:999px;background:var(--lat-r);color:#fff;font-size:var(--fs-xs);font-weight:700;line-height:1;display:grid;place-items:center;border:2px solid var(--panel);font-variant-numeric:tabular-nums;animation:dvcpulse 1.8s ease-in-out infinite;}
 @keyframes dvcpulse{0%{box-shadow:0 0 0 0 rgba(255,93,122,.5);}70%{box-shadow:0 0 0 7px rgba(255,93,122,0);}100%{box-shadow:0 0 0 0 rgba(255,93,122,0);}}
-.dvcon{position:fixed;right:18px;bottom:92px;z-index:91;width:720px;max-width:calc(100vw - 32px);
+.dvcon{position:fixed;right:18px;bottom:92px;z-index:91;width:860px;max-width:calc(100vw - 32px);
   max-height:calc(100vh - 148px);display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel);border:1px solid var(--hair-2);border-radius:14px;
   box-shadow:var(--shadow),0 0 0 1px rgba(var(--accent-rgb),.04);font-family:var(--font-mono);
@@ -464,6 +601,17 @@ type Sort = { key: string; dir: number };
 .dvc-kind{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:4px;flex:none;}
 .dvc-kind svg{width:var(--sp-5);height:var(--sp-5);}
 .dvc-kind.core{color:var(--accent);background:color-mix(in oklch,var(--accent),transparent 84%);}
+.dvc-split{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);font-size:var(--fs-sm);flex-wrap:nowrap;min-width:0;}
+.dvc-split>span{white-space:nowrap;}
+/* the verbose right-side note yields (truncates) before the numbers ever wrap */
+.dvc-split>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;}
+.dvc-palert{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);font-size:var(--fs-sm);color:var(--ink);background:color-mix(in oklch,var(--st-blocked),transparent 91%);border-bottom:1px solid color-mix(in oklch,var(--st-blocked),transparent 62%);}
+.dvc-palert b{font-weight:600;}
+.dvc-twbtn{border:none;background:transparent;padding:0;cursor:pointer;display:inline-flex;color:var(--ink-4);flex:none;}
+.dvc-twbtn:hover{color:var(--ink-2);}
+.dvc-twbtn .dvc-tw.open{transform:rotate(90deg);color:var(--accent);}
+.dvc-pdot{width:7px;height:7px;border-radius:2px;flex:none;}
+.dvc-recdot{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--lat-r);animation:dvcblink 1.5s ease-in-out infinite;}
 .dvc-foot{flex:none;display:flex;align-items:center;gap:var(--sp-6);padding:var(--sp-4) var(--sp-6);border-top:1px solid var(--hair);background:var(--panel-2);font-size:var(--fs-xs);color:var(--ink-3);}
 .dvc-leg{display:flex;align-items:center;gap:var(--sp-3);}
 .dvc-sw{width:var(--sp-4);height:var(--sp-4);border-radius:3px;}
@@ -490,6 +638,9 @@ export class DevPanelComponent implements OnDestroy {
   private readonly metricsStore = inject(MetricsStore);
   private readonly panel = inject(DevPanelStore);
   private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly bridge = inject(BRIDGE);
+  /** Raw emit-trace indicator (A0.7) — the Emits tab's record chip + toggle. */
+  readonly telemetry = inject(TelemetryStore);
 
   /** Build tier — metadata for perf exports only; the panel shows everything in prod too. */
   readonly dev = isDevMode();
@@ -534,10 +685,28 @@ export class DevPanelComponent implements OnDestroy {
         return next;
       });
     });
-    // age out the 10s window while the panel is open
+    // age out the 10s window while the panel is open; the same 1s heartbeat
+    // drives the pull-based Processes/Emits polls (every 2nd tick — matching
+    // the perf://stats push cadence) so the samplers cost NOTHING while the
+    // panel is closed or another tab is showing (the A1.7 gating pattern).
     this.tickIv = setInterval(() => {
-      if (this.open() && this.tab() === "perf") this.perf.tick();
+      if (!this.open()) return;
+      if (this.tab() === "perf") this.perf.tick();
+      this.pollTick++;
+      if (this.pollTick % 2 === 0) {
+        if (this.tab() === "processes") void this.pollTree();
+        if (this.tab() === "emits") void this.pollEmits();
+      }
     }, 1000);
+    // first paint on tab reveal — don't wait out the poll interval; the tree
+    // reveal also forces a discovery sweep (children spawned since the last
+    // sweep are otherwise invisible for up to 10 scoped polls)
+    effect(() => {
+      if (!this.open()) return;
+      const t = this.tab();
+      if (t === "processes") void this.pollTree(true);
+      if (t === "emits") void this.pollEmits();
+    });
   }
   ngOnDestroy() {
     clearInterval(this.tickIv);
@@ -775,6 +944,167 @@ export class DevPanelComponent implements OnDestroy {
   uptimeOf(id: string): string {
     const s = this.uptimeSec(id);
     return s > 0 ? this.fmtDur(s) : "—";
+  }
+
+  // ── processes (A7.7 recursive tree) ──
+  private pollTick = 0;
+  private treeBusy = false;
+  readonly tree = signal<ProcessTreeSnapshot | null>(null);
+  /** Per-node expand state (`rootId:pid` → open). Absent = open, except the
+   *  webview family which pollTree seeds collapsed ("not our code" is noise). */
+  private readonly treeExpand = signal<Record<string, boolean>>({});
+
+  /** `discover` forces a full backend sweep — passed on tab reveal so children
+   *  spawned since the last sweep (the WebView2 family right after startup)
+   *  show immediately instead of after the slow rediscovery cadence. */
+  private async pollTree(discover = false): Promise<void> {
+    if (this.treeBusy) return; // one in-flight snapshot at a time
+    this.treeBusy = true;
+    try {
+      const t = await this.bridge.invoke<ProcessTreeSnapshot>(Commands.ProcessTree, { discover });
+      // seed webview-family nodes collapsed (only when unseen — user toggles win)
+      const seed: Record<string, boolean> = {};
+      const walk = (n: ProcessNode, rootId: string) => {
+        if (n.children.length && n.note?.startsWith("webview2")) seed[rootId + ":" + n.pid] = false;
+        for (const c of n.children) walk(c, rootId);
+      };
+      for (const r of t.roots) walk(r.node, r.id);
+      this.treeExpand.update((prev) => ({ ...seed, ...prev }));
+      this.tree.set(t);
+    } catch {
+      // backend unavailable — tab keeps its empty state
+    } finally {
+      this.treeBusy = false;
+    }
+  }
+
+  expanded(key: string): boolean {
+    return this.treeExpand()[key] ?? true;
+  }
+  toggleNode(key: string): void {
+    const open = this.expanded(key);
+    this.treeExpand.update((m) => ({ ...m, [key]: !open }));
+  }
+
+  readonly treeRows = computed(() => {
+    const t = this.tree();
+    if (!t) return [];
+    const ex = this.treeExpand();
+    const rows: { key: string; n: ProcessNode; depth: number; rootId: string }[] = [];
+    const walk = (n: ProcessNode, depth: number, rootId: string) => {
+      const key = rootId + ":" + n.pid;
+      rows.push({ key, n, depth, rootId });
+      if ((ex[key] ?? true) && n.children.length) for (const c of n.children) walk(c, depth + 1, rootId);
+    };
+    for (const r of t.roots) walk(r.node, 0, r.id);
+    return rows;
+  });
+  readonly treeProcCount = computed(() =>
+    (this.tree()?.roots ?? []).reduce((a, r) => a + r.node.subtreeProcs, 0),
+  );
+  /** The status-bar split's drill-down numbers: Orrery = the app root's
+   *  subtree; agents = every agent root summed. Private bytes, never RSS. */
+  readonly orreryPriv = computed(
+    () => this.tree()?.roots.find((r) => r.id === "app")?.node.subtreePrivBytes ?? 0,
+  );
+  readonly agentsPriv = computed(() =>
+    (this.tree()?.roots ?? [])
+      .filter((r) => r.id !== "app")
+      .reduce((a, r) => a + r.node.subtreePrivBytes, 0),
+  );
+  /** Why 700MB: the runaway process is usually the dev server / test runner an
+   *  agent started and never cleaned up — flag any agent subtree above it. */
+  private readonly ALERT_PRIV_BYTES = 700 * 1024 * 1024;
+  readonly treeAlerts = computed(() =>
+    (this.tree()?.roots ?? [])
+      .filter((r) => r.id !== "app" && r.node.subtreePrivBytes > this.ALERT_PRIV_BYTES)
+      .map((r) => ({
+        id: r.id,
+        label: r.label,
+        priv: r.node.subtreePrivBytes,
+        childPriv: r.node.subtreePrivBytes - r.node.privBytes,
+        childNames: r.node.children.map((c) => c.name).join(", ") || "its descendants",
+      })),
+  );
+  readonly treeAge = computed(() => {
+    const ts = this.tree()?.tsMs ?? 0;
+    if (!ts) return "—";
+    const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    return s <= 2 ? "just now" : `${s}s ago`;
+  });
+  notOurs(n: ProcessNode): boolean {
+    return !!n.note?.includes("not our code");
+  }
+  nodeDot(n: ProcessNode): string {
+    if (this.notOurs(n)) return "var(--ink-4)";
+    if (n.detached) return "var(--lat-a)";
+    if (n.note?.includes("shim wrapper")) return "var(--lat-r)";
+    return "var(--accent)";
+  }
+
+  // ── emits (A0.7 phase 1 aggregate) ──
+  private readonly emitRowsSig = signal<EmitAggRow[]>([]);
+  private readonly traceState = signal<TelemetryTraceState | null>(null);
+  readonly eSort = signal<Sort>({ key: "bytes", dir: -1 });
+  readonly ECOLS: [string, string][] = [["name", "event name"], ["count", "calls"], ["bytes", "total bytes"], ["p50", "p50"], ["p95", "p95"], ["rate", "peak/s"], ["class", "suggested class"]];
+
+  private async pollEmits(): Promise<void> {
+    try {
+      this.emitRowsSig.set(await this.bridge.invoke<EmitAggRow[]>(Commands.TelemetryEmits));
+      this.traceState.set(
+        await this.bridge.invoke<TelemetryTraceState>(Commands.TelemetryTraceState),
+      );
+    } catch {
+      // backend unavailable — tab keeps its empty state
+    }
+  }
+
+  readonly emitRows = computed(() => this.emitRowsSig());
+  readonly emitTotal = computed(() => this.emitRowsSig().reduce((a, r) => a + r.totalBytes, 0));
+  readonly sortedEmits = computed<EmitAggRow[]>(() => {
+    const rows = this.emitRowsSig().slice();
+    const { key, dir } = this.eSort();
+    const get = (r: EmitAggRow): number =>
+      key === "count" ? r.count : key === "bytes" ? r.totalBytes : key === "p50" ? r.p50Bytes : key === "p95" ? r.p95Bytes : key === "rate" ? r.peakPerSec : -1;
+    rows.sort((a, b) => {
+      if (key === "name") return a.name < b.name ? -dir : a.name > b.name ? dir : 0;
+      if (key === "class") return this.suggestClass(a) < this.suggestClass(b) ? -dir : dir;
+      return (get(a) - get(b)) * dir;
+    });
+    return rows;
+  });
+  clickESort(k: string) {
+    this.eSort.update((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: k === "name" || k === "class" ? 1 : -1 }));
+  }
+  /** Heuristic seed for the Phase-2 class taxonomy (roadmap decision 8) —
+   *  mirrors scripts/telemetry/summarize.mjs. NOT the decision. */
+  suggestClass(r: EmitAggRow): string {
+    if (r.p95Bytes <= 512 && r.peakPerSec <= 2) return "bypass";
+    if (r.p95Bytes <= 4096 && r.peakPerSec <= 30) return "coalesced state";
+    return "bulk weighted";
+  }
+  clsColor(r: EmitAggRow): string {
+    const c = this.suggestClass(r);
+    return c === "bypass" ? "var(--lat-g)" : c === "coalesced state" ? "var(--accent-2)" : "var(--accent)";
+  }
+  /** " · 12m / 30m · 3.1 MB" detail after the recording chip. */
+  traceLine(): string {
+    const s = this.traceState();
+    if (!s?.active) return "";
+    const mins = Math.floor((Date.now() - s.startedMs) / 60_000);
+    return ` · ${mins}m / 30m · ${this.fmtBytes(s.bytes)}`;
+  }
+  toggleTrace(): void {
+    this.telemetry.setTrace(!this.telemetry.traceActive());
+    // reflect the new state promptly in the detail line
+    void this.pollEmits();
+  }
+  /** Compact byte formatting for the emit table (B / KB / MB / GB). */
+  fmtBytes(n: number): string {
+    if (n >= 2 ** 30) return (n / 2 ** 30).toFixed(2) + " GB";
+    if (n >= 2 ** 20) return (n / 2 ** 20).toFixed(1) + " MB";
+    if (n >= 1024) return Math.round(n / 1024) + " KB";
+    return n + " B";
   }
   /** Human-readable bytes: B / KB / MB / GB, one decimal above KB. */
   fmtMem(bytes: number): string {

@@ -2,8 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, si
 import { Agent, AgentFile, Commit, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentWorkStore } from "../agents/agent-work.store";
+import { ConflictStore } from "../agents/conflict.store";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
+import { GitActionButtonComponent } from "../shared/git/git-action-button.component";
+import { EstimateInput } from "../cost/estimate.service";
 import { fileDir, fileName } from "../utils";
 import { CommitFeedComponent } from "./commit-feed.component";
 import { AgentCommitHistoryComponent } from "./agent-commit-history.component";
@@ -12,7 +15,7 @@ import { UiStore } from "../ui/ui.store";
 @Component({
   selector: "app-git-tab",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, CommitFeedComponent, AgentCommitHistoryComponent],
+  imports: [IconComponent, CommitFeedComponent, AgentCommitHistoryComponent, GitActionButtonComponent],
   template: `
     @if (!agent()) {
       <div class="scroll-y" style="flex:1;padding:var(--sp-4) 0">
@@ -35,6 +38,30 @@ import { UiStore } from "../ui/ui.store";
             <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
           </div>
         </div>
+
+        <!-- in-progress merge conflicts (design agent-git.jsx AgentConflictCard):
+             the session opened by a conflicted native merge — jump back into the
+             3-way resolve view from here -->
+        @if (conflictSession(); as sess) {
+          <div style="margin:var(--sp-5) var(--sp-6);border:1px solid color-mix(in oklch, var(--st-blocked), transparent 55%);border-radius:var(--r-md);overflow:hidden;background:color-mix(in oklch, var(--st-blocked), transparent 92%)">
+            <div style="padding:var(--sp-5)">
+              <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3)">
+                <app-icon name="merge" size="sm" color="var(--st-blocked)" />
+                <span style="font-size:var(--fs-sm);font-weight:600;color:var(--ink)">Merge conflicts</span>
+                <span class="chip tnum" style="margin-left:auto;font-size:var(--fs-3xs);padding:0 var(--sp-3);color:var(--st-blocked);border-color:color-mix(in oklch, var(--st-blocked), transparent 55%)">{{ sess.files.length }} files</span>
+              </div>
+              <div style="font-size:var(--fs-xs);color:var(--ink-3);line-height:1.5;margin-bottom:var(--sp-4);text-wrap:pretty">
+                Merge {{ sess.theirs }} → {{ sess.ours }} stopped —
+                <b style="color:var(--st-blocked)">{{ unresolvedCount() }} unresolved file{{ unresolvedCount() === 1 ? "" : "s" }}</b>
+                need resolving before this branch can land.
+              </div>
+              <button class="btn ghost-hair" (click)="openConflicts(ag.id)"
+                style="width:100%;justify-content:center;border-color:color-mix(in oklch, var(--st-blocked), transparent 65%);color:var(--st-blocked)">
+                <app-icon name="diff" size="sm" />Resolve in the Diff tab →
+              </button>
+            </div>
+          </div>
+        }
 
         <!-- changed files (selectable) -->
         <div style="padding:var(--sp-5) var(--sp-6) var(--sp-3);display:flex;align-items:center;gap:var(--sp-3)">
@@ -90,40 +117,55 @@ import { UiStore } from "../ui/ui.store";
               style="background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:var(--sp-4) var(--sp-5);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);outline:none"
             />
           }
-          <!-- Commit: primary = backend, attached ✨ = AI -->
-          <div style="display:flex;gap:var(--sp-2)">
-            <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="commit(ag.id)" style="flex:1;min-width:0;justify-content:flex-start">
-              <app-icon name="commit" size="sm" />Commit {{ selected().size ? selected().size + ' selected' : 'all' }}
-            </button>
-            <button class="btn ghost-hair" [disabled]="changes().length === 0" title="Let the agent commit" (click)="agentActions.aiAction(ag.id, 'commit')" style="flex:none;padding:0 var(--sp-4)">
-              <app-icon name="sparkles" size="sm" color="var(--accent)" />
-            </button>
-          </div>
+          <!-- Commit: dual-path split button — primary = native backend commit,
+               dropdown = AI variant with its estimate ON the row (A4.1) -->
+          <app-git-action-button
+            [label]="'Commit ' + (selected().size ? selected().size + ' selected' : 'all')"
+            icon="commit"
+            [disabled]="changes().length === 0"
+            [estimateInput]="commitEstimate()"
+            [variants]="[{ id: 'commit', label: 'Commit with AI (write the message)', icon: 'sparkles' }]"
+            (native)="commit(ag.id)"
+            (ai)="agentActions.aiAction(ag.id, 'commit')"
+          />
 
-          <!-- Push: primary = backend, attached ✨ = AI -->
-          <div style="display:flex;gap:var(--sp-2)">
-            <button class="btn ghost-hair" [disabled]="ag.commits === 0" (click)="agentActions.pushAgent(ag.id)" style="flex:1;min-width:0;justify-content:flex-start">
-              <app-icon name="push" size="sm" />Push to origin
-            </button>
-            <button class="btn ghost-hair" [disabled]="ag.commits === 0" title="Let the agent push" (click)="agentActions.aiAction(ag.id, 'push')" style="flex:none;padding:0 var(--sp-4)">
-              <app-icon name="sparkles" size="sm" color="var(--accent)" />
-            </button>
-          </div>
+          <!-- Push: native default; AI variant kept (existing PTY path) -->
+          <app-git-action-button
+            label="Push to origin"
+            icon="push"
+            [disabled]="ag.commits === 0"
+            [estimateInput]="pushEstimate()"
+            [variants]="[{ id: 'push', label: 'Push with AI (agent runs it)', icon: 'sparkles' }]"
+            (native)="agentActions.pushAgent(ag.id)"
+            (ai)="agentActions.aiAction(ag.id, 'push')"
+          />
 
-          <!-- Rebase (AI) -->
-          <button class="btn ghost-hair" title="Let the agent rebase (resolves conflicts)" (click)="agentActions.aiAction(ag.id, 'rebase')" style="justify-content:flex-start;min-width:0">
-            <app-icon name="sparkles" size="sm" color="var(--accent)" />
-            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Rebase onto {{ project() ? project()!.branch : 'main' }}</span>
-          </button>
+          <!-- Rebase: no native path yet (A3.4) → AI-only control, estimate
+               shown inline on the button rather than hover-only -->
+          <app-git-action-button
+            [label]="'Rebase onto ' + baseBranch()"
+            icon="sparkles"
+            [aiOnly]="true"
+            [estimateInput]="rebaseEstimate()"
+            [variants]="[
+              { id: 'rebase', label: 'Rebase with AI', icon: 'sparkles' },
+              { id: 'rebase-v', label: 'Rebase with AI (verbose)', verbose: true, icon: 'sparkles' },
+            ]"
+            (ai)="agentActions.aiAction(ag.id, 'rebase')"
+          />
 
-          <!-- Merge (AI): base → branch -->
-          <button class="btn primary" title="Let the agent merge (resolves conflicts)" (click)="agentActions.aiAction(ag.id, 'merge')" style="justify-content:center;min-width:0">
-            <app-icon name="sparkles" size="sm" />
-            <span
-              [title]="'Merge ' + (project() ? project()!.branch : 'main') + ' → ' + ag.branch.replace('agent/', '')"
-              style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-            >Merge {{ project() ? project()!.branch : 'main' }} → {{ ag.branch.replace('agent/', '') }}</span>
-          </button>
+          <!-- Merge: primary = NATIVE merge (A3.5 — conflicts open the 3-way
+               view); dropdown = the agent drives the merge in its PTY -->
+          <app-git-action-button
+            [label]="'Merge ' + baseBranch() + ' → ' + ag.branch.replace('agent/', '')"
+            icon="branch"
+            kind="primary"
+            [title]="'Merge ' + baseBranch() + ' into ' + ag.branch + ' · native, 0 tokens'"
+            [estimateInput]="mergeEstimate()"
+            [variants]="[{ id: 'merge', label: 'Merge with AI (agent resolves conflicts)', icon: 'sparkles' }]"
+            (native)="agentActions.mergeAgent(ag.id, baseBranch())"
+            (ai)="agentActions.aiAction(ag.id, 'merge')"
+          />
 
           <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="discard(ag.id)" style="justify-content:flex-start;color:var(--st-blocked)">
             <app-icon name="discard" size="sm" />Discard {{ selected().size ? selected().size + ' selected' : 'all' }}
@@ -145,6 +187,7 @@ export class GitTabComponent {
   readonly projects = inject(ProjectActionsService);
   readonly agentActions = inject(AgentActionsService);
   readonly work = inject(AgentWorkStore);
+  readonly conflicts = inject(ConflictStore);
   readonly agent = input<Agent | null>(null);
   readonly project = input<Project | undefined>(undefined);
 
@@ -161,6 +204,47 @@ export class GitTabComponent {
   });
   readonly totAdd = computed(() => this.changes().reduce((s, f) => s + f.add, 0));
   readonly totDel = computed(() => this.changes().reduce((s, f) => s + f.del, 0));
+
+  // ---- in-progress merge conflict session (A3.5 / B4.2) ----
+  readonly conflictSession = computed(() => {
+    const ag = this.agent();
+    const sess = ag ? this.conflicts.sessionFor(ag.id).data : null;
+    return sess && sess.files.length ? sess : null;
+  });
+  readonly unresolvedCount = computed(
+    () => this.conflictSession()?.files.filter((f) => !f.resolved).length ?? 0,
+  );
+  openConflicts(id: string): void {
+    this.ui.setGitView(id, { kind: "conflict" });
+  }
+
+  // ---- AI cost estimate inputs (A4.3) ----
+  readonly baseBranch = computed(() => this.project()?.branch ?? "main");
+  // Why *40: the backend status carries line counts, not bytes — 40 bytes is a
+  // conservative average source-line length, good enough for a cost ENVELOPE.
+  private readonly diffBytes = computed(() => (this.totAdd() + this.totDel()) * 40);
+  readonly commitEstimate = computed<EstimateInput>(() => ({
+    op: "commit",
+    files: this.changes().length,
+    diffBytes: this.diffBytes(),
+    model: this.agent()?.model,
+  }));
+  readonly pushEstimate = computed<EstimateInput>(() => ({
+    op: "push",
+    model: this.agent()?.model,
+  }));
+  readonly rebaseEstimate = computed<EstimateInput>(() => ({
+    op: "rebase",
+    files: this.changes().length,
+    diffBytes: this.diffBytes(),
+    model: this.agent()?.model,
+  }));
+  readonly mergeEstimate = computed<EstimateInput>(() => ({
+    op: "merge",
+    files: this.changes().length,
+    diffBytes: this.diffBytes(),
+    model: this.agent()?.model,
+  }));
   // this branch's commits, read lazily from the agent's worktree (first page on
   // agent open, paged onward via the Load more button).
   readonly commitsEntry = computed(() => {

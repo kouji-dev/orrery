@@ -16,6 +16,7 @@ mod perf;
 mod projects;
 mod tickets;
 mod runtime;
+mod search;
 mod settings;
 mod update;
 mod watch;
@@ -71,11 +72,50 @@ pub fn run() {
             // process survives a restart, so any in-flight agent drops to idle.
             let _ = agent_service.reset_running();
             app.manage(crate::agents::service::InterruptedAgents::new(interrupted));
+            // A0.7 Phase 1: wire the emit-telemetry funnel — telemetry dir,
+            // the persisted raw-trace toggle, and a notifier that (a) tells the
+            // UI on `telemetry://trace` and (b) persists an auto-disable back
+            // into settings so the toggle never lies after a restart.
+            {
+                let telemetry_dir = app
+                    .path()
+                    .app_data_dir()
+                    .expect("no app data dir")
+                    .join("telemetry");
+                let raw_on = settings_service
+                    .get()
+                    .map(|s| s.telemetry_raw_trace)
+                    .unwrap_or(false);
+                let notify_app = app.handle().clone();
+                let notify_settings = settings_service.clone();
+                core::emit::init(
+                    telemetry_dir,
+                    raw_on,
+                    Box::new(move |active, reason| {
+                        // Auto-disable (cap hit) → write the toggle off in the DB.
+                        // User-driven changes already persisted via settings_set.
+                        if !active && reason != "user" {
+                            if let Ok(mut s) = notify_settings.get() {
+                                if s.telemetry_raw_trace {
+                                    s.telemetry_raw_trace = false;
+                                    let _ = notify_settings.set(&s);
+                                }
+                            }
+                        }
+                        let _ = core::emit::emit_tracked(
+                            &notify_app,
+                            "telemetry://trace",
+                            &serde_json::json!({ "active": active, "reason": reason }),
+                        );
+                    }),
+                );
+            }
             app.manage(settings_service);
             app.manage(project_service);
             app.manage(ticket_service);
             app.manage(agent_service);
             app.manage(crate::watch::WatchService::new());
+            app.manage(crate::search::SearchService::new());
             app.manage(RuntimeService::new());
             // loopback bridge for native agent hooks (permission round-trip + status)
             match hooks::HookBridge::start(app.handle().clone()) {
@@ -107,7 +147,7 @@ pub fn run() {
             app.manage(shared_sampler.clone());
             let metrics_app = app.handle().clone();
             std::thread::spawn(move || {
-                use tauri::{Emitter, Manager};
+                use tauri::Manager;
                 let app_pid = std::process::id();
                 shared_sampler.warm_up(); // first sample's cpu% would otherwise be 0
                 let mut tick: u32 = 0;
@@ -139,7 +179,7 @@ pub fn run() {
                         let pids = runtime.pids();
                         let labels = metrics::commands::agent_labels(&agents);
                         let m = shared_sampler.refresh_and_sample(app_pid, &pids, &labels);
-                        let _ = metrics_app.emit("system://metrics", m);
+                        let _ = crate::core::emit::emit_tracked(&metrics_app, "system://metrics", &m);
                     });
                 }
             });
@@ -157,7 +197,6 @@ pub fn run() {
             app.manage(cost_cache.clone());
             let cost_app = app.handle().clone();
             std::thread::spawn(move || {
-                use tauri::Emitter;
                 loop {
                     // timed: measured ~2.2s per cycle (npx resolution + node +
                     // full transcript scan). At the old 60s period that was
@@ -168,7 +207,7 @@ pub fn run() {
                     let snap = crate::perf::timed("system_cost_push", || {
                         cost_cache.get(cost::COST_FRESH)
                     });
-                    let _ = cost_app.emit("system://cost", snap);
+                    let _ = crate::core::emit::emit_tracked(&cost_app, "system://cost", &snap);
                     std::thread::sleep(std::time::Duration::from_secs(300));
                 }
             });
@@ -228,9 +267,21 @@ pub fn run() {
             agents::commands::agent_blame,
             agents::commands::agent_working_blame,
             agents::commands::agent_file_history,
+            agents::commands::agent_merge,
+            agents::commands::agent_conflicts,
+            agents::commands::agent_conflict_resolve,
+            agents::commands::agent_merge_abort,
+            agents::commands::agent_merge_continue,
+            agents::commands::agent_session_state,
+            search::commands::search_start,
+            search::commands::search_cancel,
+            search::commands::search_files,
             settings::commands::settings_get,
             settings::commands::settings_set,
             metrics::commands::system_metrics,
+            metrics::commands::process_tree,
+            core::emit::telemetry_emits,
+            core::emit::telemetry_trace_state,
             cost::commands::system_cost,
             appicon::set_window_icon,
             update::update_check,

@@ -23,7 +23,7 @@
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tauri_plugin_updater::{Updater, UpdaterExt};
 
 /// What a check found, for the settings dialog's update card.
@@ -143,9 +143,10 @@ async fn perform(
         .download(
             |chunk, total| {
                 downloaded += chunk as u64;
-                let _ = app.emit(
+                let _ = crate::core::emit::emit_tracked(
+                    &app,
                     "update://progress",
-                    serde_json::json!({ "downloaded": downloaded, "total": total }),
+                    &serde_json::json!({ "downloaded": downloaded, "total": total }),
                 );
             },
             || {},
@@ -157,7 +158,7 @@ async fn perform(
 
     // Download is over — the installer takes over from here. The UI flips from
     // the byte-progress bar to its "installing" state on this event.
-    let _ = app.emit("update://phase", "installing");
+    let _ = crate::core::emit::emit_tracked(&app, "update://phase", &"installing");
 
     // Windows: both MSI and NSIS hand off to the branded updater stub (which
     // exits this process). If the stub can't be staged (dev build, missing

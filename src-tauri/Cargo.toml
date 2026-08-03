@@ -35,6 +35,10 @@ uuid = { version = "1.23.2", features = ["v4", "serde"] }
 thiserror = "2.0.18"
 git2 = "0.21.0"
 ignore = "0.4.23"
+# find-in-files (B3.1): ripgrep's engine as a library — no bundled rg binary
+grep-searcher = "0.1"
+grep-regex = "0.1"
+grep-matcher = "0.1"
 notify = "6.1.1"
 portable-pty = "0.8.1"
 tauri-plugin-notification = "2.3.3"
@@ -53,6 +57,9 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security",
     "Win32_System_JobObjects",
     "Win32_System_Threading",
+    # psapi (K32GetProcessMemoryInfo): per-process PRIVATE bytes for the A7.7
+    # process tree — RSS double-counts shared pages and must not be summed.
+    "Win32_System_ProcessStatus",
 ] }
 
 # Unix-only: portable-pty already makes each PTY child a session leader

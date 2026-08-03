@@ -26,6 +26,22 @@ pub struct JobGuard {
 }
 
 impl JobGuard {
+    /// Every pid currently assigned to the job (Windows), or `None` when the
+    /// job isn't installed / not on Windows. The A7.7 process-tree builder uses
+    /// this as its DISCOVERY BACKSTOP: WebView2 children reparent and agent
+    /// grandchildren can detach, so a parent-pid walk alone under-counts — job
+    /// membership is inherited and can't lie about who we spawned.
+    pub fn pids(&self) -> Option<Vec<u32>> {
+        #[cfg(windows)]
+        {
+            return self._job.pids();
+        }
+        #[cfg(not(windows))]
+        {
+            None
+        }
+    }
+
     /// Best-effort install of the process-tree kill mechanism. Never fails hard:
     /// on any error it logs a warning and returns a guard that simply does
     /// nothing, so startup always proceeds.
@@ -62,9 +78,10 @@ mod imp {
 
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_BREAKAWAY_OK, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectBasicProcessIdList,
+        JobObjectExtendedLimitInformation, QueryInformationJobObject, SetInformationJobObject,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_BREAKAWAY_OK,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
     };
     use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
@@ -85,6 +102,45 @@ mod imp {
 
         fn is_valid(&self) -> bool {
             !self.0.is_null() && self.0 != INVALID_HANDLE_VALUE
+        }
+
+        /// Enumerate every pid in the job via `JobObjectBasicProcessIdList`.
+        /// Returns `None` when the guard owns nothing or the query fails.
+        pub fn pids(&self) -> Option<Vec<u32>> {
+            if !self.is_valid() {
+                return None;
+            }
+            // The list struct is variable-length; a fixed buffer sized for 1024
+            // pids covers any realistic agent fleet (the query truncates rather
+            // than fails when it overflows — acceptable for a metrics backstop).
+            const CAP: usize = 1024;
+            #[repr(C)]
+            struct IdList {
+                number_of_assigned_processes: u32,
+                number_of_process_ids_in_list: u32,
+                process_id_list: [usize; CAP],
+            }
+            let mut list = IdList {
+                number_of_assigned_processes: 0,
+                number_of_process_ids_in_list: 0,
+                process_id_list: [0; CAP],
+            };
+            // SAFETY: standard Win32 FFI — valid handle, correctly-sized zeroed
+            // buffer, and we only read the count the call reports back.
+            let ok = unsafe {
+                QueryInformationJobObject(
+                    self.0,
+                    JobObjectBasicProcessIdList,
+                    &mut list as *mut _ as *mut core::ffi::c_void,
+                    std::mem::size_of::<IdList>() as u32,
+                    std::ptr::null_mut(),
+                )
+            };
+            if ok == 0 {
+                return None;
+            }
+            let n = (list.number_of_process_ids_in_list as usize).min(CAP);
+            Some(list.process_id_list[..n].iter().map(|&p| p as u32).collect())
         }
     }
 

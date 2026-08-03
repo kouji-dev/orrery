@@ -12,7 +12,8 @@ import {
 } from "@angular/core";
 import { AGENT_TOOLS } from "../data";
 import { BRIDGE } from "../data-source/bridge";
-import { AutoApprovePolicy, SettingsEvents } from "../models";
+import { AutoApprovePolicy, CostRate, SettingsEvents } from "../models";
+import { DEFAULT_RATES } from "../cost/estimate.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { DiagnosticsService } from "../shared/diagnostics.service";
 import {
@@ -481,6 +482,71 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
               <!-- ── Agent defaults ──────────────────────────────────────── -->
               @case ("agent") {
                 <div class="set-grp">
+                  <div class="set-grp-h">Worktrees<span class="ln"></span></div>
+                  <app-set-row [wide]="true" [dirty]="s.branchTemplate !== D.branchTemplate" (reset)="store.set({ branchTemplate: D.branchTemplate })">
+                    <ng-container row-label>Branch template</ng-container>
+                    <ng-container row-help>Tokens: <code>{{ '{name}' }}</code> <code>{{ '{tool}' }}</code> <code>{{ '{date}' }}</code></ng-container>
+                    <div style="display:flex;flex-direction:column;gap:0;width:100%">
+                      <div class="set-text" style="max-width:320px">
+                        <app-icon name="branch" size="sm" />
+                        <input [value]="s.branchTemplate" spellcheck="false" (input)="store.set({ branchTemplate: $any($event.target).value })" />
+                      </div>
+                      <div class="set-preview">
+                        <span class="arr">preview</span><app-icon name="chevron" size="sm" [px]="11" /><b>{{ branchPreview() }}</b>
+                      </div>
+                    </div>
+                  </app-set-row>
+
+                  <app-set-row [dirty]="s.worktreeRoot !== D.worktreeRoot" (reset)="store.set({ worktreeRoot: D.worktreeRoot })">
+                    <ng-container row-label>Worktree root</ng-container>
+                    <ng-container row-help>Where new agent worktrees are created on disk.</ng-container>
+                    <div style="display:flex;align-items:center;gap:var(--sp-4);width:300px">
+                      <div class="set-path"><app-icon name="folder" size="sm" /><span class="pt">{{ s.worktreeRoot || 'app data · worktrees' }}</span></div>
+                      <button class="btn ghost-hair" style="flex:none;padding:var(--sp-2) var(--sp-5)" (click)="browse()"><app-icon name="folderOpen" size="sm" />Browse</button>
+                    </div>
+                  </app-set-row>
+
+                  <app-set-row [dirty]="s.autoResume !== D.autoResume" (reset)="store.set({ autoResume: D.autoResume })">
+                    <ng-container row-label>Auto-resume on restart</ng-container>
+                    <ng-container row-help>Re-attach to running agent sessions when Orrery relaunches.</ng-container>
+                    <app-set-tgl [value]="s.autoResume" (changed)="store.set({ autoResume: $event })" />
+                  </app-set-row>
+                </div>
+
+                <div class="set-grp">
+                  <div class="set-grp-h">Projects<span class="ln"></span></div>
+                  <app-set-row [dirty]="s.projectsRoot !== D.projectsRoot" (reset)="store.set({ projectsRoot: D.projectsRoot })">
+                    <ng-container row-label>Projects folder</ng-container>
+                    <ng-container row-help>Where the folder picker opens when adding a project.</ng-container>
+                    <div style="display:flex;align-items:center;gap:var(--sp-4);width:300px">
+                      <div class="set-path"><app-icon name="folder" size="sm" /><span class="pt">{{ s.projectsRoot || 'OS default' }}</span></div>
+                      <button class="btn ghost-hair" style="flex:none;padding:var(--sp-2) var(--sp-5)" (click)="browseProjects()"><app-icon name="folderOpen" size="sm" />Browse</button>
+                    </div>
+                  </app-set-row>
+                </div>
+
+                <!-- ── AI cost & budget (A4.3 / A4.4) ─────────────────────── -->
+                <div class="set-grp">
+                  <div class="set-grp-h">AI cost &amp; budget<span class="ln"></span></div>
+                  <app-set-row [dirty]="s.budgetCapUsd !== D.budgetCapUsd" (reset)="store.set({ budgetCapUsd: D.budgetCapUsd })">
+                    <ng-container row-label>Budget cap</ng-container>
+                    <ng-container row-help>USD ceiling for AI git actions. At the cap, AI variants disable — native actions stay fully usable. 0 = no cap.</ng-container>
+                    <div class="set-text" style="max-width:120px">
+                      <span style="color:var(--ink-4)">$</span>
+                      <input type="number" min="0" step="1" [value]="s.budgetCapUsd" (change)="setBudget('budgetCapUsd', $any($event.target).value)" />
+                    </div>
+                  </app-set-row>
+                  <app-set-row [dirty]="s.confirmAboveUsd !== D.confirmAboveUsd" (reset)="store.set({ confirmAboveUsd: D.confirmAboveUsd })">
+                    <ng-container row-label>Confirm above</ng-container>
+                    <ng-container row-help>AI actions estimated above this amount need a confirming second click. 0 = never confirm.</ng-container>
+                    <div class="set-text" style="max-width:120px">
+                      <span style="color:var(--ink-4)">$</span>
+                      <input type="number" min="0" step="0.1" [value]="s.confirmAboveUsd" (change)="setBudget('confirmAboveUsd', $any($event.target).value)" />
+                    </div>
+                  </app-set-row>
+                </div>
+
+                <div class="set-grp">
                   <div class="set-grp-h">Default agent<span class="ln"></span></div>
                   <app-set-row [wide]="true" [dirty]="s.defaultTool !== D.defaultTool" (reset)="store.set({ defaultTool: D.defaultTool })">
                     <ng-container row-label>Default tool</ng-container>
@@ -541,50 +607,29 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                       <span class="set-muted"><app-icon name="dots" size="sm" />not supported</span>
                     }
                   </app-set-row>
-                </div>
 
-                <div class="set-grp">
-                  <div class="set-grp-h">Worktrees<span class="ln"></span></div>
-                  <app-set-row [wide]="true" [dirty]="s.branchTemplate !== D.branchTemplate" (reset)="store.set({ branchTemplate: D.branchTemplate })">
-                    <ng-container row-label>Branch template</ng-container>
-                    <ng-container row-help>Tokens: <code>{{ '{name}' }}</code> <code>{{ '{tool}' }}</code> <code>{{ '{date}' }}</code></ng-container>
-                    <div style="display:flex;flex-direction:column;gap:0;width:100%">
-                      <div class="set-text" style="max-width:320px">
-                        <app-icon name="branch" size="sm" />
-                        <input [value]="s.branchTemplate" spellcheck="false" (input)="store.set({ branchTemplate: $any($event.target).value })" />
+                  <!-- per-model AI rates, scoped to the SELECTED agent's model
+                       list (common budget caps stay in the group above) -->
+                  @for (m of toolRateModels(); track m) {
+                    <app-set-row [dirty]="rateDirty(m)" (reset)="resetRate(m)">
+                      <ng-container row-label>
+                        <span style="display:inline-flex;align-items:center;gap:var(--sp-3)">
+                          <span style="color:var(--ink-4);font-weight:400">rate ·</span>
+                          <span style="font-family:var(--font-mono)">{{ m }}</span>
+                        </span>
+                      </ng-container>
+                      <ng-container row-help>$ per million tokens — in / out. Feeds the AI-action estimates for {{ modelTool().name }}.</ng-container>
+                      <div style="display:flex;align-items:center;gap:var(--sp-3)">
+                        <div class="set-text" style="max-width:96px">
+                          <input type="number" min="0" step="0.1" [value]="rateOf(m).in" title="input $/Mtok" (change)="setRate(m, 'in', $any($event.target).value)" />
+                        </div>
+                        <span style="color:var(--ink-4);font-size:var(--fs-xs)">/</span>
+                        <div class="set-text" style="max-width:96px">
+                          <input type="number" min="0" step="0.1" [value]="rateOf(m).out" title="output $/Mtok" (change)="setRate(m, 'out', $any($event.target).value)" />
+                        </div>
                       </div>
-                      <div class="set-preview">
-                        <span class="arr">preview</span><app-icon name="chevron" size="sm" [px]="11" /><b>{{ branchPreview() }}</b>
-                      </div>
-                    </div>
-                  </app-set-row>
-
-                  <app-set-row [dirty]="s.worktreeRoot !== D.worktreeRoot" (reset)="store.set({ worktreeRoot: D.worktreeRoot })">
-                    <ng-container row-label>Worktree root</ng-container>
-                    <ng-container row-help>Where new agent worktrees are created on disk.</ng-container>
-                    <div style="display:flex;align-items:center;gap:var(--sp-4);width:300px">
-                      <div class="set-path"><app-icon name="folder" size="sm" /><span class="pt">{{ s.worktreeRoot || 'app data · worktrees' }}</span></div>
-                      <button class="btn ghost-hair" style="flex:none;padding:var(--sp-2) var(--sp-5)" (click)="browse()"><app-icon name="folderOpen" size="sm" />Browse</button>
-                    </div>
-                  </app-set-row>
-
-                  <app-set-row [dirty]="s.autoResume !== D.autoResume" (reset)="store.set({ autoResume: D.autoResume })">
-                    <ng-container row-label>Auto-resume on restart</ng-container>
-                    <ng-container row-help>Re-attach to running agent sessions when Orrery relaunches.</ng-container>
-                    <app-set-tgl [value]="s.autoResume" (changed)="store.set({ autoResume: $event })" />
-                  </app-set-row>
-                </div>
-
-                <div class="set-grp">
-                  <div class="set-grp-h">Projects<span class="ln"></span></div>
-                  <app-set-row [dirty]="s.projectsRoot !== D.projectsRoot" (reset)="store.set({ projectsRoot: D.projectsRoot })">
-                    <ng-container row-label>Projects folder</ng-container>
-                    <ng-container row-help>Where the folder picker opens when adding a project.</ng-container>
-                    <div style="display:flex;align-items:center;gap:var(--sp-4);width:300px">
-                      <div class="set-path"><app-icon name="folder" size="sm" /><span class="pt">{{ s.projectsRoot || 'OS default' }}</span></div>
-                      <button class="btn ghost-hair" style="flex:none;padding:var(--sp-2) var(--sp-5)" (click)="browseProjects()"><app-icon name="folderOpen" size="sm" />Browse</button>
-                    </div>
-                  </app-set-row>
+                    </app-set-row>
+                  }
                 </div>
               }
 
@@ -624,6 +669,16 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                     <ng-container row-label>Approve from notifications</ng-container>
                     <ng-container row-help>Answer permission prompts straight from OS notifications.</ng-container>
                     <app-set-tgl [value]="s.remoteApproval" (changed)="store.set({ remoteApproval: $event })" />
+                  </app-set-row>
+                </div>
+
+                <!-- ── Diagnostics (A0.7 raw emit trace) ──────────────────── -->
+                <div class="set-grp">
+                  <div class="set-grp-h">Diagnostics<span class="ln"></span></div>
+                  <app-set-row [dirty]="s.telemetryRawTrace !== D.telemetryRawTrace" (reset)="store.set({ telemetryRawTrace: D.telemetryRawTrace })">
+                    <ng-container row-label>Raw emit trace</ng-container>
+                    <ng-container row-help>Records one line per backend event (timestamp, name, byte count — never contents) to app-data/telemetry. Auto-stops after 30 min or 200 MB; a status-bar chip shows while it records.</ng-container>
+                    <app-set-tgl [value]="s.telemetryRawTrace" (changed)="setRawTrace($event)" />
                   </app-set-row>
                 </div>
               }
@@ -1028,6 +1083,55 @@ export class SettingsModalComponent {
   resetToolPath(id: string): void {
     this.store.setMap("toolPath", id, null);
     void this.runtime.refreshDetections();
+  }
+
+  // ── AI cost & budget (A4.3 / A4.4) ──
+  /** Model ids shown in the rate table: built-in defaults + any user overrides. */
+  readonly rateModels = computed(() => {
+    const overrides = Object.keys(this.store.settings().costRates);
+    const builtin = Object.keys(DEFAULT_RATES).filter((k) => k !== "default");
+    return Array.from(new Set([...builtin, ...overrides]));
+  });
+  /** The SELECTED tool's curated models (+ a custom effective model, so its
+   *  rate stays editable) — the per-agent slice of the rate table. */
+  readonly toolRateModels = computed(() => {
+    const models = this.modelTool().models;
+    const eff = this.effModel();
+    return models.includes(eff) ? models : [...models, eff];
+  });
+  rateOf(model: string): CostRate {
+    return this.store.settings().costRates[model] ?? DEFAULT_RATES[model] ?? DEFAULT_RATES["default"];
+  }
+  rateDirty(model: string): boolean {
+    return this.store.settings().costRates[model] !== undefined;
+  }
+  setRate(model: string, field: "in" | "out", raw: string): void {
+    const v = parseFloat(raw);
+    if (!isFinite(v) || v < 0) return;
+    const next: CostRate = { ...this.rateOf(model), [field]: v };
+    const def = DEFAULT_RATES[model];
+    const rates = { ...this.store.settings().costRates };
+    // back at the built-in default → drop the override (absent = default)
+    if (def && def.in === next.in && def.out === next.out) delete rates[model];
+    else rates[model] = next;
+    this.store.set({ costRates: rates });
+  }
+  resetRate(model: string): void {
+    const rates = { ...this.store.settings().costRates };
+    delete rates[model];
+    this.store.set({ costRates: rates });
+  }
+  setBudget(key: "budgetCapUsd" | "confirmAboveUsd", raw: string): void {
+    const v = parseFloat(raw);
+    if (!isFinite(v) || v < 0) return;
+    this.store.set({ [key]: v });
+  }
+
+  /** Raw emit trace toggle (A0.7): flush immediately — the backend arms the
+   *  trace inside `settings_set`, so the 300ms debounce would delay recording. */
+  setRawTrace(on: boolean): void {
+    this.store.set({ telemetryRawTrace: on });
+    this.store.flush();
   }
 
   // ── permissions ──

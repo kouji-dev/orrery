@@ -682,6 +682,125 @@ pub async fn agent_working_blame(
     .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
+// ── native merge + conflict session commands (A3.5 / A3.6) ────────────────
+
+/// Native merge of `branch` into the agent's branch, inside its worktree.
+/// Clean/FF merges resolve immediately (empty `conflicts`); on conflict the
+/// merge state is kept and the returned session lists the conflicted files —
+/// finish with `agent_merge_continue` or discard with `agent_merge_abort`.
+/// Blocking pool: git2 merge + conflicted checkout.
+#[tauri::command]
+pub async fn agent_merge(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    branch: String,
+) -> AppResult<crate::git::service::MergeSession> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_merge", || {
+            let agent = svc.get(id)?;
+            crate::git::service::GitService::new()
+                .merge(std::path::Path::new(&agent.worktree), &branch)
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// The still-conflicted files of the in-progress session (index stages 1/2/3
+/// + the marker-bearing working-tree content).
+#[tauri::command]
+pub async fn agent_conflicts(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+) -> AppResult<Vec<crate::git::service::ConflictFile>> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_conflicts", || {
+            let agent = svc.get(id)?;
+            crate::git::service::GitService::new()
+                .conflict_files(std::path::Path::new(&agent.worktree))
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Write `content` as the resolution of `path` and stage it.
+#[tauri::command]
+pub async fn agent_conflict_resolve(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    path: String,
+    content: String,
+) -> AppResult<()> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_conflict_resolve", || {
+            let agent = svc.get(id)?;
+            crate::git::service::GitService::new().conflict_resolve(
+                std::path::Path::new(&agent.worktree),
+                &path,
+                &content,
+            )
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Abort the in-progress merge (cleanup_state + hard reset to HEAD).
+#[tauri::command]
+pub async fn agent_merge_abort(svc: State<'_, AgentService>, id: Uuid) -> AppResult<()> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_merge_abort", || {
+            let agent = svc.get(id)?;
+            crate::git::service::GitService::new()
+                .merge_abort(std::path::Path::new(&agent.worktree))
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Commit the fully-resolved merge (HEAD + MERGE_HEAD parents) → short sha.
+#[tauri::command]
+pub async fn agent_merge_continue(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    message: Option<String>,
+) -> AppResult<String> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_merge_continue", || {
+            let agent = svc.get(id)?;
+            crate::git::service::GitService::new()
+                .merge_continue(std::path::Path::new(&agent.worktree), message.as_deref())
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Whether a merge/rebase/cherry-pick is in progress in the agent's worktree.
+#[tauri::command]
+pub async fn agent_session_state(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+) -> AppResult<crate::git::service::SessionState> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_session_state", || {
+            let agent = svc.get(id)?;
+            crate::git::service::GitService::new()
+                .session_state(std::path::Path::new(&agent.worktree))
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
 /// Detection of which CLI coding agents are installed — delegated to the adapter
 /// registry so only-installed tools are offered (and, later, hooked).
 /// Blocking pool: shells out per known tool.

@@ -49,6 +49,53 @@ pub struct FileHistoryEntry {
     pub del: i64,
 }
 
+/// One conflicted file inside a merge/rebase/cherry-pick session, read from
+/// index stages 1/2/3 (base/ours/theirs). `merged` is the working-tree content
+/// with diff3 conflict markers — the frontend parses it into per-conflict
+/// segments (ctx / ours / base / theirs) for the 3-way view.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConflictFile {
+    pub path: String,
+    /// Full stage-2 (ours) content; empty when the side deleted the file.
+    pub ours: String,
+    /// Full stage-3 (theirs) content; empty when the side deleted the file.
+    pub theirs: String,
+    /// Full stage-1 (common ancestor) content; empty for add/add conflicts.
+    pub base: String,
+    /// Working-tree content with diff3 conflict markers.
+    pub merged: String,
+    /// Always false in listings (a resolved file leaves the conflict index);
+    /// flipped by the frontend store after `conflict_resolve`.
+    pub resolved: bool,
+    pub lang: String,
+}
+
+/// Result of a native merge: empty `conflicts` = merged cleanly (or was
+/// already up to date / fast-forwarded); non-empty = a merge session is now
+/// in progress and must be finished via `merge_continue` or `merge_abort`.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeSession {
+    /// HEAD branch shorthand ("ours" label in the 3-way view).
+    pub ours: String,
+    /// The branch that was merged in ("theirs" label).
+    pub theirs: String,
+    pub conflicts: Vec<ConflictFile>,
+}
+
+/// Whether a merge / rebase / cherry-pick is in progress and how far along.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionState {
+    /// "none" | "merge" | "rebase" | "cherrypick" | "revert" | "other".
+    pub state: String,
+    /// Files still conflicted in the index.
+    pub conflicts: usize,
+    /// HEAD branch shorthand, when resolvable.
+    pub ours: String,
+}
+
 /// One line in a blame result.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -305,9 +352,28 @@ impl GitService {
     }
 
     /// Merge `branch` into the repo's current HEAD (fast-forward when possible).
-    pub fn merge(&self, repo_path: &Path, branch: &str) -> AppResult<()> {
+    ///
+    /// On conflict the merge state is KEPT (conflicted index + working tree
+    /// with diff3 markers) and the returned session carries the conflicts —
+    /// the caller resolves via `conflict_resolve` then `merge_continue`, or
+    /// discards via `merge_abort`. `cleanup_state` only runs on those paths.
+    pub fn merge(&self, repo_path: &Path, branch: &str) -> AppResult<MergeSession> {
         let repo =
             Repository::open(repo_path).map_err(|e| AppError::Other(format!("open: {e}")))?;
+        let ours_label = repo
+            .head()
+            .ok()
+            .and_then(|h| h.shorthand().ok().map(|s| s.to_string()))
+            .unwrap_or_else(|| "HEAD".into());
+        let clean = |repo_ref: &Repository| MergeSession {
+            ours: repo_ref
+                .head()
+                .ok()
+                .and_then(|h| h.shorthand().ok().map(|s| s.to_string()))
+                .unwrap_or_else(|| "HEAD".into()),
+            theirs: branch.to_string(),
+            conflicts: Vec::new(),
+        };
         let their = repo
             .find_branch(branch, git2::BranchType::Local)
             .map_err(|_| AppError::Other(format!("branch '{branch}' not found")))?
@@ -322,7 +388,7 @@ impl GitService {
             .map_err(|e| AppError::Other(e.to_string()))?;
 
         if analysis.is_up_to_date() {
-            return Ok(());
+            return Ok(clean(&repo));
         }
         let head_name = repo
             .head()
@@ -342,16 +408,25 @@ impl GitService {
             co.force();
             repo.checkout_head(Some(&mut co))
                 .map_err(|e| AppError::Other(e.to_string()))?;
-            return Ok(());
+            return Ok(clean(&repo));
         }
 
-        // true merge → create a merge commit (bail on conflicts)
-        repo.merge(&[&annotated], None, None)
+        // true merge → write the (possibly conflicted) index + working tree.
+        // allow_conflicts lets the checkout proceed with conflict markers;
+        // diff3 style includes the base section so the 3-way UI can show the
+        // common ancestor per conflict, not only whole-file.
+        let mut co = git2::build::CheckoutBuilder::new();
+        co.allow_conflicts(true).conflict_style_diff3(true);
+        repo.merge(&[&annotated], None, Some(&mut co))
             .map_err(|e| AppError::Other(e.to_string()))?;
         let mut index = repo.index().map_err(|e| AppError::Other(e.to_string()))?;
         if index.has_conflicts() {
-            let _ = repo.cleanup_state();
-            return Err(AppError::Other("merge conflicts — resolve manually".into()));
+            // KEEP the merge state — the session is now in progress.
+            return Ok(MergeSession {
+                ours: ours_label,
+                theirs: branch.to_string(),
+                conflicts: self.conflict_files(repo_path)?,
+            });
         }
         let tree = repo
             .find_tree(
@@ -378,7 +453,199 @@ impl GitService {
         )
         .map_err(|e| AppError::Other(e.to_string()))?;
         let _ = repo.cleanup_state();
+        Ok(clean(&repo))
+    }
+
+    // ── conflict session (A3.5 / A3.6) ─────────────────────────────────────
+
+    /// Full text of an index-side blob, or empty when the entry is absent
+    /// (deleted on that side / no common ancestor).
+    fn stage_text(repo: &Repository, entry: Option<&git2::IndexEntry>) -> String {
+        entry
+            .and_then(|e| repo.find_blob(e.id).ok())
+            .map(|b| String::from_utf8_lossy(b.content()).to_string())
+            .unwrap_or_default()
+    }
+
+    /// The currently conflicted files, read from index stages 1/2/3. A file
+    /// resolved + staged via `conflict_resolve` no longer appears here.
+    pub fn conflict_files(&self, repo_path: &Path) -> AppResult<Vec<ConflictFile>> {
+        let repo =
+            Repository::open(repo_path).map_err(|e| AppError::Other(format!("open: {e}")))?;
+        let workdir = repo
+            .workdir()
+            .ok_or_else(|| AppError::Other("bare repo has no working tree".into()))?
+            .to_path_buf();
+        let index = repo.index().map_err(|e| AppError::Other(e.to_string()))?;
+        let conflicts = index
+            .conflicts()
+            .map_err(|e| AppError::Other(e.to_string()))?;
+        let mut files = Vec::new();
+        for c in conflicts.flatten() {
+            // Path lives on whichever stage exists (ours may be a delete).
+            let path = c
+                .our
+                .as_ref()
+                .or(c.their.as_ref())
+                .or(c.ancestor.as_ref())
+                .map(|e| String::from_utf8_lossy(&e.path).replace('\\', "/"))
+                .unwrap_or_default();
+            if path.is_empty() {
+                continue;
+            }
+            let merged = std::fs::read_to_string(workdir.join(&path)).unwrap_or_default();
+            files.push(ConflictFile {
+                ours: Self::stage_text(&repo, c.our.as_ref()),
+                theirs: Self::stage_text(&repo, c.their.as_ref()),
+                base: Self::stage_text(&repo, c.ancestor.as_ref()),
+                merged,
+                resolved: false,
+                lang: lang_from_path(&path).to_string(),
+                path,
+            });
+        }
+        Ok(files)
+    }
+
+    /// Write `content` as the resolution of `rel` and stage it — the path's
+    /// conflict entries collapse into a single stage-0 entry.
+    pub fn conflict_resolve(&self, repo_path: &Path, rel: &str, content: &str) -> AppResult<()> {
+        let repo =
+            Repository::open(repo_path).map_err(|e| AppError::Other(format!("open: {e}")))?;
+        let workdir = repo
+            .workdir()
+            .ok_or_else(|| AppError::Other("bare repo has no working tree".into()))?;
+        let abs = workdir.join(rel);
+        if let Some(parent) = abs.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        std::fs::write(&abs, content)
+            .map_err(|e| AppError::Other(format!("write '{rel}': {e}")))?;
+        let mut index = repo.index().map_err(|e| AppError::Other(e.to_string()))?;
+        index
+            .add_path(Path::new(rel))
+            .map_err(|e| AppError::Other(format!("stage '{rel}': {e}")))?;
+        index.write().map_err(|e| AppError::Other(e.to_string()))?;
         Ok(())
+    }
+
+    /// Abort the in-progress merge: drop the merge state and restore the
+    /// working tree + index to HEAD. This is the ONLY place (besides a
+    /// completed `merge_continue`) that calls `cleanup_state`.
+    pub fn merge_abort(&self, repo_path: &Path) -> AppResult<()> {
+        let repo =
+            Repository::open(repo_path).map_err(|e| AppError::Other(format!("open: {e}")))?;
+        repo.cleanup_state()
+            .map_err(|e| AppError::Other(e.to_string()))?;
+        let head_tree = repo
+            .head()
+            .and_then(|h| h.peel_to_commit())
+            .map_err(|e| AppError::Other(e.to_string()))?;
+        // Reset index + working tree to HEAD so half-resolved files don't linger.
+        repo.reset(head_tree.as_object(), git2::ResetType::Hard, None)
+            .map_err(|e| AppError::Other(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Finish the in-progress merge once every conflict is resolved + staged:
+    /// commit the index with HEAD + MERGE_HEAD(s) as parents, then clean up
+    /// the merge state. Returns the short sha.
+    pub fn merge_continue(&self, repo_path: &Path, message: Option<&str>) -> AppResult<String> {
+        // Why mut: git2's mergehead_foreach takes &mut self.
+        let mut repo =
+            Repository::open(repo_path).map_err(|e| AppError::Other(format!("open: {e}")))?;
+        let mut index = repo.index().map_err(|e| AppError::Other(e.to_string()))?;
+        if index.has_conflicts() {
+            return Err(AppError::Other(
+                "unresolved conflicts remain — resolve every file first".into(),
+            ));
+        }
+        let mut merge_heads: Vec<git2::Oid> = Vec::new();
+        repo.mergehead_foreach(|oid| {
+            merge_heads.push(*oid);
+            true
+        })
+        .map_err(|_| AppError::Other("no merge in progress (MERGE_HEAD missing)".into()))?;
+        if merge_heads.is_empty() {
+            return Err(AppError::Other("no merge in progress".into()));
+        }
+        let tree = repo
+            .find_tree(
+                index
+                    .write_tree()
+                    .map_err(|e| AppError::Other(e.to_string()))?,
+            )
+            .map_err(|e| AppError::Other(e.to_string()))?;
+        let head_commit = repo
+            .head()
+            .and_then(|h| h.peel_to_commit())
+            .map_err(|e| AppError::Other(e.to_string()))?;
+        let their_commits: Vec<git2::Commit> = merge_heads
+            .iter()
+            .filter_map(|oid| repo.find_commit(*oid).ok())
+            .collect();
+        let mut parents: Vec<&git2::Commit> = vec![&head_commit];
+        parents.extend(their_commits.iter());
+        let sig = repo
+            .signature()
+            .or_else(|_| git2::Signature::now("orrery", "orrery@local"))
+            .map_err(|e| AppError::Other(e.to_string()))?;
+        // Default message: MERGE_MSG when git wrote one, else a plain header.
+        let default_msg = std::fs::read_to_string(repo.path().join("MERGE_MSG"))
+            .ok()
+            .map(|m| m.trim().to_string())
+            .filter(|m| !m.is_empty())
+            .unwrap_or_else(|| {
+                format!(
+                    "merge {}",
+                    merge_heads
+                        .first()
+                        .map(|o| o.to_string().chars().take(7).collect::<String>())
+                        .unwrap_or_default()
+                )
+            });
+        let msg = match message {
+            Some(m) if !m.trim().is_empty() => m,
+            _ => default_msg.as_str(),
+        };
+        let oid = repo
+            .commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents)
+            .map_err(|e| AppError::Other(e.to_string()))?;
+        let _ = repo.cleanup_state();
+        Ok(oid.to_string().chars().take(7).collect())
+    }
+
+    /// Whether a merge / rebase / cherry-pick is in progress, and how many
+    /// files are still conflicted.
+    pub fn session_state(&self, repo_path: &Path) -> AppResult<SessionState> {
+        let repo =
+            Repository::open(repo_path).map_err(|e| AppError::Other(format!("open: {e}")))?;
+        let state = match repo.state() {
+            git2::RepositoryState::Clean => "none",
+            git2::RepositoryState::Merge => "merge",
+            git2::RepositoryState::Rebase
+            | git2::RepositoryState::RebaseInteractive
+            | git2::RepositoryState::RebaseMerge => "rebase",
+            git2::RepositoryState::CherryPick | git2::RepositoryState::CherryPickSequence => {
+                "cherrypick"
+            }
+            git2::RepositoryState::Revert | git2::RepositoryState::RevertSequence => "revert",
+            _ => "other",
+        };
+        let conflicts = repo
+            .index()
+            .ok()
+            .and_then(|i| i.conflicts().ok().map(|c| c.flatten().count()))
+            .unwrap_or(0);
+        Ok(SessionState {
+            state: state.into(),
+            conflicts,
+            ours: repo
+                .head()
+                .ok()
+                .and_then(|h| h.shorthand().ok().map(|s| s.to_string()))
+                .unwrap_or_else(|| "HEAD".into()),
+        })
     }
 
     /// Old (HEAD) vs new (working tree) content for a single file, for the diff view.
@@ -1861,5 +2128,159 @@ mod tests {
         assert_eq!(changes.len(), 1, "b.txt added in the range");
         assert_eq!(changes[0].path, "b.txt");
         assert_eq!(changes[0].state, "A");
+    }
+
+    // ── merge session tests (A3.5 / A3.6) ──────────────────────────────────
+
+    /// Fixture: a repo where merging `feature` into the default branch
+    /// conflicts on `f.txt` (both sides edited the same line since the base).
+    /// Returns (tempdir, default-branch name). Built with the commit_content
+    /// helper so each commit's content is explicit.
+    fn conflicted_merge_repo() -> (tempfile::TempDir, String) {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_content(dir.path(), "f.txt", "shared\nbase line\ntail\n", "base");
+        let repo = Repository::open(dir.path()).unwrap();
+        // Why: the temp repo inherits the developer's global core.autocrlf; a
+        // `true` there makes every checkout smudge LF→CRLF and byte-exact
+        // working-tree assertions become platform-dependent. Pin it off.
+        repo.config()
+            .unwrap()
+            .set_bool("core.autocrlf", false)
+            .unwrap();
+        let main = repo.head().unwrap().shorthand().unwrap().to_string();
+        let base = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("feature", &base, false).unwrap();
+
+        let checkout = |to: &str| {
+            repo.set_head(to).unwrap();
+            let mut co = git2::build::CheckoutBuilder::new();
+            co.force();
+            repo.checkout_head(Some(&mut co)).unwrap();
+        };
+        checkout("refs/heads/feature");
+        commit_content(dir.path(), "f.txt", "shared\ntheirs line\ntail\n", "theirs edit");
+        checkout(&format!("refs/heads/{main}"));
+        commit_content(dir.path(), "f.txt", "shared\nours line\ntail\n", "ours edit");
+        (dir, main)
+    }
+
+    #[test]
+    fn merge_conflict_returns_session_and_keeps_state() {
+        let (dir, main) = conflicted_merge_repo();
+        let svc = GitService::new();
+
+        let session = svc.merge(dir.path(), "feature").unwrap();
+        assert_eq!(session.ours, main, "ours label = HEAD branch");
+        assert_eq!(session.theirs, "feature");
+        assert_eq!(session.conflicts.len(), 1, "{:?}", session.conflicts);
+        let cf = &session.conflicts[0];
+        assert_eq!(cf.path, "f.txt");
+        assert!(cf.ours.contains("ours line"), "stage 2: {cf:?}");
+        assert!(cf.theirs.contains("theirs line"), "stage 3: {cf:?}");
+        assert!(cf.base.contains("base line"), "stage 1: {cf:?}");
+        assert!(cf.merged.contains("<<<<<<<"), "workdir has markers: {cf:?}");
+        assert!(!cf.resolved);
+
+        // the merge state is KEPT, not thrown away
+        let repo = Repository::open(dir.path()).unwrap();
+        assert_eq!(repo.state(), git2::RepositoryState::Merge);
+        let st = svc.session_state(dir.path()).unwrap();
+        assert_eq!(st.state, "merge");
+        assert_eq!(st.conflicts, 1);
+    }
+
+    #[test]
+    fn merge_clean_returns_empty_conflicts() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_content(dir.path(), "a.txt", "a\n", "base");
+        let repo = Repository::open(dir.path()).unwrap();
+        let main = repo.head().unwrap().shorthand().unwrap().to_string();
+        let base = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("feature", &base, false).unwrap();
+        repo.set_head("refs/heads/feature").unwrap();
+        let mut co = git2::build::CheckoutBuilder::new();
+        co.force();
+        repo.checkout_head(Some(&mut co)).unwrap();
+        commit_content(dir.path(), "b.txt", "b\n", "feature adds b");
+        repo.set_head(&format!("refs/heads/{main}")).unwrap();
+        let mut co2 = git2::build::CheckoutBuilder::new();
+        co2.force();
+        repo.checkout_head(Some(&mut co2)).unwrap();
+        // diverge main so it isn't a fast-forward
+        commit_content(dir.path(), "c.txt", "c\n", "main adds c");
+
+        let session = svc.merge(dir.path(), "feature").unwrap();
+        assert!(session.conflicts.is_empty(), "{:?}", session.conflicts);
+        assert_eq!(
+            svc.session_state(dir.path()).unwrap().state,
+            "none",
+            "clean merge leaves no session"
+        );
+        assert!(dir.path().join("b.txt").exists(), "merged content present");
+    }
+
+    #[test]
+    fn conflict_resolve_stages_and_merge_continue_commits() {
+        let (dir, _main) = conflicted_merge_repo();
+        let svc = GitService::new();
+        svc.merge(dir.path(), "feature").unwrap();
+
+        // continue before resolving must refuse
+        assert!(svc.merge_continue(dir.path(), None).is_err());
+
+        svc.conflict_resolve(dir.path(), "f.txt", "shared\nresolved line\ntail\n")
+            .unwrap();
+        assert!(
+            svc.conflict_files(dir.path()).unwrap().is_empty(),
+            "resolved file left the conflict index"
+        );
+        assert_eq!(svc.session_state(dir.path()).unwrap().conflicts, 0);
+
+        let sha = svc.merge_continue(dir.path(), Some("merge feature")).unwrap();
+        assert_eq!(sha.len(), 7, "short sha");
+        let repo = Repository::open(dir.path()).unwrap();
+        assert_eq!(repo.state(), git2::RepositoryState::Clean, "state cleaned");
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(head.parent_count(), 2, "a true merge commit");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+            "shared\nresolved line\ntail\n"
+        );
+    }
+
+    #[test]
+    fn merge_abort_restores_head_and_clears_state() {
+        let (dir, _main) = conflicted_merge_repo();
+        let svc = GitService::new();
+        svc.merge(dir.path(), "feature").unwrap();
+        assert!(std::fs::read_to_string(dir.path().join("f.txt"))
+            .unwrap()
+            .contains("<<<<<<<"));
+
+        svc.merge_abort(dir.path()).unwrap();
+
+        let repo = Repository::open(dir.path()).unwrap();
+        assert_eq!(repo.state(), git2::RepositoryState::Clean);
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("f.txt")).unwrap(),
+            "shared\nours line\ntail\n",
+            "working tree restored to HEAD (ours)"
+        );
+        assert_eq!(svc.session_state(dir.path()).unwrap().state, "none");
+    }
+
+    #[test]
+    fn session_state_none_on_clean_repo() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_content(dir.path(), "a.txt", "a\n", "init");
+        let st = svc.session_state(dir.path()).unwrap();
+        assert_eq!(st.state, "none");
+        assert_eq!(st.conflicts, 0);
     }
 }

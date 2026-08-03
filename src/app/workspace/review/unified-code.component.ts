@@ -14,6 +14,7 @@ import {
 import type { Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { ReviewStore } from "../../agents/review.store";
+import { EditorNavService } from "../../commands/editor-nav.service";
 import { UiStore } from "../../ui/ui.store";
 import { buildTheme, CMCore, loadCMCore, loadLangExt } from "../code-lang";
 import { chunkStats, DiffStats } from "./chunk-stats";
@@ -101,6 +102,7 @@ import { reviewCommentsExt, ReviewCommentsApi } from "./review-comments.ext";
 export class UnifiedCodeComponent implements OnDestroy {
   private readonly review = inject(ReviewStore);
   private readonly ui = inject(UiStore);
+  private readonly editorNav = inject(EditorNavService);
 
   // Inputs: decorator @Input backed by signals (vitest JIT / NG0950 pattern).
   readonly agent = signal("");
@@ -122,6 +124,7 @@ export class UnifiedCodeComponent implements OnDestroy {
 
   private readonly host = viewChild.required<ElementRef<HTMLElement>>("host");
   private cmView: EditorView | null = null;
+  private cm: CMCore | null = null;
   private api: ReviewCommentsApi | null = null;
   /** Bumped when a new editor is live, so the comment-sync effect re-pushes. */
   private readonly viewGen = signal(0);
@@ -143,6 +146,26 @@ export class UnifiedCodeComponent implements OnDestroy {
         .filter((c) => c.file === file && c.view === mode)
         .map((c) => ({ id: c.id, fromLine: c.fromLine, toLine: c.toLine, note: c.note }));
       if (this.cmView && this.api) this.api.setComments(this.cmView, comments);
+    });
+    // Go-to-line / open-at-line (B2.3): consume a posted nav target once the
+    // editor for that agent+file is live. viewGen re-runs this after the async
+    // mount, so a target posted BEFORE the editor exists still lands.
+    effect(() => {
+      const t = this.editorNav.target();
+      this.viewGen(); // re-check when a fresh editor mounts
+      const view = this.cmView;
+      const cm = this.cm;
+      if (!t || !view || !cm) return;
+      if (t.agentId !== this.agent() || t.file !== this.file()) return;
+      const doc = view.state.doc;
+      const line = doc.line(Math.max(1, Math.min(t.line, doc.lines)));
+      const pos = Math.min(line.from + Math.max(0, t.col - 1), line.to);
+      view.dispatch({
+        selection: { anchor: pos },
+        effects: cm.view.EditorView.scrollIntoView(pos, { y: "center" }),
+      });
+      view.focus();
+      this.editorNav.consume(t);
     });
   }
 
@@ -167,6 +190,7 @@ export class UnifiedCodeComponent implements OnDestroy {
       return;
     }
     if (token !== this.renderToken) return;
+    this.cm = cm;
 
     // Yield a macrotask so the triggering frame paints before the synchronous
     // editor build (same rationale as code-diff.component.ts).

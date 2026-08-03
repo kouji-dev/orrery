@@ -16,6 +16,9 @@ pub fn settings_get(svc: State<'_, SettingsService>) -> AppResult<Settings> {
 pub fn settings_set(svc: State<'_, SettingsService>, settings: Settings) -> AppResult<Settings> {
     crate::perf::timed("settings_set", || {
         svc.set(&settings)?;
+        // Apply the raw-trace toggle immediately (idempotent) — the emit
+        // funnel owns the runtime state; the DB row only survives restarts.
+        crate::core::emit::set_raw_trace(settings.telemetry_raw_trace);
         Ok(settings)
     })
 }

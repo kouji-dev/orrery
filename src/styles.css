@@ -258,7 +258,9 @@ app-root {
   /* minmax(0, 1fr) lets the middle row shrink to the viewport so the footer
      stays pinned to the bottom and the panels constrain their own scroll */
   grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--statusbar-h);
-  grid-template-columns: 1fr;
+  /* minmax(0,…) — otherwise the column's automatic minimum is the topbar's
+     min-content and every row overflows a narrower window (design fix) */
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
 }
 
