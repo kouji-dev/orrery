@@ -8,7 +8,7 @@ import { deriveInterest, paneLeafViews, VisibleSurfaces } from "./interest";
 /**
  * A0.2 — publishes the interest set to the backend (`runtime_subscribe`),
  * recomputed whenever the visible surfaces change: tab switch, pane layout
- * change, overview card visibility (viewport scroll), window blur/focus.
+ * change, overview card visibility (viewport scroll), window hidden/shown.
  * Replaces the old `agent_focus` single-agent fast path.
  *
  * Also drives the A1.2 recovery hook: when an agent leaves `stream` mode its
@@ -24,10 +24,14 @@ export class InterestService {
   private agents = inject(AgentsStore);
   private terminals = inject(TerminalService);
 
-  // Window focus — blurred demotes stream to digest. document.hasFocus() seeds
-  // the right value on a reload that happens while the window is background.
-  private windowFocused = signal(
-    typeof document === "undefined" ? true : document.hasFocus(),
+  // Window visibility — hidden (minimized/occluded) demotes stream to digest.
+  // Deliberately NOT document focus: on Windows the webview document only
+  // gains focus once the user clicks INSIDE the page (native window focus is
+  // not forwarded), so a focus-based signal started false and froze every
+  // open terminal until the first click. visibilityState seeds correctly at
+  // load and `visibilitychange` fires reliably on minimize/restore.
+  private windowVisible = signal(
+    typeof document === "undefined" ? true : document.visibilityState !== "hidden",
   );
 
   // Agents whose overview mini-preview card is in the viewport, maintained by
@@ -41,19 +45,23 @@ export class InterestService {
   private lastModes = new Map<string, InterestMode>();
 
   constructor() {
-    if (typeof window !== "undefined") {
-      window.addEventListener("focus", () => this.windowFocused.set(true));
-      window.addEventListener("blur", () => this.windowFocused.set(false));
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () =>
+        this.windowVisible.set(document.visibilityState !== "hidden"),
+      );
     }
     effect(() => {
       const entries = deriveInterest(this.surfaces());
       const key = JSON.stringify(entries);
       if (key === this.lastSent) return;
       this.lastSent = key;
-      // A1.2 hook: an agent that just left `stream` stops receiving live
-      // chunks — its terminal must replay the snapshot when next shown. An
-      // agent RE-ENTERING stream while still mounted (blur→focus cycle never
-      // re-attaches) recovers immediately instead.
+      // A1.2 hook: any agent NOT in `stream` receives no live chunks — its
+      // terminal must replay the snapshot when next shown. Marking every
+      // non-stream entry (not just stream→X transitions) also covers agents
+      // that were never streamed at all (e.g. first observed as digest), whose
+      // gap the old edge-only marking silently dropped. An agent ENTERING
+      // stream while still mounted (hidden→shown cycle never re-attaches)
+      // recovers immediately instead.
       const next = new Map(entries.map((e) => [e.id, e.mode] as const));
       for (const [id, mode] of this.lastModes) {
         if (mode === "stream" && next.get(id) !== "stream") {
@@ -61,7 +69,9 @@ export class InterestService {
         }
       }
       for (const [id, mode] of next) {
-        if (mode === "stream" && this.lastModes.get(id) !== "stream") {
+        if (mode !== "stream") {
+          this.terminals.markStale(id);
+        } else if (this.lastModes.get(id) !== "stream") {
           this.terminals.recoverIfStale(id);
         }
       }
@@ -88,7 +98,7 @@ export class InterestService {
       // Mini-preview cards only exist on the orchestrator (overview) tab.
       overviewAgentIds:
         kind === "orchestrator" ? [...this.visibleCards()] : [],
-      windowFocused: this.windowFocused(),
+      windowVisible: this.windowVisible(),
     };
   }
 

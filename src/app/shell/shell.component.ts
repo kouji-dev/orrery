@@ -166,7 +166,7 @@ export class ShellComponent {
     inject(CommandRegistryService).start();
     // A0.2: publish the PTY interest set (stream/digest/none per agent) to the
     // backend whenever the visible surfaces change — tab switch, pane layout,
-    // overview card visibility, window blur/focus.
+    // overview card visibility, window hidden/shown.
     inject(InterestService).start();
   }
 }

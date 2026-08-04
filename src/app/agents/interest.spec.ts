@@ -5,7 +5,7 @@ import { group, leaf } from "../workspace/pane-model";
 const base: VisibleSurfaces = {
   paneAgents: [],
   overviewAgentIds: [],
-  windowFocused: true,
+  windowVisible: true,
 };
 
 describe("deriveInterest — A0.2 interest-set derivation", () => {
@@ -70,10 +70,10 @@ describe("deriveInterest — A0.2 interest-set derivation", () => {
     expect(entries).toEqual([{ id: "a", mode: "stream" }]);
   });
 
-  it("window blur demotes stream to digest (a blurred window is digest at most)", () => {
+  it("a HIDDEN window demotes stream to digest (an unfocused-but-visible one must NOT)", () => {
     const entries = deriveInterest({
       ...base,
-      windowFocused: false,
+      windowVisible: false,
       paneAgents: [
         { agentId: "a", view: "terminal" },
         { agentId: "b", view: "diff" },
