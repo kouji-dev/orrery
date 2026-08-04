@@ -33,6 +33,7 @@ function det(p: Partial<ToolDetection> & { status: ToolDetection["status"] }): T
     version: null,
     source: null,
     reason: null,
+    shim: false,
     ...p,
   };
 }
@@ -91,6 +92,16 @@ describe("RuntimeRowComponent", () => {
     expect(el.querySelector(".set-rt-pathchip .pt")?.textContent).toContain("/usr/local/bin/cursor-agent");
     expect(el.querySelector(".set-rt-st.ok")?.textContent).toContain("v2.1.0");
     expect(el.querySelector(".set-rt-input")).toBeNull(); // editor closed
+  });
+
+  it("ok + shim install: shows the native-installer hint line", () => {
+    const { el } = mount(det({ status: "ok", path: "C:\\npm\\cursor-agent.cmd", source: "path", shim: true }));
+    expect(el.querySelector(".set-rt-shim")?.textContent).toContain("native installer");
+  });
+
+  it("ok + native install: no shim hint", () => {
+    const { el } = mount(det({ status: "ok", path: "/usr/local/bin/cursor-agent", source: "path" }));
+    expect(el.querySelector(".set-rt-shim")).toBeNull();
   });
 
   it("error: shows the reason + locate/verify editor", () => {

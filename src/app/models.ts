@@ -318,6 +318,9 @@ export interface ProcessNode {
   /** In the Job Object but unreachable via the parent-pid walk (surfaced so
    *  nothing we spawned can hide). */
   detached: boolean;
+  /** External browser Orrery merely launched (link handoff) — rendered but
+   *  excluded from every subtree rollup. */
+  excluded: boolean;
   children: ProcessNode[];
 }
 
@@ -386,6 +389,10 @@ export interface ToolDetection {
   source: "path" | "manual" | null;
   /** Why an `error` tool can't run — shown in the locate-binary editor. */
   reason: string | null;
+  /** True when the install is a script shim (npm `.cmd`/`.ps1`, Windows) rather
+   *  than a native executable — the tool tile shows a one-line hint recommending
+   *  the native installer (a shim can cost a shell wrapper process per agent). */
+  shim: boolean;
 }
 
 /** Which notification kinds are raised at all (off = the alert is not raised). */
@@ -464,7 +471,7 @@ export interface CommitFile {
   del: number;
 }
 
-/** One line of blame output for a file. */
+/** One line of blame output for a file (hydrated view — see hydrateBlame). */
 export interface BlameLine {
   n: number;
   sha: string;
@@ -472,6 +479,39 @@ export interface BlameLine {
   when: number;
   summary: string;
   line: string;
+}
+
+/** One commit in an interned blame's commit table (A0.6 blame interning). */
+export interface BlameCommit {
+  sha: string;
+  author: string;
+  when: number;
+  summary: string;
+}
+
+/** The wire shape of `agent_blame` / `agent_working_blame`: commit metadata
+ *  interned ONCE in `commits`, per-line entries carrying only an index `c`. */
+export interface BlameIntern {
+  commits: BlameCommit[];
+  lines: { n: number; c: number; line: string }[];
+}
+
+/** Expand an interned blame into flat per-line rows for the view components.
+ *  The commit strings are SHARED references (one JS string per commit, not per
+ *  line), so a 50k-line file costs row objects + pointers — not megabytes of
+ *  duplicated author/summary strings. */
+export function hydrateBlame(b: BlameIntern | null | undefined): BlameLine[] {
+  if (!b?.lines?.length) return [];
+  const orphan: BlameCommit = {
+    sha: "0000000",
+    author: "Uncommitted",
+    when: 0,
+    summary: "Uncommitted changes",
+  };
+  return b.lines.map((l) => {
+    const c = b.commits[l.c] ?? orphan;
+    return { n: l.n, sha: c.sha, author: c.author, when: c.when, summary: c.summary, line: l.line };
+  });
 }
 
 /** One commit entry in a file's history. */

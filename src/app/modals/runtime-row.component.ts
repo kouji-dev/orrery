@@ -50,6 +50,13 @@ import { ToolBadgeComponent } from "../shared/tool-badge.component";
         }
       </div>
 
+      @if (isOk() && d?.shim && !editing()) {
+        <div class="set-rt-shim">
+          <app-icon name="flag" size="sm" />
+          <span>npm shim install — the native installer launches without a shell wrapper (less RAM per agent).</span>
+        </div>
+      }
+
       @if (showEditor()) {
         <div class="set-rt-edit">
           @if (d?.status === 'error' && d?.reason) {
@@ -113,6 +120,9 @@ import { ToolBadgeComponent } from "../shared/tool-badge.component";
     .set-rt-link{background:none;border:none;color:var(--ink-4);font-family:var(--font-mono);font-size:var(--fs-xs);
       cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:var(--sp-2);transition:color .12s;flex:none;}
     .set-rt-link:hover{color:var(--accent);}
+    .set-rt-shim{display:flex;align-items:flex-start;gap:var(--sp-3);padding-left:var(--sp-11);
+      font-size:var(--fs-2xs);color:var(--ink-4);line-height:1.45;}
+    .set-rt-shim app-icon{flex:none;margin-top:1px;}
     .set-rt-edit{display:flex;flex-direction:column;gap:var(--sp-4);padding-left:var(--sp-11);}
     .set-rt-reason{display:flex;align-items:flex-start;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--set-amber);line-height:1.45;}
     .set-rt-reason app-icon{flex:none;margin-top:1px;}

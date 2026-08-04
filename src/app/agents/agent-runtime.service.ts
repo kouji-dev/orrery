@@ -15,16 +15,16 @@ import { AgentWorkStore } from "./agent-work.store";
 import { TerminalService } from "../terminal.service";
 import { UiStore } from "../ui/ui.store";
 import { treeAgentIds } from "../workspace/pane-model";
-import { detectTitleStatus, isAwaitingInput, isPermissionPrompt, TitleStatus } from "../utils";
-import { createPtyTailBuffer } from "./pty-tail-buffer";
+import { AgentPtyStatusPayload } from "../data-source/bridge";
 
 /**
  * The live runtime layer for agents: a per-agent overlay of transient metrics
  * (working / needsInput / worktree scans) merged over the backend record, fed
- * by the PTY output/title/exit streams. Also owns the liveness tick, the
- * shared elapsed clock (`now` / `elapsedFor`) and — for now — the heuristic
- * that raises notifications (this detection moves to the backend in a later
- * step).
+ * by the PTY output/exit streams and the backend's hook + heuristic events.
+ * Also owns the liveness tick and the shared elapsed clock (`now` /
+ * `elapsedFor`). Status detection itself lives in the backend: hooks for
+ * claude/codex/cursor, Rust PTY heuristics (A0.3, agent://pty-status) for
+ * un-hooked tools — this service only edge-tracks and raises notifications.
  */
 @Injectable({ providedIn: "root" })
 export class AgentRuntimeService {
@@ -85,14 +85,17 @@ export class AgentRuntimeService {
     return this.agents().find((a) => a.id === id) ?? null;
   });
 
-  // real liveness tracking (when launched, last output) + title-derived state
+  // real liveness tracking (when launched, last output)
   private startedAt: Record<string, number> = {};
   // elapsed seconds captured at process exit — what elapsedFor() reports once
   // the run is over (cleared on the next start / on dispose)
   private finalElapsed: Record<string, number> = {};
   private lastOutputAt: Record<string, number> = {};
-  private titleStatus: Record<string, TitleStatus> = {};
-  private titleAt: Record<string, number> = {};
+  // A0.3: Rust-side PTY heuristics state for un-hooked tools (gemini) —
+  // pushed on transitions over agent://pty-status. Replaces the renderer's
+  // title/promptTail parsing, which a none-mode agent (no bytes shipped)
+  // would silently starve.
+  private ptyState: Record<string, AgentPtyStatusPayload> = {};
   // notification edge-tracking + user-stop flag (a stop is not "work finished")
   private prevNeedsInput: Record<string, boolean> = {};
   private stoppingByUser: Record<string, boolean> = {};
@@ -112,12 +115,10 @@ export class AgentRuntimeService {
     return AgentRuntimeService.HOOK_TOOLS.has(tool);
   }
 
-  // Raw PTY tail, folded LAZILY: a chunk is just appended to a bounded
-  // per-agent ring (no parsing); appendPtyTail runs only when promptTail() is
-  // actually read — at process exit and in the needs-input heuristic for
-  // un-hooked tools (gemini). Hook-driven tools never pay for the fold while
-  // streaming.
-  private tailBuf = createPtyTailBuffer();
+  // A0.2 digest lines per agent (last ≤5 rendered rows, folded backend-side,
+  // pushed at 1Hz over agent://digest) — the overview mini-terminals' feed.
+  // Replaces reading the full-stream xterm buffer for previews.
+  readonly digests = signal<Record<string, string[]>>({});
 
   constructor() {
     // detect installed CLI tools once (path + version + ok/error/missing)
@@ -148,13 +149,26 @@ export class AgentRuntimeService {
       .then(() => this.scanReady.set(true))
       .catch(() => this.scanReady.set(true));
 
-    // live agent state from the terminal title (spinner = working, ✋ = needs input)
-    this.terminals.onTitle((id, title) => {
-      const s = detectTitleStatus(title);
-      if (!s) return; // unrecognized title — keep last known state
-      this.titleStatus[id] = s;
-      this.titleAt[id] = Date.now();
-    });
+    // A0.3: PTY-derived heuristics for un-hooked tools (gemini) arrive from
+    // Rust as transition events — title parsing + prompt-tail folding moved
+    // next to the batcher (see runtime/heuristics.rs). Works regardless of the
+    // agent's interest mode, since it never depends on bytes reaching us.
+    void this.agentsStore
+      .onPtyStatus((p) => this.onPtyStatus(p))
+      .catch(() => {});
+    // A0.2 digest lines for overview mini-previews (1Hz, ≤5 lines per agent).
+    void this.agentsStore
+      .onDigest((entries) => {
+        this.digests.update((m) => {
+          const next = { ...m };
+          for (const e of entries) {
+            if (!this.agentsStore.all().some((a) => a.id === e.id)) continue;
+            next[e.id] = e.lines;
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
 
     // backend native-hook signals (authoritative for tools that support hooks):
     //  • permission → a held tool call; raise a notification carrying its requestId
@@ -176,20 +190,20 @@ export class AgentRuntimeService {
       .onActivity((id, detail, event, kind) => this.pushActivity(id, detail, event, kind))
       .catch(() => {});
 
-    // stream output: raw bytes → xterm (scheduler-paced), and the SAME raw
-    // string into the lazy tail ring (no folding here — see tailBuf above).
+    // stream output: raw bytes → xterm (scheduler-paced). Only STREAM-mode
+    // agents ship frames (A0.2); `seq` rides along so the terminal service can
+    // dedup against a replayed A1.2 snapshot.
     // The payload is one multiplexed ~16ms frame: [{id, chunk, seq}, …] with
     // one coalesced entry per agent that produced output during the frame.
     void this.agentsStore
       .onOutput((entries) => {
         const now = Date.now();
-        for (const { id, chunk } of entries) {
+        for (const { id, chunk, seq } of entries) {
           // Why: the mux's exit force-drain can land after agent removal —
           // writing then would recreate (and leak) a disposed terminal.
           if (!this.agentsStore.all().some((a) => a.id === id)) continue;
           this.lastOutputAt[id] = now;
-          this.terminals.write(id, chunk);
-          this.tailBuf.push(id, chunk);
+          this.terminals.write(id, chunk, seq);
         }
       })
       .catch(() => {});
@@ -344,8 +358,7 @@ export class AgentRuntimeService {
     this.startedAt[id] = Date.now();
     delete this.finalElapsed[id]; // a fresh run derives elapsed from startedAt again
     this.now.set(Date.now()); // the clock may have been parked — show 0s immediately
-    delete this.titleStatus[id];
-    delete this.titleAt[id];
+    delete this.ptyState[id];
     delete this.hookState[id];
     this.prevNeedsInput[id] = false;
     this.clearActivity(id); // a fresh run starts with an empty feed
@@ -373,11 +386,13 @@ export class AgentRuntimeService {
     this.terminals.dispose(id);
     this.clearRuntime(id);
     this.work.dispose(id);
-    this.tailBuf.clear(id);
     delete this.startedAt[id];
     delete this.finalElapsed[id];
-    delete this.titleStatus[id];
-    delete this.titleAt[id];
+    delete this.ptyState[id];
+    this.digests.update((m) => {
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
     delete this.hookState[id];
     delete this.prevNeedsInput[id];
     delete this.stoppingByUser[id]; // exit may never arrive (guarded) — clear here too
@@ -433,8 +448,10 @@ export class AgentRuntimeService {
    *  • hooked tools (claude/codex/cursor): the backend is the single source of
    *    truth. working = a turn is in progress (status ping); needsInput = a held
    *    permission request is pending in the feed.
-   *  • un-hooked tools (gemini): the PTY title/output heuristic — the fallback
-   *    floor for tools we can't hook.
+   *  • un-hooked tools (gemini): the Rust-side PTY heuristics (A0.3), pushed
+   *    over agent://pty-status on transitions. Before the first event lands,
+   *    output recency bridges the gap (stream-mode agents only — hidden ones
+   *    get their first pty-status within ~2s of launch output anyway).
    */
   private liveState(ag: Agent, now: number): { working: boolean; needsInput: boolean } {
     const id = ag.id;
@@ -449,19 +466,9 @@ export class AgentRuntimeService {
       return { working, needsInput: this.hasPendingPermission(id) };
     }
 
-    const ts = this.titleStatus[id];
-    if (ts === "permission") return { working: false, needsInput: true };
-    let working: boolean;
-    if (ts === "working") {
-      const titleFresh = now - (this.titleAt[id] ?? 0) < 1500;
-      working = titleFresh || outputRecent;
-    } else if (ts === "idle") {
-      working = false;
-    } else {
-      working = outputRecent;
-    }
-    const needsInput = !working && isAwaitingInput(this.promptTail(id));
-    return { working, needsInput };
+    const ps = this.ptyState[id];
+    if (ps) return { working: ps.working, needsInput: ps.needsInput };
+    return { working: outputRecent, needsInput: false };
   }
 
   /** Is a hook-driven permission request currently pending for this agent? */
@@ -474,7 +481,7 @@ export class AgentRuntimeService {
   private onExit(id: string) {
     // Why: like the output path, exit can land after removeAgent (mux drain
     // ordering) — patching the overlay / pushing the tail below would recreate
-    // (and leak) runtime + tailBuf entries for a disposed agent.
+    // (and leak) runtime entries for a disposed agent.
     if (!this.agentsStore.all().some((a) => a.id === id)) return;
     this.terminals.exit(id);
     // freeze the elapsed display at the run's final duration
@@ -488,8 +495,9 @@ export class AgentRuntimeService {
     // ticks are needed.  The tick's own self-clear is a backstop; stopping here
     // avoids waiting for the next 800ms boundary.
     if (Object.keys(this.startedAt).length === 0) this.stopTicking();
-    delete this.titleStatus[id];
-    delete this.titleAt[id];
+    // ptyState is kept (not deleted) so the "finished" notification below and
+    // any later promptTail() read still see the run's final prompt tail; a
+    // fresh start clears it.
     delete this.hookState[id];
     delete this.prevNeedsInput[id];
     this.patchRuntime(id, { working: false, needsInput: false });
@@ -508,9 +516,6 @@ export class AgentRuntimeService {
       });
     }
     delete this.stoppingByUser[id];
-    // exited marker AFTER the notification read its tail — so the "finished"
-    // detail excludes it but any later promptTail() read includes it.
-    this.tailBuf.push(id, "\r\n▪ process exited");
   }
 
   // ---- backend hook-driven needs-input signal (authoritative) ----
@@ -552,20 +557,23 @@ export class AgentRuntimeService {
     });
   }
 
-  // ---- PTY-parsing fallback (for tools WITHOUT native hooks, e.g. gemini) ----
+  // ---- Rust PTY-heuristics fallback (tools WITHOUT native hooks, gemini) ----
+  // A0.3: the classification (permission vs question) and the prompt-tail
+  // detail now arrive READY from the backend event — the renderer only does
+  // edge-tracking so a prompt raises once and dismisses when answered.
   private detectNeedsInput(ag: Agent, needsInput: boolean) {
     // hook-driven tools get permission/question from the backend — don't double-raise
     if (this.hookDriven(ag.tool)) return;
     const was = this.prevNeedsInput[ag.id] ?? false;
     if (needsInput && !was) {
-      const detail = this.promptTail(ag.id);
-      const permission = isPermissionPrompt(detail);
+      const ps = this.ptyState[ag.id];
+      const permission = ps?.permission ?? false;
       this.raise({
         agentId: ag.id,
         agentName: ag.name,
         kind: permission ? "permission" : "question",
         title: permission ? `${ag.name} needs permission` : `${ag.name} has a question`,
-        detail,
+        detail: ps?.detail ?? "",
       });
     } else if (!needsInput && was) {
       this.notifications.dismissPendingFor(ag.id, ["permission", "question"]);
@@ -573,15 +581,32 @@ export class AgentRuntimeService {
     this.prevNeedsInput[ag.id] = needsInput;
   }
 
-  /** Last few non-empty terminal lines — the prompt context for a notification.
-   *  This is THE read that triggers the lazy fold of buffered raw chunks. */
+  /** A0.3 event handler: store the Rust heuristics state and reflect the
+   *  working/needsInput edge into the runtime overlay immediately (the 800ms
+   *  tick would pick it up anyway; this just removes the lag). */
+  private onPtyStatus(p: AgentPtyStatusPayload) {
+    // Same guard as output/exit: events can race agent removal.
+    const ag = this.agents().find((a) => a.id === p.id);
+    if (!ag) return;
+    this.ptyState[p.id] = p;
+    if (ag.status === "running") {
+      if (ag.working !== p.working || ag.needsInput !== p.needsInput) {
+        this.patchRuntime(p.id, { working: p.working, needsInput: p.needsInput });
+      }
+      this.detectNeedsInput(ag, p.needsInput);
+    }
+  }
+
+  /** The backend-folded prompt tail (last few non-empty lines) for un-hooked
+   *  tools — notification/exit context. "" before the first pty-status event. */
   promptTail(id: string): string {
-    return this.tailBuf
-      .tail(id)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .slice(-5)
-      .join("\n");
+    return this.ptyState[id]?.detail ?? "";
+  }
+
+  /** A0.2 digest lines (last ≤5 rendered rows) for an agent's mini-preview.
+   *  [] before the first digest arrives (or for non-digest-mode agents). */
+  digestFor(id: string): string[] {
+    return this.digests()[id] ?? [];
   }
 
   /** All notifications go through the settings-gated alert service: per-event

@@ -16,9 +16,11 @@ pub mod commands;
 pub const COST_FRESH: Duration = Duration::from_secs(300);
 
 /// Cached ccusage snapshot shared (managed state + a clone in the push loop)
-/// between the loop and the one-shot `system_cost` command. At startup both
-/// fire at once — `run` serializes them so the second caller waits for the
-/// first run's result instead of spawning a second node process.
+/// between the loop and the one-shot `system_cost` command. The loop is the
+/// only runner: the one-shot [`peek`](CostCache::peek)s and never blocks or
+/// spawns (A1.8). `run` still serializes any concurrent `get` callers so a
+/// second caller waits for the in-flight run's result instead of spawning a
+/// second node process.
 #[derive(Clone)]
 pub struct CostCache {
     inner: Arc<CostCacheInner>,
@@ -69,6 +71,16 @@ impl CostCache {
         let snap = (self.inner.runner)();
         *self.inner.last.lock().unwrap() = Some((snap, Instant::now()));
         snap
+    }
+
+    /// The cached snapshot if younger than `max_age`, WITHOUT ever running
+    /// ccusage — `None` on a cold or stale cache. This is the startup one-shot's
+    /// path (A1.8): the push loop's first run is already in flight when the
+    /// webview asks, so the one-shot must not park a thread behind the run lock
+    /// (or worse, trigger a second multi-second node process) just to duplicate
+    /// the `system://cost` emit the loop is about to make.
+    pub fn peek(&self, max_age: Duration) -> Option<CostSnapshot> {
+        self.cached(max_age)
     }
 
     fn cached(&self, max_age: Duration) -> Option<CostSnapshot> {
@@ -204,6 +216,20 @@ mod tests {
         cache.get(Duration::ZERO);
         cache.get(Duration::ZERO);
         assert_eq!(runs.load(Ordering::SeqCst), 2);
+    }
+
+    // A1.8: the startup one-shot peeks — it must NEVER trigger a run (the push
+    // loop owns running ccusage). Cold cache → None and zero runs; once the
+    // loop has stored a snapshot, peek serves it; stale → None again.
+    #[test]
+    fn peek_never_runs_and_serves_only_a_fresh_cache() {
+        let (cache, runs) = counting_cache(Duration::ZERO);
+        assert_eq!(cache.peek(COST_FRESH), None, "cold cache peeks empty");
+        assert_eq!(runs.load(Ordering::SeqCst), 0, "peek spawned nothing");
+        cache.get(COST_FRESH); // the push loop's run
+        assert_eq!(cache.peek(COST_FRESH), Some(CostSnapshot::usd(7.0)));
+        assert_eq!(cache.peek(Duration::ZERO), None, "stale cache peeks empty");
+        assert_eq!(runs.load(Ordering::SeqCst), 1, "still only the loop's run");
     }
 
     // The startup race: push loop + one-shot command both ask at once. The

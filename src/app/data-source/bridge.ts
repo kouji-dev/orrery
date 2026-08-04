@@ -49,7 +49,15 @@ export const Commands = {
   AgentDeny: 'agent_deny',
   AgentDecide: 'agent_decide',
   AgentResize: 'agent_resize',
-  AgentFocus: 'agent_focus',
+  /** A0.2 interest subscription — supersedes agent_focus. The frontend
+   *  publishes the full per-agent {id, mode} set derived from what is VISIBLE
+   *  (stream = terminal pane, digest = overview mini-preview, absent = none);
+   *  the backend diffs it. `none` means do-not-EMIT (the PTY keeps being read
+   *  into the bounded backend scrollback ring). */
+  RuntimeSubscribe: 'runtime_subscribe',
+  /** A1.2 scrollback snapshot `{text, endSeq}` — the terminal recovery source
+   *  (reload / stale-terminal-shown / none→stream resubscribe). */
+  RuntimeSnapshot: 'runtime_snapshot',
   /** ONE-SHOT drain of the agents that were running when the app last shut
    *  down (captured before reset_running) — the auto-resume flow's source. */
   AgentsInterrupted: 'agents_interrupted',
@@ -130,6 +138,45 @@ export interface AgentOutputEntry {
   seq: number;
 }
 
+/** A0.2 interest mode: how much of an agent's PTY output the renderer wants.
+ *  `stream` = full output per frame (a visible terminal pane); `digest` =
+ *  last few rendered lines at 1Hz (overview mini-preview); `none`/absent =
+ *  nothing ships (the backend ring keeps the bytes, bounded). */
+export type InterestMode = 'stream' | 'digest' | 'none';
+
+/** One entry of the `runtime_subscribe` interest set. */
+export interface InterestEntry {
+  id: string;
+  mode: InterestMode;
+}
+
+/** `runtime_snapshot` reply: the backend scrollback ring's content plus the
+ *  cumulative byte seq of its last byte. Recovery contract: term.clear() →
+ *  write `text` → drop live chunks with `seq <= endSeq` → resume. */
+export interface RuntimeSnapshot {
+  text: string;
+  endSeq: number;
+}
+
+/** One agent's entry in an `agent://digest` payload: the last ≤5 rendered
+ *  lines (backend-side VT fold) + the seq of the last folded chunk. */
+export interface AgentDigestEntry {
+  id: string;
+  lines: string[];
+  seq: number;
+}
+
+/** `agent://pty-status` payload (A0.3): Rust-side PTY heuristics for tools
+ *  without a blocking permission hook (gemini). Emitted on state TRANSITIONS
+ *  only; `detail` is the folded prompt tail (notification context). */
+export interface AgentPtyStatusPayload {
+  id: string;
+  working: boolean;
+  needsInput: boolean;
+  permission: boolean;
+  detail: string;
+}
+
 export const Events = {
   ProjectCreated: 'project://created',
   ProjectUpdated: 'project://updated',
@@ -139,6 +186,12 @@ export const Events = {
   AgentDeleted: 'agent://deleted',
   AgentChanged: 'agent://changed',
   AgentOutput: 'agent://output',
+  /** 1Hz per-agent digests (last ≤5 rendered lines) for digest-mode agents —
+   *  the overview mini-terminals' feed. Payload: AgentDigestEntry[]. */
+  AgentDigest: 'agent://digest',
+  /** Rust-side PTY status heuristics for un-hooked tools (gemini) — A0.3.
+   *  Payload: AgentPtyStatusPayload, transitions only. */
+  AgentPtyStatus: 'agent://pty-status',
   AgentExit: 'agent://exit',
   AgentAsk: 'agent://ask',
   /** A hook signalled the agent needs the user (permission prompt / question). */

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { InterestService } from '../agents/interest.service';
 import { CommandRegistryService } from '../commands/command-registry.service';
 import { CommandOverlaysComponent } from '../commands/overlays.component';
 import { ContextMenuComponent } from '../context-menu/context-menu.component';
@@ -163,5 +164,9 @@ export class ShellComponent {
     // Global keybindings (command palette, Search Everywhere, recent files…)
     // dispatch from the command registry — one window-level listener.
     inject(CommandRegistryService).start();
+    // A0.2: publish the PTY interest set (stream/digest/none per agent) to the
+    // backend whenever the visible surfaces change — tab switch, pane layout,
+    // overview card visibility, window blur/focus.
+    inject(InterestService).start();
   }
 }

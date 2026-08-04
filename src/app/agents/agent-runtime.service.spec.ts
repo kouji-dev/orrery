@@ -3,7 +3,7 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent, Settings } from "../models";
-import { appendPtyTail } from "../utils";
+import { AgentDigestEntry, AgentPtyStatusPayload } from "../data-source/bridge";
 import { settingsDefaults, SettingsStore } from "../settings/settings.store";
 import { AgentsStore } from "../stores/agents.store";
 import { NotificationStore } from "../stores/notifications.store";
@@ -11,15 +11,6 @@ import { UiStore } from "../ui/ui.store";
 import { TerminalService } from "../terminal.service";
 import { AgentWorkStore } from "./agent-work.store";
 import { AgentRuntimeService } from "./agent-runtime.service";
-
-// Spy-wrap appendPtyTail so the specs can prove WHEN folding happens (never on
-// push for hook-driven tools; lazily on read for the exit/gemini paths). The
-// wrapper delegates to the real implementation — behavior is unchanged.
-vi.mock("../utils", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../utils")>();
-  return { ...actual, appendPtyTail: vi.fn(actual.appendPtyTail) };
-});
-const foldSpy = vi.mocked(appendPtyTail);
 
 function makeAgent(p: Partial<Agent> & { id: string; tool: Agent["tool"] }): Agent {
   return {
@@ -51,12 +42,13 @@ beforeAll(() => {
 
 let output: OutputCb;
 let exit: (id: string) => void;
+let ptyStatus: (p: AgentPtyStatusPayload) => void;
+let digest: (entries: AgentDigestEntry[]) => void;
 let notifications: { pending: () => never[]; push: ReturnType<typeof vi.fn>; dismissPendingFor: ReturnType<typeof vi.fn> };
 let terminals: { write: ReturnType<typeof vi.fn>; exit: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; size: () => null; syncSize: ReturnType<typeof vi.fn>; onTitle: ReturnType<typeof vi.fn> };
 
 beforeEach(() => {
   vi.useFakeTimers();
-  foldSpy.mockClear();
 });
 afterEach(() => {
   TestBed.resetTestingModule();
@@ -84,6 +76,14 @@ function setup(
     },
     onExit: (cb: (id: string) => void) => {
       exit = cb;
+      return Promise.resolve(() => {});
+    },
+    onPtyStatus: (cb: (p: AgentPtyStatusPayload) => void) => {
+      ptyStatus = cb;
+      return Promise.resolve(() => {});
+    },
+    onDigest: (cb: (entries: AgentDigestEntry[]) => void) => {
+      digest = cb;
       return Promise.resolve(() => {});
     },
     start: vi.fn(() => Promise.resolve()),
@@ -207,34 +207,47 @@ describe("AgentRuntimeService — shared clock & stable agents identity", () => 
   });
 });
 
-describe("AgentRuntimeService — lazy PTY tail folding", () => {
-  it("hook-driven tool: streaming never folds; exit folds once for the notification detail", () => {
-    const svc = setup([makeAgent({ id: "a1", tool: "claude" })]);
-    output([{ id: "a1", chunk: "line one\r\n" }]);
-    output([{ id: "a1", chunk: "line two\r\n" }]);
-    vi.advanceTimersByTime(5000); // many liveness ticks — the hook path never reads the tail
-    expect(foldSpy).not.toHaveBeenCalled();
-    expect(terminals.write).toHaveBeenCalledTimes(2); // xterm still gets the raw stream
-
-    exit("a1");
-    expect(foldSpy).toHaveBeenCalledTimes(2); // both buffered chunks, folded exactly once
-    expect(notifications.push).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "done", detail: "line one\nline two" }),
-    );
-    // post-exit tail still carries the exited marker (parity with the old sys line)
-    expect(svc.promptTail("a1")).toBe("line one\nline two\n▪ process exited");
+describe("AgentRuntimeService — Rust PTY heuristics (A0.3, agent://pty-status)", () => {
+  const ev = (
+    id: string,
+    p: Partial<AgentPtyStatusPayload> = {},
+  ): AgentPtyStatusPayload => ({
+    id,
+    working: false,
+    needsInput: false,
+    permission: false,
+    detail: "",
+    ...p,
   });
 
-  it("gemini: tail folds lazily on the heuristic read, caches until new output, raises the same prompt", () => {
+  it("streams raw output (with seq) to xterm; exit uses the pty-status tail as detail", () => {
+    const svc = setup([makeAgent({ id: "a1", tool: "claude" })]);
+    output([{ id: "a1", chunk: "line one\r\n", seq: 10 }]);
+    output([{ id: "a1", chunk: "line two\r\n", seq: 20 }]);
+    expect(terminals.write).toHaveBeenCalledTimes(2);
+    expect(terminals.write).toHaveBeenLastCalledWith("a1", "line two\r\n", 20);
+
+    exit("a1");
+    // no pty-status ever arrived (hook tool) → the generic detail
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "done",
+        detail: "Process ended — review or merge its work.",
+      }),
+    );
+    expect(svc.promptTail("a1")).toBe("");
+  });
+
+  it("gemini: a needs-input transition raises ONE question with the backend detail", () => {
     setup([makeAgent({ id: "g1", tool: "gemini" })]);
-    output([{ id: "g1", chunk: "thinking...\r\n" }]);
-    output([{ id: "g1", chunk: "Apply this patch?\r\n" }]);
+    // Backend heuristics: working while streaming — no notification.
+    ptyStatus(ev("g1", { working: true, detail: "thinking..." }));
+    expect(notifications.push).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(800); // tick 1: output is recent → working → tail not read
-    expect(foldSpy).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(800); // tick 2: idle → heuristic reads the tail → folds now
-    expect(foldSpy).toHaveBeenCalledTimes(2);
+    // Transition: quiet + trailing question → needsInput (open question).
+    ptyStatus(
+      ev("g1", { needsInput: true, detail: "thinking...\nApply this patch?" }),
+    );
     expect(notifications.push).toHaveBeenCalledTimes(1);
     expect(notifications.push).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -244,22 +257,77 @@ describe("AgentRuntimeService — lazy PTY tail folding", () => {
       }),
     );
 
-    vi.advanceTimersByTime(800); // tick 3: no new output → cached fold, no re-raise
-    expect(foldSpy).toHaveBeenCalledTimes(2);
+    // Same state re-pushed (backend dedups, but belt-and-braces): no re-raise.
+    ptyStatus(
+      ev("g1", { needsInput: true, detail: "thinking...\nApply this patch?" }),
+    );
     expect(notifications.push).toHaveBeenCalledTimes(1);
 
-    output([{ id: "g1", chunk: "more\r\n" }]); // new raw chunk → dirty
-    vi.advanceTimersByTime(1600); // working tick, then idle tick re-folds the new chunk only
-    expect(foldSpy).toHaveBeenCalledTimes(3);
+    // Input answered → needsInput falls → pending prompts dismissed.
+    ptyStatus(ev("g1", { working: true, detail: "continuing" }));
+    expect(notifications.dismissPendingFor).toHaveBeenCalledWith("g1", [
+      "permission",
+      "question",
+    ]);
   });
 
-  it("dispose clears the raw buffer — no fold of removed agents' output", () => {
+  it("gemini: a permission-classified prompt raises kind=permission", () => {
+    setup([makeAgent({ id: "g1", tool: "gemini" })]);
+    ptyStatus(
+      ev("g1", {
+        needsInput: true,
+        permission: true,
+        detail: "Run `rm -rf dist`? [y/N]",
+      }),
+    );
+    expect(notifications.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "permission",
+        title: "g1 needs permission",
+        detail: "Run `rm -rf dist`? [y/N]",
+      }),
+    );
+  });
+
+  it("hook-driven tools never double-raise from pty-status (backend hooks own them)", () => {
+    setup([makeAgent({ id: "a1", tool: "claude" })]);
+    ptyStatus(ev("a1", { needsInput: true, detail: "Proceed? (y/n)" }));
+    expect(notifications.push).not.toHaveBeenCalled();
+  });
+
+  it("pty-status for a removed agent is ignored (no state leak)", () => {
+    const svc = setup([makeAgent({ id: "g1", tool: "gemini" })]);
+    ptyStatus(ev("ghost", { needsInput: true, detail: "?" }));
+    expect(notifications.push).not.toHaveBeenCalled();
+    expect(svc.promptTail("ghost")).toBe("");
+  });
+
+  it("dispose clears the heuristics state", () => {
+    const svc = setup([makeAgent({ id: "g1", tool: "gemini" })]);
+    ptyStatus(ev("g1", { working: true, detail: "context" }));
+    expect(svc.promptTail("g1")).toBe("context");
+    svc.dispose("g1");
+    expect(svc.promptTail("g1")).toBe("");
+    expect(terminals.dispose).toHaveBeenCalledWith("g1");
+  });
+});
+
+describe("AgentRuntimeService — digest lines (A0.2, agent://digest)", () => {
+  it("stores the latest digest lines per agent for the mini-previews", () => {
     const svc = setup([makeAgent({ id: "a1", tool: "claude" })]);
-    output([{ id: "a1", chunk: "secret scrollback\r\n" }]);
+    digest([{ id: "a1", lines: ["one", "two"], seq: 10 }]);
+    expect(svc.digestFor("a1")).toEqual(["one", "two"]);
+    digest([{ id: "a1", lines: ["three"], seq: 20 }]);
+    expect(svc.digestFor("a1")).toEqual(["three"]); // last write wins
+  });
+
+  it("ignores digests for unknown agents and clears on dispose", () => {
+    const svc = setup([makeAgent({ id: "a1", tool: "claude" })]);
+    digest([{ id: "ghost", lines: ["x"], seq: 1 }]);
+    expect(svc.digestFor("ghost")).toEqual([]);
+    digest([{ id: "a1", lines: ["x"], seq: 1 }]);
     svc.dispose("a1");
-    expect(svc.promptTail("a1")).toBe("");
-    expect(foldSpy).not.toHaveBeenCalled();
-    expect(terminals.dispose).toHaveBeenCalledWith("a1");
+    expect(svc.digestFor("a1")).toEqual([]);
   });
 });
 

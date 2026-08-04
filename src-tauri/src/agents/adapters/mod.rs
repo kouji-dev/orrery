@@ -60,18 +60,40 @@ pub struct ToolStatus {
     pub source: Option<String>,
     /// Why an `error` tool couldn't run — shown to the user.
     pub reason: Option<String>,
+    /// True when the resolved install is a script shim (`.cmd`/`.bat`/`.ps1` or
+    /// npm's extensionless launcher) rather than a native executable. The
+    /// Settings tool tile shows a one-line "native installer" hint — a shim
+    /// install may need a shell wrapper process per agent (A0.1).
+    pub shim: bool,
 }
 
 impl ToolStatus {
     fn missing(id: String) -> Self {
-        Self { id, status: "missing".into(), available: false, path: None, version: None, source: None, reason: None }
+        Self { id, status: "missing".into(), available: false, path: None, version: None, source: None, reason: None, shim: false }
     }
     fn ok(id: String, path: String, source: &str, version: Option<String>) -> Self {
-        Self { id, status: "ok".into(), available: true, path: Some(path), version, source: Some(source.into()), reason: None }
+        let shim = is_shim_path(&path);
+        Self { id, status: "ok".into(), available: true, path: Some(path), version, source: Some(source.into()), reason: None, shim }
     }
     fn error(id: String, path: String, source: &str, reason: String) -> Self {
-        Self { id, status: "error".into(), available: false, path: Some(path), version: None, source: Some(source.into()), reason: Some(reason) }
+        Self { id, status: "error".into(), available: false, path: Some(path), version: None, source: Some(source.into()), reason: Some(reason), shim: false }
     }
+}
+
+/// Script-shim heuristic for the detection payload: on Windows anything that is
+/// not a PE image (`.exe`/`.com`) — npm installs `.cmd`/`.ps1`/extensionless
+/// launchers, all of which cost a wrapper process (or at best a parsed re-spawn)
+/// per agent. Never a shim off Windows (Unix npm shims are exec-replaced shell
+/// scripts — no lingering wrapper, so no hint to show).
+fn is_shim_path(path: &str) -> bool {
+    if !cfg!(windows) {
+        return false;
+    }
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+    !matches!(ext.as_deref(), Some("exe") | Some("com"))
 }
 
 pub trait AgentAdapter: Send + Sync {
@@ -135,6 +157,15 @@ pub trait AgentAdapter: Send + Sync {
     /// Does this tool have hooks we drive (vs. PTY-parse fallback)?
     fn supports_hooks(&self) -> bool {
         true
+    }
+
+    /// Does this tool need the Rust-side PTY status heuristics (A0.3)?
+    /// True only for tools whose working / needs-input state cannot come from
+    /// a blocking permission hook (gemini) — the runtime then tees the raw
+    /// stream through `runtime::heuristics` and emits `agent://pty-status`,
+    /// so status survives even when the agent is in `none` interest mode.
+    fn pty_status_fallback(&self) -> bool {
+        false
     }
 
     /// Extra spawn args for the user's per-tool auto-approve policy
@@ -523,11 +554,184 @@ pub fn powershell_program() -> String {
     }
 }
 
-/// Whether PowerShell 7 is available — when it is, a `.ps1` shim run under pwsh
-/// is preferred over the `.cmd` shim (smoother than cmd.exe's batch machinery).
+/// Directly-spawnable argv parsed out of an npm-style launcher shim
+/// (`claude.cmd` / `claude.ps1` / `claude.bat`): the real interpreter + script,
+/// e.g. `["…\node.exe", "…\node_modules\@anthropic-ai\claude-code\cli.js"]`.
+/// Spawning that argv deletes the shell wrapper process that would otherwise
+/// live for the agent's whole run (A0.1). `None` when the file doesn't match
+/// the known npm shim shapes — callers then fall back to wrapping the shim in
+/// its interpreter (we never guess).
+///
+/// Cached per `(path, mtime)`: the parse re-runs only when the tool updates
+/// (npm rewrites the shim on upgrade, bumping mtime). Negative results are
+/// cached too — a hand-written wrapper script stays wrapped until it changes
+/// on disk.
 #[cfg(windows)]
-pub fn prefers_pwsh() -> bool {
-    powershell_program() == "pwsh.exe"
+pub fn resolve_shim_argv(path: &Path) -> Option<Vec<String>> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::SystemTime;
+    type ShimCache = Mutex<HashMap<PathBuf, (SystemTime, Option<Vec<String>>)>>;
+    static CACHE: OnceLock<ShimCache> = OnceLock::new();
+
+    let meta = std::fs::metadata(path).ok()?;
+    // Why 16 KiB: generated npm/pnpm shims are well under 1 KiB; anything bigger
+    // is not a shim, and reading it just to reject it would be wasted IO.
+    if meta.len() > 16 * 1024 {
+        return None;
+    }
+    let mtime = meta.modified().ok()?;
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some((cached_at, argv)) = cache.lock().unwrap().get(path) {
+        if *cached_at == mtime {
+            return argv.clone();
+        }
+    }
+    let parsed = parse_shim(path);
+    cache
+        .lock()
+        .unwrap()
+        .insert(path.to_path_buf(), (mtime, parsed.clone()));
+    parsed
+}
+
+/// Uncached parse behind [`resolve_shim_argv`]: dispatch on extension to the
+/// `.cmd`/`.bat` or `.ps1` npm-shim parser. Rejects any shim that mentions
+/// `NODE_PATH` — some pnpm layouts export it for module resolution, and a
+/// direct spawn would drop that env and break `require()` in the target.
+#[cfg(windows)]
+fn parse_shim(path: &Path) -> Option<Vec<String>> {
+    let text = std::fs::read_to_string(path).ok()?;
+    if text.contains("NODE_PATH") {
+        return None;
+    }
+    let dir = path.parent()?;
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "cmd" | "bat" => parse_cmd_shim(&text, dir),
+        "ps1" => parse_ps1_shim(&text, dir),
+        _ => None,
+    }
+}
+
+/// npm's `.cmd` shim ends in one exec line shaped like
+/// `… "%_prog%"  "%dp0%\node_modules\<pkg>\cli.js" %*` (current npm) or
+/// `@"%~dp0\node.exe" "%~dp0\…\cli.js" %*` (older npm). Take the last line
+/// carrying `%*`, read its double-quoted tokens, expand `%dp0%`/`%~dp0` to the
+/// shim's directory and `%_prog%` per the shim's own logic (sibling `node.exe`,
+/// else `node` on PATH). Both the program and the script must exist on disk or
+/// the parse is rejected — never guess.
+#[cfg(windows)]
+fn parse_cmd_shim(text: &str, dir: &Path) -> Option<Vec<String>> {
+    let exec_line = text
+        .lines()
+        .rev()
+        .find(|l| l.contains("%*") && l.contains('"'))?;
+    let quoted = quoted_tokens(exec_line);
+    // Why exactly 2: `program + script` is the entire npm shim contract; extra
+    // quoted tokens mean a hand-written wrapper doing something we can't model.
+    if quoted.len() != 2 {
+        return None;
+    }
+    let prog = resolve_cmd_shim_prog(&quoted[0], dir)?;
+    let script = expand_dp0(&quoted[1], dir);
+    if !Path::new(&script).is_file() {
+        return None;
+    }
+    Some(vec![prog, script])
+}
+
+/// Resolve the program token of a `.cmd` shim exec line to a real on-disk
+/// `.exe`. `%_prog%` mirrors the shim's own `IF EXIST` branch (sibling
+/// `node.exe`, else `node` from PATH); an explicit `%dp0%`-relative `.exe` must
+/// exist; a bare name goes through PATH. Anything else → `None` (wrap instead).
+#[cfg(windows)]
+fn resolve_cmd_shim_prog(token: &str, dir: &Path) -> Option<String> {
+    if token == "%_prog%" {
+        let sibling = dir.join("node.exe");
+        if sibling.is_file() {
+            return Some(sibling.to_string_lossy().into_owned());
+        }
+        return which_path("node").map(|p| p.to_string_lossy().into_owned());
+    }
+    let expanded = expand_dp0(token, dir);
+    let p = Path::new(&expanded);
+    if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe")) && p.is_file() {
+        return Some(expanded);
+    }
+    if !expanded.contains('\\') && !expanded.contains('/') {
+        // Bare program name (`node`) — a direct spawn needs the real path.
+        return which_path(&expanded).map(|p| p.to_string_lossy().into_owned());
+    }
+    None
+}
+
+/// Expand batch `%~dp0` / npm's `SET dp0=%~dp0` variable (both mean "the
+/// shim's own directory, trailing backslash") in one token. A doubled `\\` from
+/// `"%dp0%\x"` is harmless to the filesystem APIs and CreateProcessW.
+#[cfg(windows)]
+fn expand_dp0(token: &str, dir: &Path) -> String {
+    let d = format!("{}\\", dir.to_string_lossy());
+    token.replace("%~dp0", &d).replace("%dp0%", &d)
+}
+
+/// npm's `.ps1` shim invokes `& "$basedir/node$exe"  "$basedir/…/cli.js" $args`
+/// — a sibling-node branch, then a bare `"node$exe"` PATH fallback. Scan the
+/// invocation lines in order and return the first whose program + script both
+/// resolve to real files (`$basedir` → shim dir, `$exe` → ".exe" on Windows).
+#[cfg(windows)]
+fn parse_ps1_shim(text: &str, dir: &Path) -> Option<Vec<String>> {
+    for line in text
+        .lines()
+        .filter(|l| l.contains("$args") && l.contains("& \""))
+    {
+        let quoted = quoted_tokens(line);
+        if quoted.len() != 2 {
+            continue;
+        }
+        let prog_tok = expand_ps1_vars(&quoted[0], dir);
+        let script = expand_ps1_vars(&quoted[1], dir);
+        let prog = if !prog_tok.contains('\\') && !prog_tok.contains('/') {
+            // The else-branch's bare `"node$exe"` → resolve on PATH.
+            let stem = prog_tok.trim_end_matches(".exe");
+            which_path(stem).map(|p| p.to_string_lossy().into_owned())
+        } else if Path::new(&prog_tok).is_file() {
+            Some(prog_tok)
+        } else {
+            None
+        };
+        let Some(prog) = prog else { continue };
+        if !Path::new(&script).is_file() {
+            continue;
+        }
+        return Some(vec![prog, script]);
+    }
+    None
+}
+
+/// Expand the two variables npm's ps1 shim interpolates inside its quoted
+/// arguments: `$basedir` (the shim's directory) and `$exe` (".exe" on Windows).
+#[cfg(windows)]
+fn expand_ps1_vars(token: &str, dir: &Path) -> String {
+    token
+        .replace("$basedir", &dir.to_string_lossy())
+        .replace("$exe", ".exe")
+}
+
+/// The double-quoted substrings of `line`, in order. Batch/ps1 shim exec lines
+/// quote exactly the program + script paths, so this is the whole tokenizer a
+/// known-shape shim needs.
+#[cfg(windows)]
+fn quoted_tokens(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = line;
+    while let Some(start) = rest.find('"') {
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('"') else { break };
+        out.push(after[..end].to_string());
+        rest = &after[end + 1..];
+    }
+    out
 }
 
 #[cfg(windows)]
@@ -539,29 +743,42 @@ fn windows_launch_prefix(path: &str) -> (String, Vec<String>) {
         .map(str::to_ascii_lowercase);
     match ext.as_deref() {
         Some("exe") | Some("com") => (path.to_string(), Vec::new()),
-        Some("cmd") | Some("bat") => (
-            "cmd.exe".into(),
-            vec!["/c".into(), "call".into(), path.to_string()],
-        ),
-        Some("ps1") => (
-            powershell_program(),
-            vec![
-                "-NoProfile".into(),
-                "-ExecutionPolicy".into(),
-                "Bypass".into(),
-                "-File".into(),
-                path.to_string(),
-            ],
-        ),
+        Some("cmd") | Some("bat") | Some("ps1") => {
+            // A0.1: an npm-style shim parses to `node <cli.js>` — spawn that
+            // directly, no wrapper process at all. Only an unparseable shim
+            // falls back to its interpreter below.
+            if let Some(argv) = resolve_shim_argv(p) {
+                return (argv[0].clone(), argv[1..].to_vec());
+            }
+            if ext.as_deref() == Some("ps1") {
+                // Old pwsh path, kept reachable: only a ps1-ONLY unparseable
+                // shim still pays for a PowerShell wrapper.
+                (
+                    powershell_program(),
+                    vec![
+                        "-NoProfile".into(),
+                        "-ExecutionPolicy".into(),
+                        "Bypass".into(),
+                        "-File".into(),
+                        path.to_string(),
+                    ],
+                )
+            } else {
+                (
+                    "cmd.exe".into(),
+                    vec!["/c".into(), "call".into(), path.to_string()],
+                )
+            }
+        }
         _ => {
             // Extensionless (or unknown) shim — prefer a runnable sibling with
             // the same stem (npm installs `claude` + `claude.cmd` side by side).
-            // With pwsh installed the .ps1 sibling outranks .cmd.
-            let sibs: [&str; 4] = if prefers_pwsh() {
-                ["exe", "ps1", "cmd", "bat"]
-            } else {
-                ["exe", "cmd", "bat", "ps1"]
-            };
+            // Why .cmd/.bat before .ps1 even when pwsh is installed: a cmd.exe
+            // wrapper is ~3–5 MB RSS vs pwsh's ~60–100 MB, and the old "pwsh
+            // runs npm's ps1 shim more smoothly" note predated the `/c call`
+            // quoting fix (see runtime::wrap_for_ext) that made the .cmd path
+            // survive spaced dirs + spaced prompts.
+            let sibs: [&str; 4] = ["exe", "cmd", "bat", "ps1"];
             for sib in sibs {
                 let cand = p.with_extension(sib);
                 if cand.is_file() {
@@ -658,6 +875,166 @@ mod tests {
         // pwsh.exe on machines with PowerShell 7, powershell.exe otherwise.
         assert_eq!(prog, powershell_program());
         assert_eq!(args.last().unwrap(), r"C:\bin\claude.ps1");
+    }
+
+    /// The exec tail of a real npm-generated `.cmd` shim (npm ≥9 shape) for a
+    /// package whose entry is `node_modules\test-pkg\cli.js`.
+    #[cfg(windows)]
+    const NPM_CMD_SHIM: &str = concat!(
+        "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\n",
+        "SETLOCAL\r\nCALL :find_dp0\r\n\r\n",
+        "IF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n",
+        ") ELSE (\r\n  SET \"_prog=node\"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\n",
+        "endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & ",
+        "\"%_prog%\"  \"%dp0%\\node_modules\\test-pkg\\cli.js\" %*\r\n",
+    );
+
+    /// A real npm-generated `.ps1` shim body (sibling-node branch + bare-node
+    /// fallback) for the same package.
+    #[cfg(windows)]
+    const NPM_PS1_SHIM: &str = concat!(
+        "#!/usr/bin/env pwsh\n",
+        "$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent\n\n",
+        "$exe=\"\"\n",
+        "if ($PSVersionTable.PSVersion -lt \"6.0\" -or $IsWindows) {\n  $exe=\".exe\"\n}\n",
+        "$ret=0\n",
+        "if (Test-Path \"$basedir/node$exe\") {\n",
+        "  if ($MyInvocation.ExpectingInput) {\n",
+        "    $input | & \"$basedir/node$exe\"  \"$basedir/node_modules/test-pkg/cli.js\" $args\n",
+        "  } else {\n",
+        "    & \"$basedir/node$exe\"  \"$basedir/node_modules/test-pkg/cli.js\" $args\n",
+        "  }\n  $ret=$LASTEXITCODE\n} else {\n",
+        "  & \"node$exe\"  \"$basedir/node_modules/test-pkg/cli.js\" $args\n",
+        "  $ret=$LASTEXITCODE\n}\nexit $ret\n",
+    );
+
+    /// Lay out a fake npm bin dir: node.exe sibling + the target cli.js.
+    #[cfg(windows)]
+    fn npm_dir_with(shim_name: &str, shim_body: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("node.exe"), b"MZ").unwrap();
+        let pkg = dir.path().join("node_modules").join("test-pkg");
+        std::fs::create_dir_all(&pkg).unwrap();
+        std::fs::write(pkg.join("cli.js"), b"// cli\n").unwrap();
+        let shim = dir.path().join(shim_name);
+        std::fs::write(&shim, shim_body).unwrap();
+        (dir, shim)
+    }
+
+    // A0.1 primary path: the npm .cmd shim parses to `node.exe <cli.js>` and is
+    // spawned directly — no cmd.exe wrapper process.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_shim_argv_parses_npm_cmd_shim_to_direct_node_spawn() {
+        let (dir, shim) = npm_dir_with("claude.cmd", NPM_CMD_SHIM);
+        let argv = resolve_shim_argv(&shim).expect("npm .cmd shim must resolve");
+        assert_eq!(argv.len(), 2, "program + script: {argv:?}");
+        assert_eq!(argv[0], dir.path().join("node.exe").to_string_lossy());
+        assert!(argv[1].ends_with("cli.js"), "script target: {}", argv[1]);
+        assert!(Path::new(&argv[1]).is_file(), "resolved script exists");
+        // launch_prefix rides the same resolution: direct spawn, no wrapper.
+        let (prog, args) = launch_prefix(&shim.to_string_lossy());
+        assert_eq!(prog, argv[0]);
+        assert_eq!(args, vec![argv[1].clone()]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_shim_argv_parses_npm_ps1_shim_to_direct_node_spawn() {
+        let (dir, shim) = npm_dir_with("claude.ps1", NPM_PS1_SHIM);
+        let argv = resolve_shim_argv(&shim).expect("npm .ps1 shim must resolve");
+        assert_eq!(argv.len(), 2, "program + script: {argv:?}");
+        assert_eq!(
+            Path::new(&argv[0]).file_name().unwrap().to_string_lossy(),
+            "node.exe"
+        );
+        assert!(argv[0].starts_with(&*dir.path().to_string_lossy()), "sibling node wins");
+        assert!(Path::new(&argv[1]).is_file(), "resolved script exists");
+        // No pwsh wrapper for a resolvable ps1 shim.
+        let (prog, _args) = launch_prefix(&shim.to_string_lossy());
+        assert_ne!(prog, powershell_program());
+    }
+
+    // "Never guess": a hand-written .cmd that doesn't match the npm shape must
+    // NOT resolve — launch_prefix falls back to the cmd.exe /c call wrapper.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_shim_argv_rejects_non_npm_cmd_and_falls_back_to_wrapper() {
+        let dir = tempfile::tempdir().unwrap();
+        let shim = dir.path().join("mytool.cmd");
+        std::fs::write(&shim, "@echo off\r\nsomething.exe --flag\r\n").unwrap();
+        assert_eq!(resolve_shim_argv(&shim), None);
+        let (prog, args) = launch_prefix(&shim.to_string_lossy());
+        assert_eq!(prog, "cmd.exe");
+        assert_eq!(args[..2], ["/c".to_string(), "call".into()]);
+    }
+
+    // A shim that exports NODE_PATH depends on env a direct spawn would drop —
+    // it must stay wrapped even though the exec line would otherwise parse.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_shim_argv_rejects_node_path_dependent_shim() {
+        let (_dir, shim) = npm_dir_with(
+            "claude.cmd",
+            &format!("SET NODE_PATH=%dp0%\\node_modules\r\n{NPM_CMD_SHIM}"),
+        );
+        assert_eq!(resolve_shim_argv(&shim), None);
+    }
+
+    // A missing script target (package removed, stale shim) must not resolve.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_shim_argv_rejects_shim_whose_target_is_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("node.exe"), b"MZ").unwrap();
+        let shim = dir.path().join("claude.cmd");
+        std::fs::write(&shim, NPM_CMD_SHIM).unwrap(); // no node_modules laid out
+        assert_eq!(resolve_shim_argv(&shim), None);
+    }
+
+    // The cache is keyed on (path, mtime): same mtime → the cached parse is
+    // served even if the bytes changed; a bumped mtime → re-parse.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_shim_argv_caches_by_mtime_and_reparses_on_update() {
+        let (_dir, shim) = npm_dir_with("claude.cmd", NPM_CMD_SHIM);
+        let first = resolve_shim_argv(&shim).expect("initial parse resolves");
+        let original_mtime = std::fs::metadata(&shim).unwrap().modified().unwrap();
+
+        // Rewrite to garbage but RESTORE the mtime — the cache must serve the
+        // old parse (we only re-read when the tool updates).
+        std::fs::write(&shim, "@echo off\r\ngarbage\r\n").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&shim)
+            .unwrap()
+            .set_modified(original_mtime)
+            .unwrap();
+        assert_eq!(resolve_shim_argv(&shim), Some(first));
+
+        // Bump mtime past the original — the garbage is re-parsed → None.
+        std::fs::File::options()
+            .write(true)
+            .open(&shim)
+            .unwrap()
+            .set_modified(original_mtime + Duration::from_secs(5))
+            .unwrap();
+        assert_eq!(resolve_shim_argv(&shim), None);
+    }
+
+    // Detection surfaces the install kind: a script-shim path sets `shim`, a
+    // native .exe does not (drives the Settings "native installer" hint).
+    #[test]
+    fn tool_status_flags_shim_installs_on_windows_only() {
+        let cmd = ToolStatus::ok("claude".into(), r"C:\npm\claude.cmd".into(), "path", None);
+        let exe = ToolStatus::ok("claude".into(), r"C:\winget\claude.exe".into(), "path", None);
+        if cfg!(windows) {
+            assert!(cmd.shim, ".cmd install is a shim");
+            assert!(!exe.shim, ".exe install is native");
+        } else {
+            assert!(!cmd.shim && !exe.shim, "never flagged off Windows");
+        }
+        assert!(!ToolStatus::missing("claude".into()).shim);
     }
 
     #[cfg(windows)]

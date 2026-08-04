@@ -13,6 +13,7 @@ import type { Extension } from "@codemirror/state";
 import { BlameLine } from "../models";
 import { UiStore } from "../ui/ui.store";
 import { buildTheme, CMCore, loadCMCore, loadLangExt } from "./code-lang";
+import { registerEditor } from "./editor-cap";
 
 /** Stable per-author hue (mirrors AuthorAvatarComponent / file-blame). */
 function authorColor(author: string): string {
@@ -180,6 +181,8 @@ export class CodeDiffComponent implements OnDestroy {
   private ui = inject(UiStore);
   private host = viewChild.required<ElementRef<HTMLElement>>("host");
   private view?: { destroy(): void };
+  /** Unhooks this component's entry in the global editor cap (A0.6). */
+  private unregisterCap: (() => void) | null = null;
   // bumped on every render so a late-arriving lazy parser chunk is ignored if the
   // view has since been rebuilt (content / theme / lang changed underneath it).
   private renderToken = 0;
@@ -208,7 +211,21 @@ export class CodeDiffComponent implements OnDestroy {
     });
   }
   ngOnDestroy() {
+    this.unregisterCap?.();
+    this.unregisterCap = null;
     this.view?.destroy();
+  }
+
+  /** Register the freshly built view in the global editor cap (A0.6): when
+   *  more than the cap are live, the oldest is destroyed and replaced by
+   *  plain text (`fallback`) to bound the webview heap. */
+  private capRegister(view: { destroy(): void }, el: HTMLElement, fallback: string): void {
+    this.unregisterCap = registerEditor(() => {
+      if (this.view !== view) return; // superseded — nothing to demote
+      view.destroy();
+      this.view = undefined;
+      el.textContent = fallback;
+    });
   }
 
   private async render(
@@ -221,6 +238,8 @@ export class CodeDiffComponent implements OnDestroy {
   ) {
     const token = ++this.renderToken;
     const el = this.host().nativeElement;
+    this.unregisterCap?.();
+    this.unregisterCap = null;
     this.view?.destroy();
     this.view = undefined;
     el.innerHTML = "";
@@ -332,6 +351,7 @@ export class CodeDiffComponent implements OnDestroy {
         // Non-diff fallback: render the NEW content only. No merge diff = no stall.
         const ev = new EditorView({ doc: newText, extensions: extsB, parent: el });
         this.view = ev;
+        this.capRegister(ev, el, newText);
         if (lang) {
           void loadLangExt(lang).then((ext) => {
             if (token !== this.renderToken || this.view !== ev) return; // stale
@@ -348,6 +368,7 @@ export class CodeDiffComponent implements OnDestroy {
           highlightChanges: true, // mark the changed run within a line (.cm-changedText)
         });
         this.view = mv;
+        this.capRegister(mv, el, newText);
         this.makeSplitResizable(el);
         if (lang) {
           void loadLangExt(lang).then((ext) => {

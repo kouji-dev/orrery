@@ -8,6 +8,11 @@ export const COMMITS_PAGE = 10;
 const IDLE: Loadable<never[]> = { status: "idle", data: [] };
 const IDLE_COMMITS = { ...IDLE, hasMore: false };
 
+/** Why 4: entries reload lazily by design — eviction is free (A0.6). Four
+ *  covers the agents a user actively flips between; beyond that the keyed
+ *  maps only grow for the process lifetime. */
+const MAX_AGENTS = 4;
+
 export type CommitsEntry = Loadable<Commit[]> & { hasMore: boolean };
 
 /**
@@ -32,6 +37,21 @@ export class AgentWorkStore {
   // last pushed HEAD oid per agent — commits refresh only when it moves
   private lastHead: Record<string, string | null> = {};
 
+  // ---- LRU agent eviction (A0.6) ----
+  /** Agent ids in touch order, most recent LAST. Data landing for a 5th agent
+   *  disposes the least-recently-touched one's entries (they reload lazily —
+   *  a watcher push or reopen repopulates them). */
+  private touched: string[] = [];
+
+  private touch(id: string): void {
+    const i = this.touched.indexOf(id);
+    if (i >= 0) this.touched.splice(i, 1);
+    this.touched.push(id);
+    while (this.touched.length > MAX_AGENTS) {
+      this.dispose(this.touched[0]); // dispose() also drops it from `touched`
+    }
+  }
+
   changesFor(id: string): Loadable<AgentFile[]> {
     return this.changesMap()[id] ?? IDLE;
   }
@@ -44,6 +64,7 @@ export class AgentWorkStore {
 
   // ---- changes (eager per agent; reloaded on watcher events) ----
   loadChanges(id: string): void {
+    this.touch(id);
     const gen = (this.changesGen[id] ?? 0) + 1;
     this.changesGen[id] = gen;
     const prev = this.changesFor(id);
@@ -77,6 +98,7 @@ export class AgentWorkStore {
     this.loadCommitsPage(id, Math.max(COMMITS_PAGE, cur.data.length), 0, cur.data);
   }
   private loadCommitsPage(id: string, limit: number, offset: number, keep: Commit[]): void {
+    this.touch(id);
     const gen = (this.commitsGen[id] ?? 0) + 1;
     this.commitsGen[id] = gen;
     this.patch(this.commitsMap, id, {
@@ -108,6 +130,7 @@ export class AgentWorkStore {
   }
   /** Forced reload (file-tree refresh button; watcher path once loaded). */
   loadTree(id: string): void {
+    this.touch(id);
     const gen = (this.treesGen[id] ?? 0) + 1;
     this.treesGen[id] = gen;
     const prev = this.treeFor(id);
@@ -142,6 +165,7 @@ export class AgentWorkStore {
    *  HEAD actually moved (and the feed was ever opened); tree reloads only when
    *  previously loaded. Replaces the old ping → pull (`onWorktreeChanged`). */
   applyScan(id: string, changes: AgentFile[], head: string | null): void {
+    this.touch(id);
     // supersede any in-flight pull so its late resolve can't stomp fresher push data
     this.changesGen[id] = (this.changesGen[id] ?? 0) + 1;
     this.patch(this.changesMap, id, { status: "ready", data: changes });
@@ -151,8 +175,10 @@ export class AgentWorkStore {
     if (this.treeFor(id).status !== "idle") this.loadTree(id);
   }
 
-  /** Drop all of an agent's entries (on removal). */
+  /** Drop all of an agent's entries (on removal or LRU eviction). */
   dispose(id: string): void {
+    const t = this.touched.indexOf(id);
+    if (t >= 0) this.touched.splice(t, 1);
     for (const map of [this.changesMap, this.commitsMap, this.treesMap]) {
       (map as WritableSignal<Record<string, unknown>>).update((m) => {
         if (!(id in m)) return m;

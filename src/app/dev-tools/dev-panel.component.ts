@@ -324,7 +324,7 @@ type Sort = { key: string; dir: number };
                 </tr></thead>
                 <tbody>
                   @for (r of treeRows(); track r.key) {
-                    <tr class="dvc-row" style="cursor:default">
+                    <tr class="dvc-row" style="cursor:default" [style.opacity]="r.n.excluded ? 0.55 : 1">
                       <td><span class="dvc-lead" [style.padding-left.px]="r.depth * 15">
                         @if (r.n.children.length) {
                           <button type="button" class="dvc-twbtn" (click)="toggleNode(r.key)">
@@ -965,7 +965,10 @@ export class DevPanelComponent implements OnDestroy {
       // seed webview-family nodes collapsed (only when unseen — user toggles win)
       const seed: Record<string, boolean> = {};
       const walk = (n: ProcessNode, rootId: string) => {
-        if (n.children.length && n.note?.startsWith("webview2")) seed[rootId + ":" + n.pid] = false;
+        // Only EXCLUDED (external-browser) nodes seed collapsed. The WebView2
+        // family is Orrery's own UI runtime — shown expanded like everything
+        // else we spawn (the user's model: Orrery == the whole Tauri runtime).
+        if (n.children.length && n.excluded) seed[rootId + ":" + n.pid] = false;
         for (const c of n.children) walk(c, rootId);
       };
       for (const r of t.roots) walk(r.node, r.id);

@@ -69,25 +69,15 @@ export class TerminalService implements OnDestroy {
   }
 
   // The agent whose xterm last GAINED focus — i.e. the terminal the user types
-  // in. The backend output mux drains that agent every ~16ms frame (keystroke
-  // echo needs the fast path) and holds everyone else to a ~150ms cadence, so
-  // we tell it on every change. Tracks the last value actually sent: gains are
-  // invoked once per change (no flapping on repeated focus of the same
-  // terminal), and it is cleared only when the focused agent's process exits
-  // or its terminal is disposed — NOT on blur, so the visible terminal keeps
-  // the fast path while the user works elsewhere in the app.
+  // in. LOCAL bookkeeping only since A0.2: the backend no longer has a
+  // single-focus fast path (`agent_focus` is superseded by the interest
+  // subscription — every VISIBLE terminal pane is `stream` mode and drains
+  // per frame). Kept for the drop-target fallback (`focusedAgentId`). It is
+  // cleared when the focused agent's process exits or its terminal is
+  // disposed — NOT on blur.
   private sentFocusId: string | null = null;
   private setFocused(id: string | null) {
-    if (id === this.sentFocusId) return;
-    const prev = this.sentFocusId;
     this.sentFocusId = id;
-    void this.agents.focus(id).catch(() => {
-      // Invoke failed — roll back the sentinel so the next call with the same
-      // id is not suppressed by the dedup guard and can retry the IPC. Only if
-      // no newer focus change was sent meanwhile: interleaved invokes settle
-      // out of order, and rolling back then would clobber the newer value.
-      if (this.sentFocusId === id) this.sentFocusId = prev;
-    });
   }
 
   /** The agent whose terminal currently holds the typing focus (fast-path), or
@@ -208,16 +198,87 @@ export class TerminalService implements OnDestroy {
     return h;
   }
 
+  // ── A1.2 snapshot recovery ────────────────────────────────────────────────
+  // Live chunks with seq <= minSeq are already inside a replayed snapshot —
+  // writing them again would duplicate output. Set by recover(); reset on
+  // dispose (a fresh terminal starts from the live stream again).
+  private minSeq = new Map<string, number>();
+  // Agents whose terminal went stale (dropped out of `stream` interest while
+  // hidden — chunks were never shipped). Their next attach() replays the
+  // backend scrollback snapshot instead of resuming mid-stream.
+  private stale = new Set<string>();
+  // While a recovery is in flight, live chunks are parked here instead of the
+  // terminal — they would land BEFORE the clear+replay and be lost. recover()
+  // flushes them (seq-deduped) after the snapshot is written.
+  private recovering = new Map<string, { chunk: string; seq?: number }[]>();
+
+  /** Mark an agent's terminal stale (its live stream was interrupted — e.g. it
+   *  left `stream` interest mode). The next attach() replays the snapshot. */
+  markStale(id: string) {
+    this.stale.add(id);
+  }
+
+  /** Replay the snapshot NOW when the terminal is stale but still mounted —
+   *  the re-enter-stream-without-re-attach case (window refocus demote/promote
+   *  cycle: blur → digest → focus → stream, terminal never detached). */
+  recoverIfStale(id: string) {
+    if (this.stale.has(id) && this.handles.get(id)?.term.element?.isConnected) {
+      void this.recover(id);
+    }
+  }
+
   /** Write a raw PTY chunk to the agent's terminal. Visible terminals (element
    *  in the DOM) write direct; hidden ones go through the shared scheduler so
-   *  background floods can't starve the focused terminal or pin memory. */
-  write(id: string, chunk: string) {
+   *  background floods can't starve the focused terminal or pin memory.
+   *  `seq` (the backend's cumulative byte count) gates snapshot dedup: chunks
+   *  at or below the last replayed snapshot's endSeq are silently dropped. */
+  write(id: string, chunk: string, seq?: number) {
+    const parked = this.recovering.get(id);
+    if (parked) {
+      parked.push({ chunk, seq });
+      return;
+    }
+    if (seq !== undefined && seq <= (this.minSeq.get(id) ?? -1)) return;
     const h = this.handle(id);
     writeScheduled(id, h.term, chunk, {
       visible: h.term.element?.isConnected === true,
       // xterm `write` cb fires once parsed — buffer is current for tail()
       onParsed: () => this.bumpRevision(id),
     });
+  }
+
+  /**
+   * A1.2 recovery: replace the terminal's content with the backend scrollback
+   * snapshot. Runs when a stale/hidden terminal becomes visible again or after
+   * a webview reload (fresh terminal for a known agent): discard the queued
+   * hidden backlog → term.clear() → replay the snapshot → drop live chunks
+   * with seq <= endSeq (they're inside the snapshot) → resume the stream.
+   * Live chunks arriving mid-recovery are parked and flushed after the replay
+   * so nothing can land between clear and snapshot.
+   */
+  private async recover(id: string): Promise<void> {
+    if (this.recovering.has(id)) return; // one recovery at a time
+    this.stale.delete(id);
+    this.recovering.set(id, []);
+    try {
+      const snap = await this.agents.snapshot(id);
+      const h = this.handles.get(id);
+      if (!h) return;
+      discardTerminalQueue(id); // queued pre-snapshot backlog is inside `text`
+      // Why reset(), not clear(): xterm's clear() deliberately KEEPS the
+      // current (bottom) line — an un-terminated live chunk would survive the
+      // wipe and the snapshot would concatenate onto it. reset() (full RIS)
+      // also drops parser/SGR state, which must not leak into the replay.
+      h.term.reset();
+      if (snap.text) h.term.write(snap.text, () => this.bumpRevision(id));
+      this.minSeq.set(id, snap.endSeq);
+    } catch {
+      this.stale.add(id); // backend unavailable — retry on the next attach
+    } finally {
+      const parked = this.recovering.get(id) ?? [];
+      this.recovering.delete(id);
+      for (const p of parked) this.write(id, p.chunk, p.seq);
+    }
   }
 
   /**
@@ -317,7 +378,13 @@ export class TerminalService implements OnDestroy {
 
   /** Mount the agent's terminal into `el`, sizing it to fit; returns a detach fn. */
   attach(id: string, el: HTMLElement): () => void {
+    // A fresh handle for an agent means the webview (re)loaded — the xterm
+    // buffer is empty while the backend ring still holds the history. Either
+    // that or an explicit stale mark (the live stream was interrupted while
+    // hidden) triggers the A1.2 snapshot replay.
+    const fresh = !this.handles.has(id);
     const h = this.handle(id);
+    if (fresh || this.stale.has(id)) void this.recover(id);
     h.term.options.theme = this.theme(); // pick up the current light/dark theme
     if (!h.term.element) {
       el.replaceChildren(); // evict any terminal a prior agent left in this host
@@ -354,10 +421,13 @@ export class TerminalService implements OnDestroy {
   dispose(id: string) {
     const h = this.handles.get(id);
     if (!h) return;
-    if (this.sentFocusId === id) this.setFocused(null); // gone → release the fast path
+    if (this.sentFocusId === id) this.setFocused(null); // gone → clear the typing-focus sentinel
     h.ro?.disconnect();
     discardTerminalQueue(id);
     this.revs.delete(id);
+    this.minSeq.delete(id);
+    this.stale.delete(id);
+    this.recovering.delete(id);
     h.term.dispose();
     this.handles.delete(id);
   }

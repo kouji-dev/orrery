@@ -1,26 +1,70 @@
 //! Global PTY-output multiplexer: ONE `agent://output` emit per ~16ms frame
-//! TOTAL, regardless of agent count.
+//! TOTAL, regardless of agent count — routed by the A0.2 INTEREST SUBSCRIPTION.
 //!
-//! Why: each per-agent batcher used to `app.emit` its own flushes — on Windows
-//! every emit is a PostMessageW + ExecuteScript on the Win32 UI thread (the
-//! same thread Tauri invoke crosses twice), so 5 streaming agents ≈ 625
-//! UI-thread jobs/s and every command gained 100-350ms. Now the per-agent
-//! batchers push their UTF-8-safe chunks here, and a single drain thread
-//! coalesces ALL agents' pending output into one array-payload emit per frame.
-//! Idle costs nothing: the drain thread parks on a condvar — zero wakeups,
-//! zero emits — until the next push.
+//! Why one drain thread: each per-agent batcher used to `app.emit` its own
+//! flushes — on Windows every emit is a PostMessageW + ExecuteScript on the
+//! Win32 UI thread (the same thread Tauri invoke crosses twice), so 5 streaming
+//! agents ≈ 625 UI-thread jobs/s and every command gained 100-350ms. The
+//! per-agent batchers push their UTF-8-safe chunks here, and a single drain
+//! thread coalesces ALL subscribed agents' pending output into one array
+//! payload per frame. Idle costs nothing: the drain thread parks on a condvar.
+//!
+//! Interest modes (A0.2 — supersedes the old `set_focus` single-agent cadence):
+//! - `Stream`: full output on the per-frame path (a visible terminal pane).
+//! - `Digest`: the raw stream is FOLDED backend-side into the last few rendered
+//!   lines and shipped as a tiny `agent://digest` payload at 1Hz (overview
+//!   mini-terminals). No raw bytes reach the renderer.
+//! - `None` (or absent): DO NOT EMIT. This must never mean do-not-READ — the
+//!   reader + batcher threads keep draining every PTY regardless of mode
+//!   (a full kernel PTY buffer would BLOCK the agent process itself). Bytes
+//!   land in the A1.2 scrollback ring only (bounded); `push` for a `None`
+//!   agent stores NOTHING here, so the mux can never accumulate unbounded
+//!   pending Strings for unwatched agents.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-/// Unfocused agents drain once per this many frames (~150ms at the 16ms app
-/// frame). Their chunks keep coalescing losslessly in `pending` — they just
-/// ship older — while the FOCUSED agent (the terminal the user types in)
-/// drains every frame so keystroke echo stays snappy. When only background
-/// agents stream, the whole loop runs at the slow cadence: fewer frames,
-/// fewer Win32 UI-thread emit jobs.
-const UNFOCUSED_FRAMES: u32 = 9;
+use super::digest;
+
+/// Digest payload size. Why 5: the overview mini-terminal renders a 5-line
+/// preview — shipping more would be paying for lines nobody can see.
+pub const DIGEST_LINES: usize = 5;
+
+/// Digest push cadence. Why 1Hz: mini-previews are glanceable status, not
+/// terminals — 1 update/s is imperceptibly stale there and caps the digest
+/// channel at (agents × ~300B)/s no matter how hard an agent floods.
+pub const DIGEST_PERIOD: Duration = Duration::from_secs(1);
+
+/// A0.2 interest mode for one agent. Absent from the subscription = `None`.
+/// (Ord is for deterministic ordering in diffs/tests only.)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum Mode {
+    Stream,
+    Digest,
+    #[default]
+    None,
+}
+
+impl Mode {
+    /// Wire string → mode. Unknown strings degrade to `None` (emit nothing) —
+    /// the safe direction: output stops shipping rather than flooding.
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "stream" => Mode::Stream,
+            "digest" => Mode::Digest,
+            _ => Mode::None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Mode::Stream => "stream",
+            Mode::Digest => "digest",
+            Mode::None => "none",
+        }
+    }
+}
 
 /// One agent's coalesced output inside a multiplexed frame. The event payload
 /// is an array of these — one entry per agent that produced output during the
@@ -33,18 +77,44 @@ pub struct OutputEntry {
     pub seq: u64,
 }
 
+/// One agent's digest inside an `agent://digest` payload: the last
+/// [`DIGEST_LINES`] rendered lines plus the seq of the last folded chunk.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct DigestEntry {
+    pub id: String,
+    pub lines: Vec<String>,
+    pub seq: u64,
+}
+
+/// One agent's interest change from a `set_interest` diff — recorded for the
+/// A0.7 telemetry correlate ("emit volume is uninterpretable without knowing
+/// the subscription state").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterestTransition {
+    pub id: String,
+    pub from: Mode,
+    pub to: Mode,
+}
+
+#[derive(Default)]
+struct DigestState {
+    /// Rolling fold buffer (see `digest::fold_lines`), cap `digest::FOLD_CAP`.
+    lines: Vec<String>,
+    seq: u64,
+    /// New output folded since the last digest emit.
+    dirty: bool,
+}
+
 #[derive(Default)]
 struct State {
-    /// agent id → (coalesced chunk, last seq). BTreeMap so a frame's entry
-    /// order is deterministic.
+    /// STREAM agents only: agent id → (coalesced chunk, last seq). BTreeMap so
+    /// a frame's entry order is deterministic.
     pending: BTreeMap<String, (String, u64)>,
-    /// The agent whose terminal the user is typing in (`agent_focus`). It
-    /// drains EVERY frame; everyone else only at the slow cadence.
-    focused: Option<String>,
-    /// agent id → when its pending output was last drained. Missing entry =
-    /// never drained, which ships immediately (a new agent's first output is
-    /// not delayed). Entries are removed by `take()` so exits don't leak.
-    last_drain: HashMap<String, Instant>,
+    /// The current interest set. Only Stream/Digest are stored — `None` is
+    /// represented by absence, so the map is bounded by what is on screen.
+    interest: HashMap<String, Mode>,
+    /// DIGEST agents only: the backend-side line fold.
+    digests: BTreeMap<String, DigestState>,
     /// True while the drain thread has taken a frame out of `pending` but its
     /// emit has not finished — the drained-but-unemitted window. `take()`
     /// waits this out so the exit path can't emit `agent://exit` while the
@@ -56,7 +126,11 @@ struct State {
 #[derive(Default)]
 pub struct OutputMux {
     state: Mutex<State>,
+    /// Wakes the output drain thread (stream pushes, shutdown, take()).
     cv: Condvar,
+    /// Wakes the digest thread (digest pushes, shutdown). Separate condvar so
+    /// a digest push can't be swallowed by the drain thread's notify_one.
+    digest_cv: Condvar,
 }
 
 impl OutputMux {
@@ -64,33 +138,105 @@ impl OutputMux {
         Self::default()
     }
 
-    /// Queue a batcher flush for `id`: appends to the agent's pending chunk and
-    /// advances its seq (batcher seqs are cumulative, so "last wins" keeps it
-    /// monotonic). Wakes the drain thread if it is parked.
+    /// Queue a batcher flush for `id`, routed by its interest mode:
+    /// Stream → pending (drained per frame); Digest → folded into the digest
+    /// lines (shipped at 1Hz); None → DROPPED here (the scrollback ring holds
+    /// the bytes — the mux must never grow for unwatched agents).
     pub fn push(&self, id: &str, chunk: String, seq: u64) {
+        let mut st = self.state.lock().unwrap();
+        match st.interest.get(id).copied().unwrap_or_default() {
+            Mode::Stream => {
+                let e = st.pending.entry(id.to_string()).or_default();
+                e.0.push_str(&chunk);
+                e.1 = seq;
+                drop(st);
+                self.cv.notify_all();
+            }
+            Mode::Digest => {
+                let d = st.digests.entry(id.to_string()).or_default();
+                digest::fold_lines(&mut d.lines, &chunk, digest::FOLD_CAP);
+                d.seq = seq;
+                d.dirty = true;
+                drop(st);
+                self.digest_cv.notify_all();
+            }
+            Mode::None => {} // do-not-EMIT (never do-not-read — caller keeps reading)
+        }
+    }
+
+    /// Replace the whole interest set (the backend diffs against the current
+    /// one). Entries with `Mode::None` are equivalent to absence. Returns the
+    /// transitions (old → new per changed agent) for telemetry.
+    ///
+    /// Downgrades drop mux-side state: leaving `Stream` discards the agent's
+    /// pending chunk (the ring is the recovery source — the renderer replays a
+    /// snapshot on resubscribe and dedups by seq), leaving `Digest` drops its
+    /// fold buffer.
+    pub fn set_interest(&self, entries: Vec<(String, Mode)>) -> Vec<InterestTransition> {
+        let new_map: HashMap<String, Mode> = entries
+            .into_iter()
+            .filter(|(_, m)| *m != Mode::None)
+            .collect();
+        let mut transitions = Vec::new();
         {
             let mut st = self.state.lock().unwrap();
-            let e = st.pending.entry(id.to_string()).or_default();
-            e.0.push_str(&chunk);
-            e.1 = seq;
+            let old_map = std::mem::take(&mut st.interest);
+            for (id, old) in &old_map {
+                let new = new_map.get(id).copied().unwrap_or_default();
+                if new != *old {
+                    transitions.push(InterestTransition {
+                        id: id.clone(),
+                        from: *old,
+                        to: new,
+                    });
+                }
+            }
+            for (id, new) in &new_map {
+                if !old_map.contains_key(id) {
+                    transitions.push(InterestTransition {
+                        id: id.clone(),
+                        from: Mode::None,
+                        to: *new,
+                    });
+                }
+            }
+            for t in &transitions {
+                if t.from == Mode::Stream {
+                    st.pending.remove(&t.id);
+                }
+                if t.from == Mode::Digest {
+                    st.digests.remove(&t.id);
+                }
+            }
+            st.interest = new_map;
         }
-        self.cv.notify_one();
-    }
-
-    /// Set (or clear, with `None`) the focused agent — the one whose terminal
-    /// the user is typing in. The focused agent drains every frame; everyone
-    /// else at the slow cadence. Wakes the drain thread so a newly focused
-    /// agent's held-back output ships on the next frame, not when its cadence
-    /// timer expires.
-    pub fn set_focus(&self, id: Option<String>) {
-        self.state.lock().unwrap().focused = id;
+        // Wake both threads: a newly streaming/digesting agent's next push
+        // routes correctly either way, but shutdown/park bookkeeping is cheap
+        // to refresh and a pending-drop may let the drain thread re-park.
         self.cv.notify_all();
+        self.digest_cv.notify_all();
+        transitions
     }
 
-    /// Remove and return `id`'s pending output, if any. The exit path uses
-    /// this to force-drain an agent ahead of its `agent://exit` so no queued
-    /// output event lands after the exit; it doubles as the stop/remove
-    /// cleanup (the entry is gone either way).
+    /// Current interest mode for `id` (`Mode::None` when absent from the set).
+    /// Read-only snapshot — used by the watcher's A2.2 scan-detail decision.
+    pub fn interest_of(&self, id: &str) -> Mode {
+        self.state
+            .lock()
+            .unwrap()
+            .interest
+            .get(id)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// Remove and return `id`'s pending stream output, if any. The exit path
+    /// uses this to force-drain an agent ahead of its `agent://exit` so no
+    /// queued output event lands after the exit; it doubles as the stop/remove
+    /// cleanup. Digest state is dropped too (a relaunch starts a fresh fold —
+    /// its seq restarts at 0). The interest entry is KEPT: a restart of a
+    /// still-visible agent must keep streaming without waiting for the next
+    /// frontend recompute.
     ///
     /// Waits out any in-flight drain emit first: the drain thread emits with
     /// the lock RELEASED (pushers must never block on UI-thread emit latency),
@@ -101,7 +247,7 @@ impl OutputMux {
         while st.draining {
             st = self.cv.wait(st).unwrap();
         }
-        st.last_drain.remove(id); // the agent is gone — don't leak its cadence stamp
+        st.digests.remove(id);
         st.pending.remove(id).map(|(chunk, seq)| OutputEntry {
             id: id.to_string(),
             chunk,
@@ -109,16 +255,17 @@ impl OutputMux {
         })
     }
 
-    /// End the drain loop: it final-drains whatever is pending, emits it, and
-    /// returns. (Tests join on this; the app never calls it — the drain thread
-    /// lives for the process.)
+    /// End the drain + digest loops: each final-drains whatever is pending,
+    /// emits it, and returns. (Tests join on this; the app never calls it —
+    /// the threads live for the process.)
     pub fn shutdown(&self) {
         self.state.lock().unwrap().shutdown = true;
         self.cv.notify_all();
+        self.digest_cv.notify_all();
     }
 
-    /// Pull EVERYTHING pending, cadence ignored — the shutdown path, so
-    /// nothing buffered is ever lost.
+    /// Pull EVERYTHING pending (all pending entries are stream-mode by
+    /// construction — `push` stores nothing for other modes).
     fn drain_all(st: &mut State) -> Vec<OutputEntry> {
         std::mem::take(&mut st.pending)
             .into_iter()
@@ -126,58 +273,13 @@ impl OutputMux {
             .collect()
     }
 
-    /// Pull every ELIGIBLE agent's pending output: the focused agent always;
-    /// everyone else only when ≥ `slow` has passed since their last drain
-    /// (never-drained agents ship immediately — first output is not delayed).
-    /// Also returns how long until the earliest held-back agent comes due
-    /// (`None` when nothing was held back), so the drain loop knows how long
-    /// it may park.
-    fn drain_eligible(
-        st: &mut State,
-        now: Instant,
-        slow: Duration,
-    ) -> (Vec<OutputEntry>, Option<Duration>) {
-        let mut out = Vec::new();
-        let mut next_due: Option<Duration> = None;
-        let ids: Vec<String> = st.pending.keys().cloned().collect();
-        for id in ids {
-            // None = drains now; Some(d) = held back for d more.
-            let held_for = st.last_drain.get(&id).and_then(|t| {
-                slow.checked_sub(now.duration_since(*t))
-                    .filter(|d| !d.is_zero())
-            });
-            if st.focused.as_deref() == Some(id.as_str()) || held_for.is_none() {
-                let (chunk, seq) = st.pending.remove(&id).expect("key came from pending");
-                st.last_drain.insert(id.clone(), now);
-                out.push(OutputEntry { id, chunk, seq });
-            } else if let Some(d) = held_for {
-                next_due = Some(next_due.map_or(d, |n| n.min(d)));
-            }
-        }
-        (out, next_due)
-    }
-
     /// The single drain thread's body. Parks on the condvar while nothing is
     /// pending (ZERO idle wakeups). On wake it emits — immediately after an
-    /// idle stretch (typing echo stays snappy), otherwise paced so consecutive
-    /// emits are ≥ `frame` apart, which caps the emit rate at one per frame no
-    /// matter how many agents flood. Each emit carries every ELIGIBLE pending
-    /// agent: the focused one every frame, the rest once per ~`UNFOCUSED_FRAMES`
-    /// frames (their chunks keep coalescing losslessly meanwhile). When only
-    /// held-back agents are pending, no frame is emitted at all — the thread
-    /// parks until the earliest comes due (or a push/focus change wakes it).
-    pub fn drain_loop(&self, frame: Duration, emit: impl FnMut(Vec<OutputEntry>)) {
-        self.drain_loop_with_cadence(frame, frame * UNFOCUSED_FRAMES, emit);
-    }
-
-    /// [`drain_loop`] with the unfocused cadence injectable — tests pin `slow`
-    /// (e.g. to "longer than the test") for load-robust determinism.
-    pub(crate) fn drain_loop_with_cadence(
-        &self,
-        frame: Duration,
-        slow: Duration,
-        mut emit: impl FnMut(Vec<OutputEntry>),
-    ) {
+    /// idle stretch (a subscribed agent's first output, and typing echo, are
+    /// never delayed), otherwise paced so consecutive emits are ≥ `frame`
+    /// apart, which caps the emit rate at one per frame no matter how many
+    /// agents flood. Each emit carries every pending STREAM agent coalesced.
+    pub fn drain_loop(&self, frame: Duration, mut emit: impl FnMut(Vec<OutputEntry>)) {
         let mut last_emit: Option<Instant> = None;
         loop {
             // Park until there is something to do.
@@ -206,38 +308,77 @@ impl OutputMux {
                     std::thread::sleep(frame - since);
                 }
             }
-            // Take the eligible agents; when everything pending is held back,
-            // park (under the SAME lock acquisition — a push/focus/shutdown
-            // notify between evaluate and wait must not be missed) until the
-            // earliest comes due. A focused push wakes this immediately, so the
-            // cadence never delays typing echo. Open the draining window BEFORE
+            // Take everything pending. Open the draining window BEFORE
             // unlocking, emit with the lock released (pushers stay
             // non-blocking), then close it and wake any take() parked on it.
             let batch = {
                 let mut st = self.state.lock().unwrap();
+                if st.shutdown {
+                    continue; // outer loop re-parks → final drain
+                }
+                let b = Self::drain_all(&mut st);
+                if b.is_empty() {
+                    continue; // take()/set_interest raced it away — re-park
+                }
+                st.draining = true;
+                b
+            };
+            emit(batch);
+            last_emit = Some(Instant::now());
+            self.state.lock().unwrap().draining = false;
+            self.cv.notify_all();
+        }
+    }
+
+    /// The digest thread's body: parks until some digest-mode agent has new
+    /// folded output, emits one `agent://digest` array payload (dirty agents
+    /// only, [`DIGEST_LINES`] tail lines each), then sleeps `period` — the 1Hz
+    /// cadence. A first digest after an idle stretch ships immediately.
+    pub fn digest_loop(&self, period: Duration, mut emit: impl FnMut(Vec<DigestEntry>)) {
+        loop {
+            let batch = {
+                let mut st = self.state.lock().unwrap();
                 loop {
-                    if st.shutdown {
-                        break Vec::new(); // outer loop re-parks → final drain
+                    let dirty: Vec<DigestEntry> = st
+                        .digests
+                        .iter_mut()
+                        .filter(|(_, d)| d.dirty)
+                        .map(|(id, d)| {
+                            d.dirty = false;
+                            DigestEntry {
+                                id: id.clone(),
+                                lines: digest::tail_lines(&d.lines, DIGEST_LINES),
+                                seq: d.seq,
+                            }
+                        })
+                        .collect();
+                    if !dirty.is_empty() || st.shutdown {
+                        break dirty;
                     }
-                    let (b, next_due) = Self::drain_eligible(&mut st, Instant::now(), slow);
-                    if !b.is_empty() {
-                        st.draining = true;
-                        break b;
-                    }
-                    match next_due {
-                        Some(due_in) => st = self.cv.wait_timeout(st, due_in).unwrap().0,
-                        // take() raced everything away — back to idle parking.
-                        None => break Vec::new(),
-                    }
+                    st = self.digest_cv.wait(st).unwrap();
                 }
             };
             if !batch.is_empty() {
                 emit(batch);
-                last_emit = Some(Instant::now());
-                self.state.lock().unwrap().draining = false;
-                self.cv.notify_all();
             }
+            if self.state.lock().unwrap().shutdown {
+                return;
+            }
+            std::thread::sleep(period);
         }
+    }
+
+    /// Test-only visibility: bytes currently pending for `id` (must stay 0 for
+    /// non-stream agents — the "none must not accumulate" budget).
+    #[cfg(test)]
+    pub(crate) fn pending_bytes(&self, id: &str) -> usize {
+        self.state
+            .lock()
+            .unwrap()
+            .pending
+            .get(id)
+            .map(|(c, _)| c.len())
+            .unwrap_or(0)
     }
 }
 
@@ -272,9 +413,38 @@ mod tests {
         }
     }
 
+    fn stream(mux: &OutputMux, ids: &[&str]) {
+        mux.set_interest(ids.iter().map(|i| (i.to_string(), Mode::Stream)).collect());
+    }
+
+    // THE A0.2 budget: an unsubscribed (= none) agent ships NOTHING to the
+    // renderer AND holds no pending memory in the mux — its bytes live in the
+    // bounded scrollback ring only.
     #[test]
-    fn multi_agent_pushes_coalesce_into_one_emit_per_frame() {
+    fn unsubscribed_agent_emits_nothing_and_accumulates_nothing() {
+        let (mux, emitted, h) = run(Duration::from_millis(5));
+        for i in 0..50u64 {
+            mux.push("hidden", format!("x{i};"), i + 1);
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(
+            emitted.lock().unwrap().is_empty(),
+            "none-mode renderer bytes/sec must be 0"
+        );
+        assert_eq!(
+            mux.pending_bytes("hidden"),
+            0,
+            "none-mode must never grow the mux's pending map"
+        );
+        mux.shutdown();
+        h.join().unwrap();
+        assert!(emitted.lock().unwrap().is_empty(), "not even the final drain");
+    }
+
+    #[test]
+    fn multi_agent_stream_pushes_coalesce_into_one_emit_per_frame() {
         let mux = Arc::new(OutputMux::new());
+        stream(&mux, &["a", "b"]);
         // Queue BEFORE the drain thread runs so everything is one frame:
         // two flushes for "a" (must coalesce, seq = last) and one for "b".
         mux.push("a", "a1".into(), 2);
@@ -300,6 +470,7 @@ mod tests {
     #[test]
     fn idle_mux_emits_nothing_after_draining() {
         let (mux, emitted, h) = run(Duration::from_millis(10));
+        stream(&mux, &["a"]);
         mux.push("a", "x".into(), 1);
         std::thread::sleep(Duration::from_millis(150)); // long idle stretch
         assert_eq!(
@@ -313,9 +484,10 @@ mod tests {
     }
 
     #[test]
-    fn flood_is_paced_to_at_most_one_emit_per_frame_and_loses_nothing() {
+    fn stream_flood_is_paced_to_at_most_one_emit_per_frame_and_loses_nothing() {
         let frame = Duration::from_millis(40);
         let (mux, emitted, h) = run(frame);
+        stream(&mux, &["a"]);
         let start = Instant::now();
         let mut sent = String::new();
         for i in 0..50 {
@@ -355,6 +527,7 @@ mod tests {
     #[test]
     fn take_force_drains_one_agent_without_touching_others() {
         let mux = OutputMux::new();
+        stream(&mux, &["a", "b"]);
         mux.push("a", "tail".into(), 7);
         mux.push("a", "!".into(), 8);
         mux.push("b", "keep".into(), 3);
@@ -375,6 +548,7 @@ mod tests {
     #[test]
     fn take_waits_for_in_flight_drain_emit_so_no_chunk_lands_after_it() {
         let mux = Arc::new(OutputMux::new());
+        stream(&mux, &["a"]);
         let log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let (m, l) = (mux.clone(), log.clone());
@@ -408,6 +582,7 @@ mod tests {
     #[test]
     fn shutdown_final_drains_pending_like_the_batcher_does() {
         let (mux, emitted, h) = run(Duration::from_secs(10)); // frame never paces
+        stream(&mux, &["a"]);
         mux.push("a", "last words".into(), 10);
         mux.shutdown();
         h.join().unwrap();
@@ -417,200 +592,192 @@ mod tests {
         assert_eq!(*all[0], entry("a", "last words", 10), "nothing buffered is lost on shutdown");
     }
 
-    /// Run drain_loop_with_cadence on a thread, emitting into an mpsc channel —
-    /// the deterministic harness for the focus tests: each `recv` is exactly one
-    /// frame, and with `slow` pinned far past the test's lifetime an unfocused
-    /// agent can NEVER come due, so "held back" holds under arbitrary load.
-    fn run_channel(
-        frame: Duration,
-        slow: Duration,
+    // ---- interest diffing ---------------------------------------------------
+
+    #[test]
+    fn set_interest_diffs_against_the_current_set() {
+        let mux = OutputMux::new();
+        let t1 = mux.set_interest(vec![
+            ("a".into(), Mode::Stream),
+            ("b".into(), Mode::Digest),
+        ]);
+        let mut ids: Vec<(String, Mode, Mode)> =
+            t1.iter().map(|t| (t.id.clone(), t.from, t.to)).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            vec![
+                ("a".into(), Mode::None, Mode::Stream),
+                ("b".into(), Mode::None, Mode::Digest),
+            ]
+        );
+        // b: digest → stream; a absent → none; c appears as digest.
+        let t2 = mux.set_interest(vec![
+            ("b".into(), Mode::Stream),
+            ("c".into(), Mode::Digest),
+        ]);
+        let mut ids: Vec<(String, Mode, Mode)> =
+            t2.iter().map(|t| (t.id.clone(), t.from, t.to)).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            vec![
+                ("a".into(), Mode::Stream, Mode::None),
+                ("b".into(), Mode::Digest, Mode::Stream),
+                ("c".into(), Mode::None, Mode::Digest),
+            ]
+        );
+        // Unchanged set → no transitions (the frontend recomputes often;
+        // steady state must be free).
+        assert!(mux
+            .set_interest(vec![
+                ("b".into(), Mode::Stream),
+                ("c".into(), Mode::Digest),
+            ])
+            .is_empty());
+        // Explicit none behaves exactly like absence.
+        let t3 = mux.set_interest(vec![
+            ("b".into(), Mode::Stream),
+            ("c".into(), Mode::None),
+        ]);
+        assert_eq!(
+            t3,
+            vec![InterestTransition {
+                id: "c".into(),
+                from: Mode::Digest,
+                to: Mode::None
+            }]
+        );
+    }
+
+    #[test]
+    fn downgrade_from_stream_drops_pending_so_nothing_leaks_or_ships_late() {
+        let (mux, emitted, h) = run(Duration::from_secs(10)); // frame never paces
+        stream(&mux, &["a"]);
+        // Push while the drain thread may not have woken yet, then downgrade.
+        mux.push("a", "held".into(), 4);
+        mux.set_interest(vec![]); // a → none
+        assert_eq!(mux.pending_bytes("a"), 0, "downgrade discards pending (ring recovers it)");
+        mux.push("a", "more".into(), 8); // now none — dropped at the door
+        mux.shutdown();
+        h.join().unwrap();
+        let log = emitted.lock().unwrap();
+        // Depending on thread timing the pre-downgrade "held" frame MAY have
+        // been drained-and-emitted before set_interest ran; what must never
+        // happen is the post-downgrade chunk shipping.
+        assert!(
+            log.iter().flatten().all(|e| e.chunk != "more"),
+            "post-downgrade output must not ship: {log:?}"
+        );
+    }
+
+    // ---- digest mode --------------------------------------------------------
+
+    /// Run digest_loop on a thread with a fast period (tests can't wait 1s).
+    fn run_digest(
+        period: Duration,
     ) -> (
         Arc<OutputMux>,
-        std::sync::mpsc::Receiver<Vec<OutputEntry>>,
+        Arc<Mutex<Vec<Vec<DigestEntry>>>>,
         std::thread::JoinHandle<()>,
     ) {
         let mux = Arc::new(OutputMux::new());
-        let (tx, rx) = std::sync::mpsc::channel();
-        let m = mux.clone();
+        let emitted = Arc::new(Mutex::new(Vec::new()));
+        let (m, e) = (mux.clone(), emitted.clone());
         let h = std::thread::spawn(move || {
-            m.drain_loop_with_cadence(frame, slow, move |b| {
-                let _ = tx.send(b);
-            });
+            m.digest_loop(period, move |batch| e.lock().unwrap().push(batch));
         });
-        (mux, rx, h)
+        (mux, emitted, h)
     }
 
-    const NEVER: Duration = Duration::from_secs(600);
-
     #[test]
-    fn focused_agent_drains_every_frame_while_unfocused_is_held() {
-        let (mux, rx, h) = run_channel(Duration::from_millis(1), NEVER);
-        mux.set_focus(Some("f".into()));
-        // A never-drained agent's FIRST output ships immediately even unfocused
-        // (no cadence stamp yet) — a new agent's first paint is not delayed.
-        mux.push("b", "b0".into(), 2);
-        assert_eq!(
-            rx.recv_timeout(Duration::from_secs(10)).unwrap(),
-            vec![entry("b", "b0", 2)],
-            "first-ever output is not held back"
-        );
-        // From here "b" sits inside its (600s) cadence window: every frame must
-        // carry the focused agent and never "b" — no wall-clock window to miss,
-        // so this is exact under any load.
-        let mut held = String::new();
-        for i in 1..=5u64 {
-            mux.push("f", format!("f{i}"), i);
-            let piece = format!("b{i}");
-            held.push_str(&piece);
-            mux.push("b", piece, 2 + i);
+    fn digest_agent_ships_last_lines_not_raw_output() {
+        let (mux, digests, dh) = run_digest(Duration::from_millis(10));
+        let out_emits = Arc::new(Mutex::new(Vec::new()));
+        let (m2, oe) = (mux.clone(), out_emits.clone());
+        let oh = std::thread::spawn(move || {
+            m2.drain_loop(Duration::from_millis(1), move |b| oe.lock().unwrap().push(b));
+        });
+        mux.set_interest(vec![("d".into(), Mode::Digest)]);
+        mux.push("d", "one\r\ntwo\r\nthree\r\nfour\r\nfive\r\nsix\r\n".into(), 30);
+        std::thread::sleep(Duration::from_millis(120));
+        {
+            let log = digests.lock().unwrap();
+            assert!(!log.is_empty(), "digest push must emit");
+            let d = &log[0][0];
+            assert_eq!(d.id, "d");
             assert_eq!(
-                rx.recv_timeout(Duration::from_secs(10)).unwrap(),
-                vec![entry("f", &format!("f{i}"), i)],
-                "focused drains every frame; unfocused held (and emits no frame of its own)"
+                d.lines,
+                vec!["two", "three", "four", "five", "six"],
+                "last {DIGEST_LINES} rendered lines"
             );
+            assert_eq!(d.seq, 30);
         }
-        // Shutdown final-drains the held-back agent: older, but lossless.
-        mux.shutdown();
-        h.join().unwrap();
-        let tail: Vec<OutputEntry> = rx.try_iter().flatten().collect();
-        assert_eq!(
-            tail,
-            vec![entry("b", &held, 7)],
-            "held chunks coalesce losslessly with the last seq"
-        );
-    }
-
-    #[test]
-    fn focus_switch_mid_stream_flips_who_gets_the_fast_path() {
-        let (mux, rx, h) = run_channel(Duration::from_millis(1), NEVER);
-        let recv = |what: &str| rx.recv_timeout(Duration::from_secs(10)).expect(what);
-        mux.set_focus(Some("f".into()));
-        // Stamp both agents' cadence clocks (first output ships immediately).
-        mux.push("f", "f0".into(), 1);
-        assert_eq!(recv("f's first frame"), vec![entry("f", "f0", 1)]);
-        mux.push("b", "b0".into(), 1);
-        assert_eq!(recv("b's first frame"), vec![entry("b", "b0", 1)]);
-        // Mid-stream: f rides the fast path, b is held.
-        mux.push("f", "f1".into(), 2);
-        mux.push("b", "b1".into(), 2);
-        assert_eq!(recv("pre-switch frame"), vec![entry("f", "f1", 2)]);
-        // Switch focus to b: the focus change itself wakes the parked drain
-        // thread, so b's HELD chunk ships on the next frame — no new push, no
-        // waiting out the cadence timer.
-        mux.set_focus(Some("b".into()));
-        assert_eq!(
-            recv("switch flushes b's held output"),
-            vec![entry("b", "b1", 2)]
-        );
-        // And the roles are now swapped: f is held, b is per-frame.
-        mux.push("f", "f2".into(), 3);
-        mux.push("b", "b2".into(), 3);
-        assert_eq!(recv("post-switch frame"), vec![entry("b", "b2", 3)]);
-        mux.shutdown();
-        h.join().unwrap();
-        let tail: Vec<OutputEntry> = rx.try_iter().flatten().collect();
-        assert_eq!(
-            tail,
-            vec![entry("f", "f2", 3)],
-            "the now-unfocused agent's held output final-drains on shutdown"
-        );
-    }
-
-    #[test]
-    fn no_focus_holds_every_agent_to_the_slow_cadence() {
-        let frame = Duration::from_millis(5);
-        let slow = Duration::from_millis(40);
-        let mux = Arc::new(OutputMux::new());
-        let emitted = Arc::new(Mutex::new(Vec::new()));
-        let (m, e) = (mux.clone(), emitted.clone());
-        let h = std::thread::spawn(move || {
-            m.drain_loop_with_cadence(frame, slow, move |b| e.lock().unwrap().push(b));
-        });
-        mux.set_focus(None); // explicit: None = NOBODY rides the per-frame path
-        let start = Instant::now();
-        let (mut sent_a, mut sent_b) = (String::new(), String::new());
-        for i in 0..60u64 {
-            let (pa, pb) = (format!("a{i};"), format!("b{i};"));
-            sent_a.push_str(&pa);
-            sent_b.push_str(&pb);
-            mux.push("a", pa, i + 1);
-            mux.push("b", pb, i + 1);
-            std::thread::sleep(Duration::from_millis(2)); // ~120ms flood
-        }
-        mux.shutdown();
-        h.join().unwrap();
-        // Bound from MEASURED elapsed (see flood_is_paced): consecutive drains
-        // of one unfocused agent are >= slow apart, so the per-agent cap is
-        // floor(elapsed/slow) + 1 (immediate first drain) + 1 (shutdown final
-        // drain) + 2 slack.
-        let elapsed = start.elapsed();
-        let max_per_agent = (elapsed.as_millis() / slow.as_millis()) as usize + 4;
-        let log = emitted.lock().unwrap();
-        for id in ["a", "b"] {
-            let frames = log.iter().filter(|f| f.iter().any(|e| e.id == id)).count();
-            assert!(
-                frames <= max_per_agent,
-                "{}ms elapsed / {}ms slow → ≤ {max_per_agent} frames for '{id}', got {frames}",
-                elapsed.as_millis(),
-                slow.as_millis(),
-            );
-        }
-        let join = |id: &str| -> String {
-            log.iter()
-                .flatten()
-                .filter(|e| e.id == id)
-                .map(|e| e.chunk.as_str())
-                .collect()
-        };
-        assert_eq!(join("a"), sent_a, "slow cadence still loses nothing");
-        assert_eq!(join("b"), sent_b, "slow cadence still loses nothing");
-    }
-
-    // The PUBLIC drain_loop derives the cadence (frame × UNFOCUSED_FRAMES):
-    // an unfocused agent flooding while someone ELSE is focused is paced by
-    // slow, not by frame — fewer emits when only background agents stream.
-    #[test]
-    fn unfocused_flood_is_paced_by_the_slow_cadence_not_the_frame() {
-        let frame = Duration::from_millis(5); // slow = 45ms via drain_loop
-        let mux = Arc::new(OutputMux::new());
-        let emitted = Arc::new(Mutex::new(Vec::new()));
-        let (m, e) = (mux.clone(), emitted.clone());
-        let h = std::thread::spawn(move || {
-            m.drain_loop(frame, move |b| e.lock().unwrap().push(b));
-        });
-        mux.set_focus(Some("f".into())); // focused agent exists but stays silent
-        let start = Instant::now();
-        let mut sent = String::new();
-        for i in 0..60u64 {
-            let piece = format!("b{i};");
-            sent.push_str(&piece);
-            mux.push("b", piece, i + 1);
-            std::thread::sleep(Duration::from_millis(2)); // ~120ms flood
-        }
-        mux.shutdown();
-        h.join().unwrap();
-        // Same measured-elapsed bound as flood_is_paced, against slow.
-        let elapsed = start.elapsed();
-        let slow = frame * UNFOCUSED_FRAMES;
-        let max_emits = (elapsed.as_millis() / slow.as_millis()) as usize + 4;
-        let log = emitted.lock().unwrap();
         assert!(
-            log.len() <= max_emits,
-            "{}ms elapsed / {}ms slow → ≤ {max_emits} emits, got {}",
-            elapsed.as_millis(),
-            slow.as_millis(),
-            log.len()
+            out_emits.lock().unwrap().is_empty(),
+            "digest agents ship NO raw output frames"
         );
-        let joined: String = log.iter().flatten().map(|e| e.chunk.as_str()).collect();
-        assert_eq!(joined, sent, "cadence holding must preserve every byte, in order");
-        let seqs: Vec<u64> = log.iter().flatten().map(|e| e.seq).collect();
-        assert!(seqs.windows(2).all(|w| w[0] < w[1]), "seq stays monotonic: {seqs:?}");
+        assert_eq!(mux.pending_bytes("d"), 0, "digest mode holds no pending chunk");
+        mux.shutdown();
+        dh.join().unwrap();
+        oh.join().unwrap();
     }
 
-    // Locks the wire shape the frontend types against: an ARRAY of
-    // {id, chunk, seq} objects.
     #[test]
-    fn frame_serializes_to_the_event_payload_shape() {
+    fn digest_emits_are_paced_and_dirty_only() {
+        let period = Duration::from_millis(50);
+        let (mux, digests, h) = run_digest(period);
+        mux.set_interest(vec![("d".into(), Mode::Digest)]);
+        let start = Instant::now();
+        for i in 0..40u64 {
+            mux.push("d", format!("line{i}\n"), i + 1);
+            std::thread::sleep(Duration::from_millis(4)); // ~160ms flood
+        }
+        // quiet stretch: no new folds → NO further digest emits
+        std::thread::sleep(Duration::from_millis(150));
+        let emits_after_quiet = digests.lock().unwrap().len();
+        std::thread::sleep(Duration::from_millis(120));
+        assert_eq!(
+            digests.lock().unwrap().len(),
+            emits_after_quiet,
+            "clean (non-dirty) digests must not re-emit"
+        );
+        // Pacing bound, measured-elapsed style (see stream flood test).
+        let elapsed = start.elapsed();
+        let max_emits = (elapsed.as_millis() / period.as_millis()) as usize + 4;
+        assert!(
+            emits_after_quiet <= max_emits,
+            "{}ms / {}ms period → ≤ {max_emits} digest emits, got {emits_after_quiet}",
+            elapsed.as_millis(),
+            period.as_millis(),
+        );
+        // Lossless-at-the-tail: the LAST digest shows the newest lines.
+        let log = digests.lock().unwrap();
+        let last = log.last().unwrap().last().unwrap();
+        assert_eq!(last.lines.last().unwrap(), "line39");
+        drop(log);
+        mux.shutdown();
+        h.join().unwrap();
+    }
+
+    #[test]
+    fn take_clears_digest_state_for_a_fresh_relaunch() {
+        let mux = OutputMux::new();
+        mux.set_interest(vec![("d".into(), Mode::Digest)]);
+        mux.push("d", "old run\n".into(), 8);
+        assert_eq!(mux.take("d"), None, "digest agents have no pending stream chunk");
+        // A new run's first push folds into an EMPTY buffer.
+        mux.push("d", "new run\n".into(), 8);
+        let st = mux.state.lock().unwrap();
+        assert_eq!(
+            digest::tail_lines(&st.digests.get("d").unwrap().lines, DIGEST_LINES),
+            vec!["new run"]
+        );
+    }
+
+    // Locks the wire shapes the frontend types against.
+    #[test]
+    fn payloads_serialize_to_the_event_shapes() {
         let frame = vec![entry("a", "x", 3), entry("b", "y", 1)];
         assert_eq!(
             serde_json::to_value(&frame).unwrap(),
@@ -618,6 +785,15 @@ mod tests {
                 { "id": "a", "chunk": "x", "seq": 3 },
                 { "id": "b", "chunk": "y", "seq": 1 }
             ])
+        );
+        let d = vec![DigestEntry {
+            id: "a".into(),
+            lines: vec!["l1".into(), "l2".into()],
+            seq: 12,
+        }];
+        assert_eq!(
+            serde_json::to_value(&d).unwrap(),
+            serde_json::json!([{ "id": "a", "lines": ["l1", "l2"], "seq": 12 }])
         );
     }
 }

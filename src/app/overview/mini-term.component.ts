@@ -1,13 +1,23 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+  input,
+} from "@angular/core";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { InterestService } from "../agents/interest.service";
 import { ActivityKind } from "../models";
-import { TerminalService } from "../terminal.service";
 
-// Single switch to re-enable the PTY buffer-tail fallback. When false the preview
-// is HOOKS-ONLY (transcript activity); when true it falls back to the xterm buffer
-// tail (last 3 rendered rows) before/without any hook. All the PTY/tail code below
-// is retained either way — flip this back to `true` to restore the fallback.
-const PTY_FALLBACK = false;
+// Fallback switch for the PTY-derived preview. When true the preview falls back
+// to the agent's DIGEST lines (A0.2: last rendered rows, folded backend-side,
+// pushed at 1Hz over agent://digest — no full stream reaches the renderer)
+// before/without any hook activity. Needed for un-hooked tools (gemini), whose
+// cards would otherwise stay empty. When false the preview is HOOKS-ONLY.
+const PTY_FALLBACK = true;
 
 // One preview row: its single collapsed line of text + the activity `kind` that
 // drives its color. Fallback (PTY tail) rows have no kind → rendered as default
@@ -62,8 +72,9 @@ const KIND_COLOR: Record<ActivityKind, string> = {
   `,
 })
 export class MiniTermComponent {
-  private terminals = inject(TerminalService);
   private runtime = inject(AgentRuntimeService);
+  private interest = inject(InterestService);
+  private host = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly agentId = input.required<string>();
   // The hook-driven activity detail (latest message content) as up to 3 lines,
   // each carrying its `kind` for colorizing. When present this is the preview. The
@@ -72,17 +83,18 @@ export class MiniTermComponent {
   private readonly activityLines = computed<{ text: string; kind: ActivityKind }[]>(() =>
     this.runtime.activityFor(this.agentId()),
   ); // reactive: activity signal
-  // Fallback: the last few rows straight from the authoritative xterm buffer —
-  // the same fully-rendered text the user sees in the full terminal. Depending on
-  // this agent's revision (bumped after each parsed write) keeps it live; the
-  // "process exited" line is written into xterm too, so it shows up naturally.
+  // Fallback: the agent's DIGEST lines (A0.2) — the last rendered rows folded
+  // in Rust and pushed at 1Hz while this card is in the viewport (this card's
+  // visibility registration below is exactly what puts the agent in digest
+  // mode). The full stream never reaches the renderer for preview-only agents.
   // No kind (null) → rendered as default stream text.
-  private readonly tailLines = computed<{ text: string; kind: null }[]>(() => {
-    const id = this.agentId();
-    this.terminals.revOf(id); // reactive dep: re-read on each new parsed write
-    return this.terminals.tail(id, 3).map((text) => ({ text, kind: null }));
-  });
-  // Prefer the activity feed. With PTY_FALLBACK on, fall back to the buffer tail
+  private readonly tailLines = computed<{ text: string; kind: null }[]>(() =>
+    this.runtime
+      .digestFor(this.agentId())
+      .slice(-3)
+      .map((text) => ({ text, kind: null })),
+  );
+  // Prefer the activity feed. With PTY_FALLBACK on, fall back to the digest
   // when no hook has fired; otherwise (hooks-only) return empty so the "no output
   // yet" row shows until hooks reach us.
   private readonly lines = computed<{ text: string; kind: ActivityKind | null }[]>(() => {
@@ -91,7 +103,7 @@ export class MiniTermComponent {
     return PTY_FALLBACK ? this.tailLines() : [];
   });
   // Which source drove the current preview: 'hook' (transcript activity), 'pty'
-  // (xterm buffer tail), or 'none' (nothing yet, hooks-only). Debug aid only —
+  // (backend digest), or 'none' (nothing yet, hooks-only). Debug aid only —
   // never rendered. With hooks-only this reads 'none' when nothing arrives, making
   // it obvious hooks aren't reaching the card.
   private readonly source = computed<"hook" | "pty" | "none">(() =>
@@ -99,13 +111,23 @@ export class MiniTermComponent {
   );
 
   constructor() {
+    // A0.2: while this card is in the viewport its agent belongs to the digest
+    // set (recomputed on overview scroll); off-screen cards drop to none.
+    // Registered from an effect (not directly) because inputs aren't readable
+    // until after construction; re-registers if the card is re-bound.
+    let unobserve: (() => void) | null = null;
+    effect(() => {
+      const id = this.agentId();
+      unobserve?.();
+      unobserve = this.interest.observeCard(this.host.nativeElement, id);
+    });
+    inject(DestroyRef).onDestroy(() => unobserve?.());
     // Debug-only side effect: log the preview content + its driving source on
-    // every update. Reads the activity signal and terminals.revOf(id) so it
-    // re-fires on each change, exactly like the preview. console only — no UI tag.
+    // every update. Reads the activity signal so it re-fires on each change,
+    // exactly like the preview. console only — no UI tag.
     effect(() => {
       const id = this.agentId();
       const acts = this.runtime.activityFor(id); // reactive dep: activity signal
-      this.terminals.revOf(id); // reactive dep: re-read on each new parsed write
       // Only log when there IS activity — skip the 'none' case entirely so the
       // shared activity signal re-running every card's effect doesn't spam.
       if (!acts.length) return;

@@ -24,8 +24,10 @@ export class CostStore {
       // backend unavailable — readout stays hidden
     }
     try {
-      const initial = await this.bridge.invoke<CostSnapshot>(Commands.SystemCost);
-      if (this.cost() === null) this.cost.set(initial);
+      // Cache peek only — null when the backend's first ccusage run is still in
+      // flight; its `system://cost` push (subscribed above) fills in shortly.
+      const initial = await this.bridge.invoke<CostSnapshot | null>(Commands.SystemCost);
+      if (initial && this.cost() === null) this.cost.set(initial);
     } catch {
       // optional command — fine to skip
     }

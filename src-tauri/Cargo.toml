@@ -61,6 +61,11 @@ windows-sys = { version = "0.61", features = [
     # process tree — RSS double-counts shared pages and must not be summed.
     "Win32_System_ProcessStatus",
 ] }
+# BrowserProcessId for the A7.7 tree: WebView2 shares one browser-process
+# family per user-data-dir, so a second Orrery instance's UI processes parent
+# under the FIRST instance — the ppid walk alone cannot attribute them. Same
+# version tauri/wry already pull in.
+webview2-com = "0.38"
 
 # Unix-only: portable-pty already makes each PTY child a session leader
 # (setsid), so killing the process group reaches grandchildren too. libc is

@@ -92,6 +92,7 @@ pub async fn agent_remove<R: Runtime>(
     // Kill the agent's PTY first (no-op when idle) — a live process holds its
     // cwd open, which makes remove_dir_all fail on Windows.
     rt.stop(id);
+    rt.drop_scrollback(id); // the A1.2 ring dies with the agent
     watch.unwatch(id); // stop watching its worktree before tearing it down
     let svc = svc.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -413,15 +414,86 @@ pub fn agent_decide(
     })
 }
 
-/// Tell the output mux which agent's terminal is focused (`None` = none): the
-/// focused agent's PTY output drains every ~16ms frame (typing echo stays
-/// snappy) while unfocused agents coalesce losslessly at a ~150ms cadence.
+/// One entry of the frontend's interest set (A0.2): which agent, and how much
+/// of its PTY output the renderer wants. `mode` is "stream" | "digest" |
+/// "none" — anything else degrades to "none" (emit nothing; safe direction).
+#[derive(Debug, serde::Deserialize)]
+pub struct InterestEntry {
+    pub id: Uuid,
+    pub mode: String,
+}
+
+/// A0.2 interest subscription — SUPERSEDES `agent_focus`/`set_focus`. The
+/// frontend publishes the full set derived from what is visible (terminal
+/// panes = stream, overview mini-previews = digest, diff/file views &
+/// unmounted agents = absent/none, blurred window demotes stream → digest);
+/// the backend diffs it against the current set. `none` only ever means
+/// do-not-EMIT — every PTY keeps being read and its bytes land in the bounded
+/// A1.2 scrollback ring.
+///
+/// Each mode transition is recorded (A0.7 correlate note): a tiny
+/// `runtime://interest` telemetry event carries the new set's counts + how
+/// many agents changed, so emit volume can be interpreted against what was on
+/// screen.
 #[tauri::command(async)]
-pub fn agent_focus(rt: State<'_, RuntimeService>, id: Option<Uuid>) -> AppResult<()> {
-    crate::perf::timed("agent_focus", || {
-        rt.focus(id);
+pub fn runtime_subscribe<R: Runtime>(
+    app: AppHandle<R>,
+    rt: State<'_, RuntimeService>,
+    watch: State<'_, WatchService>,
+    entries: Vec<InterestEntry>,
+) -> AppResult<()> {
+    crate::perf::timed("runtime_subscribe", || {
+        use crate::runtime::output_mux::Mode;
+        let parsed: Vec<(String, Mode)> = entries
+            .into_iter()
+            .map(|e| (e.id.to_string(), Mode::parse(&e.mode)))
+            .collect();
+        let (stream, digest): (usize, usize) = parsed.iter().fold((0, 0), |(s, d), (_, m)| {
+            match m {
+                Mode::Stream => (s + 1, d),
+                Mode::Digest => (s, d + 1),
+                Mode::None => (s, d),
+            }
+        });
+        let transitions = rt.subscribe(parsed);
+        for t in &transitions {
+            log::debug!("interest {}: {} → {}", t.id, t.from.as_str(), t.to.as_str());
+        }
+        // A2.2 reveal: an agent transitioning TO stream had counts-only
+        // background scans — push one full-detail scan so its changes panel
+        // shows real line counts without waiting for the next fs event.
+        for t in &transitions {
+            if t.to == Mode::Stream {
+                if let Ok(aid) = uuid::Uuid::parse_str(&t.id) {
+                    watch.rescan(aid);
+                }
+            }
+        }
+        if !transitions.is_empty() {
+            let _ = crate::core::emit::emit_tracked(
+                &app,
+                "runtime://interest",
+                &serde_json::json!({
+                    "stream": stream,
+                    "digest": digest,
+                    "changed": transitions.len(),
+                }),
+            );
+        }
         Ok(())
     })
+}
+
+/// A1.2 scrollback snapshot: the agent's recent raw output (lossy UTF-8
+/// string — same shape output ships in) + the cumulative byte seq of its last
+/// byte. Recovery contract: `term.clear()` → write `text` → drop queued live
+/// chunks with `seq <= endSeq` → resume the live stream.
+#[tauri::command(async)]
+pub fn runtime_snapshot(
+    rt: State<'_, RuntimeService>,
+    id: Uuid,
+) -> AppResult<crate::runtime::scrollback::Snapshot> {
+    crate::perf::timed("runtime_snapshot", || Ok(rt.snapshot(id)))
 }
 
 /// Resize the agent's PTY to match the visible terminal (cols × rows).
@@ -453,7 +525,16 @@ pub fn agent_watch<R: Runtime>(
             // Why: scans run on the watcher thread, not in a command — timing
             // them here is what keeps backend scan cost/rate visible in the
             // perf table now that the frontend no longer pulls agent_changes.
-            crate::perf::timed("agent_scan", || scan_svc.scan(id))
+            // A2.2: only a STREAM-subscribed agent (its terminal is on screen)
+            // pays for per-file line-count diffing; everyone else scans
+            // counts-only. Full deltas are pushed on reveal — see
+            // runtime_subscribe → watch.rescan on a →stream transition.
+            // TODO(A2.2 follow-up): an agent whose DIFF view is open is
+            // `none`-mode by design (A0.2) — those panes pull full counts via
+            // agent_changes; consider a git-interest mode if that ever pushes.
+            let full =
+                crate::runtime::interest_mode(id) == crate::runtime::output_mux::Mode::Stream;
+            crate::perf::timed("agent_scan", || scan_svc.scan_detail(id, full))
         });
         Ok(())
     })
@@ -612,7 +693,7 @@ pub async fn agent_blame(
     id: Uuid,
     path: String,
     rev: Option<String>,
-) -> AppResult<Vec<crate::git::service::BlameLine>> {
+) -> AppResult<crate::git::service::Blame> {
     let svc = svc.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_blame", || {
@@ -658,8 +739,8 @@ pub async fn agent_file_history(
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkingBlame {
-    pub old: Vec<crate::git::service::BlameLine>,
-    pub new: Vec<crate::git::service::BlameLine>,
+    pub old: crate::git::service::Blame,
+    pub new: crate::git::service::Blame,
 }
 
 #[tauri::command]

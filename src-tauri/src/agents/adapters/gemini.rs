@@ -27,6 +27,14 @@ impl AgentAdapter for GeminiAdapter {
         "gemini"
     }
 
+    /// Gemini has no BLOCKING permission hook, so its working / needs-input
+    /// state is derived from the PTY stream — now in Rust (A0.3, see
+    /// `runtime::heuristics`) so it keeps working when the agent is in
+    /// `none` interest mode and ships no bytes to the renderer.
+    fn pty_status_fallback(&self) -> bool {
+        true
+    }
+
     fn argv(&self, task: Option<&str>) -> Vec<String> {
         let mut v = vec!["gemini".to_string()];
         if let Some(t) = task {
@@ -108,6 +116,13 @@ mod tests {
     #[test]
     fn gemini_supports_hooks() {
         assert!(GeminiAdapter.supports_hooks());
+    }
+
+    // Gemini's fire-and-forget hooks carry activity, but NOT a blocking
+    // permission flow — the Rust PTY heuristics tee (A0.3) must stay on.
+    #[test]
+    fn gemini_needs_the_pty_status_fallback() {
+        assert!(GeminiAdapter.pty_status_fallback());
     }
 
     // Gemini's full installed event set, written into ~/.gemini/settings.json in

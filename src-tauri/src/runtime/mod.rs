@@ -11,8 +11,11 @@ use crate::agents::adapters::{self, HookEnv};
 use crate::agents::model::Agent;
 
 pub mod jobobj;
+pub(crate) mod digest;
+pub(crate) mod heuristics;
 pub(crate) mod output_batcher;
 pub(crate) mod output_mux;
+pub mod scrollback;
 
 type ProcMap = Arc<Mutex<HashMap<Uuid, Proc>>>;
 
@@ -26,21 +29,41 @@ fn mux() -> Arc<output_mux::OutputMux> {
         .clone()
 }
 
+/// A2.2: current interest mode for one agent, readable from anywhere in the
+/// backend (the watcher's scan closures use it to decide between full and
+/// counts-only status scans — only a Stream-subscribed agent's terminal is on
+/// screen, so only it pays for line-count diffing).
+pub fn interest_mode(id: Uuid) -> output_mux::Mode {
+    mux().interest_of(&id.to_string())
+}
+
 /// Guards the drain-thread spawn. Module-level (NOT inside the generic fn —
 /// a static in a generic fn is per-monomorphization, which could start one
 /// drain thread per `R` and double-emit frames).
 static DRAIN_STARTED: std::sync::Once = std::sync::Once::new();
 
-/// Start the single global drain thread on the first agent launch. Lazy
-/// because emitting needs an `AppHandle`, which only `start()` has; `Once`
-/// because there must be exactly one emitter no matter how many agents launch.
+/// Start the single global drain thread (per-frame `agent://output`) and the
+/// digest thread (1Hz `agent://digest` for digest-mode agents — see A0.2) on
+/// the first agent launch. Lazy because emitting needs an `AppHandle`, which
+/// only `start()` has; `Once` because there must be exactly one emitter no
+/// matter how many agents launch.
 fn ensure_drain_thread<R: Runtime>(app: &AppHandle<R>) {
     let app = app.clone();
     DRAIN_STARTED.call_once(move || {
-        let mux = mux();
+        let out_mux = mux();
+        let out_app = app.clone();
         std::thread::spawn(move || {
-            mux.drain_loop(std::time::Duration::from_millis(16), move |frame| {
-                emit_output_frame(&app, frame);
+            out_mux.drain_loop(std::time::Duration::from_millis(16), move |frame| {
+                emit_output_frame(&out_app, frame);
+            });
+        });
+        let digest_mux = mux();
+        std::thread::spawn(move || {
+            digest_mux.digest_loop(output_mux::DIGEST_PERIOD, move |batch| {
+                // Tiny payload (≤5 lines per digest-mode agent, 1Hz) — the
+                // overview mini-terminals' feed. Routed through the A0.7 funnel
+                // like every other emit.
+                let _ = crate::core::emit::emit_tracked(&app, "agent://digest", &batch);
             });
         });
     });
@@ -228,7 +251,8 @@ impl RuntimeService {
         let killer = child.clone_killer();
         let pid = child.process_id();
 
-        // stream stdout/stderr → batcher → global mux → `agent://output`.
+        // stream stdout/stderr → batcher → {scrollback ring, heuristics tee,
+        // global mux} → `agent://output` / `agent://digest`.
         // The batcher thread coalesces reads into ≤4ms / ≥16KB UTF-8-safe
         // chunks tagged with a cumulative byte seq (snapshot-dedup
         // foundation) and pushes them into the process-wide mux; the mux's
@@ -239,9 +263,45 @@ impl RuntimeService {
         // (the mux frame does), it only bounds chunk size + fixes multibyte
         // chars split across read boundaries (from_utf8_lossy per read
         // corrupted them).
+        //
+        // EVERY chunk also lands in the A1.2 scrollback ring BEFORE the mux
+        // sees it: the ring is the bounded recovery source that makes the
+        // mux's `none` interest mode safe (do-not-EMIT never means
+        // do-not-READ — this pipeline drains the PTY regardless of mode, or
+        // the kernel buffer would fill and block the agent process itself).
+        //
         // Neither thread emits `agent://exit`; both end once the master is
         // dropped (reader read fails → sender drops → batcher final-flushes).
         ensure_drain_thread(&app);
+        // A relaunch restarts the batcher seq at 0 — stale ring content tagged
+        // with the previous run's seqs would corrupt snapshot dedup.
+        scrollback::rings().reset(&id.to_string());
+        // A0.3: tools without a usable permission hook (gemini) get a
+        // heuristics tee — a per-agent thread that folds the same chunks and
+        // emits `agent://pty-status` on state transitions, replacing the
+        // renderer-side PTY parsing (which a `none`-mode agent would starve).
+        let heur_tx = if adapters::adapter_for(&agent.tool)
+            .map(|a| a.pty_status_fallback())
+            .unwrap_or(false)
+        {
+            let (tx, rx) = std::sync::mpsc::channel::<String>();
+            let heur_app = app.clone();
+            let heur_id = id.to_string();
+            std::thread::spawn(move || {
+                let loop_id = heur_id.clone();
+                heuristics::status_loop(rx, &loop_id, move |ev| {
+                    let _ = crate::core::emit::emit_keyed(
+                        &heur_app,
+                        "agent://pty-status",
+                        Some(&heur_id),
+                        ev,
+                    );
+                });
+            });
+            Some(tx)
+        } else {
+            None
+        };
         let out_id = id.to_string();
         let mux_out = mux();
         let (batch_tx, batch_rx) = std::sync::mpsc::channel::<Vec<u8>>();
@@ -250,7 +310,13 @@ impl RuntimeService {
                 batch_rx,
                 std::time::Duration::from_millis(4),
                 16 * 1024,
-                move |chunk, seq| mux_out.push(&out_id, chunk, seq),
+                move |chunk, seq| {
+                    scrollback::rings().append(&out_id, &chunk, seq);
+                    if let Some(tx) = &heur_tx {
+                        let _ = tx.send(chunk.clone());
+                    }
+                    mux_out.push(&out_id, chunk, seq);
+                },
             );
         });
         std::thread::spawn(move || {
@@ -375,12 +441,36 @@ impl RuntimeService {
         }
     }
 
-    /// Mark which agent's terminal is focused in the UI (`None` = none). The
-    /// output mux drains the focused agent every frame (keystroke echo stays
-    /// snappy) and holds everyone else to the slow ~150ms cadence — see
-    /// `output_mux::set_focus`.
-    pub fn focus(&self, id: Option<Uuid>) {
-        mux().set_focus(id.map(|u| u.to_string()));
+    /// A0.2: replace the whole interest set (supersedes the old single-agent
+    /// `focus`). `stream` agents ride the per-frame path, `digest` agents get
+    /// last-lines-at-1Hz, absent/`none` agents ship NOTHING (their bytes stay
+    /// in the bounded scrollback ring — the reader keeps draining regardless).
+    /// Returns the mode transitions for telemetry (A0.7 correlate).
+    pub fn subscribe(
+        &self,
+        entries: Vec<(String, output_mux::Mode)>,
+    ) -> Vec<output_mux::InterestTransition> {
+        mux().set_interest(entries)
+    }
+
+    /// Current interest mode for one agent (`None` when unsubscribed). Free
+    /// function twin below for callers without the service handle.
+    pub fn interest_mode(&self, id: Uuid) -> output_mux::Mode {
+        interest_mode(id)
+    }
+
+    /// A1.2: current scrollback snapshot for an agent — the renderer's
+    /// recovery source (stale/hidden terminal shown again, webview reload,
+    /// none→stream resubscribe). Empty default when the agent never ran.
+    pub fn snapshot(&self, id: Uuid) -> scrollback::Snapshot {
+        scrollback::rings()
+            .snapshot(&id.to_string())
+            .unwrap_or_default()
+    }
+
+    /// Drop an agent's scrollback ring (agent/worktree removal).
+    pub fn drop_scrollback(&self, id: Uuid) {
+        scrollback::rings().remove(&id.to_string());
     }
 
     /// Feed keystrokes from the UI terminal into the agent's PTY stdin.
@@ -558,10 +648,12 @@ fn tool_command(
 ///
 /// We resolve argv[0] ourselves before spawning: PATH dirs are walked in order and
 /// the first dir with a runnable candidate wins (preferring `.exe` over shims WITHIN
-/// a dir), so orrery launches the same version the user's terminal would. `.cmd`/
-/// `.bat`/`.ps1` shims are wrapped in their interpreter so they actually run; the
-/// extensionless file is a global last resort. No-op when argv[0] already names a
-/// path, when nothing resolves, or off Windows.
+/// a dir), so orrery launches the same version the user's terminal would. An
+/// npm-style `.cmd`/`.ps1` shim is parsed to its real target and spawned as
+/// `node <cli.js>` directly (no wrapper process — A0.1); an unparseable shim is
+/// outranked by a real `.exe` anywhere else on PATH, and only as a last resort
+/// wrapped in its interpreter. The extensionless file is a global last resort.
+/// No-op when argv[0] already names a path, when nothing resolves, or off Windows.
 #[cfg(windows)]
 fn resolve_program_command(cmd: CommandBuilder) -> CommandBuilder {
     let argv: Vec<String> = cmd
@@ -591,9 +683,10 @@ fn resolve_program_command(cmd: CommandBuilder) -> CommandBuilder {
 #[cfg(windows)]
 fn resolve_program(argv: Vec<String>) -> Vec<String> {
     let prog = &argv[0];
-    // An explicit path (a manual `tool_paths` override) — still wrap a script or
-    // extensionless shim so CreateProcessW can launch it (npm's bare `claude` →
-    // `cmd.exe /c call claude.cmd`). A real `.exe` passes through unchanged.
+    // An explicit path (a manual `tool_paths` override) — launch_prefix resolves
+    // an npm-style shim to a direct `node <cli.js>` spawn, wraps any other
+    // script/extensionless shim so CreateProcessW can launch it, and passes a
+    // real `.exe` through unchanged.
     if prog.contains('/') || prog.contains('\\') {
         let (program, mut head) = crate::agents::adapters::launch_prefix(prog);
         head.extend_from_slice(&argv[1..]);
@@ -604,27 +697,77 @@ fn resolve_program(argv: Vec<String>) -> Vec<String> {
     let dirs: Vec<std::path::PathBuf> = std::env::var_os("PATH")
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default();
-    let prefer_ps1 = crate::agents::adapters::prefers_pwsh();
-    match find_program(prog, &dirs, &executable_exts(prefer_ps1)) {
-        Some(found) => wrap_for_ext(&found, &argv[1..]),
-        None => argv, // nothing better to offer; let portable-pty try
+    resolve_from_dirs(argv, &dirs)
+}
+
+/// PATH-dir resolution core behind [`resolve_program`], split out so tests can
+/// drive it with temp dirs. Strategy, in A0.1's order of preference:
+///
+/// 1. PATH order picks the candidate (`find_program`) — same version the user's
+///    shell would run. A real `.exe`/`.com` launches directly.
+/// 2. A script shim is PARSED (`adapters::resolve_shim_argv`): an npm-style
+///    shim becomes a direct `node <cli.js>` spawn — no wrapper process, and
+///    still the PATH-order version.
+/// 3. An UNPARSEABLE shim would need a live wrapper process, so a real `.exe`
+///    anywhere LATER on PATH now outranks it (global exe ranking) — a wrapper-
+///    free spawn beats strict PATH order when the shim's target is unknowable.
+/// 4. Only then is the shim wrapped in its interpreter (`wrap_for_ext`).
+#[cfg(windows)]
+fn resolve_from_dirs(argv: Vec<String>, dirs: &[std::path::PathBuf]) -> Vec<String> {
+    let prog = &argv[0];
+    let Some(found) = find_program(prog, dirs, &executable_exts()) else {
+        return argv; // nothing better to offer; let portable-pty try
+    };
+    let ext = found
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase());
+    if !matches!(ext.as_deref(), Some("exe") | Some("com")) {
+        // 2) Shim resolution: spawn the shim's real target directly.
+        if let Some(mut direct) = crate::agents::adapters::resolve_shim_argv(&found) {
+            direct.extend(argv[1..].iter().cloned());
+            return direct;
+        }
+        // 3) Global exe ranking: this shim can only run behind a wrapper
+        // process — a native image in ANY later PATH dir runs wrapper-free.
+        if let Some(exe) = find_exe_global(prog, dirs) {
+            let mut out = vec![exe.to_string_lossy().into_owned()];
+            out.extend(argv[1..].iter().cloned());
+            return out;
+        }
     }
+    wrap_for_ext(&found, &argv[1..])
+}
+
+/// The first `<prog>.exe` / `<prog>.com` across ALL of `dirs`, in PATH order —
+/// the A0.1 "rank a real .exe above every shim globally" pass, consulted only
+/// after shim resolution failed (a resolvable npm shim keeps PATH-order
+/// precedence; see [`resolve_from_dirs`]).
+#[cfg(windows)]
+fn find_exe_global(prog: &str, dirs: &[std::path::PathBuf]) -> Option<std::path::PathBuf> {
+    dirs.iter().find_map(|dir| {
+        ["exe", "com"].iter().find_map(|ext| {
+            let cand = dir.join(format!("{prog}.{ext}"));
+            cand.is_file().then_some(cand)
+        })
+    })
 }
 
 /// Candidate extensions in launchability order: PE images CreateProcessW runs
 /// directly, then the script kinds we wrap in a known interpreter, then whatever
 /// else the machine's PATHEXT declares executable (launched via cmd.exe file
 /// association). Honoring PATHEXT means a `claude.vbs`/`.py`-style install the
-/// user's shell would run is not invisible to us. With PowerShell 7 installed
-/// (`prefer_ps1`) the `.ps1` shim outranks `.cmd` — pwsh runs npm's ps1 shim
-/// more smoothly than cmd.exe runs the batch one.
+/// user's shell would run is not invisible to us.
+///
+/// Why `.cmd`/`.bat` before `.ps1` even with PowerShell 7 installed: a wrapped
+/// `.cmd` costs a cmd.exe (~3–5 MB RSS) while a wrapped `.ps1` costs a pwsh
+/// (~60–100 MB) — per agent, for its whole run. The old "pwsh runs npm's ps1
+/// shim more smoothly" preference predated the `/c call` quoting fix in
+/// [`wrap_for_ext`], which is what actually broke spaced shim paths under cmd.
+/// And a shim that parses (`resolve_shim_argv`) never pays for either wrapper.
 #[cfg(windows)]
-fn executable_exts(prefer_ps1: bool) -> Vec<String> {
-    let base: [&str; 5] = if prefer_ps1 {
-        ["exe", "com", "ps1", "cmd", "bat"]
-    } else {
-        ["exe", "com", "cmd", "bat", "ps1"]
-    };
+fn executable_exts() -> Vec<String> {
+    let base: [&str; 5] = ["exe", "com", "cmd", "bat", "ps1"];
     let mut exts: Vec<String> = base.iter().map(|e| e.to_string()).collect();
     if let Some(pathext) = std::env::var_os("PATHEXT") {
         for e in pathext.to_string_lossy().split(';') {
@@ -641,7 +784,9 @@ fn executable_exts(prefer_ps1: bool) -> Vec<String> {
 /// candidate wins, and within that dir a real executable beats a script shim
 /// (`exe` > `com` > `cmd` > `bat` > `ps1`). This matches what the user's shell
 /// resolves — so when npm's `claude.cmd` (kept current by `npm update`) precedes a
-/// stale winget `claude.exe`, orrery launches the same version the terminal does.
+/// stale winget `claude.exe`, orrery launches the same version the terminal does
+/// (the shim is then RESOLVED to a direct `node` spawn, or — only if unparseable —
+/// outranked by the global exe pass; see [`resolve_from_dirs`]).
 /// An extensionless file is a global LAST resort (CreateProcessW can't run it, and
 /// npm's bare shim always has a runnable `.cmd`/`.ps1` sibling in the same dir).
 /// `exts` comes from [`executable_exts`] — PE images first, then wrappable scripts,
@@ -1052,12 +1197,13 @@ mod tests {
         }
     }
 
-    // PATH order wins: when `claude` is installed by both npm (extensionless Node
-    // shim + .cmd/.ps1, in an EARLIER PATH dir) and winget (real .exe, later), the
-    // npm dir's runnable `.cmd` shim is chosen — same version the terminal resolves.
-    // The 193 fix survives because the extensionless shell script is never picked
-    // while a runnable sibling exists; the stale-winget-version bug is fixed because
-    // a later-dir .exe no longer shadows the earlier dir the user keeps current.
+    // PATH order picks the candidate: when `claude` is installed by both npm
+    // (extensionless Node shim + .cmd/.ps1, in an EARLIER PATH dir) and winget
+    // (real .exe, later), find_program still surfaces the npm dir's runnable
+    // `.cmd` shim — same version the terminal resolves. What happens to that shim
+    // (parse → direct spawn, or global-exe outranking) is resolve_from_dirs's
+    // call, tested below. The 193 fix survives because the extensionless shell
+    // script is never picked while a runnable sibling exists.
     #[cfg(windows)]
     #[test]
     fn find_program_respects_path_order_over_later_exe() {
@@ -1073,14 +1219,9 @@ mod tests {
         fs::write(winget.path().join("claude.exe"), b"MZ").unwrap();
         let dirs: Vec<PathBuf> = vec![npm.path().into(), winget.path().into()];
         assert_eq!(
-            find_program("claude", &dirs, &executable_exts(false)),
+            find_program("claude", &dirs, &executable_exts()),
             Some(npm.path().join("claude.cmd")),
-            "earlier dir's runnable .cmd beats a later dir's .exe"
-        );
-        assert_eq!(
-            find_program("claude", &dirs, &executable_exts(true)),
-            Some(npm.path().join("claude.ps1")),
-            "with pwsh installed the earlier dir's .ps1 shim is preferred"
+            "earlier dir's runnable .cmd beats a later dir's .exe in the pick pass"
         );
     }
 
@@ -1095,13 +1236,117 @@ mod tests {
         fs::write(dir.path().join("claude.cmd"), b"@echo off\n").unwrap();
         fs::write(dir.path().join("claude.exe"), b"MZ").unwrap();
         let dirs: Vec<PathBuf> = vec![dir.path().into()];
-        for prefer_ps1 in [false, true] {
-            assert_eq!(
-                find_program("claude", &dirs, &executable_exts(prefer_ps1)),
-                Some(dir.path().join("claude.exe")),
-                ".exe beats .cmd in the same dir (prefer_ps1={prefer_ps1})"
-            );
-        }
+        assert_eq!(
+            find_program("claude", &dirs, &executable_exts()),
+            Some(dir.path().join("claude.exe")),
+            ".exe beats .cmd in the same dir"
+        );
+    }
+
+    /// A real npm-generated `.cmd` shim body targeting
+    /// `node_modules\test-pkg\cli.js` (mirrors the adapters-test fixture).
+    #[cfg(windows)]
+    const NPM_CMD_SHIM: &str = concat!(
+        "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\n",
+        "SETLOCAL\r\nCALL :find_dp0\r\n\r\n",
+        "IF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n",
+        ") ELSE (\r\n  SET \"_prog=node\"\r\n)\r\n\r\n",
+        "endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & ",
+        "\"%_prog%\"  \"%dp0%\\node_modules\\test-pkg\\cli.js\" %*\r\n",
+    );
+
+    // A0.1 preference 1: an npm shim earlier on PATH RESOLVES to a direct
+    // `node <cli.js>` spawn — no wrapper process, and the later real .exe does
+    // NOT outrank it (the PATH-order version is preserved for resolvable shims).
+    #[cfg(windows)]
+    #[test]
+    fn resolve_from_dirs_spawns_npm_shim_target_directly_over_later_exe() {
+        use std::fs;
+        use std::path::PathBuf;
+        let npm = tempfile::tempdir().unwrap();
+        let winget = tempfile::tempdir().unwrap();
+        fs::write(npm.path().join("node.exe"), b"MZ").unwrap();
+        let pkg = npm.path().join("node_modules").join("test-pkg");
+        fs::create_dir_all(&pkg).unwrap();
+        fs::write(pkg.join("cli.js"), b"// cli\n").unwrap();
+        fs::write(npm.path().join("claude.cmd"), NPM_CMD_SHIM).unwrap();
+        fs::write(winget.path().join("claude.exe"), b"MZ").unwrap();
+        let dirs: Vec<PathBuf> = vec![npm.path().into(), winget.path().into()];
+
+        let out = resolve_from_dirs(vec!["claude".into(), "fix bug".into()], &dirs);
+        assert_eq!(out.len(), 3, "node + cli.js + prompt: {out:?}");
+        assert_eq!(out[0], npm.path().join("node.exe").to_string_lossy());
+        assert!(out[1].ends_with("cli.js"), "direct script target: {}", out[1]);
+        assert_eq!(out[2], "fix bug");
+        assert!(
+            !out.iter().any(|a| a.contains("cmd.exe") || a.contains("claude.cmd")),
+            "no shell wrapper in the argv: {out:?}"
+        );
+    }
+
+    // A0.1 preference 2: when the earlier shim is UNPARSEABLE, a real .exe in a
+    // LATER PATH dir now outranks it globally — a wrapper-free spawn beats
+    // strict PATH order for a shim whose target is unknowable.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_from_dirs_ranks_later_exe_above_unparseable_shim() {
+        use std::fs;
+        use std::path::PathBuf;
+        let shim_dir = tempfile::tempdir().unwrap();
+        let winget = tempfile::tempdir().unwrap();
+        fs::write(shim_dir.path().join("claude.cmd"), b"@echo off\r\nsomething\r\n").unwrap();
+        fs::write(winget.path().join("claude.exe"), b"MZ").unwrap();
+        let dirs: Vec<PathBuf> = vec![shim_dir.path().into(), winget.path().into()];
+
+        let out = resolve_from_dirs(vec!["claude".into(), "task".into()], &dirs);
+        assert_eq!(
+            out,
+            vec![
+                winget.path().join("claude.exe").to_string_lossy().into_owned(),
+                "task".to_string()
+            ],
+            "global exe ranking beats wrapping the opaque shim"
+        );
+    }
+
+    // A0.1 preference 3: no parseable shim, no exe anywhere → the shim is
+    // wrapped, via cmd.exe /c call (the RAM-cheap wrapper), not pwsh.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_from_dirs_wraps_unparseable_shim_with_cmd_as_last_resort() {
+        use std::fs;
+        use std::path::PathBuf;
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("claude.cmd"), b"@echo off\r\nsomething\r\n").unwrap();
+        let dirs: Vec<PathBuf> = vec![dir.path().into()];
+        let out = resolve_from_dirs(vec!["claude".into()], &dirs);
+        assert_eq!(
+            out,
+            vec![
+                "cmd.exe".to_string(),
+                "/c".into(),
+                "call".into(),
+                dir.path().join("claude.cmd").to_string_lossy().into_owned()
+            ]
+        );
+    }
+
+    // The old pwsh path stays reachable: a ps1-ONLY unparseable install wraps
+    // under PowerShell (there is nothing cheaper that can run it).
+    #[cfg(windows)]
+    #[test]
+    fn resolve_from_dirs_ps1_only_install_still_wraps_under_powershell() {
+        use std::fs;
+        use std::path::PathBuf;
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("claude.ps1"), b"Write-Host hi\r\n").unwrap();
+        let dirs: Vec<PathBuf> = vec![dir.path().into()];
+        let out = resolve_from_dirs(vec!["claude".into()], &dirs);
+        assert_eq!(out[0], crate::agents::adapters::powershell_program());
+        assert_eq!(
+            out.last().unwrap(),
+            &dir.path().join("claude.ps1").to_string_lossy().into_owned()
+        );
     }
 
     // A dir holding ONLY the extensionless file must not capture resolution — a
@@ -1118,33 +1363,30 @@ mod tests {
         fs::write(winget.path().join("claude.exe"), b"MZ").unwrap();
         let dirs: Vec<PathBuf> = vec![bare.path().into(), winget.path().into()];
         assert_eq!(
-            find_program("claude", &dirs, &executable_exts(false)),
+            find_program("claude", &dirs, &executable_exts()),
             Some(winget.path().join("claude.exe")),
             "later runnable .exe beats an earlier extensionless-only dir"
         );
         let only_bare: Vec<PathBuf> = vec![bare.path().into()];
         assert_eq!(
-            find_program("claude", &only_bare, &executable_exts(false)),
+            find_program("claude", &only_bare, &executable_exts()),
             Some(bare.path().join("claude")),
             "extensionless file returned only as last resort"
         );
     }
 
-    // The candidate-extension list honors the pwsh preference (ps1 outranks cmd
-    // only when PowerShell 7 is around) and appends the machine's PATHEXT extras
-    // after the known kinds.
+    // The candidate-extension order is fixed: PE images first, then .cmd/.bat
+    // BEFORE .ps1 regardless of pwsh being installed (a cmd.exe wrapper is
+    // ~3–5 MB RSS vs pwsh's ~60–100 MB), with the machine's PATHEXT extras
+    // appended after the known kinds.
     #[cfg(windows)]
     #[test]
-    fn executable_exts_orders_ps1_by_pwsh_preference() {
-        let pos = |exts: &[String], e: &str| exts.iter().position(|x| x == e).unwrap();
-        let with = executable_exts(true);
-        assert!(pos(&with, "exe") < pos(&with, "ps1"), "exe always first: {with:?}");
-        assert!(pos(&with, "ps1") < pos(&with, "cmd"), "pwsh: ps1 before cmd: {with:?}");
-        let without = executable_exts(false);
-        assert!(
-            pos(&without, "cmd") < pos(&without, "ps1"),
-            "no pwsh: cmd before ps1: {without:?}"
-        );
+    fn executable_exts_prefers_cmd_over_ps1_unconditionally() {
+        let exts = executable_exts();
+        let pos = |e: &str| exts.iter().position(|x| x == e).unwrap();
+        assert!(pos("exe") < pos("cmd"), "exe first: {exts:?}");
+        assert!(pos("cmd") < pos("ps1"), "cmd before ps1 (RAM): {exts:?}");
+        assert!(pos("bat") < pos("ps1"), "bat before ps1 (RAM): {exts:?}");
     }
 
     // No real .exe anywhere → the .cmd shim is chosen over the extensionless file
@@ -1159,7 +1401,7 @@ mod tests {
         fs::write(npm.path().join("claude.cmd"), b"@echo off\n").unwrap();
         let dirs: Vec<PathBuf> = vec![npm.path().into()];
         assert_eq!(
-            find_program("claude", &dirs, &executable_exts(false)),
+            find_program("claude", &dirs, &executable_exts()),
             Some(npm.path().join("claude.cmd")),
             ".cmd shim beats the extensionless file"
         );
