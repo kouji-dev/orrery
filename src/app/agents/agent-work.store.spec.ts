@@ -122,4 +122,37 @@ describe("AgentWorkStore", () => {
     await Promise.resolve();
     expect(store.changesFor("a").data[0].path).toBe("pushed");
   });
+
+  // ---- A0.6 LRU eviction: keep the last 4 agents touched ----
+
+  it("evicts the least-recently-touched agent beyond the 4-agent cap", () => {
+    const file: AgentFile = { path: "x", add: 1, del: 0, state: "M" };
+    for (const id of ["a1", "a2", "a3", "a4"]) store.applyScan(id, [file], "h");
+    expect(store.changesFor("a1").status).toBe("ready");
+
+    store.applyScan("a5", [file], "h"); // 5th agent → a1 evicted
+    expect(store.changesFor("a1").status).toBe("idle");
+    for (const id of ["a2", "a3", "a4", "a5"]) {
+      expect(store.changesFor(id).status).toBe("ready");
+    }
+  });
+
+  it("touching an old agent protects it from eviction (true LRU, not FIFO)", () => {
+    const file: AgentFile = { path: "x", add: 1, del: 0, state: "M" };
+    for (const id of ["a1", "a2", "a3", "a4"]) store.applyScan(id, [file], "h");
+    store.applyScan("a1", [file], "h"); // a1 becomes most recent
+    store.applyScan("a5", [file], "h"); // now a2 is the oldest → evicted
+    expect(store.changesFor("a1").status).toBe("ready");
+    expect(store.changesFor("a2").status).toBe("idle");
+  });
+
+  it("evicted entries reload lazily — eviction is free by design", async () => {
+    const file: AgentFile = { path: "x", add: 1, del: 0, state: "M" };
+    for (const id of ["a1", "a2", "a3", "a4", "a5"]) store.applyScan(id, [file], "h");
+    expect(store.changesFor("a1").status).toBe("idle"); // evicted
+    store.loadChanges("a1"); // reveal → normal lazy pull
+    resolvers.shift()!([file]);
+    await Promise.resolve();
+    expect(store.changesFor("a1").status).toBe("ready");
+  });
 });

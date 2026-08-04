@@ -8,7 +8,7 @@ import {
   signal,
 } from "@angular/core";
 import { marked } from "marked";
-import { Agent, BlameLine } from "../models";
+import { Agent, BlameIntern, BlameLine, hydrateBlame } from "../models";
 import { AgentsStore } from "../stores/agents.store";
 import { IconComponent } from "../shared/icon.component";
 import { UiStore } from "../ui/ui.store";
@@ -155,10 +155,10 @@ export class FileViewComponent {
       }
       const g = ++this.blameGen;
       void this.bridge
-        .invoke<{ old: BlameLine[]; new: BlameLine[] }>(Commands.AgentWorkingBlame, { id, path })
+        .invoke<{ old: BlameIntern; new: BlameIntern }>(Commands.AgentWorkingBlame, { id, path })
         .then((r) => {
           if (this.blameGen !== g) return;
-          this.blame.set(r.new ?? []);
+          this.blame.set(hydrateBlame(r.new));
         })
         .catch(() => {
           if (this.blameGen !== g) return;

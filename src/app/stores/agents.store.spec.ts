@@ -46,6 +46,34 @@ describe("AgentsStore session continuation", () => {
   });
 });
 
+describe("AgentsStore interest subscription (A0.2 / A1.2)", () => {
+  it("subscribe ships the {entries} payload of runtime_subscribe", () => {
+    const { bridge, invokes } = fakeBridge();
+    const store = makeStore(bridge);
+
+    void store.subscribe([
+      { id: "a1", mode: "stream" },
+      { id: "a2", mode: "digest" },
+    ]);
+    const call = invokes.find((c) => c.command === Commands.RuntimeSubscribe);
+    expect(call?.payload).toEqual({
+      entries: [
+        { id: "a1", mode: "stream" },
+        { id: "a2", mode: "digest" },
+      ],
+    });
+  });
+
+  it("snapshot invokes runtime_snapshot with the agent id", () => {
+    const { bridge, invokes } = fakeBridge();
+    const store = makeStore(bridge);
+
+    void store.snapshot("a1");
+    const call = invokes.find((c) => c.command === Commands.RuntimeSnapshot);
+    expect(call?.payload).toEqual({ id: "a1" });
+  });
+});
+
 describe("AgentsStore multiplexed output", () => {
   // The backend mux emits ONE agent://output event per ~16ms frame whose
   // payload is an ARRAY of per-agent entries (not the old single {id, chunk}

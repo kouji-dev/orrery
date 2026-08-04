@@ -45,10 +45,10 @@ interface Setup {
 
 // claude/codex/cursor detected; gemini missing — mirrors the design fixture.
 const DETECTIONS: Record<string, ToolDetection> = {
-  claude: { id: "claude", status: "ok", available: true, path: "/usr/local/bin/claude", version: "1.4.2", source: "path", reason: null },
-  codex: { id: "codex", status: "ok", available: true, path: "/usr/local/bin/codex", version: "0.31.0", source: "path", reason: null },
-  cursor: { id: "cursor", status: "ok", available: true, path: "/usr/local/bin/cursor-agent", version: null, source: "path", reason: null },
-  gemini: { id: "gemini", status: "missing", available: false, path: null, version: null, source: null, reason: null },
+  claude: { id: "claude", status: "ok", available: true, path: "/usr/local/bin/claude", version: "1.4.2", source: "path", reason: null, shim: false },
+  codex: { id: "codex", status: "ok", available: true, path: "/usr/local/bin/codex", version: "0.31.0", source: "path", reason: null, shim: false },
+  cursor: { id: "cursor", status: "ok", available: true, path: "/usr/local/bin/cursor-agent", version: null, source: "path", reason: null, shim: false },
+  gemini: { id: "gemini", status: "missing", available: false, path: null, version: null, source: null, reason: null, shim: false },
 };
 
 async function setup(stored: Partial<Settings> = {}): Promise<Setup> {

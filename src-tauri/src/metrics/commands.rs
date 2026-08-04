@@ -34,6 +34,7 @@ pub async fn process_tree(
     runtime: State<'_, RuntimeService>,
     agents: State<'_, AgentService>,
     job: State<'_, crate::runtime::jobobj::JobGuard>,
+    webviews: State<'_, super::WebviewFamily>,
     discover: Option<bool>,
 ) -> Result<super::tree::ProcessTreeSnapshot, String> {
     let labels = agent_labels(&agents);
@@ -49,6 +50,7 @@ pub async fn process_tree(
         })
         .collect();
     let job_pids = job.pids();
+    let webview_roots: Vec<u32> = webviews.0.lock().unwrap().clone();
     let shared = shared.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("process_tree", move || {
@@ -66,6 +68,7 @@ pub async fn process_tree(
                 &agent_roots,
                 &map,
                 job_pids.as_deref(),
+                &webview_roots,
                 &super::tree::private_bytes_or_rss,
                 now_ms,
             )

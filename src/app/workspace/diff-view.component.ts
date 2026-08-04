@@ -7,7 +7,7 @@ import {
   input,
   signal,
 } from "@angular/core";
-import { Agent, AgentFile, BlameLine, FileDiff } from "../models";
+import { Agent, AgentFile, BlameIntern, BlameLine, FileDiff, hydrateBlame } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { EstimateInput } from "../cost/estimate.service";
 import { IconComponent } from "../shared/icon.component";
@@ -523,10 +523,10 @@ export class DiffViewComponent {
       }
       const g = ++this.blameGen;
       void this.bridge
-        .invoke<{ old: BlameLine[]; new: BlameLine[] }>(Commands.AgentWorkingBlame, { id, path: f.path })
+        .invoke<{ old: BlameIntern; new: BlameIntern }>(Commands.AgentWorkingBlame, { id, path: f.path })
         .then((r) => {
           if (this.blameGen !== g) return;
-          this.newBlame.set(r.new ?? []);
+          this.newBlame.set(hydrateBlame(r.new));
         })
         .catch(() => {
           if (this.blameGen !== g) return;

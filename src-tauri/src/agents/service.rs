@@ -281,6 +281,14 @@ impl AgentService {
     /// be dropped anyway. Composition of tested pieces; covered end-to-end by
     /// the watch integration test.
     pub fn scan(&self, id: Uuid) -> crate::watch::ScanResult {
+        self.scan_detail(id, true)
+    }
+
+    /// [`scan`] with the detail level explicit (A2.2): `full = false` skips
+    /// per-file line-count diffing (states/paths only, add/del = 0) — the
+    /// cheap background scan for non-focused agents. Full deltas are pushed
+    /// on reveal via `WatchService::rescan`.
+    pub fn scan_detail(&self, id: Uuid, full: bool) -> crate::watch::ScanResult {
         let Ok(rec) = self.get(id) else {
             return crate::watch::ScanResult {
                 changes: Vec::new(),
@@ -289,7 +297,11 @@ impl AgentService {
         };
         let p = Path::new(&rec.worktree);
         crate::watch::ScanResult {
-            changes: self.git.status(p),
+            changes: if full {
+                self.git.status(p)
+            } else {
+                self.git.status_counts_only(p)
+            },
             head: self.git.head_oid(p),
         }
     }

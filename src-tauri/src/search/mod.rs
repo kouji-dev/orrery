@@ -221,12 +221,48 @@ fn window_line(line: &str, byte_ranges: &[(usize, usize)]) -> (String, Vec<(usiz
 /// Walk one root honoring .gitignore (hidden files INCLUDED, `.git` excluded)
 /// — shared by the search runner and the file-lister.
 fn walker(root: &Path) -> ignore::Walk {
+    walker_with(root, Some(MAX_FILE_SIZE))
+}
+
+/// [`walker`] with the size cap injectable: search skips huge files, while the
+/// status-cache fingerprint below must see EVERY file's stat. One ignore-aware
+/// walker configuration for the whole backend (A2.4).
+fn walker_with(root: &Path, max_filesize: Option<u64>) -> ignore::Walk {
     WalkBuilder::new(root)
         .hidden(false)
         .follow_links(false)
-        .max_filesize(Some(MAX_FILE_SIZE))
+        .max_filesize(max_filesize)
         .filter_entry(|e| e.file_name().to_str() != Some(".git"))
         .build()
+}
+
+/// Stat-level fingerprint of a worktree: hash of every non-ignored file's
+/// (path, len, mtime) via the SAME ignore-aware walker the search corpus uses
+/// (A2.4: one walk implementation, not two). Content is never read — this is
+/// the cheap "did anything change" component of the status cache key (A2.3).
+pub(crate) fn worktree_fingerprint(root: &Path) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    // No size cap: a >MAX_FILE_SIZE tracked file's edits must still change the key.
+    for entry in walker_with(root, None).flatten() {
+        if !entry.file_type().is_some_and(|t| t.is_file()) {
+            continue;
+        }
+        entry
+            .path()
+            .strip_prefix(root)
+            .unwrap_or_else(|_| entry.path())
+            .hash(&mut h);
+        if let Ok(md) = entry.metadata() {
+            md.len().hash(&mut h);
+            if let Ok(mtime) = md.modified() {
+                if let Ok(d) = mtime.duration_since(std::time::UNIX_EPOCH) {
+                    d.as_nanos().hash(&mut h);
+                }
+            }
+        }
+    }
+    h.finish()
 }
 
 /// The streaming search body — runs on its own thread per search.

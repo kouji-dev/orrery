@@ -43,6 +43,26 @@ pub fn run() {
                     let _ = win.center();
                 }
             }
+            // A7.7: record our WebView2 browser-process pid. WebView2 shares one
+            // browser family per user-data-dir, so with a second Orrery instance
+            // running our UI processes parent under THAT instance — the process
+            // tree attaches this family to our root explicitly instead of
+            // trusting the ppid walk.
+            let webview_family = metrics::WebviewFamily::default();
+            app.manage(webview_family.clone());
+            #[cfg(windows)]
+            if let Some(win) = app.get_webview_window("main") {
+                let fam = webview_family.clone();
+                let _ = win.with_webview(move |pv| unsafe {
+                    let controller = pv.controller();
+                    if let Ok(core) = controller.CoreWebView2() {
+                        let mut pid = 0u32;
+                        if core.BrowserProcessId(&mut pid).is_ok() && pid != 0 {
+                            fam.0.lock().unwrap().push(pid);
+                        }
+                    }
+                });
+            }
             // Install the OS process-tree kill mechanism FIRST so every process
             // we later spawn (agents + their subtrees) inherits it. On Windows
             // this is a kill-on-close Job Object; the guard must live for the
@@ -190,9 +210,10 @@ pub fn run() {
 
             // Cost push loop: shell out to `ccusage` and emit the global total on
             // `system://cost`. `available:false` is emitted when ccusage can't run
-            // — the UI hides the readout. The snapshot is cached in shared managed
-            // state (CostCache) so the one-shot `system_cost` command and this
-            // loop never run two node processes for the same 5-minute window.
+            // — the UI hides the readout. This loop is the ONLY thing that runs
+            // ccusage: the one-shot `system_cost` command just peeks the shared
+            // CostCache (A1.8 — no second node process, no thread parked behind
+            // the loop's in-flight startup run).
             let cost_cache = cost::CostCache::new();
             app.manage(cost_cache.clone());
             let cost_app = app.handle().clone();
@@ -256,7 +277,8 @@ pub fn run() {
             agents::commands::agent_deny,
             agents::commands::agent_decide,
             agents::commands::agent_resize,
-            agents::commands::agent_focus,
+            agents::commands::runtime_subscribe,
+            agents::commands::runtime_snapshot,
             agents::commands::agents_interrupted,
             agents::commands::detect_tools,
             agents::commands::verify_tool_path,

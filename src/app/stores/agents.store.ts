@@ -1,5 +1,14 @@
 import { inject, Injectable } from "@angular/core";
-import { AgentOutputEntry, BRIDGE, Commands, Events } from "../data-source/bridge";
+import {
+  AgentDigestEntry,
+  AgentOutputEntry,
+  AgentPtyStatusPayload,
+  BRIDGE,
+  Commands,
+  Events,
+  InterestEntry,
+  RuntimeSnapshot,
+} from "../data-source/bridge";
 import {
   ActivityKind,
   Agent,
@@ -208,11 +217,24 @@ export class AgentsStore {
   resize(id: string, rows: number, cols: number): Promise<void> {
     return this.bridge.invoke(Commands.AgentResize, { id, rows, cols });
   }
-  /** Tell the backend output mux which agent's terminal is focused (null =
-   *  none): the focused agent's output ships every ~16ms frame (typing echo
-   *  stays snappy); everyone else coalesces at a slower ~150ms cadence. */
-  focus(id: string | null): Promise<void> {
-    return this.bridge.invoke(Commands.AgentFocus, { id });
+  /** A0.2: publish the full interest set (supersedes the old focus() /
+   *  agent_focus). Entries absent from the set are `none` — the backend ships
+   *  NOTHING for them (their PTYs keep being read into the bounded ring). */
+  subscribe(entries: InterestEntry[]): Promise<void> {
+    return this.bridge.invoke(Commands.RuntimeSubscribe, { entries });
+  }
+  /** A1.2: the backend scrollback snapshot for an agent — replayed into a
+   *  stale/reloaded terminal; live chunks with seq <= endSeq are dupes. */
+  snapshot(id: string): Promise<RuntimeSnapshot> {
+    return this.bridge.invoke<RuntimeSnapshot>(Commands.RuntimeSnapshot, { id });
+  }
+  /** Subscribe to 1Hz digests (last rendered lines) for digest-mode agents. */
+  onDigest(cb: (entries: AgentDigestEntry[]) => void): Promise<() => void> {
+    return this.bridge.on<AgentDigestEntry[]>(Events.AgentDigest, cb);
+  }
+  /** Subscribe to Rust-side PTY status heuristics (un-hooked tools — A0.3). */
+  onPtyStatus(cb: (p: AgentPtyStatusPayload) => void): Promise<() => void> {
+    return this.bridge.on<AgentPtyStatusPayload>(Events.AgentPtyStatus, cb);
   }
   /** Subscribe to streamed process output. The backend multiplexes EVERY
    *  agent's PTY output into one `agent://output` event per ~16ms frame; the

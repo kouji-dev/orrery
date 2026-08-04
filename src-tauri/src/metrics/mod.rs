@@ -9,6 +9,15 @@ use uuid::Uuid;
 pub mod commands;
 pub mod tree;
 
+/// WebView2 browser-process pids of OUR windows, captured at startup via
+/// `ICoreWebView2::BrowserProcessId`. Why: WebView2 shares one browser-process
+/// family per user-data-dir — when another Orrery instance is already running,
+/// this instance's UI processes parent under THAT instance, and the ppid walk
+/// alone would show an app root with no UI runtime at all. The tree builder
+/// attaches these roots explicitly (counted — they ARE the Tauri runtime).
+#[derive(Clone, Default)]
+pub struct WebviewFamily(pub Arc<Mutex<Vec<u32>>>);
+
 /// One-shot freshness window: the push loop refreshes every 5s while agents
 /// run, so a snapshot at most one period old is as good as a fresh sweep.
 pub const SNAPSHOT_FRESH: Duration = Duration::from_secs(5);

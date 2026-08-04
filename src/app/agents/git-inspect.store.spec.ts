@@ -145,4 +145,70 @@ describe("GitInspectStore", () => {
     const call = mockBridge.invoke.mock.calls[0][1] as Record<string, unknown>;
     expect(call["rev"]).toBeUndefined();
   });
+
+  // -------------------------------------------------------------------------
+  // blame interning (A0.6): the wire shape is {commits, lines} — the store
+  // hydrates it into flat BlameLine rows sharing the interned commit strings.
+  // -------------------------------------------------------------------------
+  it("loadBlame hydrates the interned wire shape into per-line rows", async () => {
+    store.loadBlame("a1", "src/foo.ts");
+    resolveFn!({
+      commits: [
+        { sha: "aaaaaaa", author: "Ann", when: 100, summary: "first" },
+        { sha: "bbbbbbb", author: "Bob", when: 200, summary: "second" },
+      ],
+      lines: [
+        { n: 1, c: 0, line: "one" },
+        { n: 2, c: 0, line: "two" },
+        { n: 3, c: 1, line: "three" },
+      ],
+    });
+    await flush();
+
+    const rows = store.blameFor("a1", "src/foo.ts").data;
+    expect(rows.map((r) => [r.n, r.sha, r.author, r.line])).toEqual([
+      [1, "aaaaaaa", "Ann", "one"],
+      [2, "aaaaaaa", "Ann", "two"],
+      [3, "bbbbbbb", "Bob", "three"],
+    ]);
+    // interning contract: rows of the same commit share the SAME string refs
+    expect(rows[0].author).toBe(rows[1].author);
+    expect(rows[0].summary).toBe(rows[1].summary);
+  });
+
+  // -------------------------------------------------------------------------
+  // A0.6 LRU eviction: keep the last 4 agents touched
+  // -------------------------------------------------------------------------
+  it("evicts the least-recently-touched agent's entries beyond 4 agents", async () => {
+    const files: CommitFile[] = [{ path: "x.ts", state: "A", add: 1, del: 0 }];
+    for (const id of ["a1", "a2", "a3", "a4"]) {
+      store.loadCommitFiles(id, "sha");
+      resolveFn!(files);
+      await flush();
+    }
+    expect(store.commitFilesFor("a1", "sha").status).toBe("ready");
+
+    store.loadCommitFiles("a5", "sha"); // 5th agent → a1 evicted
+    resolveFn!(files);
+    await flush();
+    expect(store.commitFilesFor("a1", "sha").status).toBe("idle");
+    for (const id of ["a2", "a3", "a4", "a5"]) {
+      expect(store.commitFilesFor(id, "sha").status).toBe("ready");
+    }
+  });
+
+  it("re-touching an agent protects it from eviction (LRU, not FIFO)", async () => {
+    const files: CommitFile[] = [{ path: "x.ts", state: "A", add: 1, del: 0 }];
+    for (const id of ["a1", "a2", "a3", "a4"]) {
+      store.loadCommitFiles(id, "sha");
+      resolveFn!(files);
+      await flush();
+    }
+    store.loadBlame("a1", "f.ts"); // a1 becomes most recent (different map)
+    store.loadCommitFiles("a5", "sha"); // a2 is now oldest → evicted
+    resolveFn!(files);
+    await flush();
+    expect(store.commitFilesFor("a1", "sha").status).toBe("ready");
+    expect(store.commitFilesFor("a2", "sha").status).toBe("idle");
+  });
 });

@@ -23,6 +23,16 @@ Apple signing decision), A0.5 headless fork (a decision, not code), A0.1/A0.2 pr
 B1.1 writable editor, A3.1/A3.2 remotes & branch ops, B4.1 commit graph, terminal-plus,
 github-panel. Say which you want next.
 
+> **Update (2026-08-04, perf batch):** since the v0.13.0 release, also implemented:
+> A0.1 (shim resolution — no more pwsh/cmd wrappers), A1.2 (scrollback ring),
+> A0.2 (interest subscription: stream/digest/none replaces focus), A0.3 (gemini
+> heuristics in Rust), A0.4 (one watcher/project, N roots), A0.6 remainder (blame
+> interning, LRU stores, editor cap, SQLite cache, prod source-map guard; file-tree
+> flattening skipped — cross-layer, not S-sized), A2.2/A2.3/A2.4, A1.8 dedupe.
+> Still gated: A1.3/A1.4/A1.6/A1.10/A1.11 (on the A0.5 headless decision — Q8),
+> A0.7 Phase 2 (on a week of emit telemetry). B4.1 partially exists (tool-window
+> commit graph; lanes await A3.8 parent data).
+
 ## Roadmap open decisions that blocked or shaped implementation
 
 **Q2 (A4.3 estimator).** No actuals ledger exists yet (A6.1 not built). v1 estimator is the static

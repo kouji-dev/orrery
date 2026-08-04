@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::{RecursiveMode, Watcher};
@@ -41,11 +40,156 @@ fn fingerprint(s: &ScanResult) -> u64 {
     h.finish()
 }
 
-/// Watches every agent's worktree concurrently; on settled change bursts it
-/// scans the worktree BACKEND-SIDE (git status + HEAD oid) and pushes the
-/// result in `agent://changed` — the frontend never pulls in steady state.
+type ScanFn = Box<dyn Fn() -> ScanResult + Send>;
+type EmitFn = Box<dyn FnMut(ScanResult) + Send>;
+
+/// The scan+emit half of an agent registration. Behind its own Arc<Mutex> so
+/// the debounce thread can run a (slow) scan without holding the project's
+/// state lock — the notify OS-callback thread must never wait on a scan.
+struct AgentRun {
+    scan: ScanFn,
+    emit: EmitFn,
+    /// fingerprint of the last emitted scan; None = nothing emitted yet, so
+    /// the registration scan always ships (the frontend's startup state).
+    last_fp: Option<u64>,
+}
+
+/// One agent registered on a project watcher.
+struct AgentReg {
+    /// This agent's routing roots: its worktree plus its private gitdir
+    /// (`…/.git/worktrees/<n>/` for a linked worktree). Events are routed to
+    /// the agent whose root is the LONGEST prefix of the event path.
+    roots: Vec<PathBuf>,
+    run: Arc<Mutex<AgentRun>>,
+}
+
+/// A pending (not yet scanned) fs burst for one agent.
+#[derive(Clone, Copy)]
+struct Burst {
+    first: Instant,
+    last: Instant,
+}
+
+/// A burst that is due IMMEDIATELY (used for the registration scan and the
+/// focus-reveal rescan): backdated past both debounce deadlines.
+fn immediate_burst(now: Instant) -> Burst {
+    Burst {
+        first: now.checked_sub(MAX_BURST).unwrap_or(now),
+        last: now.checked_sub(SETTLE).unwrap_or(now),
+    }
+}
+
+#[derive(Default)]
+struct ProjectState {
+    agents: HashMap<Uuid, AgentReg>,
+    /// The BOUNDED event queue: at most ONE entry per agent, no matter how
+    /// many fs events arrive — a build writing 100k files coalesces into a
+    /// single burst per affected agent instead of accumulating events.
+    pending: HashMap<Uuid, Burst>,
+    closed: bool,
+}
+
+#[derive(Default)]
+struct ProjectShared {
+    state: Mutex<ProjectState>,
+    cv: Condvar,
+}
+
+/// One notify watcher instance per PROJECT (keyed by the repo's common gitdir)
+/// with N registered watch roots — main workdir, common gitdir, and every
+/// worktree, including ones created OUTSIDE the project folder.
+struct ProjectWatcher {
+    /// Kept alive for its Drop (releases the OS watches). Also used to add
+    /// roots as more agents register.
+    watcher: notify::RecommendedWatcher,
+    /// Roots currently registered on `watcher` (dedup for later registrations).
+    roots: Vec<PathBuf>,
+    shared: Arc<ProjectShared>,
+}
+
+/// Mark fs activity for one agent: extends its open burst or opens a new one.
+/// Shared by the notify handler and the tests. Caller notifies the condvar.
+fn tick_pending(st: &mut ProjectState, id: Uuid, now: Instant) {
+    st.pending
+        .entry(id)
+        .and_modify(|b| b.last = now)
+        .or_insert(Burst { first: now, last: now });
+}
+
+/// Longest-prefix route: the agent whose registered root is the longest prefix
+/// of `path`. None when no agent root contains the path.
+fn route(agents: &HashMap<Uuid, AgentReg>, path: &Path) -> Option<Uuid> {
+    let mut best: Option<(usize, Uuid)> = None;
+    for (id, reg) in agents {
+        for root in &reg.roots {
+            if path.starts_with(root) {
+                let len = root.as_os_str().len();
+                if best.is_none_or(|(l, _)| len > l) {
+                    best = Some((len, *id));
+                }
+            }
+        }
+    }
+    best.map(|(_, id)| id)
+}
+
+/// Drop roots that are duplicates or nested under another root (a recursive
+/// watch on the parent already covers them). Pure — unit-tested directly.
+fn dedup_roots(mut roots: Vec<PathBuf>) -> Vec<PathBuf> {
+    roots.sort();
+    roots.dedup();
+    let mut out: Vec<PathBuf> = Vec::new();
+    for r in roots {
+        if !out.iter().any(|o| r.starts_with(o)) {
+            out.push(r);
+        }
+    }
+    out
+}
+
+/// Compute a project key + full watch-root set for an agent worktree:
+/// (common gitdir, [worktree, its gitdir, common gitdir, main workdir,
+/// every registered worktree]) — deduped. Worktrees registered elsewhere on
+/// disk (a configured worktreeRoot outside the project folder) get their own
+/// root, so they are covered too. Non-repos key on the path itself.
+fn project_key_and_roots(path: &Path) -> (PathBuf, Vec<PathBuf>) {
+    match git2::Repository::open(path) {
+        Ok(repo) => {
+            let common = repo.commondir().to_path_buf();
+            let mut roots = vec![
+                path.to_path_buf(),
+                repo.path().to_path_buf(),
+                common.clone(),
+            ];
+            if let Ok(main) = git2::Repository::open(&common) {
+                if let Some(wd) = main.workdir() {
+                    roots.push(wd.to_path_buf());
+                }
+                if let Ok(names) = main.worktrees() {
+                    for n in names.iter() {
+                        let Ok(Some(n)) = n else { continue };
+                        if let Ok(wt) = main.find_worktree(n) {
+                            roots.push(wt.path().to_path_buf());
+                        }
+                    }
+                }
+            }
+            (common, dedup_roots(roots))
+        }
+        Err(_) => (path.to_path_buf(), vec![path.to_path_buf()]),
+    }
+}
+
+/// Watches each project's root set with ONE notify watcher (A0.4 — watchers
+/// scale with projects, not agents); routes settled change bursts to the
+/// owning agent by longest-prefix match, scans BACKEND-SIDE (git status +
+/// HEAD oid) and pushes the result in `agent://changed` — the frontend never
+/// pulls in steady state.
 pub struct WatchService {
-    watchers: Mutex<HashMap<Uuid, notify::RecommendedWatcher>>,
+    /// project key (common gitdir) → its single watcher + debounce thread.
+    projects: Mutex<HashMap<PathBuf, ProjectWatcher>>,
+    /// agent id → project key (for unwatch/rescan).
+    agent_index: Mutex<HashMap<Uuid, PathBuf>>,
     // Why: scans are git2 status walks — serializing them keeps N busy agents
     // from hammering the disk concurrently; each agent still scans ≤~1/s.
     scan_lock: Arc<Mutex<()>>,
@@ -60,13 +204,14 @@ impl Default for WatchService {
 impl WatchService {
     pub fn new() -> Self {
         Self {
-            watchers: Mutex::new(HashMap::new()),
+            projects: Mutex::new(HashMap::new()),
+            agent_index: Mutex::new(HashMap::new()),
             scan_lock: Arc::new(Mutex::new(())),
         }
     }
 
-    /// Watch `path` for `id`, replacing that agent's previous watcher (if any).
-    /// `scan` computes the pushed payload; runs on the agent's debounce thread.
+    /// Watch `path` for `id`, replacing that agent's previous registration.
+    /// `scan` computes the pushed payload; runs on the project debounce thread.
     pub fn watch<R: Runtime>(
         &self,
         app: AppHandle<R>,
@@ -92,145 +237,291 @@ impl WatchService {
         scan: impl Fn() -> ScanResult + Send + 'static,
         emit: impl FnMut(ScanResult) + Send + 'static,
     ) {
-        let mut guard = self.watchers.lock().unwrap();
-        guard.remove(&id); // drop previous watcher → stops it (+ ends its scan thread)
+        self.unwatch(id); // drop any previous registration for this agent
 
         // Why: even when fs watching cannot start (missing dir, watcher error),
         // push one scan so the UI gets a definitive state — otherwise the
         // changes badge would stay unknown forever.
-        let register = || -> Option<(notify::RecommendedWatcher, std::sync::mpsc::Receiver<()>)> {
-            if !path.is_dir() {
-                return None;
-            }
+        if !path.is_dir() {
+            let mut emit = emit;
+            std::thread::spawn(move || emit(scan()));
+            return;
+        }
 
-            // The notify handler is on the OS callback thread — keep it cheap:
-            // drop transient git-metadata noise, forward a tick for the rest.
-            // The dedicated thread debounces, scans, and pushes.
-            let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let (key, project_roots) = project_key_and_roots(&path);
+        let mut projects = self.projects.lock().unwrap();
+
+        if !projects.contains_key(&key) {
+            let shared = Arc::new(ProjectShared::default());
+            let handler_shared = Arc::clone(&shared);
+            let handler_common = key.clone();
+            // The notify handler runs on the OS callback thread — keep it
+            // cheap: drop transient git-metadata noise, route the rest to the
+            // owning agent's pending burst. The project debounce thread does
+            // the scanning and pushing.
             let handler = move |res: notify::Result<notify::Event>| {
-                if let Ok(event) = res {
-                    // fail open: an event with no paths still ticks the debounce
-                    if event.paths.is_empty() || event.paths.iter().any(|p| is_scan_relevant(p)) {
-                        let _ = tx.send(());
+                let Ok(event) = res else { return };
+                let now = Instant::now();
+                let mut st = handler_shared.state.lock().unwrap();
+                if st.closed {
+                    return;
+                }
+                let mut ticked = false;
+                let tick_all = |st: &mut ProjectState| {
+                    let ids: Vec<Uuid> = st.agents.keys().copied().collect();
+                    for aid in ids {
+                        tick_pending(st, aid, now);
+                    }
+                };
+                if event.paths.is_empty() {
+                    // fail open: an event with no paths ticks every agent
+                    tick_all(&mut st);
+                    ticked = true;
+                } else {
+                    for p in event.paths.iter().filter(|p| is_scan_relevant(p)) {
+                        match route(&st.agents, p) {
+                            Some(aid) => {
+                                tick_pending(&mut st, aid, now);
+                                ticked = true;
+                            }
+                            // Unrouted events under the COMMON gitdir (shared
+                            // refs/HEAD moved by any worktree) may affect any
+                            // agent — tick all. Unrouted events elsewhere
+                            // (main-checkout content) have no agent surface.
+                            None if p.starts_with(&handler_common) => {
+                                tick_all(&mut st);
+                                ticked = true;
+                            }
+                            None => {}
+                        }
                     }
                 }
+                drop(st);
+                if ticked {
+                    handler_shared.cv.notify_all();
+                }
             };
-            let Ok(mut watcher) = notify::recommended_watcher(handler) else {
-                return None;
-            };
-            if watcher.watch(&path, RecursiveMode::Recursive).is_err() {
-                return None;
-            }
-            // Why: a linked worktree's gitdir (HEAD, index, refs) lives under the
-            // MAIN repo's .git/worktrees/<name>/ — a commit or checkout touches only
-            // that dir, so without watching it an agent's own `git commit` would
-            // never refresh the changes badge or commits feed. A plain repo's .git
-            // sits inside `path` and is already covered by the recursive watch.
-            if let Ok(repo) = git2::Repository::open(&path) {
-                let gitdir = repo.path().to_path_buf();
-                if !gitdir.starts_with(&path) {
-                    let _ = watcher.watch(&gitdir, RecursiveMode::Recursive);
+            match notify::recommended_watcher(handler) {
+                Ok(watcher) => {
+                    let loop_shared = Arc::clone(&shared);
+                    let loop_lock = Arc::clone(&self.scan_lock);
+                    std::thread::spawn(move || {
+                        project_loop(loop_shared, SETTLE, MAX_BURST, loop_lock);
+                    });
+                    projects.insert(
+                        key.clone(),
+                        ProjectWatcher {
+                            watcher,
+                            roots: Vec::new(),
+                            shared,
+                        },
+                    );
+                }
+                Err(_) => {
+                    // No watcher possible — one definitive scan (see above).
+                    let mut emit = emit;
+                    std::thread::spawn(move || emit(scan()));
+                    return;
                 }
             }
-            Some((watcher, rx))
-        };
+        }
 
-        match register() {
-            None => {
-                // Registration failed — emit one definitive scan so the UI is not stale.
-                let mut emit = emit;
-                std::thread::spawn(move || {
-                    emit(scan());
-                });
+        let pw = projects.get_mut(&key).expect("inserted above");
+        // Register any not-yet-covered roots on the project watcher. Failures
+        // (root missing on disk) are per-root best-effort: the agent still gets
+        // its registration scan below, and its own worktree root was verified
+        // `is_dir` above.
+        for root in &project_roots {
+            if pw.roots.iter().any(|r| root.starts_with(r)) {
+                continue;
             }
-            Some((watcher, rx)) => {
-                guard.insert(id, watcher);
-                let scan_lock = Arc::clone(&self.scan_lock);
-                std::thread::spawn(move || {
-                    scan_loop(rx, SETTLE, MAX_BURST, scan_lock, scan, emit);
-                });
+            if pw.watcher.watch(root, RecursiveMode::Recursive).is_ok() {
+                pw.roots.push(root.clone());
+            }
+        }
+
+        // This agent's ROUTING roots: its worktree + its private gitdir (a
+        // linked worktree's commits/checkouts touch only `.git/worktrees/<n>/`
+        // in the main repo — already handled today; keep routing them here).
+        let mut agent_roots = vec![path.clone()];
+        if let Ok(repo) = git2::Repository::open(&path) {
+            let gitdir = repo.path().to_path_buf();
+            if !gitdir.starts_with(&path) {
+                agent_roots.push(gitdir);
+            }
+        }
+
+        {
+            let mut st = pw.shared.state.lock().unwrap();
+            st.agents.insert(
+                id,
+                AgentReg {
+                    roots: agent_roots,
+                    run: Arc::new(Mutex::new(AgentRun {
+                        scan: Box::new(scan),
+                        emit: Box::new(emit),
+                        last_fp: None,
+                    })),
+                },
+            );
+            // Registration scan: due immediately (the frontend's startup state).
+            st.pending.insert(id, immediate_burst(Instant::now()));
+        }
+        pw.shared.cv.notify_all();
+        self.agent_index.lock().unwrap().insert(id, key);
+    }
+
+    /// Stop watching one agent's worktree (e.g. when it is removed). Dropping
+    /// the LAST agent of a project tears the whole project watcher down.
+    pub fn unwatch(&self, id: Uuid) {
+        let Some(key) = self.agent_index.lock().unwrap().remove(&id) else {
+            return;
+        };
+        let mut projects = self.projects.lock().unwrap();
+        let Some(pw) = projects.get_mut(&key) else {
+            return;
+        };
+        let empty = {
+            let mut st = pw.shared.state.lock().unwrap();
+            st.agents.remove(&id);
+            st.pending.remove(&id);
+            st.agents.is_empty()
+        };
+        if empty {
+            if let Some(pw) = projects.remove(&key) {
+                pw.shared.state.lock().unwrap().closed = true;
+                pw.shared.cv.notify_all();
+                drop(pw); // drops the notify watcher → OS watches released
             }
         }
     }
 
-    /// Stop watching one agent's worktree (e.g. when it is removed).
-    pub fn unwatch(&self, id: Uuid) {
-        self.watchers.lock().unwrap().remove(&id);
+    /// Force a fresh scan+emit for one agent, bypassing the fingerprint
+    /// suppression. The A2.2 reveal path: background scans were counts-only,
+    /// so on focus the UI needs one full-detail push even when the file SET
+    /// did not change.
+    pub fn rescan(&self, id: Uuid) {
+        let Some(key) = self.agent_index.lock().unwrap().get(&id).cloned() else {
+            return;
+        };
+        let projects = self.projects.lock().unwrap();
+        let Some(pw) = projects.get(&key) else {
+            return;
+        };
+        let mut st = pw.shared.state.lock().unwrap();
+        if let Some(reg) = st.agents.get(&id) {
+            reg.run.lock().unwrap().last_fp = None; // next scan always emits
+            st.pending.insert(id, immediate_burst(Instant::now()));
+        }
+        drop(st);
+        pw.shared.cv.notify_all();
     }
 }
 
 /// Why: agent CLIs run git constantly; every op churns transient git metadata
-/// (index.lock create/delete, reflog appends, loose-object writes). Scanning on
-/// that noise would turn each agent git call into a full status walk — the
-/// fingerprint only suppresses the push, the scan CPU is already spent. Only
-/// git metadata that can change what a scan reports (index, HEAD, refs) earns a
-/// tick; regular worktree content always does. Segment-based so it covers both
-/// plain repos (`<wt>/.git/…`) and linked-worktree gitdirs
-/// (`….git/worktrees/<n>/…`) without path canonicalization, and fails OPEN:
-/// unrecognized shapes count as relevant.
+/// (index.lock create/delete, reflog appends, loose-object writes — and each of
+/// those bumps the gitdir directory's own mtime, which notify reports as an
+/// event on the gitdir root). Scanning on that noise would turn each agent git
+/// call into a full status walk — the fingerprint only suppresses the push, the
+/// scan CPU is already spent. Worktree content (no `.git` segment) is ALWAYS
+/// relevant — that side fails open. Gitdir paths fail CLOSED against a
+/// whitelist: the file set that can change what a scan reports is bounded
+/// (index, HEAD-ish refs, packed-refs, refs/**), and everything else — logs/,
+/// objects/, tmp files, the gitdir-root mtime churn — is per-git-op noise a
+/// status scan cannot observe. Segment-based so it covers both plain repos
+/// (`<wt>/.git/…`) and linked-worktree gitdirs (`….git/worktrees/<n>/…`)
+/// without path canonicalization.
 fn is_scan_relevant(path: &Path) -> bool {
-    let mut in_git_metadata = false;
-    for component in path.components() {
-        let segment = component.as_os_str();
-        if segment == ".git" {
-            in_git_metadata = true;
-            continue;
-        }
-        if in_git_metadata && (segment == "logs" || segment == "objects") {
-            return false;
-        }
+    let comps: Vec<&std::ffi::OsStr> = path
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(s) => Some(s),
+            _ => None,
+        })
+        .collect();
+    let Some(git_at) = comps.iter().rposition(|s| *s == ".git") else {
+        return true; // plain worktree content — always relevant
+    };
+    let mut rest: &[&std::ffi::OsStr] = &comps[git_at + 1..];
+    // linked-worktree gitdir: `.git/worktrees/<name>/<rest…>`
+    if rest.first().is_some_and(|s| *s == "worktrees") {
+        rest = if rest.len() >= 2 { &rest[2..] } else { &[] };
     }
-    !(in_git_metadata && path.extension().is_some_and(|e| e == "lock"))
+    // empty rest = the gitdir root itself (directory-mtime churn) — noise
+    let Some(first) = rest.first() else {
+        return false;
+    };
+    if path.extension().is_some_and(|e| e == "lock") {
+        return false; // index.lock / refs/….lock — mid-operation transients
+    }
+    matches!(
+        first.to_str(),
+        Some("index" | "HEAD" | "ORIG_HEAD" | "MERGE_HEAD" | "FETCH_HEAD" | "packed-refs" | "refs")
+    )
 }
 
-/// Drive the scan-and-push loop: scan once at registration (the frontend's
-/// startup state), then per settled fs burst re-scan and emit ONLY when the
-/// result fingerprint changed — ignored-file noise (build artifacts) settles
-/// to an identical scan and wakes nothing downstream.
-fn scan_loop(
-    rx: Receiver<()>,
+/// The project debounce thread: waits until an agent's burst settles (no event
+/// for `settle`, capped at `max_burst` for sustained activity), then scans that
+/// agent and emits ONLY when the result fingerprint changed — ignored-file
+/// noise (build artifacts) settles to an identical scan and wakes nothing
+/// downstream. One thread per project, any number of agents.
+fn project_loop(
+    shared: Arc<ProjectShared>,
     settle: Duration,
     max_burst: Duration,
     scan_lock: Arc<Mutex<()>>,
-    scan: impl Fn() -> ScanResult,
-    mut emit: impl FnMut(ScanResult),
 ) {
-    let mut last = {
-        let s = {
-            let _serial = scan_lock.lock().unwrap();
-            scan()
-        };
-        let fp = fingerprint(&s);
-        emit(s);
-        fp
-    };
-    while rx.recv().is_ok() {
-        // a burst started — coalesce until the stream is quiet for `settle`, so
-        // the scan sees the SETTLED filesystem, not a transient mid-move state.
-        // `max_burst` caps sustained activity so long writes still refresh.
-        let burst_start = Instant::now();
-        loop {
-            match rx.recv_timeout(settle) {
-                Ok(()) => {
-                    if burst_start.elapsed() >= max_burst {
-                        break;
+    loop {
+        // Collect due agents (their run handles) under the state lock, but run
+        // the scans OUTSIDE it — the notify handler must never wait on a scan.
+        let due: Vec<Arc<Mutex<AgentRun>>> = {
+            let mut st = shared.state.lock().unwrap();
+            loop {
+                if st.closed {
+                    return;
+                }
+                let now = Instant::now();
+                let mut due_ids: Vec<Uuid> = Vec::new();
+                let mut next_due: Option<Duration> = None;
+                for (aid, b) in st.pending.iter() {
+                    let deadline = std::cmp::min(b.last + settle, b.first + max_burst);
+                    if deadline <= now {
+                        due_ids.push(*aid);
+                    } else {
+                        let d = deadline - now;
+                        next_due = Some(next_due.map_or(d, |n: Duration| n.min(d)));
                     }
                 }
-                Err(RecvTimeoutError::Timeout) => break, // quiet → settled
-                Err(RecvTimeoutError::Disconnected) => return, // watcher dropped
+                if !due_ids.is_empty() {
+                    let mut due = Vec::new();
+                    for aid in due_ids {
+                        st.pending.remove(&aid);
+                        if let Some(reg) = st.agents.get(&aid) {
+                            due.push(Arc::clone(&reg.run));
+                        }
+                    }
+                    break due;
+                }
+                st = match next_due {
+                    Some(d) => shared.cv.wait_timeout(st, d).unwrap().0,
+                    None => shared.cv.wait(st).unwrap(),
+                };
             }
-        }
-        let s = {
-            // Why the lock: scans are git2 status walks — serializing them keeps N
-            // busy agents from hammering the disk concurrently; each agent still
-            // scans at most ~1/s (debounce above).
-            let _serial = scan_lock.lock().unwrap();
-            scan()
         };
-        let fp = fingerprint(&s);
-        if fp != last {
-            last = fp;
-            emit(s);
+        for run in due {
+            let mut run = run.lock().unwrap();
+            let s = {
+                // Why the lock: scans are git2 status walks — serializing them
+                // keeps N busy agents from hammering the disk concurrently;
+                // each agent still scans at most ~1/s (debounce above).
+                let _serial = scan_lock.lock().unwrap();
+                (run.scan)()
+            };
+            let fp = fingerprint(&s);
+            if run.last_fp != Some(fp) {
+                run.last_fp = Some(fp);
+                (run.emit)(s);
+            }
         }
     }
 }
@@ -258,87 +549,222 @@ mod tests {
         }
     }
 
-    /// Drive scan_loop with a scripted sequence of scan results (the last one
-    /// repeats); returns (fs-tick sender, emitted scans, thread handle).
-    fn run_scan_loop(
+    /// Drive project_loop with one agent whose scans are scripted (the last
+    /// result repeats); returns (shared, agent id, emitted scans, handle).
+    fn run_project_loop(
         results: Vec<ScanResult>,
     ) -> (
-        std::sync::mpsc::Sender<()>,
+        Arc<ProjectShared>,
+        Uuid,
         Arc<Mutex<Vec<ScanResult>>>,
         std::thread::JoinHandle<()>,
     ) {
-        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let shared = Arc::new(ProjectShared::default());
+        let id = Uuid::new_v4();
         let emitted = Arc::new(Mutex::new(Vec::new()));
         let e = emitted.clone();
         let calls = AtomicUsize::new(0);
+        {
+            let mut st = shared.state.lock().unwrap();
+            st.agents.insert(
+                id,
+                AgentReg {
+                    roots: vec![PathBuf::from("/wt")],
+                    run: Arc::new(Mutex::new(AgentRun {
+                        scan: Box::new(move || {
+                            let i = calls.fetch_add(1, Ordering::SeqCst);
+                            results[i.min(results.len() - 1)].clone()
+                        }),
+                        emit: Box::new(move |s| e.lock().unwrap().push(s)),
+                        last_fp: None,
+                    })),
+                },
+            );
+            // registration scan: due immediately
+            st.pending.insert(id, immediate_burst(Instant::now()));
+        }
+        let loop_shared = Arc::clone(&shared);
         let h = std::thread::spawn(move || {
-            scan_loop(
-                rx,
+            project_loop(
+                loop_shared,
                 Duration::from_millis(40),
                 Duration::from_secs(10),
                 Arc::new(Mutex::new(())),
-                move || {
-                    let i = calls.fetch_add(1, Ordering::SeqCst);
-                    results[i.min(results.len() - 1)].clone()
-                },
-                move |s| e.lock().unwrap().push(s),
             );
         });
-        (tx, emitted, h)
+        shared.cv.notify_all();
+        (shared, id, emitted, h)
+    }
+
+    fn tick(shared: &Arc<ProjectShared>, id: Uuid) {
+        tick_pending(&mut shared.state.lock().unwrap(), id, Instant::now());
+        shared.cv.notify_all();
+    }
+
+    fn close(shared: &Arc<ProjectShared>) {
+        shared.state.lock().unwrap().closed = true;
+        shared.cv.notify_all();
     }
 
     #[test]
     fn initial_scan_emits_without_any_fs_tick() {
-        let (tx, emitted, h) = run_scan_loop(vec![sr(&["a.txt"], "h1")]);
+        let (shared, _id, emitted, h) = run_project_loop(vec![sr(&["a.txt"], "h1")]);
         std::thread::sleep(Duration::from_millis(80));
         assert_eq!(
             emitted.lock().unwrap().len(),
             1,
             "registration pushes the current state"
         );
-        drop(tx);
+        close(&shared);
         h.join().unwrap();
     }
 
     #[test]
     fn unchanged_rescan_is_suppressed() {
-        let (tx, emitted, h) = run_scan_loop(vec![sr(&["a.txt"], "h1"), sr(&["a.txt"], "h1")]);
+        let (shared, id, emitted, h) =
+            run_project_loop(vec![sr(&["a.txt"], "h1"), sr(&["a.txt"], "h1")]);
         std::thread::sleep(Duration::from_millis(80)); // initial scan emitted
-        tx.send(()).unwrap();
+        tick(&shared, id);
         std::thread::sleep(Duration::from_millis(160)); // settle + rescan
         assert_eq!(
             emitted.lock().unwrap().len(),
             1,
             "identical scan result must not re-emit"
         );
-        drop(tx);
+        close(&shared);
         h.join().unwrap();
     }
 
     #[test]
     fn changed_files_emit_again() {
-        let (tx, emitted, h) =
-            run_scan_loop(vec![sr(&["a.txt"], "h1"), sr(&["a.txt", "b.txt"], "h1")]);
+        let (shared, id, emitted, h) =
+            run_project_loop(vec![sr(&["a.txt"], "h1"), sr(&["a.txt", "b.txt"], "h1")]);
         std::thread::sleep(Duration::from_millis(80));
-        tx.send(()).unwrap();
+        tick(&shared, id);
         std::thread::sleep(Duration::from_millis(160));
         assert_eq!(emitted.lock().unwrap().len(), 2, "new file → new push");
-        drop(tx);
+        close(&shared);
         h.join().unwrap();
     }
 
     #[test]
     fn head_only_move_emits() {
-        let (tx, emitted, h) = run_scan_loop(vec![sr(&["a.txt"], "h1"), sr(&["a.txt"], "h2")]);
+        let (shared, id, emitted, h) =
+            run_project_loop(vec![sr(&["a.txt"], "h1"), sr(&["a.txt"], "h2")]);
         std::thread::sleep(Duration::from_millis(80));
-        tx.send(()).unwrap();
+        tick(&shared, id);
         std::thread::sleep(Duration::from_millis(160));
         let scans = emitted.lock().unwrap();
         assert_eq!(scans.len(), 2, "HEAD move alone is a real change");
         assert_eq!(scans[1].head.as_deref(), Some("h2"));
         drop(scans);
-        drop(tx);
+        close(&shared);
         h.join().unwrap();
+    }
+
+    #[test]
+    fn burst_of_many_ticks_coalesces_to_one_pending_entry() {
+        // The BOUNDED queue: 100k events collapse to one Burst per agent.
+        let mut st = ProjectState::default();
+        let id = Uuid::new_v4();
+        let t0 = Instant::now();
+        for _ in 0..100_000 {
+            tick_pending(&mut st, id, Instant::now());
+        }
+        assert_eq!(st.pending.len(), 1, "one entry per agent, not per event");
+        let b = st.pending[&id];
+        assert!(b.first >= t0 && b.last >= b.first, "burst window tracked");
+    }
+
+    #[test]
+    fn dedup_roots_drops_nested_and_duplicate_roots() {
+        let roots = vec![
+            PathBuf::from("/main"),
+            PathBuf::from("/main/.git"),          // nested → covered by /main
+            PathBuf::from("/main"),               // duplicate
+            PathBuf::from("/elsewhere/wt_a"),     // outside worktree → kept
+            PathBuf::from("/elsewhere/wt_a/sub"), // nested under kept root
+            PathBuf::from("/elsewhere/wt_b"),
+        ];
+        let out = dedup_roots(roots);
+        assert_eq!(
+            out,
+            vec![
+                PathBuf::from("/elsewhere/wt_a"),
+                PathBuf::from("/elsewhere/wt_b"),
+                PathBuf::from("/main"),
+            ]
+        );
+    }
+
+    #[test]
+    fn project_key_and_roots_covers_outside_worktrees() {
+        let git = crate::git::service::GitService::new();
+        let main = tempfile::tempdir().unwrap();
+        git.init(main.path()).unwrap();
+        git.ensure_main_branch(main.path()).unwrap();
+
+        // worktree OUTSIDE the project folder (its own temp dir)
+        let wt_root = tempfile::tempdir().unwrap();
+        let wt = wt_root.path().join("agent_out");
+        git.create_worktree(main.path(), "agent_out", "agent/out", None, &wt)
+            .unwrap();
+
+        let (key, roots) = project_key_and_roots(&wt);
+        let common = git2::Repository::open(&wt).unwrap().commondir().to_path_buf();
+        assert_eq!(key, common, "project key is the COMMON gitdir");
+        assert!(
+            roots.iter().any(|r| wt.starts_with(r)),
+            "outside worktree covered: {roots:?}"
+        );
+        // canonicalize both sides: git2 may hand back canonicalized paths while
+        // tempfile hands back the raw ones (8.3 / verbatim prefixes on Windows)
+        let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        let main_canon = canon(main.path());
+        assert!(
+            roots.iter().any(|r| main_canon.starts_with(canon(r))),
+            "main workdir covered: {roots:?}"
+        );
+        // both agents of one project share one key → ONE watcher instance
+        let (key2, _) = project_key_and_roots(main.path());
+        assert_eq!(key, key2, "main checkout and worktree share the project key");
+    }
+
+    #[test]
+    fn route_picks_longest_prefix_owner() {
+        let mut agents = HashMap::new();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        agents.insert(
+            a,
+            AgentReg {
+                roots: vec![PathBuf::from("/w"), PathBuf::from("/m/.git/worktrees/a")],
+                run: Arc::new(Mutex::new(AgentRun {
+                    scan: Box::new(|| sr(&[], "h")),
+                    emit: Box::new(|_| {}),
+                    last_fp: None,
+                })),
+            },
+        );
+        agents.insert(
+            b,
+            AgentReg {
+                roots: vec![PathBuf::from("/w/deeper"), PathBuf::from("/m/.git/worktrees/b")],
+                run: Arc::new(Mutex::new(AgentRun {
+                    scan: Box::new(|| sr(&[], "h")),
+                    emit: Box::new(|_| {}),
+                    last_fp: None,
+                })),
+            },
+        );
+        assert_eq!(route(&agents, Path::new("/w/src/x.rs")), Some(a));
+        assert_eq!(
+            route(&agents, Path::new("/w/deeper/src/x.rs")),
+            Some(b),
+            "longest prefix wins over the shorter containing root"
+        );
+        assert_eq!(route(&agents, Path::new("/m/.git/worktrees/b/index")), Some(b));
+        assert_eq!(route(&agents, Path::new("/m/.git/refs/heads/x")), None);
     }
 
     #[test]
@@ -448,6 +874,39 @@ mod tests {
             emitted.lock().unwrap().len(),
             1,
             "one definitive scan despite no watcher"
+        );
+    }
+
+    #[test]
+    fn two_agents_of_one_project_share_one_watcher_instance() {
+        let git = crate::git::service::GitService::new();
+        let main = tempfile::tempdir().unwrap();
+        git.init(main.path()).unwrap();
+        git.ensure_main_branch(main.path()).unwrap();
+
+        let wt_root = tempfile::tempdir().unwrap();
+        let wt_a = wt_root.path().join("agent_a");
+        let wt_b = wt_root.path().join("agent_b");
+        git.create_worktree(main.path(), "agent_a", "agent/a", None, &wt_a)
+            .unwrap();
+        git.create_worktree(main.path(), "agent_b", "agent/b", None, &wt_b)
+            .unwrap();
+
+        let svc = WatchService::new();
+        let (id_a, id_b) = (Uuid::new_v4(), Uuid::new_v4());
+        svc.watch_with_emit(id_a, wt_a, || sr(&[], "h"), |_| {});
+        svc.watch_with_emit(id_b, wt_b, || sr(&[], "h"), |_| {});
+        assert_eq!(
+            svc.projects.lock().unwrap().len(),
+            1,
+            "one watcher per PROJECT, not per agent"
+        );
+        svc.unwatch(id_a);
+        assert_eq!(svc.projects.lock().unwrap().len(), 1, "project alive while an agent remains");
+        svc.unwatch(id_b);
+        assert!(
+            svc.projects.lock().unwrap().is_empty(),
+            "last agent gone → project watcher torn down"
         );
     }
 

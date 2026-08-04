@@ -1,16 +1,23 @@
 import { inject, Injectable, signal, WritableSignal } from "@angular/core";
 import { BRIDGE, Commands } from "../data-source/bridge";
 import {
+  BlameIntern,
   BlameLine,
   CommitFile,
   FileHistoryEntry,
   FileDiff,
+  hydrateBlame,
   Loadable,
   RangeFiles,
 } from "../models";
 
 const IDLE_ARR = <T>(): Loadable<T[]> => ({ status: "idle", data: [] as T[] });
 const IDLE_NULL = <T>(): Loadable<T | null> => ({ status: "idle", data: null });
+
+/** Why 4: entries reload lazily by design — eviction is free (A0.6). Four
+ *  covers the agents a user actively flips between; beyond that the keyed
+ *  maps only grow for the process lifetime. */
+const MAX_AGENTS = 4;
 
 /**
  * Per-agent git inspection data: commit files, file diffs, range diffs, blame,
@@ -38,6 +45,20 @@ export class GitInspectStore {
   private blameGen: Record<string, number> = {};
   private fileHistoryGen: Record<string, number> = {};
 
+  // ---- LRU agent eviction (A0.6) ----
+  /** Agent ids in touch order, most recent LAST. Loading data for a 5th agent
+   *  disposes the least-recently-touched one's entries (they reload lazily). */
+  private touched: string[] = [];
+
+  private touch(id: string): void {
+    const i = this.touched.indexOf(id);
+    if (i >= 0) this.touched.splice(i, 1);
+    this.touched.push(id);
+    while (this.touched.length > MAX_AGENTS) {
+      this.dispose(this.touched[0]); // dispose() also drops it from `touched`
+    }
+  }
+
   // =========================================================================
   // commit files (AgentCommitDiff)
   // =========================================================================
@@ -47,6 +68,7 @@ export class GitInspectStore {
   }
 
   loadCommitFiles(id: string, sha: string): void {
+    this.touch(id);
     const key = `${id}/${sha}`;
     const gen = (this.commitFilesGen[key] ?? 0) + 1;
     this.commitFilesGen[key] = gen;
@@ -73,6 +95,7 @@ export class GitInspectStore {
   }
 
   loadCommitFileDiff(id: string, sha: string, path: string): void {
+    this.touch(id);
     const key = `${id}/${sha}/${path}`;
     const gen = (this.commitFileDiffGen[key] ?? 0) + 1;
     this.commitFileDiffGen[key] = gen;
@@ -99,6 +122,7 @@ export class GitInspectStore {
   }
 
   loadRangeFiles(id: string, shas: string[]): void {
+    this.touch(id);
     const key = `${id}/${shas.join(",")}`;
     const gen = (this.rangeFilesGen[key] ?? 0) + 1;
     this.rangeFilesGen[key] = gen;
@@ -125,6 +149,7 @@ export class GitInspectStore {
   }
 
   loadRangeFileDiff(id: string, from: string, to: string, path: string): void {
+    this.touch(id);
     const key = `${id}/${from}/${to}/${path}`;
     const gen = (this.rangeFileDiffGen[key] ?? 0) + 1;
     this.rangeFileDiffGen[key] = gen;
@@ -151,6 +176,7 @@ export class GitInspectStore {
   }
 
   loadBlame(id: string, path: string, rev?: string): void {
+    this.touch(id);
     // Key includes rev: annotate blames the OLD side (parent/from) and the NEW
     // side (commit/to) of the same file — different revs, must not collide.
     const key = `${id}/${path}/${rev ?? ""}`;
@@ -161,10 +187,11 @@ export class GitInspectStore {
     const payload: Record<string, unknown> = { id, path };
     if (rev !== undefined) payload["rev"] = rev;
     void this.bridge
-      .invoke<BlameLine[]>(Commands.AgentBlame, payload)
-      .then((lines) => {
+      .invoke<BlameIntern>(Commands.AgentBlame, payload)
+      .then((interned) => {
         if (this.blameGen[key] !== gen) return;
-        this.patch(this.blameMap, key, { status: "ready", data: lines });
+        // hydrate once at the boundary: rows share the interned commit strings
+        this.patch(this.blameMap, key, { status: "ready", data: hydrateBlame(interned) });
       })
       .catch(() => {
         if (this.blameGen[key] !== gen) return;
@@ -181,6 +208,7 @@ export class GitInspectStore {
   }
 
   loadFileHistory(id: string, path: string): void {
+    this.touch(id);
     const key = `${id}/${path}`;
     const gen = (this.fileHistoryGen[key] ?? 0) + 1;
     this.fileHistoryGen[key] = gen;
@@ -203,6 +231,8 @@ export class GitInspectStore {
   // =========================================================================
 
   dispose(id: string): void {
+    const t = this.touched.indexOf(id);
+    if (t >= 0) this.touched.splice(t, 1);
     const prefix = `${id}/`;
     const dropKeys = (map: WritableSignal<Record<string, unknown>>) => {
       map.update((m) => {

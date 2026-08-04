@@ -17,6 +17,7 @@ import { ReviewStore } from "../../agents/review.store";
 import { EditorNavService } from "../../commands/editor-nav.service";
 import { UiStore } from "../../ui/ui.store";
 import { buildTheme, CMCore, loadCMCore, loadLangExt } from "../code-lang";
+import { registerEditor } from "../editor-cap";
 import { chunkStats, DiffStats } from "./chunk-stats";
 import { reviewCommentsExt, ReviewCommentsApi } from "./review-comments.ext";
 
@@ -126,6 +127,8 @@ export class UnifiedCodeComponent implements OnDestroy {
   private cmView: EditorView | null = null;
   private cm: CMCore | null = null;
   private api: ReviewCommentsApi | null = null;
+  /** Unhooks this component's entry in the global editor cap (A0.6). */
+  private unregisterCap: (() => void) | null = null;
   /** Bumped when a new editor is live, so the comment-sync effect re-pushes. */
   private readonly viewGen = signal(0);
   private renderToken = 0;
@@ -170,6 +173,8 @@ export class UnifiedCodeComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.unregisterCap?.();
+    this.unregisterCap = null;
     this.cmView?.destroy();
     this.cmView = null;
   }
@@ -177,6 +182,8 @@ export class UnifiedCodeComponent implements OnDestroy {
   private async render(oldText: string, newText: string, mode: "diff" | "file", lang: string, theme: "dark" | "light"): Promise<void> {
     const token = ++this.renderToken;
     const el = this.host().nativeElement;
+    this.unregisterCap?.();
+    this.unregisterCap = null;
     this.cmView?.destroy();
     this.cmView = null;
     this.api = null;
@@ -231,6 +238,15 @@ export class UnifiedCodeComponent implements OnDestroy {
       const view = new EditorView({ doc: newText, extensions: exts, parent: el });
       this.cmView = view;
       this.api = api;
+      // A0.6 editor cap: if too many editors are live, the oldest one (maybe
+      // this one, later) is demoted to plain text to bound the webview heap.
+      this.unregisterCap = registerEditor(() => {
+        if (this.cmView !== view) return; // superseded — nothing to demote
+        view.destroy();
+        this.cmView = null;
+        this.api = null;
+        el.textContent = newText;
+      });
       this.viewGen.update((n) => n + 1);
 
       if (mode === "diff") {

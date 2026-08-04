@@ -96,16 +96,33 @@ pub struct SessionState {
     pub ours: String,
 }
 
-/// One line in a blame result.
+/// One commit referenced by a blame — interned ONCE in `Blame::commits` and
+/// indexed by `BlameLine::c` (A0.6 blame interning: a 50k-line file must not
+/// duplicate author/sha/summary strings per line).
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BlameLine {
-    pub n: usize,
+pub struct BlameCommit {
     pub sha: String,
     pub author: String,
     pub when: i64,
     pub summary: String,
+}
+
+/// One line in a blame result: `c` indexes into the owning `Blame::commits`.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameLine {
+    pub n: usize,
+    pub c: u32,
     pub line: String,
+}
+
+/// Interned blame payload: small commit table + per-line u32 indices.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Blame {
+    pub commits: Vec<BlameCommit>,
+    pub lines: Vec<BlameLine>,
 }
 
 fn lang_from_path(rel: &str) -> &'static str {
@@ -127,12 +144,46 @@ fn lang_from_path(rel: &str) -> &'static str {
     }
 }
 
+/// Cache key for `status()` (A2.3): a scan whose key is unchanged returns the
+/// cached result without touching libgit2 (no index load, no content diffing).
+#[derive(Clone, PartialEq, Eq)]
+struct StatusKey {
+    /// `.git/index` (mtime as unix-nanos, len) — moves on stage/commit/reset.
+    index: Option<(u128, u64)>,
+    /// HEAD oid — moves on commit/checkout/reset.
+    head: Option<String>,
+    /// Stat-level fingerprint of the worktree (path/mtime/len of every
+    /// non-ignored file) — catches edits, creates and deletes. Same-second
+    /// same-length rewrites can alias; the fs watcher's settle window makes
+    /// that window practically unobservable for the scan path.
+    worktree_fp: u64,
+}
+
+struct StatusCacheEntry {
+    key: StatusKey,
+    /// Whether `changes` carries per-file line counts. A full entry also
+    /// serves counts-only requests; a counts-only entry never serves a full one.
+    full: bool,
+    changes: Vec<FileChange>,
+    last_used: std::time::Instant,
+}
+
+/// Why 16: one live entry per open repo/worktree is plenty; the tiny cap keeps
+/// abandoned worktrees from accumulating entries over a long session.
+const STATUS_CACHE_REPOS: usize = 16;
+
 #[derive(Clone, Default)]
-pub struct GitService;
+pub struct GitService {
+    /// Per-repo status cache, shared across clones (Arc). Bounded to
+    /// [`STATUS_CACHE_REPOS`] entries, one per repo path; an entry is replaced
+    /// whenever its key changes.
+    status_cache:
+        std::sync::Arc<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, StatusCacheEntry>>>,
+}
 
 impl GitService {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 
     /// True if `path` is (inside) a git repository.
@@ -673,6 +724,83 @@ impl GitService {
 
     /// Working-tree changes vs HEAD (staged + unstaged + untracked), with line counts.
     pub fn status(&self, path: &Path) -> Vec<FileChange> {
+        self.status_scan(path, true)
+    }
+
+    /// A2.2: like [`status`] but SKIPS per-file line-count diffing (add/del
+    /// stay 0) — states and paths only, for non-focused agents' background
+    /// scans. Full deltas are recomputed on reveal.
+    pub fn status_counts_only(&self, path: &Path) -> Vec<FileChange> {
+        self.status_scan(path, false)
+    }
+
+    /// Cache-aware status entry point (A2.3): unchanged key → cached
+    /// `Vec<FileChange>` without touching libgit2.
+    fn status_scan(&self, path: &Path, with_line_counts: bool) -> Vec<FileChange> {
+        let key = Self::status_key(path);
+        if let Some(k) = &key {
+            let mut cache = self.status_cache.lock().unwrap();
+            if let Some(e) = cache.get_mut(path) {
+                // A full entry satisfies a counts-only request (extra counts
+                // are harmless); a counts-only entry cannot satisfy a full one.
+                if e.key == *k && (e.full || !with_line_counts) {
+                    e.last_used = std::time::Instant::now();
+                    return e.changes.clone();
+                }
+            }
+        }
+        let changes = self.status_uncached(path, with_line_counts);
+        if let Some(k) = key {
+            let mut cache = self.status_cache.lock().unwrap();
+            if cache.len() >= STATUS_CACHE_REPOS && !cache.contains_key(path) {
+                // evict the least-recently-used repo to stay bounded
+                if let Some(oldest) = cache
+                    .iter()
+                    .min_by_key(|(_, e)| e.last_used)
+                    .map(|(p, _)| p.clone())
+                {
+                    cache.remove(&oldest);
+                }
+            }
+            cache.insert(
+                path.to_path_buf(),
+                StatusCacheEntry {
+                    key: k,
+                    full: with_line_counts,
+                    changes: changes.clone(),
+                    last_used: std::time::Instant::now(),
+                },
+            );
+        }
+        changes
+    }
+
+    /// Compute the status cache key: (index mtime+len, HEAD oid, worktree
+    /// dirty-fingerprint). None (→ never cache) for non-repos or when the
+    /// workdir cannot be resolved.
+    fn status_key(path: &Path) -> Option<StatusKey> {
+        let repo = Repository::open(path).ok()?;
+        let index = std::fs::metadata(repo.path().join("index"))
+            .ok()
+            .and_then(|m| {
+                let mtime = m
+                    .modified()
+                    .ok()?
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()?
+                    .as_nanos();
+                Some((mtime, m.len()))
+            });
+        let head = repo.head().ok().and_then(|h| h.target()).map(|o| o.to_string());
+        let workdir = repo.workdir()?.to_path_buf();
+        Some(StatusKey {
+            index,
+            head,
+            worktree_fp: crate::search::worktree_fingerprint(&workdir),
+        })
+    }
+
+    fn status_uncached(&self, path: &Path, with_line_counts: bool) -> Vec<FileChange> {
         use std::cell::RefCell;
         use std::collections::BTreeMap;
 
@@ -683,10 +811,13 @@ impl GitService {
         let mut opts = git2::DiffOptions::new();
         // `show_untracked_content` is what makes the line-level diff callback fire
         // for untracked files — without it a brand-new N-line file reports +0/-0
-        // because git2 only emits its delta header, never its lines.
-        opts.include_untracked(true)
-            .recurse_untracked_dirs(true)
-            .show_untracked_content(true);
+        // because git2 only emits its delta header, never its lines. Reading
+        // untracked content is also the expensive part, so counts-only scans
+        // skip it (A2.2).
+        opts.include_untracked(true).recurse_untracked_dirs(true);
+        if with_line_counts {
+            opts.show_untracked_content(true);
+        }
         let mut diff =
             match repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts)) {
                 Ok(d) => d,
@@ -709,38 +840,44 @@ impl GitService {
         // (add, del, state, old_path) per NEW path; RefCell so both callbacks can mutate it
         let acc: RefCell<BTreeMap<String, (i64, i64, char, Option<String>)>> =
             RefCell::new(BTreeMap::new());
-        let _ = diff.foreach(
-            &mut |delta, _| {
-                let st = match delta.status() {
-                    git2::Delta::Added | git2::Delta::Untracked | git2::Delta::Copied => 'A',
-                    git2::Delta::Deleted => 'D',
-                    git2::Delta::Renamed => 'R',
-                    _ => 'M',
-                };
-                let mut m = acc.borrow_mut();
-                let e = m.entry(new_path_of(&delta)).or_insert((0, 0, st, None));
-                e.2 = st;
-                if st == 'R' {
-                    e.3 = delta
-                        .old_file()
-                        .path()
-                        .map(|p| p.to_string_lossy().replace('\\', "/"));
-                }
-                true
-            },
-            None,
-            None,
-            Some(&mut |delta, _hunk, line| {
-                let mut m = acc.borrow_mut();
-                let e = m.entry(new_path_of(&delta)).or_insert((0, 0, 'M', None));
-                match line.origin() {
-                    '+' => e.0 += 1,
-                    '-' => e.1 += 1,
-                    _ => {}
-                }
-                true
-            }),
-        );
+        let mut file_cb = |delta: git2::DiffDelta, _progress: f32| {
+            let st = match delta.status() {
+                git2::Delta::Added | git2::Delta::Untracked | git2::Delta::Copied => 'A',
+                git2::Delta::Deleted => 'D',
+                git2::Delta::Renamed => 'R',
+                _ => 'M',
+            };
+            let mut m = acc.borrow_mut();
+            let e = m.entry(new_path_of(&delta)).or_insert((0, 0, st, None));
+            e.2 = st;
+            if st == 'R' {
+                e.3 = delta
+                    .old_file()
+                    .path()
+                    .map(|p| p.to_string_lossy().replace('\\', "/"));
+            }
+            true
+        };
+        let _ = if with_line_counts {
+            diff.foreach(
+                &mut file_cb,
+                None,
+                None,
+                Some(&mut |delta, _hunk, line| {
+                    let mut m = acc.borrow_mut();
+                    let e = m.entry(new_path_of(&delta)).or_insert((0, 0, 'M', None));
+                    match line.origin() {
+                        '+' => e.0 += 1,
+                        '-' => e.1 += 1,
+                        _ => {}
+                    }
+                    true
+                }),
+            )
+        } else {
+            // A2.2 counts-only: no line callback → no per-file content diffing.
+            diff.foreach(&mut file_cb, None, None, None)
+        };
 
         acc.into_inner()
             .into_iter()
@@ -1065,7 +1202,7 @@ impl GitService {
         repo: &git2::Repository,
         path: &str,
         rev: Option<&str>,
-    ) -> AppResult<Vec<BlameLine>> {
+    ) -> AppResult<Blame> {
         // Resolve the starting OID (HEAD or the given rev)
         let newest_commit = match rev {
             Some(r) => {
@@ -1107,36 +1244,53 @@ impl GitService {
         Ok(Self::blame_to_lines(repo, &blame, &file_content))
     }
 
-    /// Build per-line `BlameLine`s from a git2 `Blame` and the file content it was
-    /// computed over. Lines with a zero oid (from `blame_buffer` on a modified
-    /// working tree) are reported as "Uncommitted".
+    /// Build an interned `Blame` from a git2 `Blame` and the file content it was
+    /// computed over: commit metadata is stored once per distinct commit, each
+    /// line carries only its index. Lines with a zero oid (from `blame_buffer`
+    /// on a modified working tree) are reported as "Uncommitted".
     fn blame_to_lines(
         repo: &git2::Repository,
         blame: &git2::Blame,
         file_content: &str,
-    ) -> Vec<BlameLine> {
+    ) -> Blame {
         let file_lines: Vec<&str> = file_content.split('\n').collect();
-        let mut result = Vec::new();
+        let mut commits: Vec<BlameCommit> = Vec::new();
+        let mut by_sha: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let mut lines = Vec::new();
         let mut line_num = 1usize;
 
         for hunk in blame.iter() {
             let oid = hunk.final_commit_id();
             let uncommitted = oid.is_zero();
-            let sig = hunk.final_signature();
             let sha: String = oid.to_string().chars().take(7).collect();
-            let author = if uncommitted {
-                "Uncommitted".to_string()
-            } else {
-                sig.as_ref().and_then(|s| s.name().ok()).unwrap_or("unknown").to_string()
-            };
-            let when = sig.as_ref().map(|s| s.when().seconds()).unwrap_or(0);
-            let summary = if uncommitted {
-                "Uncommitted changes".to_string()
-            } else {
-                repo.find_commit(oid)
-                    .ok()
-                    .and_then(|c| c.message().ok().map(|m| m.lines().next().unwrap_or("").to_string()))
-                    .unwrap_or_default()
+            let c = match by_sha.get(&sha) {
+                Some(&i) => i,
+                None => {
+                    let sig = hunk.final_signature();
+                    let author = if uncommitted {
+                        "Uncommitted".to_string()
+                    } else {
+                        sig.as_ref().and_then(|s| s.name().ok()).unwrap_or("unknown").to_string()
+                    };
+                    let when = sig.as_ref().map(|s| s.when().seconds()).unwrap_or(0);
+                    let summary = if uncommitted {
+                        "Uncommitted changes".to_string()
+                    } else {
+                        repo.find_commit(oid)
+                            .ok()
+                            .and_then(|c| c.message().ok().map(|m| m.lines().next().unwrap_or("").to_string()))
+                            .unwrap_or_default()
+                    };
+                    let i = commits.len() as u32;
+                    commits.push(BlameCommit {
+                        sha: sha.clone(),
+                        author,
+                        when,
+                        summary,
+                    });
+                    by_sha.insert(sha, i);
+                    i
+                }
             };
 
             for _ in 0..hunk.lines_in_hunk() {
@@ -1145,19 +1299,16 @@ impl GitService {
                     .copied()
                     .unwrap_or("")
                     .to_string();
-                result.push(BlameLine {
+                lines.push(BlameLine {
                     n: line_num,
-                    sha: sha.clone(),
-                    author: author.clone(),
-                    when,
-                    summary: summary.clone(),
+                    c,
                     line: line_text,
                 });
                 line_num += 1;
             }
         }
 
-        result
+        Blame { commits, lines }
     }
 
     /// Blame both sides of the working-tree diff for `path`:
@@ -1168,7 +1319,7 @@ impl GitService {
         &self,
         repo: &git2::Repository,
         path: &str,
-    ) -> AppResult<(Vec<BlameLine>, Vec<BlameLine>)> {
+    ) -> AppResult<(Blame, Blame)> {
         let p = std::path::Path::new(path);
         let work_dir = repo
             .workdir()
@@ -1179,7 +1330,10 @@ impl GitService {
         // A brand-new (untracked) file has no HEAD history to blame — the whole
         // file is your uncommitted work, and there is no old side.
         let Ok(blame) = repo.blame_file(p, None) else {
-            return Ok((Vec::new(), Self::uncommitted_lines(&working_str)));
+            return Ok((
+                Blame { commits: Vec::new(), lines: Vec::new() },
+                Self::uncommitted_lines(&working_str),
+            ));
         };
 
         let head_content = repo
@@ -1202,20 +1356,25 @@ impl GitService {
         Ok((old, new))
     }
 
-    /// One "Uncommitted" BlameLine per line of `content` (for new/untracked files).
-    fn uncommitted_lines(content: &str) -> Vec<BlameLine> {
-        content
+    /// A whole-file "Uncommitted" blame (for new/untracked files): one commit
+    /// table entry, every line indexing it.
+    fn uncommitted_lines(content: &str) -> Blame {
+        let commits = vec![BlameCommit {
+            sha: "0000000".to_string(),
+            author: "Uncommitted".to_string(),
+            when: 0,
+            summary: "Uncommitted changes".to_string(),
+        }];
+        let lines = content
             .split('\n')
             .enumerate()
             .map(|(i, line)| BlameLine {
                 n: i + 1,
-                sha: "0000000".to_string(),
-                author: "Uncommitted".to_string(),
-                when: 0,
-                summary: "Uncommitted changes".to_string(),
+                c: 0,
                 line: line.to_string(),
             })
-            .collect()
+            .collect();
+        Blame { commits, lines }
     }
 
     /// Local branch names, or empty for a non-repo.
@@ -2099,14 +2258,135 @@ mod tests {
         repo.commit(Some("HEAD"), &sig, &sig, "add file", &tree, &[])
             .unwrap();
 
-        let lines = svc.blame(&repo, "f.txt", None).unwrap();
+        let b = svc.blame(&repo, "f.txt", None).unwrap();
         // 3 content lines + trailing empty from split
-        assert!(lines.len() >= 3, "at least 3 blame lines: {lines:?}");
-        assert_eq!(lines[0].n, 1);
-        assert_eq!(lines[1].n, 2);
-        assert_eq!(lines[0].author, "Author");
-        assert_eq!(lines[0].line, "line1");
-        assert_eq!(lines[1].line, "line2");
+        assert!(b.lines.len() >= 3, "at least 3 blame lines: {:?}", b.lines);
+        assert_eq!(b.lines[0].n, 1);
+        assert_eq!(b.lines[1].n, 2);
+        assert_eq!(b.commits[b.lines[0].c as usize].author, "Author");
+        assert_eq!(b.lines[0].line, "line1");
+        assert_eq!(b.lines[1].line, "line2");
+    }
+
+    /// The A0.6 interning contract: commit metadata appears ONCE in `commits`,
+    /// per-line entries carry only a u32 index into it.
+    #[test]
+    fn blame_interns_commits_once_with_per_line_indices() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_content(dir.path(), "f.txt", "a\nb\nc\n", "c1");
+        commit_content(dir.path(), "f.txt", "a\nb\nc\nd\ne\n", "c2");
+        let repo = git2::Repository::open(dir.path()).unwrap();
+
+        let b = svc.blame(&repo, "f.txt", None).unwrap();
+        assert_eq!(
+            b.commits.len(),
+            2,
+            "one table entry per DISTINCT commit, not per line: {:?}",
+            b.commits
+        );
+        assert!(b.lines.len() >= 5);
+        assert!(
+            b.lines.iter().all(|l| (l.c as usize) < b.commits.len()),
+            "every line index resolves into the commit table"
+        );
+        let commit_of = |n: usize| {
+            let l = b.lines.iter().find(|l| l.n == n).unwrap();
+            &b.commits[l.c as usize]
+        };
+        assert_eq!(commit_of(1).summary, "c1", "untouched lines keep c1");
+        assert_eq!(commit_of(4).summary, "c2", "appended lines carry c2");
+        assert_eq!(commit_of(1).sha.len(), 7, "short sha in the table");
+    }
+
+    #[test]
+    fn working_blame_marks_uncommitted_lines_via_the_commit_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_content(dir.path(), "f.txt", "one\ntwo\n", "init");
+        std::fs::write(dir.path().join("f.txt"), "one\ntwo\nthree\n").unwrap();
+        let repo = git2::Repository::open(dir.path()).unwrap();
+
+        let (_old, new) = svc.working_blame(&repo, "f.txt").unwrap();
+        let line3 = new.lines.iter().find(|l| l.n == 3).unwrap();
+        assert_eq!(
+            new.commits[line3.c as usize].author, "Uncommitted",
+            "your fresh edit maps to the interned Uncommitted entry"
+        );
+        let line1 = new.lines.iter().find(|l| l.n == 1).unwrap();
+        assert_eq!(
+            new.commits[line1.c as usize].author, "T",
+            "untouched lines keep their original author"
+        );
+    }
+
+    // ── status cache tests (A2.3) ──────────────────────────────────────────
+
+    #[test]
+    fn status_cache_serves_unchanged_key_and_invalidates_on_worktree_edit() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_content(dir.path(), "a.txt", "one\n", "init");
+
+        std::fs::write(dir.path().join("a.txt"), "one\ntwo\n").unwrap();
+        let s1 = svc.status(dir.path());
+        assert_eq!(s1.len(), 1);
+        assert_eq!((s1[0].path.as_str(), s1[0].add), ("a.txt", 1));
+
+        // unchanged key → cached result (same shape, no recompute needed)
+        let s2 = svc.status(dir.path());
+        assert_eq!(s2.len(), 1);
+        assert_eq!((s2[0].path.as_str(), s2[0].add), ("a.txt", 1));
+
+        // a worktree edit changes the dirty fingerprint → fresh result
+        std::fs::write(dir.path().join("a.txt"), "one\ntwo\nthree!\n").unwrap();
+        let s3 = svc.status(dir.path());
+        assert_eq!(s3[0].add, 2, "stale cache would still say 1: {s3:?}");
+
+        // a brand-new untracked file also invalidates (fingerprint sees creates)
+        std::fs::write(dir.path().join("new.txt"), "n\n").unwrap();
+        let s4 = svc.status(dir.path());
+        assert!(
+            s4.iter().any(|c| c.path == "new.txt"),
+            "created file must appear despite unchanged index/HEAD: {s4:?}"
+        );
+
+        // commit moves index + HEAD → key changes → clean status
+        svc.commit(dir.path(), "all", &[]).unwrap();
+        assert!(svc.status(dir.path()).is_empty(), "clean after commit");
+    }
+
+    #[test]
+    fn status_counts_only_skips_line_counts_but_not_states() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_content(dir.path(), "a.txt", "one\n", "init");
+        std::fs::write(dir.path().join("a.txt"), "one\ntwo\n").unwrap();
+        std::fs::write(dir.path().join("new.txt"), "x\ny\n").unwrap();
+
+        let st = svc.status_counts_only(dir.path());
+        let a = st.iter().find(|c| c.path == "a.txt").unwrap();
+        assert_eq!(a.state, "M");
+        assert_eq!((a.add, a.del), (0, 0), "counts-only: no line diffing");
+        let n = st.iter().find(|c| c.path == "new.txt").unwrap();
+        assert_eq!(n.state, "A");
+        assert_eq!((n.add, n.del), (0, 0));
+
+        // a counts-only cache entry must NOT satisfy a later full request
+        let full = svc.status(dir.path());
+        let a = full.iter().find(|c| c.path == "a.txt").unwrap();
+        assert_eq!(a.add, 1, "full scan recomputes real counts: {full:?}");
+        let n = full.iter().find(|c| c.path == "new.txt").unwrap();
+        assert_eq!(n.add, 2, "untracked content counted on the full scan");
+
+        // …while a full entry DOES satisfy a counts-only request (with counts)
+        let again = svc.status_counts_only(dir.path());
+        let a = again.iter().find(|c| c.path == "a.txt").unwrap();
+        assert_eq!(a.add, 1, "served from the full cache entry");
     }
 
     // ── range_diff tests ───────────────────────────────────────────────────

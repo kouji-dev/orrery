@@ -4,14 +4,14 @@ import { AgentsStore } from "./stores/agents.store";
 import { TerminalService } from "./terminal.service";
 import { flushTerminalQueue } from "./terminal-output-scheduler";
 
-// TerminalService only calls AgentsStore from xterm event handlers (input/resize),
-// none of which fire during a write/tail test — a bare stub is enough. We build it
+// TerminalService only calls AgentsStore from xterm event handlers (input/resize)
+// and the A1.2 recovery path (snapshot) — a bare stub is enough. We build it
 // via a plain Injector + runInInjectionContext so no TestBed/zone bootstrap is
 // needed (this repo's vitest setup has no Angular test environment).
 const stubStore = {
   input: () => Promise.resolve(),
   resize: () => Promise.resolve(),
-  focus: () => Promise.resolve(),
+  snapshot: () => Promise.resolve({ text: "", endSeq: 0 }),
 } as unknown as AgentsStore;
 
 function makeService(store: AgentsStore = stubStore): TerminalService {
@@ -19,19 +19,6 @@ function makeService(store: AgentsStore = stubStore): TerminalService {
     providers: [{ provide: AgentsStore, useValue: store }],
   });
   return runInInjectionContext(injector, () => new TerminalService());
-}
-
-/** Service whose AgentsStore records every agent_focus invoke. */
-function makeFocusSpy(): { svc: TerminalService; calls: Array<string | null> } {
-  const calls: Array<string | null> = [];
-  const store = {
-    ...stubStore,
-    focus: (id: string | null) => {
-      calls.push(id);
-      return Promise.resolve();
-    },
-  } as unknown as AgentsStore;
-  return { svc: makeService(store), calls };
 }
 
 // `write` routes through the shared scheduler; an unattached terminal counts as
@@ -68,88 +55,111 @@ describe("TerminalService.tail", () => {
   });
 });
 
-// The backend mux drains the FOCUSED agent every frame and holds everyone
-// else to a slow cadence, so TerminalService must tell it which terminal the
-// user is in — exactly once per CHANGE (the xterm focus event re-fires on
-// every click into an already-focused terminal; flapping invokes would just
-// burn IPC). setFocused is the single funnel the xterm focus listener,
-// exit() and dispose() all feed.
-describe("TerminalService focus → agent_focus", () => {
-  it("invokes once per change, not once per focus event", () => {
-    const { svc, calls } = makeFocusSpy();
-    // @ts-expect-error reach the private funnel the xterm focus listener calls
+// Since A0.2 the backend has no single-focus fast path (interest subscription
+// supersedes agent_focus) — focus tracking is LOCAL bookkeeping only, used as
+// the drop-target fallback. It must track gains, and clear on the focused
+// terminal's exit/dispose — and only then.
+describe("TerminalService typing-focus sentinel (local, post-A0.2)", () => {
+  it("tracks the last focused agent", () => {
+    const svc = makeService();
+    // @ts-expect-error private funnel the xterm focus listener calls
     svc["setFocused"]("a");
-    // @ts-expect-error same terminal re-focused — must NOT re-invoke
-    svc["setFocused"]("a");
-    expect(calls).toEqual(["a"]);
-    // @ts-expect-error switching terminals is a change — one more invoke
+    expect(svc.focusedAgentId()).toBe("a");
+    // @ts-expect-error private
     svc["setFocused"]("b");
-    expect(calls).toEqual(["a", "b"]);
+    expect(svc.focusedAgentId()).toBe("b");
   });
 
-  it("clears focus when the focused agent's process exits", () => {
-    const { svc, calls } = makeFocusSpy();
-    svc.write("a", "x"); // materialize the terminal
+  it("clears when the focused agent's process exits — not another's", () => {
+    const svc = makeService();
+    svc.write("a", "x"); // materialize the terminals
+    svc.write("b", "x");
     // @ts-expect-error private funnel
     svc["setFocused"]("a");
+    svc.exit("b"); // some OTHER terminal exiting must not release focus
+    expect(svc.focusedAgentId()).toBe("a");
     svc.exit("a");
-    expect(calls).toEqual(["a", null]);
-    // an exit for an agent that is NOT focused must not touch it
-    svc.write("b", "x");
-    svc.exit("b");
-    expect(calls).toEqual(["a", null]);
+    expect(svc.focusedAgentId()).toBeNull();
   });
 
-  it("retries sending focus after a failed invoke — dedup does not suppress the retry", async () => {
-    let rejectNext = false;
-    const calls: Array<string | null> = [];
-    const store = {
-      ...stubStore,
-      focus: (id: string | null) => {
-        calls.push(id);
-        if (rejectNext) {
-          rejectNext = false;
-          return Promise.reject(new Error("ipc error"));
-        }
-        return Promise.resolve();
-      },
-    } as unknown as AgentsStore;
-    const svc = makeService(store);
-
-    // First call succeeds — sentFocusId is now "a".
-    // @ts-expect-error private
-    svc["setFocused"]("a");
-    await Promise.resolve();
-    expect(calls).toEqual(["a"]);
-
-    // Simulates a different focus then back — sentFocusId temporarily "b" then
-    // we call with "a" again which should fail.
-    rejectNext = true;
-    // @ts-expect-error private
-    svc["setFocused"]("b"); // sentFocusId → "b", focus("b") rejects → rolls back to "a"
-    // let the rejection handler run
-    await Promise.resolve();
-    await Promise.resolve();
-
-    // sentFocusId should have been rolled back to "a" (prev before the failed call)
-    // @ts-expect-error read the private field
-    expect(svc["sentFocusId"]).toBe("a");
-
-    // Now "b" can be retried (dedup won't block it, since sentFocusId ≠ "b")
-    // @ts-expect-error
-    svc["setFocused"]("b");
-    expect(calls).toEqual(["a", "b", "b"]);
-  });
-
-  it("clears focus when the focused terminal is disposed — and only then", () => {
-    const { svc, calls } = makeFocusSpy();
+  it("clears when the focused terminal is disposed — and only then", () => {
+    const svc = makeService();
     svc.write("a", "x");
     svc.write("b", "x");
     // @ts-expect-error private funnel
     svc["setFocused"]("a");
-    svc.dispose("b"); // some OTHER terminal going away must not release focus
-    expect(calls).toEqual(["a"]);
+    svc.dispose("b");
+    expect(svc.focusedAgentId()).toBe("a");
     svc.dispose("a");
-    expect(calls).toEqual(["a", null]);
+    expect(svc.focusedAgentId()).toBeNull();
+  });
+});
+
+// A1.2 recovery: replaying a backend snapshot must (1) replace the buffer
+// content, (2) drop live chunks that are already inside the snapshot
+// (seq <= endSeq), and (3) let newer chunks through — including ones that
+// arrive WHILE the recovery is in flight (they are parked, then flushed).
+describe("TerminalService snapshot recovery (A1.2)", () => {
+  function withSnapshot(snap: { text: string; endSeq: number }) {
+    let resolve!: (s: { text: string; endSeq: number }) => void;
+    const gate = new Promise<{ text: string; endSeq: number }>((r) => (resolve = r));
+    const store = {
+      ...stubStore,
+      snapshot: () => gate,
+    } as unknown as AgentsStore;
+    return { svc: makeService(store), release: () => resolve(snap) };
+  }
+
+  it("replays the snapshot and dedups live chunks by seq", async () => {
+    const { svc, release } = withSnapshot({ text: "from-ring\r\n", endSeq: 10 });
+    svc.write("a", "pre-recovery\r\n", 10); // materialize the terminal
+    await flush(svc, "a");
+    // @ts-expect-error drive the private recovery entry point directly
+    const done = svc["recover"]("a") as Promise<void>;
+    release();
+    await done;
+    await flush(svc, "a");
+    // stale live chunk — already inside the snapshot → dropped
+    svc.write("a", "dupe-from-snapshot\r\n", 9);
+    // newer live chunk — resumes the stream
+    svc.write("a", "fresh\r\n", 11);
+    await flush(svc, "a");
+    const tail = svc.tail("a", 10);
+    expect(tail).toContain("from-ring");
+    expect(tail).toContain("fresh");
+    expect(tail).not.toContain("dupe-from-snapshot");
+    expect(tail).not.toContain("pre-recovery"); // cleared by the replay
+  });
+
+  it("parks chunks that arrive mid-recovery and flushes them seq-deduped", async () => {
+    const { svc, release } = withSnapshot({ text: "ring\r\n", endSeq: 5 });
+    svc.write("a", "x", 1);
+    await flush(svc, "a");
+    // @ts-expect-error private
+    const done = svc["recover"]("a") as Promise<void>;
+    // These land while the snapshot invoke is still pending:
+    svc.write("a", "inside-snapshot\r\n", 4); // dupe — must be dropped
+    svc.write("a", "after-snapshot\r\n", 6); // new — must survive
+    release();
+    await done;
+    await flush(svc, "a");
+    const tail = svc.tail("a", 10);
+    expect(tail).toContain("ring");
+    expect(tail).toContain("after-snapshot");
+    expect(tail).not.toContain("inside-snapshot");
+  });
+
+  it("marks the terminal stale again when the snapshot invoke fails", async () => {
+    const store = {
+      ...stubStore,
+      snapshot: () => Promise.reject(new Error("backend gone")),
+    } as unknown as AgentsStore;
+    const svc = makeService(store);
+    svc.write("a", "x", 1);
+    svc.markStale("a");
+    // @ts-expect-error private
+    await svc["recover"]("a");
+    // @ts-expect-error read the private stale set — retry on next attach
+    expect(svc["stale"].has("a")).toBe(true);
   });
 });
