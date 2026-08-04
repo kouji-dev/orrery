@@ -7,8 +7,11 @@ import { PaneNode, PaneView } from "../workspace/pane-model";
  * Rules (renderer bytes are proportional to what is on screen, flat in total
  * agent count):
  *  • an agent shown in a TERMINAL pane of the active tab → `stream`
- *    (demoted to `digest` while the window is blurred — a blurred window is
- *    digest at most);
+ *    (demoted to `digest` only while the window is HIDDEN — minimized or
+ *    fully occluded. NOT on mere focus loss: an unfocused-but-visible window
+ *    is exactly how agents are watched from a second monitor, and webview
+ *    document focus lags native window focus on Windows, which froze open
+ *    terminals until the user clicked into them);
  *  • an agent whose overview mini-preview card is in the viewport → `digest`;
  *  • an agent shown only in a diff/file pane → none (PTY output is irrelevant
  *    to that surface — status still arrives over hooks);
@@ -24,8 +27,9 @@ export interface VisibleSurfaces {
   paneAgents: { agentId: string; view: PaneView }[];
   /** Agents whose overview mini-preview card is currently in the viewport. */
   overviewAgentIds: string[];
-  /** Window focus state — blurred demotes stream to digest. */
-  windowFocused: boolean;
+  /** Window visibility — a HIDDEN (minimized/occluded) window demotes stream
+   *  to digest. Focus is deliberately not consulted: see the module doc. */
+  windowVisible: boolean;
 }
 
 const RANK: Record<InterestMode, number> = { none: 0, digest: 1, stream: 2 };
@@ -39,7 +43,7 @@ export function deriveInterest(s: VisibleSurfaces): InterestEntry[] {
   };
   for (const p of s.paneAgents) {
     if (p.view === "terminal") {
-      bump(p.agentId, s.windowFocused ? "stream" : "digest");
+      bump(p.agentId, s.windowVisible ? "stream" : "digest");
     } else {
       bump(p.agentId, "none"); // diff/file view open — PTY output irrelevant
     }

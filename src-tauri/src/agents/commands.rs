@@ -426,7 +426,7 @@ pub struct InterestEntry {
 /// A0.2 interest subscription — SUPERSEDES `agent_focus`/`set_focus`. The
 /// frontend publishes the full set derived from what is visible (terminal
 /// panes = stream, overview mini-previews = digest, diff/file views &
-/// unmounted agents = absent/none, blurred window demotes stream → digest);
+/// unmounted agents = absent/none, a HIDDEN window demotes stream → digest);
 /// the backend diffs it against the current set. `none` only ever means
 /// do-not-EMIT — every PTY keeps being read and its bytes land in the bounded
 /// A1.2 scrollback ring.

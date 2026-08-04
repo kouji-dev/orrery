@@ -219,8 +219,8 @@ export class TerminalService implements OnDestroy {
   }
 
   /** Replay the snapshot NOW when the terminal is stale but still mounted —
-   *  the re-enter-stream-without-re-attach case (window refocus demote/promote
-   *  cycle: blur → digest → focus → stream, terminal never detached). */
+   *  the re-enter-stream-without-re-attach case (window minimize/restore
+   *  cycle: hidden → digest → shown → stream, terminal never detached). */
   recoverIfStale(id: string) {
     if (this.stale.has(id) && this.handles.get(id)?.term.element?.isConnected) {
       void this.recover(id);
