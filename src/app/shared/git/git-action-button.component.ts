@@ -10,6 +10,7 @@ import {
   signal,
 } from "@angular/core";
 import { CostEstimate } from "../../models";
+import { COST_FEATURES_ENABLED } from "../../cost/cost-flags";
 import { EstimateService, EstimateInput, fmtTok, fmtUsd } from "../../cost/estimate.service";
 import { IconComponent } from "../icon.component";
 
@@ -51,7 +52,7 @@ export interface GitActionAiEvent {
       <button
         class="btn {{ kind() }}"
         [disabled]="disabled()"
-        [title]="title() || label() + ' · native, 0 tokens'"
+        [title]="title() || label() + (costEnabled ? ' · native, 0 tokens' : ' · native')"
         (click)="pressNative()"
         [style.padding]="pad()"
         [style.font-size]="fs()"
@@ -72,14 +73,14 @@ export interface GitActionAiEvent {
         >
           @if (icon()) { <app-icon [name]="icon()!" size="sm" [color]="aiOnly() ? 'var(--accent)' : null" /> }
           <span class="lbl">{{ primaryConfirming() && primaryEstimate() ? 'Confirm ≈' + usd(primaryEstimate()!.usdHigh) + ' — click again' : label() }}</span>
-          @if (aiOnly() && primaryEstimate(); as pe) {
+          @if (costEnabled && aiOnly() && primaryEstimate(); as pe) {
             <span class="tnum est-inline">~{{ tok(pe.tokensHigh) }} tok · ≈{{ usd(pe.usdHigh) }}</span>
           }
         </button>
         <button
           class="btn {{ kind() }} caret"
           [disabled]="disabled()"
-          title="AI path — shows its price first"
+          [title]="costEnabled ? 'AI path — shows its price first' : 'AI path'"
           (click)="open.set(!open())"
           [style.font-size]="fs()"
         >
@@ -90,8 +91,8 @@ export interface GitActionAiEvent {
           <div class="menu rise" [style.left]="menuAlign() === 'left' ? '0' : 'auto'" [style.right]="menuAlign() === 'left' ? 'auto' : '0'">
             <div class="menu-head">
               <app-icon name="sparkles" size="sm" [px]="12" color="var(--accent)" />
-              <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-3)">AI path · spends tokens</span>
-              @if (est.capUsd() > 0) {
+              <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-3)">{{ costEnabled ? 'AI path · spends tokens' : 'AI path' }}</span>
+              @if (costEnabled && est.capUsd() > 0) {
                 <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">
                   {{ usd(est.remainingUsd()) }} left of {{ usd(est.capUsd()) }}
                 </span>
@@ -109,13 +110,15 @@ export interface GitActionAiEvent {
                 <span class="row-lbl">
                   {{ confirming() === v.variant.id ? 'Confirm ≈' + usd(v.estimate.usdHigh) + ' — click again' : v.variant.label }}
                 </span>
-                <span class="tnum row-est">
-                  <span>~{{ tok(v.estimate.tokensHigh) }} tok</span>
-                  <span style="color:var(--accent-2)">≈{{ usd(v.estimate.usdHigh) }}</span>
-                </span>
+                @if (costEnabled) {
+                  <span class="tnum row-est">
+                    <span>~{{ tok(v.estimate.tokensHigh) }} tok</span>
+                    <span style="color:var(--accent-2)">≈{{ usd(v.estimate.usdHigh) }}</span>
+                  </span>
+                }
               </button>
             }
-            <div class="menu-foot">native path is instant, deterministic and costs 0 tokens</div>
+            <div class="menu-foot">{{ costEnabled ? 'native path is instant, deterministic and costs 0 tokens' : 'native path is instant and deterministic' }}</div>
           </div>
         }
       </div>
@@ -221,6 +224,9 @@ export interface GitActionAiEvent {
   ],
 })
 export class GitActionButtonComponent {
+  /** Cost kill switch — when off, all token/$ chrome disappears but the
+   *  native/AI action paths keep working. */
+  readonly costEnabled = COST_FEATURES_ENABLED;
   readonly est = inject(EstimateService);
   private readonly host = inject(ElementRef<HTMLElement>);
 
@@ -272,8 +278,8 @@ export class GitActionButtonComponent {
   readonly primaryConfirming = computed(() => this.confirming()?.startsWith("primary:") ?? false);
   readonly primaryTitle = computed(() => {
     if (this.title()) return this.title();
-    if (this.aiOnly()) return this.label() + " · AI path — price shown on the button";
-    return this.label() + " · native, 0 tokens";
+    if (this.aiOnly()) return this.label() + (this.costEnabled ? " · AI path — price shown on the button" : " · AI path");
+    return this.label() + (this.costEnabled ? " · native, 0 tokens" : " · native");
   });
 
   pressNative(): void {

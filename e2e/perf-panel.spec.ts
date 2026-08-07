@@ -1,13 +1,14 @@
 import { expect, Page, test } from "@playwright/test";
 
 /**
- * E2E for the A7.7 process tree + A0.7 emit telemetry surfaces in the dev
- * console, and the A0.6 status-bar memory split.
+ * E2E for the merged Resources tab (gauges + A7.7 process tree under one
+ * "Orrery App" root) + A0.7 emit telemetry surfaces in the dev console, and
+ * the agents-only status-bar readout.
  *
  * Backend-free: `process_tree` / `telemetry_emits` invokes reject in the
  * browser build, so the specs assert the panel chrome (tabs, privacy footer,
  * empty states) rather than live data — the data path is covered by the Rust
- * unit tests.
+ * unit tests and the mergeRoots vitest specs.
  */
 
 async function ready(page: Page): Promise<void> {
@@ -15,24 +16,26 @@ async function ready(page: Page): Promise<void> {
   await page.waitForSelector("app-top-bar");
 }
 
-test("dev console FAB opens the panel with Processes and Emits tabs", async ({ page }) => {
+test("dev console FAB opens the panel with the merged tab set (no Processes tab)", async ({ page }) => {
   await ready(page);
   await page.locator(".dvc-fab").click();
   const panel = page.locator(".dvcon");
   await expect(panel).toBeVisible();
 
-  for (const label of ["Perf", "Agents", "Projects", "Resources", "Processes", "Emits"]) {
+  for (const label of ["Perf", "Agents", "Projects", "Resources", "Emits"]) {
     await expect(panel.locator(".dvc-tab", { hasText: label })).toBeVisible();
   }
+  await expect(panel.locator(".dvc-tab", { hasText: "Processes" })).toHaveCount(0);
 });
 
-test("Processes tab activates without a backend (empty tree, no crash)", async ({ page }) => {
+test("Resources tab activates without a backend (empty tree state, no crash)", async ({ page }) => {
   await ready(page);
   await page.locator(".dvc-fab").click();
-  const tab = page.locator(".dvc-tab", { hasText: "Processes" });
+  const tab = page.locator(".dvc-tab", { hasText: "Resources" });
   await tab.click();
   await expect(tab).toHaveClass(/on/);
   await expect(page.locator(".dvcon")).toBeVisible(); // still alive after the failed poll
+  await expect(page.locator(".dvcon")).toContainText("No process tree yet");
 });
 
 test("Emits tab carries the telemetry privacy contract in its footer", async ({ page }) => {
@@ -45,11 +48,14 @@ test("Emits tab carries the telemetry privacy contract in its footer", async ({ 
   );
 });
 
-test("status bar shows the A0.6 memory split base (Orrery + CPU)", async ({ page }) => {
+test("status bar readout is agents-only and stays hidden with no agent samples", async ({ page }) => {
   await ready(page);
   const bar = page.locator("app-status-bar");
-  await expect(bar).toContainText("CPU");
-  await expect(bar).toContainText("Orrery");
-  // no backend → no agent samples → the agents figure stays hidden (honest split)
-  await expect(bar).not.toContainText("· agents");
+  // the deep-link gauge button is always there…
+  await expect(bar.locator(".gauge")).toBeVisible();
+  // …but with no backend (no agent subtree samples) the readout text is hidden,
+  // and the old CPU/Orrery split is gone for good
+  await expect(bar.locator(".gauge")).not.toContainText("agents");
+  await expect(bar).not.toContainText("Orrery");
+  await expect(bar).not.toContainText("CPU");
 });

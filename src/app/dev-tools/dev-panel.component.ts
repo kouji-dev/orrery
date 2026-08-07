@@ -21,6 +21,7 @@ import { setSchedulerStatsEnabled, terminalSchedulerStats } from "../terminal-ou
 import { MetricsStore } from "../metrics/metrics.store";
 import { TelemetryStore } from "../metrics/telemetry.store";
 import { DevPanelStore } from "./dev-panel.store";
+import { MERGED_ROOT_KEY, mergeRoots } from "./process-tree-merge";
 import { BRIDGE, Commands } from "../data-source/bridge";
 import {
   Agent,
@@ -28,7 +29,6 @@ import {
   EmitAggRow,
   ProcessNode,
   ProcessTreeSnapshot,
-  ProcMetric,
   Project,
   TelemetryTraceState,
 } from "../models";
@@ -64,8 +64,7 @@ type Sort = { key: string; dir: number };
             <button class="dvc-tab" [class.on]="tab() === 'perf'" (click)="tab.set('perf')"><app-icon name="spark" size="sm" />Perf</button>
             <button class="dvc-tab" [class.on]="tab() === 'agents'" (click)="tab.set('agents')"><app-icon name="agent" size="sm" />Agents<span class="dvc-cnt">{{ agents().length }}</span></button>
             <button class="dvc-tab" [class.on]="tab() === 'projects'" (click)="tab.set('projects')"><app-icon name="box" size="sm" />Projects<span class="dvc-cnt">{{ projects().length }}</span></button>
-            <button class="dvc-tab" [class.on]="tab() === 'resources'" (click)="tab.set('resources')"><app-icon name="cpu" size="sm" />Resources<span class="dvc-cnt">{{ procs().length }}</span></button>
-            <button class="dvc-tab" [class.on]="tab() === 'processes'" (click)="tab.set('processes')"><app-icon name="timeline" size="sm" />Processes<span class="dvc-cnt">{{ treeProcCount() }}</span></button>
+            <button class="dvc-tab" [class.on]="tab() === 'resources'" (click)="tab.set('resources')"><app-icon name="cpu" size="sm" />Resources<span class="dvc-cnt">{{ treeProcCount() }}</span></button>
             <button class="dvc-tab" [class.on]="tab() === 'emits'" (click)="tab.set('emits')"><app-icon name="spark" size="sm" />Emits<span class="dvc-cnt">{{ emitRows().length }}</span></button>
           </div>
           <span class="dvc-live on"><span class="dvc-ld"></span>live</span>
@@ -233,7 +232,9 @@ type Sort = { key: string; dir: number };
             </div>
           }
 
-          <!-- ── RESOURCES ── -->
+          <!-- ── RESOURCES (merged: gauges + the A7.7 recursive process tree,
+               rooted at a synthetic "Orrery App" row that sums EVERYTHING —
+               rust core, webview family, every agent subtree) ── -->
           @if (tab() === 'resources') {
             @if (procs().length) {
               <div class="dvc-res-top">
@@ -243,7 +244,7 @@ type Sort = { key: string; dir: number };
                     <span class="g-val tnum">{{ totalCpu().toFixed(1) }}<small>%</small></span>
                   </div>
                   <div class="dvc-gbar"><i [style.width.%]="barClamp(totalCpu())" [style.background]="latColor(gaugeCpuC())"></i></div>
-                  <span class="g-sub tnum">{{ coresUsed() }} of {{ cores() }} cores · {{ procs().length }} processes</span>
+                  <span class="g-sub tnum">{{ coresUsed() }} of {{ cores() }} cores · {{ agentProcCount() }} agent {{ agentProcCount() === 1 ? 'subtree' : 'subtrees' }}</span>
                 </div>
                 <div class="dvc-gauge">
                   <div class="g-top">
@@ -251,59 +252,16 @@ type Sort = { key: string; dir: number };
                     <span class="g-val tnum">{{ memGb() }}<small> GB</small></span>
                   </div>
                   <div class="dvc-gbar"><i [style.width.%]="barClamp(memPct())" [style.background]="latColor(gaugeMemC())"></i></div>
-                  <span class="g-sub tnum">{{ memPct().toFixed(1) }}% of {{ sysGb() }} GB · {{ agentProcCount() }} agent {{ agentProcCount() === 1 ? 'process' : 'processes' }}</span>
+                  <span class="g-sub tnum">{{ memPct().toFixed(1) }}% of {{ sysGb() }} GB</span>
                 </div>
               </div>
-              <div class="dvc-scroll">
-              <table class="dvc-tbl">
-                <thead><tr>
-                  @for (c of RCOLS; track c[0]) {
-                    <th [class.srt]="rSort().key === c[0]" [style.cursor]="c[0] === 'trend' ? 'default' : null" (click)="c[0] !== 'trend' && clickRSort(c[0])">{{ c[1] }}@if (rSort().key === c[0]) { <span class="dvc-arr">{{ rSort().dir < 0 ? '▼' : '▲' }}</span> }</th>
-                  }
-                </tr></thead>
-                <tbody>
-                  @for (p of sortedProcs(); track p.id) {
-                    <tr class="dvc-row" style="cursor:default">
-                      <td><span class="dvc-lead">
-                        @if (agentOf(p.id); as ag) {
-                          <span class="dvc-kind" style="background:transparent"><app-tool-badge [tool]="ag.tool" [size]="17" /></span>
-                        } @else {
-                          <span class="dvc-kind core"><app-icon name="cpu" size="sm" [px]="11" /></span>
-                        }
-                        <span class="dvc-nm">{{ p.label }}</span>
-                        <span class="dvc-dim" style="font-size:var(--fs-xs)">{{ p.id === 'app' ? 'app · rust core + webview' : 'agent · ' + (agentOf(p.id)?.tool ?? 'subtree') }}</span>
-                      </span></td>
-                      <td [class]="'dvc-lat ' + cpuC(p.cpu) + ' tnum'"><span class="v">{{ p.cpu.toFixed(1) }}%</span></td>
-                      <td class="dvc-spk">
-                        <svg [attr.width]="54" [attr.height]="16" style="display:block">
-                          <polyline [attr.points]="sparkPoints(cpuHistOf(p.id), 54)" fill="none" [attr.stroke]="latColor(cpuC(p.cpu))" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.9" />
-                        </svg>
-                      </td>
-                      <td [class]="'dvc-lat ' + memC(p.memBytes) + ' tnum'"><span class="v">{{ fmtMem(p.memBytes) }}</span></td>
-                      <td class="tnum" style="color:var(--ink-3)">{{ uptimeOf(p.id) }}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-              </div>
-            } @else {
-              <div class="dvc-empty">
-                <div class="dvc-ring"><app-icon name="cpu" /></div>
-                <h4>No metrics yet</h4>
-                <p>Per-process CPU and memory populate from the backend's resource sweep — lowest-priority by design, so the first sample can take a few seconds.</p>
-                <span class="dvc-hint"><span class="dvc-ld"></span>waiting for the first sweep…</span>
-              </div>
             }
-          }
-
-          <!-- ── PROCESSES (A7.7 recursive tree) ── -->
-          @if (tab() === 'processes') {
-            @if (tree(); as t) {
+            @if (tree()) {
               <div class="dvc-split">
                 <span class="tnum" style="color:var(--ink-2)">Orrery <b style="color:var(--ink)">{{ fmtMem(orreryPriv()) }}</b></span>
                 <span style="color:var(--ink-4)">·</span>
                 <span class="tnum" style="color:var(--ink-2)">agents <b style="color:var(--accent-2)">{{ fmtMem(agentsPriv()) }}</b></span>
-                <span class="dvc-chip" style="font-size:var(--fs-2xs)">private working set · RSS is secondary</span>
+                <span class="dvc-chip" style="font-size:var(--fs-2xs)">private working set</span>
                 <span style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">job-object accounting · descendants rediscovered at slower cadence</span>
               </div>
               @for (al of treeAlerts(); track al.id) {
@@ -319,7 +277,6 @@ type Sort = { key: string; dir: number };
                   <th style="cursor:default">PID</th>
                   <th style="cursor:default">CPU</th>
                   <th style="cursor:default">Private</th>
-                  <th style="cursor:default">RSS</th>
                   <th style="cursor:default">Subtree</th>
                 </tr></thead>
                 <tbody>
@@ -331,19 +288,18 @@ type Sort = { key: string; dir: number };
                             <svg class="dvc-tw" [class.open]="expanded(r.key)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
                           </button>
                         } @else { <span style="width:var(--sp-5);flex:none"></span> }
-                        @if (r.depth === 0 && r.rootId !== 'app' && agentOf(r.rootId); as ag) {
+                        @if (r.agentRoot && agentOf(r.rootId); as ag) {
                           <span class="dvc-kind" style="background:transparent"><app-tool-badge [tool]="ag.tool" [size]="15" /></span>
                         } @else {
                           <span class="dvc-pdot" [style.background]="nodeDot(r.n)"></span>
                         }
-                        <span class="dvc-nm" [style.color]="notOurs(r.n) ? 'var(--ink-3)' : 'var(--ink)'">{{ r.n.name }}</span>
+                        <span class="dvc-nm" [style.color]="notOurs(r.n) ? 'var(--ink-3)' : 'var(--ink)'" [style.font-weight]="r.depth === 0 ? 600 : null">{{ r.n.name }}</span>
                         @if (r.n.note) { <span style="font-size:var(--fs-2xs);color:var(--ink-4);flex:none">{{ r.n.note }}</span> }
                         @if (r.n.detached) { <span class="dvc-chip" style="font-size:var(--fs-3xs);color:var(--lat-a)">detached · found via job object</span> }
                       </span></td>
-                      <td class="tnum" style="color:var(--ink-4)">{{ r.n.pid }}</td>
+                      <td class="tnum" style="color:var(--ink-4)">{{ r.n.pid || '—' }}</td>
                       <td class="tnum" [style.color]="r.n.cpu > 60 ? 'var(--lat-r)' : r.n.cpu > 25 ? 'var(--lat-a)' : 'var(--ink-2)'">{{ r.n.cpu.toFixed(1) }}%</td>
                       <td class="tnum" [style.color]="r.n.privBytes > 1073741824 ? 'var(--lat-r)' : 'var(--ink)'">{{ fmtMem(r.n.privBytes) }}</td>
-                      <td class="tnum" style="color:var(--ink-4)">{{ fmtMem(r.n.rssBytes) }}</td>
                       <td class="tnum" [style.color]="r.n.children.length ? 'var(--accent-2)' : 'var(--ink-4)'">{{ r.n.children.length ? fmtMem(r.n.subtreePrivBytes) : '—' }}</td>
                     </tr>
                   }
@@ -352,9 +308,9 @@ type Sort = { key: string; dir: number };
               </div>
             } @else {
               <div class="dvc-empty">
-                <div class="dvc-ring"><app-icon name="timeline" /></div>
-                <h4>No tree yet</h4>
-                <p>The process-tree sampler only runs while this tab is open (known pids + their discovered descendants — never a machine-wide sweep per poll).</p>
+                <div class="dvc-ring"><app-icon name="cpu" /></div>
+                <h4>No process tree yet</h4>
+                <p>The process sampler only runs while this tab is open (known pids + their discovered descendants — never a machine-wide sweep per poll).</p>
                 <span class="dvc-hint"><span class="dvc-ld"></span>sampling…</span>
               </div>
             }
@@ -431,16 +387,9 @@ type Sort = { key: string; dir: number };
             <span class="dvc-sp"></span><span class="tnum">live state</span>
           }
           @if (tab() === 'resources') {
-            <span class="dvc-leg"><span class="dvc-sw g"></span>idle</span>
-            <span class="dvc-leg"><span class="dvc-sw a"></span>busy</span>
-            <span class="dvc-leg"><span class="dvc-sw r"></span>hot</span>
-            <span class="dvc-sp"></span>
-            <span class="tnum">app {{ appCpu().toFixed(1) }}% · {{ procs().length }} procs · {{ totalCpu().toFixed(1) }}% / {{ cores() }} cores · {{ memGb() }} GB</span>
-          }
-          @if (tab() === 'processes') {
             <span>subtree totals sum private working set — RSS double-counts shared pages and would overstate</span>
             <span class="dvc-sp"></span>
-            <span class="tnum">{{ treeProcCount() }} procs · refreshed {{ treeAge() }}</span>
+            <span class="tnum">{{ totalCpu().toFixed(1) }}% / {{ cores() }} cores · {{ memGb() }} GB · {{ treeProcCount() }} procs · refreshed {{ treeAge() }}</span>
           }
           @if (tab() === 'emits') {
             <span>app-data/telemetry/emit-summary-…json</span>
@@ -652,7 +601,6 @@ export class DevPanelComponent implements OnDestroy {
   readonly sort = signal<Sort>({ key: "rt", dir: -1 });
   readonly aSort = signal<Sort>({ key: "status", dir: 1 });
   readonly pSort = signal<Sort>({ key: "name", dir: 1 });
-  readonly rSort = signal<Sort>({ key: "cpu", dir: -1 });
   readonly openCmd = signal<string | null>(null);
   readonly openAg = signal<string | null>(null);
   readonly openPr = signal<string | null>(null);
@@ -666,7 +614,6 @@ export class DevPanelComponent implements OnDestroy {
   readonly PCOLS: [string, string][] = [["cmd", "command"], ["calls", "calls/10s"], ["rt", "avg RT"], ["exec", "avg exec"], ["overhead", "overhead"], ["p95", "p95"], ["max", "max"], ["err", "err%"], ["spark", "trend"]];
   readonly ACOLS: [string, string][] = [["name", "agent"], ["status", "status"], ["tool", "tool"], ["project", "project"], ["branch", "branch"], ["commits", "c"], ["elapsed", "elapsed"], ["progress", "prog"]];
   readonly PRCOLS: [string, string][] = [["name", "project"], ["id", "id"], ["head", "head"], ["branch", "default"], ["branches", "branches"], ["agents", "agents"], ["files", "files"]];
-  readonly RCOLS: [string, string][] = [["name", "process"], ["cpu", "cpu %"], ["trend", "trend"], ["mem", "memory"], ["uptime", "uptime"]];
 
   private tickIv?: ReturnType<typeof setInterval>;
   private copiedTo?: ReturnType<typeof setTimeout>;
@@ -674,19 +621,8 @@ export class DevPanelComponent implements OnDestroy {
   constructor() {
     // gate the terminal write-scheduler stats collector on panel visibility
     effect(() => setSchedulerStatsEnabled(this.open()));
-    // accumulate per-subtree cpu history from every metrics push (ring of 20)
-    // so the Resources trend column has data the moment the tab opens
-    effect(() => {
-      const m = this.metricsStore.metrics();
-      if (!m) return;
-      this.cpuHist.update((prev) => {
-        const next: Record<string, number[]> = {};
-        for (const p of m.procs) next[p.id] = [...(prev[p.id] ?? []), p.cpu].slice(-20);
-        return next;
-      });
-    });
     // age out the 10s window while the panel is open; the same 1s heartbeat
-    // drives the pull-based Processes/Emits polls (every 2nd tick — matching
+    // drives the pull-based Resources/Emits polls (every 2nd tick — matching
     // the perf://stats push cadence) so the samplers cost NOTHING while the
     // panel is closed or another tab is showing (the A1.7 gating pattern).
     this.tickIv = setInterval(() => {
@@ -694,7 +630,7 @@ export class DevPanelComponent implements OnDestroy {
       if (this.tab() === "perf") this.perf.tick();
       this.pollTick++;
       if (this.pollTick % 2 === 0) {
-        if (this.tab() === "processes") void this.pollTree();
+        if (this.tab() === "resources") void this.pollTree();
         if (this.tab() === "emits") void this.pollEmits();
       }
     }, 1000);
@@ -704,7 +640,7 @@ export class DevPanelComponent implements OnDestroy {
     effect(() => {
       if (!this.open()) return;
       const t = this.tab();
-      if (t === "processes") void this.pollTree(true);
+      if (t === "resources") void this.pollTree(true);
       if (t === "emits") void this.pollEmits();
     });
   }
@@ -885,11 +821,7 @@ export class DevPanelComponent implements OnDestroy {
     return this.agentsIn(id).filter((a) => this.attn(a)).length;
   }
 
-  // ── resources ──
-  private readonly appStart = performance.timeOrigin;
-  /** Per-subtree cpu history (last 20 pushes) — fed by the constructor effect. */
-  private readonly cpuHist = signal<Record<string, number[]>>({});
-
+  // ── resources (gauges from the system://metrics push — always warm) ──
   readonly procs = computed(() => this.metricsStore.metrics()?.procs ?? []);
   readonly totalCpu = computed(() => this.metricsStore.metrics()?.totalCpu ?? 0);
   readonly cores = computed(() => this.metricsStore.metrics()?.cores ?? 1);
@@ -901,52 +833,16 @@ export class DevPanelComponent implements OnDestroy {
     return m?.sysMemBytes ? (m.totalMemBytes / m.sysMemBytes) * 100 : 0;
   });
   readonly agentProcCount = computed(() => this.procs().filter((p) => p.id !== "app").length);
-  readonly appCpu = computed(() => this.procs().find((p) => p.id === "app")?.cpu ?? 0);
   readonly gaugeCpuC = computed(() => (this.totalCpu() < 30 ? "g" : this.totalCpu() < 70 ? "a" : "r"));
   readonly gaugeMemC = computed(() => (this.memPct() < 25 ? "g" : this.memPct() < 50 ? "a" : "r"));
-  readonly sortedProcs = computed<ProcMetric[]>(() => {
-    const arr = this.procs().slice();
-    const { key, dir } = this.rSort();
-    arr.sort((a, b) => {
-      if (key === "name") return a.label < b.label ? -dir : dir;
-      if (key === "mem") return (a.memBytes - b.memBytes) * dir;
-      if (key === "uptime") return (this.uptimeSec(a.id) - this.uptimeSec(b.id)) * dir;
-      return (a.cpu - b.cpu) * dir;
-    });
-    return arr;
-  });
-  clickRSort(k: string) {
-    this.rSort.update((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: k === "name" ? 1 : -1 }));
-  }
-  /** Rows are machine-relative subtree shares (already ÷cores), so the mock's
-   *  per-process 30/70 bands compress: one full core on a 10-core box reads 10%. */
-  cpuC(v: number): string {
-    return v < 10 ? "g" : v < 30 ? "a" : "r";
-  }
-  /** Rows are subtree rollups (the app row includes its WebView2 children), so
-   *  the bands sit above the mock's single-process 300/600 MB. */
-  memC(bytes: number): string {
-    const mb = bytes / 2 ** 20;
-    return mb < 512 ? "g" : mb < 1536 ? "a" : "r";
-  }
   barClamp(v: number): number {
     return Math.min(100, Math.max(2, v));
   }
   agentOf(id: string): Agent | undefined {
     return id === "app" ? undefined : this.agents().find((a) => a.id === id);
   }
-  cpuHistOf(id: string): number[] {
-    return this.cpuHist()[id] ?? [];
-  }
-  private uptimeSec(id: string): number {
-    return id === "app" ? Math.floor((Date.now() - this.appStart) / 1000) : this.runtime.elapsedFor(id);
-  }
-  uptimeOf(id: string): string {
-    const s = this.uptimeSec(id);
-    return s > 0 ? this.fmtDur(s) : "—";
-  }
 
-  // ── processes (A7.7 recursive tree) ──
+  // ── resources tree (A7.7 recursive, merged under one "Orrery App" root) ──
   private pollTick = 0;
   private treeBusy = false;
   readonly tree = signal<ProcessTreeSnapshot | null>(null);
@@ -989,17 +885,30 @@ export class DevPanelComponent implements OnDestroy {
     this.treeExpand.update((m) => ({ ...m, [key]: !open }));
   }
 
+  /** One synthetic "Orrery App" root over the backend's forest — always the
+   *  first row, always the recursive total. Null until the first sample. */
+  readonly mergedRoot = computed(() => {
+    const t = this.tree();
+    return t ? mergeRoots(t) : null;
+  });
   readonly treeRows = computed(() => {
     const t = this.tree();
-    if (!t) return [];
+    const root = this.mergedRoot();
+    if (!t || !root) return [];
     const ex = this.treeExpand();
-    const rows: { key: string; n: ProcessNode; depth: number; rootId: string }[] = [];
-    const walk = (n: ProcessNode, depth: number, rootId: string) => {
+    const rows: { key: string; n: ProcessNode; depth: number; rootId: string; agentRoot: boolean }[] = [];
+    const walk = (n: ProcessNode, depth: number, rootId: string, agentRoot: boolean) => {
       const key = rootId + ":" + n.pid;
-      rows.push({ key, n, depth, rootId });
-      if ((ex[key] ?? true) && n.children.length) for (const c of n.children) walk(c, depth + 1, rootId);
+      rows.push({ key, n, depth, rootId, agentRoot });
+      if ((ex[key] ?? true) && n.children.length) for (const c of n.children) walk(c, depth + 1, rootId, false);
     };
-    for (const r of t.roots) walk(r.node, 0, r.id);
+    // Absent expand state = open, so the root ships expanded by default.
+    rows.push({ key: MERGED_ROOT_KEY, n: root, depth: 0, rootId: "app", agentRoot: false });
+    if (ex[MERGED_ROOT_KEY] ?? true) {
+      // Walk the ORIGINAL roots (same nodes as root.children) so expand keys
+      // stay `rootId:pid` — stable across polls and across the old tab's seeds.
+      for (const r of t.roots) walk(r.node, 1, r.id, r.id !== "app");
+    }
     return rows;
   });
   readonly treeProcCount = computed(() =>

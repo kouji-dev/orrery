@@ -1,6 +1,7 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 import { CostEstimate, CostRate } from "../models";
 import { SettingsStore } from "../settings/settings.store";
+import { COST_FEATURES_ENABLED } from "./cost-flags";
 
 /** Which git operation an AI variant would perform (drives the heuristic). */
 export type CostOpKind =
@@ -136,16 +137,19 @@ export class EstimateService {
 
   /** Would running this estimate exceed the remaining budget? (cap guard) */
   overCap(est: CostEstimate): boolean {
+    if (!COST_FEATURES_ENABLED) return false;
     return est.usdHigh > this.remainingUsd();
   }
   /** Does this estimate need a confirming second click? (confirm-above guard) */
   needsConfirm(est: CostEstimate): boolean {
+    if (!COST_FEATURES_ENABLED) return false;
     const t = this.confirmAboveUsd();
     return t > 0 && est.usdHigh > t;
   }
   /** Record a press against the session budget (estimate high bound — the
    *  honest stand-in until actuals land). */
   recordSpend(est: CostEstimate): void {
+    if (!COST_FEATURES_ENABLED) return;
     this.sessionSpentUsd.update((v) => v + est.usdHigh);
   }
 }

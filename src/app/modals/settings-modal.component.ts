@@ -13,6 +13,7 @@ import {
 import { AGENT_TOOLS } from "../data";
 import { BRIDGE } from "../data-source/bridge";
 import { AutoApprovePolicy, CostRate, SettingsEvents } from "../models";
+import { COST_FEATURES_ENABLED } from "../cost/cost-flags";
 import { DEFAULT_RATES } from "../cost/estimate.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { DiagnosticsService } from "../shared/diagnostics.service";
@@ -525,7 +526,9 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                   </app-set-row>
                 </div>
 
-                <!-- ── AI cost & budget (A4.3 / A4.4) ─────────────────────── -->
+                <!-- ── AI cost & budget (A4.3 / A4.4) — hidden while the cost
+                     kill switch is off ─────────────────────────────────────── -->
+                @if (costEnabled) {
                 <div class="set-grp">
                   <div class="set-grp-h">AI cost &amp; budget<span class="ln"></span></div>
                   <app-set-row [dirty]="s.budgetCapUsd !== D.budgetCapUsd" (reset)="store.set({ budgetCapUsd: D.budgetCapUsd })">
@@ -545,6 +548,7 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                     </div>
                   </app-set-row>
                 </div>
+                }
 
                 <div class="set-grp">
                   <div class="set-grp-h">Default agent<span class="ln"></span></div>
@@ -609,8 +613,9 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                   </app-set-row>
 
                   <!-- per-model AI rates, scoped to the SELECTED agent's model
-                       list (common budget caps stay in the group above) -->
-                  @for (m of toolRateModels(); track m) {
+                       list (common budget caps stay in the group above) —
+                       hidden while the cost kill switch is off -->
+                  @for (m of costEnabled ? toolRateModels() : []; track m) {
                     <app-set-row [dirty]="rateDirty(m)" (reset)="resetRate(m)">
                       <ng-container row-label>
                         <span style="display:inline-flex;align-items:center;gap:var(--sp-3)">
@@ -944,6 +949,8 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   ],
 })
 export class SettingsModalComponent {
+  /** Cost kill switch — hides the budget group + per-model rate rows. */
+  readonly costEnabled = COST_FEATURES_ENABLED;
   readonly store = inject(SettingsStore);
   readonly runtime = inject(AgentRuntimeService);
   readonly version = inject(VersionService);

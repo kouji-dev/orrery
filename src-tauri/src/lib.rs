@@ -214,9 +214,13 @@ pub fn run() {
             // ccusage: the one-shot `system_cost` command just peeks the shared
             // CostCache (A1.8 — no second node process, no thread parked behind
             // the loop's in-flight startup run).
+            // The cache stays managed even with the kill switch off — the
+            // registered `system_cost` command takes State<CostCache> and an
+            // unmanaged state would panic the invoke; cold peek returns None.
             let cost_cache = cost::CostCache::new();
             app.manage(cost_cache.clone());
             let cost_app = app.handle().clone();
+            if cost::COST_FEATURES_ENABLED {
             std::thread::spawn(move || {
                 loop {
                     // timed: measured ~2.2s per cycle (npx resolution + node +
@@ -232,6 +236,9 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_secs(300));
                 }
             });
+            } else {
+                let _ = cost_app; // loop consumer — unused while the switch is off
+            }
 
             Ok(())
         })

@@ -160,7 +160,7 @@ import { UiStore } from "../ui/ui.store";
             [label]="'Merge ' + baseBranch() + ' → ' + ag.branch.replace('agent/', '')"
             icon="branch"
             kind="primary"
-            [title]="'Merge ' + baseBranch() + ' into ' + ag.branch + ' · native, 0 tokens'"
+            [title]="'Merge ' + baseBranch() + ' into ' + ag.branch + ' · native'"
             [estimateInput]="mergeEstimate()"
             [variants]="[{ id: 'merge', label: 'Merge with AI (agent resolves conflicts)', icon: 'sparkles' }]"
             (native)="agentActions.mergeAgent(ag.id, baseBranch())"

@@ -1,6 +1,6 @@
 import { Injectable, signal } from "@angular/core";
 
-export type DevPanelTab = "perf" | "agents" | "projects" | "resources" | "processes" | "emits";
+export type DevPanelTab = "perf" | "agents" | "projects" | "resources" | "emits";
 
 /**
  * Visibility + active tab of the floating dev console, lifted out of the
