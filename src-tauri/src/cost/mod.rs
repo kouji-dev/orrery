@@ -10,6 +10,12 @@ use serde::Serialize;
 
 pub mod commands;
 
+/// Kill switch for the cost feature (twin of `COST_FEATURES_ENABLED` in
+/// `src/app/cost/cost-flags.ts`). When off, the ccusage push loop is never
+/// spawned — `system://cost` never fires, the one-shot `system_cost` peeks an
+/// always-cold cache and returns `None`, and the UI readout stays hidden.
+pub const COST_FEATURES_ENABLED: bool = false;
+
 /// Serve a cached total this long before shelling out again. Cost moves slowly
 /// and one ccusage run costs seconds (cmd -> npx -> node + full transcript
 /// scan), so the push loop's 5-minute cadence is also the freshness bound.

@@ -15,8 +15,8 @@ import {
 } from "../terminal-output-scheduler";
 import { MetricsStore } from "../metrics/metrics.store";
 import { TelemetryStore } from "../metrics/telemetry.store";
-import { BRIDGE } from "../data-source/bridge";
-import { SystemMetrics } from "../models";
+import { BRIDGE, Commands } from "../data-source/bridge";
+import { ProcessNode, ProcessTreeSnapshot, SystemMetrics } from "../models";
 import { DevPanelComponent } from "./dev-panel.component";
 
 function row(p: Partial<PerfRow> & { cmd: string }): PerfRow {
@@ -62,7 +62,7 @@ class ToolBadgeStub {}
 /** Real TestBed render (not a bare `new`): this is what catches a non-callable
  *  `open` — the template invokes `open()` and the constructor needs a proper
  *  injection context for the stats-gate effect. */
-function setup(rows: PerfRow[] = [], metrics: SystemMetrics | null = null): ComponentFixture<DevPanelComponent> {
+function setup(rows: PerfRow[] = [], metrics: SystemMetrics | null = null, tree: ProcessTreeSnapshot | null = null): ComponentFixture<DevPanelComponent> {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -70,9 +70,16 @@ function setup(rows: PerfRow[] = [], metrics: SystemMetrics | null = null): Comp
       { provide: AgentRuntimeService, useValue: { agents: signal([]), elapsedFor: () => 0 } },
       { provide: ProjectsStore, useValue: { all: signal([]) } },
       { provide: MetricsStore, useValue: { metrics: signal(metrics) } },
-      // Processes/Emits tabs poll through the bridge only while visible; specs
-      // never open those tabs, so a rejecting stub is enough.
-      { provide: BRIDGE, useValue: { invoke: () => Promise.reject(new Error("stub")), on: () => Promise.resolve(() => {}) } },
+      // Resources/Emits tabs poll through the bridge only while visible; the
+      // stub serves the given tree snapshot and rejects everything else.
+      {
+        provide: BRIDGE,
+        useValue: {
+          invoke: (cmd: string) =>
+            cmd === Commands.ProcessTree && tree ? Promise.resolve(tree) : Promise.reject(new Error("stub")),
+          on: () => Promise.resolve(() => {}),
+        },
+      },
       { provide: TelemetryStore, useValue: { traceActive: signal(false), traceReason: signal(null), setTrace() {} } },
     ],
   });
@@ -132,7 +139,7 @@ describe("DevPanelComponent open gate", () => {
   });
 });
 
-describe("DevPanelComponent resources tab", () => {
+describe("DevPanelComponent resources tab (merged tree)", () => {
   const SNAP: SystemMetrics = {
     totalCpu: 12.4,
     totalMemBytes: 3 * 2 ** 30,
@@ -144,42 +151,89 @@ describe("DevPanelComponent resources tab", () => {
     ],
   };
 
-  it("renders gauges and one row per process subtree", () => {
-    const fixture = setup([], SNAP);
+  const pn = (p: Partial<ProcessNode> & { pid: number; name: string }): ProcessNode => ({
+    note: null,
+    cpu: 0,
+    privBytes: 0,
+    rssBytes: 0,
+    subtreeCpu: p.cpu ?? 0,
+    subtreePrivBytes: p.privBytes ?? 0,
+    subtreeProcs: 1,
+    detached: false,
+    excluded: false,
+    children: [],
+    ...p,
+  });
+  const TREE: ProcessTreeSnapshot = {
+    roots: [
+      {
+        id: "app",
+        label: "Orrery",
+        node: pn({
+          pid: 10,
+          name: "orrery.exe",
+          cpu: 2,
+          privBytes: 100 * 2 ** 20,
+          subtreeCpu: 4.2,
+          subtreePrivBytes: 800 * 2 ** 20,
+          subtreeProcs: 2,
+          children: [pn({ pid: 11, name: "msedgewebview2.exe", cpu: 2.2, privBytes: 700 * 2 ** 20 })],
+        }),
+      },
+      { id: "ag-1", label: "refactor-auth", node: pn({ pid: 20, name: "node.exe", cpu: 8.2, privBytes: 2200 * 2 ** 20 }) },
+    ],
+    tsMs: Date.now(),
+  };
+
+  async function openResources(fixture: ComponentFixture<DevPanelComponent>): Promise<HTMLElement> {
     const el: HTMLElement = fixture.nativeElement;
     (el.querySelector(".dvc-fab") as HTMLButtonElement).click();
     fixture.detectChanges();
     (Array.from(el.querySelectorAll(".dvc-tab")).find((b) => b.textContent?.includes("Resources")) as HTMLButtonElement).click();
     fixture.detectChanges();
+    await new Promise((r) => setTimeout(r)); // drain the pollTree invoke
+    fixture.detectChanges();
+    return el;
+  }
+
+  it("renders gauges plus the tree rooted at an expanded Orrery App row summing everything", async () => {
+    const fixture = setup([], SNAP, TREE);
+    const el = await openResources(fixture);
 
     expect(el.querySelectorAll(".dvc-gauge").length).toBe(2);
     expect(el.textContent).toContain("12.4");
     expect(el.textContent).toContain("of 10 cores");
+
+    // no RSS column in the merged table
+    const heads = Array.from(el.querySelectorAll(".dvc-tbl thead th")).map((h) => h.textContent?.trim());
+    expect(heads).toEqual(["Process", "PID", "CPU", "Private", "Subtree"]);
+
+    // root first + expanded by default: root, orrery.exe, webview child, agent
     const rows = el.querySelectorAll(".dvc-tbl tbody tr");
-    expect(rows.length).toBe(2);
-    expect(el.textContent).toContain("Orrery");
-    expect(el.textContent).toContain("refactor-auth");
+    expect(rows.length).toBe(4);
+    expect(rows[0].textContent).toContain("Orrery App");
+    expect(rows[0].textContent).toContain("12.4%"); // 4.2 + 8.2 recursive cpu total
+    expect(rows[0].textContent).toContain("2.9 GB"); // 800MB + 2200MB private total
+    expect(rows[1].textContent).toContain("orrery.exe");
+    expect(rows[2].textContent).toContain("msedgewebview2.exe");
+    expect(rows[3].textContent).toContain("node.exe");
   });
 
-  it("shows the empty state before the first metrics push", () => {
-    const fixture = setup([], null);
-    const el: HTMLElement = fixture.nativeElement;
-    (el.querySelector(".dvc-fab") as HTMLButtonElement).click();
+  it("collapsing the Orrery App root hides every process row beneath it", async () => {
+    const fixture = setup([], SNAP, TREE);
+    const el = await openResources(fixture);
+    (el.querySelector(".dvc-tbl tbody .dvc-twbtn") as HTMLButtonElement).click();
     fixture.detectChanges();
-    (Array.from(el.querySelectorAll(".dvc-tab")).find((b) => b.textContent?.includes("Resources")) as HTMLButtonElement).click();
-    fixture.detectChanges();
+    const rows = el.querySelectorAll(".dvc-tbl tbody tr");
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain("Orrery App");
+  });
+
+  it("shows the sampling empty state before the first tree snapshot", async () => {
+    const fixture = setup([], null, null); // bridge rejects → no tree
+    const el = await openResources(fixture);
     expect(el.querySelector(".dvc-empty")).not.toBeNull();
-    expect(el.textContent).toContain("No metrics yet");
-  });
-
-  it("color-codes machine-relative subtree cpu/mem bands", () => {
-    const cmp = setup().componentInstance;
-    expect(cmp.cpuC(4)).toBe("g");
-    expect(cmp.cpuC(15)).toBe("a");
-    expect(cmp.cpuC(35)).toBe("r");
-    expect(cmp.memC(100 * 2 ** 20)).toBe("g");
-    expect(cmp.memC(800 * 2 ** 20)).toBe("a");
-    expect(cmp.memC(2 * 2 ** 30)).toBe("r");
+    expect(el.textContent).toContain("No process tree yet");
   });
 });
 

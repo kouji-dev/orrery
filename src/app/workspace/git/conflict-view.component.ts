@@ -170,7 +170,7 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
                   label="Auto-resolve"
                   icon="merge"
                   [small]="true"
-                  title="Accept both sides for every conflict · native, 0 tokens"
+                  title="Accept both sides for every conflict · native"
                   [estimateInput]="fileEstimateInput()"
                   [variants]="aiVariants"
                   (native)="acceptAll('both')"

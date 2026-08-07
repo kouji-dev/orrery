@@ -84,17 +84,18 @@ test("diff header carries agent-level actions: commit (AI), rebase (AI), native 
   const buttons = head.locator("app-git-action-button");
   await expect(buttons).toHaveCount(3);
 
-  // commit + rebase are aiOnly -> estimate inline on the button (A4.1)
+  // commit + rebase are aiOnly — no inline estimate while the cost switch is off
   const commit = buttons.filter({ hasText: "Commit" }).first();
-  await expect(commit.locator(".est-inline")).toContainText("tok");
+  await expect(commit.locator(".est-inline")).toHaveCount(0);
   const rebase = buttons.filter({ hasText: "Rebase onto" }).first();
-  await expect(rebase.locator(".est-inline")).toContainText("$");
+  await expect(rebase.locator(".est-inline")).toHaveCount(0);
 
-  // merge: primary press is native (free); AI variant discloses its price
+  // merge: primary press is native; the AI variant row renders without a price
   const merge = buttons.filter({ hasText: "Merge" }).first();
   await merge.locator(".caret").click();
   const row = merge.locator(".menu .btn.row", { hasText: "Merge with AI" });
-  await expect(row.locator(".row-est")).toContainText("tok");
+  await expect(row).toBeVisible();
+  await expect(row.locator(".row-est")).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   // send review still lives beside them

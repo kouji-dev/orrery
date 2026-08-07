@@ -129,10 +129,13 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
         style="display:flex;align-items:center;gap:var(--sp-3);border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:var(--fs-xs);padding:0;color:var(--ink-3)"
       >
         <app-icon name="cpu" size="sm" [px]="11" [color]="'var(--accent)'" />
-        <!-- A0.6: the split is honest — users blame the IDE for the agents'
-             memory; the process tree in the dev console is its drill-down -->
-        <span class="tnum">CPU {{ cpuPct() }}% · Orrery {{ orreryMem() }}@if (agentsMemBytes() > 0) {<span style="color:var(--ink-4)"> · </span>agents {{ agentsMem() }}}</span>
-        <!-- mini bar reflecting total cpu (clamped 0–100) -->
+        <!-- A0.6 agents-only readout: what the footer answers is "what are the
+             AGENTS costing me" — Orrery's own footprint (and the full recursive
+             tree) lives in the Resources tab this deep-links to -->
+        @if (hasAgentProcs()) {
+          <span class="tnum">agents {{ agentsCpu() }}% · {{ agentsMem() }}</span>
+        }
+        <!-- mini bar reflecting agents cpu (clamped 0–100) -->
         <span
           style="position:relative;width:30px;height:var(--sp-2);border-radius:2px;background:var(--panel-2);overflow:hidden"
         >
@@ -221,23 +224,20 @@ export class StatusBarComponent {
     () => this.runtime.agents().filter((a) => a.status === "blocked").length,
   );
 
-  // ---- gauge readouts ----
-  // total cpu% used by orrery + agents (machine-relative), to one decimal
-  readonly cpuPct = computed(
-    () => Math.round((this.metrics.metrics()?.totalCpu ?? 0) * 10) / 10,
+  // ---- gauge readout: AGENTS only (fed from the same subtree rollups the
+  // Resources tree drills into — every non-"app" row is an agent subtree) ----
+  private readonly agentProcs = computed(() =>
+    (this.metrics.metrics()?.procs ?? []).filter((p) => p.id !== "app"),
   );
-  readonly cpuBar = computed(() => Math.min(100, Math.max(0, this.cpuPct())));
-  // ---- A0.6 memory split: our subtree vs the agents' (fed from the same
-  // subtree rollups the process tree drills into; "app" is Orrery + WebView2) ----
-  readonly orreryMemBytes = computed(
-    () => this.metrics.metrics()?.procs.find((p) => p.id === "app")?.memBytes ?? 0,
+  readonly hasAgentProcs = computed(() => this.agentProcs().length > 0);
+  // machine-relative %, to one decimal
+  readonly agentsCpu = computed(
+    () => Math.round(this.agentProcs().reduce((a, p) => a + p.cpu, 0) * 10) / 10,
   );
+  readonly cpuBar = computed(() => Math.min(100, Math.max(0, this.agentsCpu())));
   readonly agentsMemBytes = computed(() =>
-    (this.metrics.metrics()?.procs ?? [])
-      .filter((p) => p.id !== "app")
-      .reduce((a, p) => a + p.memBytes, 0),
+    this.agentProcs().reduce((a, p) => a + p.memBytes, 0),
   );
-  readonly orreryMem = computed(() => this.fmtMem(this.orreryMemBytes()));
   readonly agentsMem = computed(() => this.fmtMem(this.agentsMemBytes()));
 
   /** Human-readable bytes: B / KB / MB / GB, one decimal above KB. */

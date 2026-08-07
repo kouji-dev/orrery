@@ -1,13 +1,12 @@
 import { expect, Page, test } from "@playwright/test";
 
 /**
- * E2E for the A4.1 dual-path git controls: every AI variant carries its
- * token/$ estimate ON the row (never hover-only), the dropdown discloses
- * "AI path · spends tokens", and aiOnly controls (rebase, until A3.4 lands
- * a native path) show the estimate inline on the button itself.
+ * E2E for the A4.1 dual-path git controls with the cost kill switch OFF
+ * (src/app/cost/cost-flags.ts): the split buttons and AI variants keep
+ * working, but NO token/$ chrome renders anywhere — no row estimates, no
+ * inline estimate on aiOnly controls, no "spends tokens" phrasing.
  *
- * Backend-free: estimates come from the frontend EstimateService heuristic +
- * the default rate table, so they render without a Tauri backend.
+ * Backend-free: the buttons render without a Tauri backend.
  */
 
 const seedAgent = (id: string, name: string) => `(() => {
@@ -40,32 +39,31 @@ test("git tab renders dual-path split buttons for commit / push / rebase / merge
   await expect(page.getByRole("button", { name: /^Push to origin/ })).toBeDisabled();
 });
 
-test("merge dropdown discloses the AI price on the row before it can run", async ({ page }) => {
+test("merge dropdown offers the AI variant with NO cost chrome (kill switch off)", async ({ page }) => {
   await openGitTab(page, "e2e-g2", "e2e-merge");
   const merge = page.locator("app-git-action-button", { hasText: "Merge" });
 
   await merge.locator(".caret").click();
   const menu = merge.locator(".menu");
   await expect(menu).toBeVisible();
-  await expect(menu).toContainText("AI path · spends tokens");
+  await expect(menu).toContainText("AI path");
+  await expect(menu).not.toContainText("spends tokens");
 
-  // A4.1: the estimate is ON the row — tokens and dollars visible without hover
+  // the variant row still works, but carries no token/$ estimate
   const row = menu.locator(".btn.row", { hasText: "Merge with AI" });
   await expect(row).toBeVisible();
-  await expect(row.locator(".row-est")).toContainText("tok");
-  await expect(row.locator(".row-est")).toContainText("$");
+  await expect(row.locator(".row-est")).toHaveCount(0);
 
-  await expect(menu).toContainText("native path is instant, deterministic and costs 0 tokens");
+  await expect(menu).toContainText("native path is instant and deterministic");
+  await expect(menu).not.toContainText("tokens");
 
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
 });
 
-test("rebase is aiOnly until A3.4: estimate shown inline on the primary button", async ({ page }) => {
+test("rebase is aiOnly until A3.4: usable, with no inline estimate while costs are off", async ({ page }) => {
   await openGitTab(page, "e2e-g3", "e2e-rebase");
   const rebase = page.locator("app-git-action-button", { hasText: "Rebase onto" });
-  const inline = rebase.locator(".est-inline");
-  await expect(inline).toBeVisible();
-  await expect(inline).toContainText("tok");
-  await expect(inline).toContainText("$");
+  await expect(rebase.locator(".btn.main")).toBeVisible();
+  await expect(rebase.locator(".est-inline")).toHaveCount(0);
 });
