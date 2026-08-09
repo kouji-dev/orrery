@@ -34,6 +34,9 @@ pub struct SearchRequest {
     pub agent_id: Option<Uuid>,
     pub project_id: Option<Uuid>,
     pub max_results: Option<usize>,
+    /// Replace mode (B3.2): matches gain a post-replacement `preview` and a
+    /// staleness stamp when set. `$1`-style capture interpolation applies.
+    pub replacement: Option<String>,
 }
 
 fn resolve_roots(
@@ -116,6 +119,19 @@ pub fn search_start<R: Runtime>(
         .map_err(AppError::Other)?;
         let roots = resolve_roots(&req, &agents, &projects)?;
         let max = req.max_results.unwrap_or(super::DEFAULT_MAX_RESULTS);
+        let replacer = match &req.replacement {
+            Some(rep) => Some((
+                super::build_replacer(
+                    &req.query,
+                    req.case_sensitive,
+                    req.whole_word,
+                    req.regex,
+                )
+                .map_err(AppError::Other)?,
+                rep.clone(),
+            )),
+            None => None,
+        };
         let (id, cancel) = search.register();
         // Registered-state handle for the cleanup at thread end. SearchService
         // is behind Tauri managed state, so grab what we need by value.
@@ -124,7 +140,7 @@ pub fn search_start<R: Runtime>(
             .name(format!("search-{id}"))
             .spawn(move || {
                 crate::perf::timed("search_run", || {
-                    super::run(app2.clone(), id, cancel, roots, matcher, max)
+                    super::run(app2.clone(), id, cancel, roots, matcher, max, replacer)
                 });
                 if let Some(svc) = app2.try_state::<SearchService>() {
                     svc.finish(id);
@@ -142,6 +158,137 @@ pub fn search_cancel(search: State<'_, SearchService>, id: Uuid) -> AppResult<()
         search.cancel(id);
         Ok(())
     })
+}
+
+// ---- B3.2 replace apply ----
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceFile {
+    /// Root: the agent's worktree, or the project checkout when None.
+    pub agent_id: Option<Uuid>,
+    /// Root-relative path (forward-slash), as reported by the scan.
+    pub path: String,
+    /// Staleness stamp captured by the scan.
+    pub mtime: u64,
+    pub size: u64,
+    /// Selected 1-based lines to replace on.
+    pub lines: Vec<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceApplyRequest {
+    pub query: String,
+    #[serde(default)]
+    pub case_sensitive: bool,
+    #[serde(default)]
+    pub whole_word: bool,
+    #[serde(default)]
+    pub regex: bool,
+    pub replacement: String,
+    pub project_id: Option<Uuid>,
+    pub files: Vec<ReplaceFile>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileReplaceResult {
+    pub path: String,
+    /// Lines actually changed (0 = selected lines no longer matched).
+    pub replaced: usize,
+    /// File changed since the scan — skipped, re-run the search.
+    pub stale: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Apply a replace to the selected matches, per-file atomically (temp+rename),
+/// skipping files whose stamp changed since the scan. Blocking pool.
+#[tauri::command]
+pub async fn search_replace_apply(
+    agents: State<'_, AgentService>,
+    projects: State<'_, ProjectService>,
+    req: ReplaceApplyRequest,
+) -> AppResult<Vec<FileReplaceResult>> {
+    let agents = agents.inner().clone();
+    let projects = projects.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("search_replace_apply", || {
+            let re = super::build_replacer(
+                &req.query,
+                req.case_sensitive,
+                req.whole_word,
+                req.regex,
+            )
+            .map_err(AppError::Other)?;
+            let project_root: Option<PathBuf> = match req.project_id {
+                Some(pid) => Some(PathBuf::from(projects.path_of(pid)?)),
+                None => None,
+            };
+            let mut out = Vec::with_capacity(req.files.len());
+            for f in &req.files {
+                let root = match f.agent_id {
+                    Some(aid) => match agents.get(aid) {
+                        Ok(a) => PathBuf::from(a.worktree),
+                        Err(e) => {
+                            out.push(FileReplaceResult {
+                                path: f.path.clone(),
+                                replaced: 0,
+                                stale: false,
+                                error: Some(format!("agent: {e:?}")),
+                            });
+                            continue;
+                        }
+                    },
+                    None => match &project_root {
+                        Some(p) => p.clone(),
+                        None => {
+                            out.push(FileReplaceResult {
+                                path: f.path.clone(),
+                                replaced: 0,
+                                stale: false,
+                                error: Some("no projectId for a project-root match".into()),
+                            });
+                            continue;
+                        }
+                    },
+                };
+                let lines: std::collections::HashSet<u64> = f.lines.iter().copied().collect();
+                match super::apply_replace(
+                    &root,
+                    &f.path,
+                    &re,
+                    &req.replacement,
+                    f.mtime,
+                    f.size,
+                    &lines,
+                ) {
+                    Ok(n) => out.push(FileReplaceResult {
+                        path: f.path.clone(),
+                        replaced: n,
+                        stale: false,
+                        error: None,
+                    }),
+                    Err(super::ReplaceError::Stale) => out.push(FileReplaceResult {
+                        path: f.path.clone(),
+                        replaced: 0,
+                        stale: true,
+                        error: None,
+                    }),
+                    Err(super::ReplaceError::Io(e)) => out.push(FileReplaceResult {
+                        path: f.path.clone(),
+                        replaced: 0,
+                        stale: false,
+                        error: Some(e),
+                    }),
+                }
+            }
+            Ok(out)
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
 /// All (gitignore-filtered) file paths in an agent's worktree — the Files

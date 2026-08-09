@@ -47,7 +47,9 @@ import { fileName } from "../utils";
       </div>
     }
 
-    <!-- commit rows -->
+    <!-- commit rows — capped + scrollable on their own, so the section header
+         above (and Load more below) stay put however long the branch gets -->
+    <div class="scroll-y ach-list">
     @for (c of commits(); track c.sha; let i = $index) {
       @let isHead = i === 0;
       @let expanded = isExpanded(c.sha);
@@ -141,6 +143,7 @@ import { fileName } from "../utils";
         }
       </div>
     }
+    </div>
 
     <!-- load-more / empty states -->
     @if (commitsEntry()?.status === 'loading' && !commits().length) {
@@ -160,6 +163,8 @@ import { fileName } from "../utils";
   styles: [`
     .commit-row-inner:hover { background: var(--panel-2); border-radius: var(--r-sm); }
     .cf-row:hover { background: var(--panel-2); }
+    /* ~7 two-line commit rows, then scroll — token-derived for density */
+    .ach-list { max-height: calc(var(--sp-9) * 14); overflow-y: auto; }
   `],
 })
 export class AgentCommitHistoryComponent {

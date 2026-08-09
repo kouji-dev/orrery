@@ -1,82 +1,61 @@
-import { describe, it, expect } from "vitest";
-import { Text } from "@codemirror/state";
-import { Chunk } from "@codemirror/merge";
-import { chunkStats } from "./chunk-stats";
+import { describe, expect, it } from "vitest";
 
-function doc(s: string): Text {
-  return Text.of(s.split("\n"));
-}
-function stats(oldText: string, newText: string) {
-  const a = doc(oldText);
-  const b = doc(newText);
-  return chunkStats(Chunk.build(a, b), a, b);
-}
+import { lineChangeStats, LineChangeLite } from "./chunk-stats";
 
-describe("chunkStats", () => {
-  it("single-line change → 1 hunk, 1/1", () => {
-    const s = stats("x\nold\nz", "x\nnew\nz");
-    expect(s).toMatchObject({ add: 1, del: 1, hunks: 1, hunk: "@@ -2,1 +2,1 @@" });
+// Monaco ILineChange convention: END 0 = "no lines on this side", START then
+// names the line BEFORE the change point.
+const change = (
+  oStart: number,
+  oEnd: number,
+  mStart: number,
+  mEnd: number,
+): LineChangeLite => ({
+  originalStartLineNumber: oStart,
+  originalEndLineNumber: oEnd,
+  modifiedStartLineNumber: mStart,
+  modifiedEndLineNumber: mEnd,
+});
+
+describe("lineChangeStats", () => {
+  it("counts a single-line modification as +1 −1", () => {
+    const s = lineChangeStats([change(2, 2, 2, 2)], "a\nb\nc", "a\nB\nc");
+    expect(s).toEqual({ add: 1, del: 1, hunks: 1, hunk: "@@ -2,1 +2,1 @@" });
   });
 
-  it("pure insertion → add only", () => {
-    const s = stats("a\nc", "a\nb\nc");
-    expect(s.add).toBe(1);
-    expect(s.del).toBe(0);
-    expect(s.hunks).toBe(1);
+  it("counts pure insertions (original side empty on the change)", () => {
+    const s = lineChangeStats([change(1, 0, 2, 3)], "a", "a\nx\ny");
+    expect(s).toEqual({ add: 2, del: 0, hunks: 1, hunk: "@@ -1,0 +2,2 @@" });
   });
 
-  it("pure deletion → del only", () => {
-    const s = stats("a\nb\nc", "a\nc");
-    expect(s.add).toBe(0);
-    expect(s.del).toBe(1);
+  it("counts pure deletions (modified side empty on the change)", () => {
+    const s = lineChangeStats([change(2, 3, 1, 0)], "a\nx\ny", "a");
+    expect(s).toEqual({ add: 0, del: 2, hunks: 1, hunk: "@@ -2,2 +1,0 @@" });
   });
 
-  it("added file (empty old) → +N, no −", () => {
-    expect(stats("", "a\nb")).toMatchObject({ add: 2, del: 0, hunks: 1, hunk: "@@ -0,0 +1,2 @@" });
-  });
-
-  it("deleted file (empty new) → −N, no +", () => {
-    expect(stats("a\nb", "")).toMatchObject({ add: 0, del: 2, hunks: 1, hunk: "@@ -1,2 +0,0 @@" });
-  });
-
-  it("both empty → zeros", () => {
-    expect(stats("", "")).toMatchObject({ add: 0, del: 0, hunks: 0 });
-  });
-
-  it("identical → zeros, no hunks", () => {
-    expect(stats("a\nb\nc", "a\nb\nc")).toMatchObject({ add: 0, del: 0, hunks: 0 });
-  });
-
-  it("two separated edits → 2 hunks", () => {
-    const oldT = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"].join("\n");
-    const newT = ["a", "B", "c", "d", "e", "f", "g", "h", "i", "j", "K", "l"].join("\n");
-    const s = stats(oldT, newT);
+  it("sums multiple hunks and labels the first", () => {
+    const s = lineChangeStats(
+      [change(1, 1, 1, 2), change(5, 6, 7, 7)],
+      "a\nb\nc\nd\ne\nf",
+      "A\nA2\nb\nc\nd\nE\n",
+    );
+    expect(s.add).toBe(3);
+    expect(s.del).toBe(3);
     expect(s.hunks).toBe(2);
-    expect(s.add).toBe(2);
-    expect(s.del).toBe(2);
+    expect(s.hunk).toBe("@@ -1,1 +1,2 @@");
   });
 
-  it("block moved down stays aligned — no giant misplaced hunks (regression)", () => {
-    // The old naive LCS cross-matched blank/trivial lines across distant
-    // regions, painting content 'deleted at top, re-added at bottom'.
-    const block = ["function f() {", "  return 1;", "}"];
-    const oldT = [...block, "", "const x = 1;", "const y = 2;"].join("\n");
-    const newT = ["const x = 1;", "const y = 2;", "", ...block].join("\n");
-    const s = stats(oldT, newT);
-    // a move shows as one delete region + one insert region, NOT a rewrite of
-    // every line: changed lines must stay well under the full file size
-    expect(s.add + s.del).toBeLessThanOrEqual(2 * block.length + 2);
+  it("added file: exact +N with no change walk", () => {
+    const s = lineChangeStats([], "", "one\ntwo\nthree");
+    expect(s).toEqual({ add: 3, del: 0, hunks: 1, hunk: "@@ -0,0 +1,3 @@" });
   });
 
-  it("10k-line file with one edit → exact 1/1 fast", () => {
-    const lines = Array.from({ length: 10_000 }, (_, i) => `line ${i};`);
-    const oldT = lines.join("\n");
-    lines[5000] = "line 5000 CHANGED;";
-    const newT = lines.join("\n");
-    const t0 = performance.now();
-    const s = stats(oldT, newT);
-    const elapsed = performance.now() - t0;
-    expect(s).toMatchObject({ add: 1, del: 1, hunks: 1 });
-    expect(elapsed).toBeLessThan(1000); // the old LCS DP froze / OOMed here
+  it("deleted file: exact −N with no change walk", () => {
+    const s = lineChangeStats([], "one\ntwo", "");
+    expect(s).toEqual({ add: 0, del: 2, hunks: 1, hunk: "@@ -1,2 +0,0 @@" });
+  });
+
+  it("both sides empty / no changes", () => {
+    expect(lineChangeStats([], "", "")).toEqual({ add: 0, del: 0, hunks: 0, hunk: "@@ -0,0 +0,0 @@" });
+    expect(lineChangeStats([], "same", "same")).toEqual({ add: 0, del: 0, hunks: 0, hunk: "@@ -0,0 +0,0 @@" });
   });
 });

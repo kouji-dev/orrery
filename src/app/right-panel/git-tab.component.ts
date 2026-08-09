@@ -79,6 +79,9 @@ import { UiStore } from "../ui/ui.store";
           @if (changesLoading()) { <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4)">· scanning…</span> }
         </div>
 
+        <!-- capped + scrollable: however long the list, the commit input and
+             the git action buttons below stay on screen -->
+        <div class="scroll-y gt-changes">
         @if (changesLoading()) {
           <div style="padding:var(--sp-2) var(--sp-6) var(--sp-4);font-size:var(--fs-xs);color:var(--ink-4)">scanning worktree…</div>
         } @else if (changes().length) {
@@ -106,6 +109,7 @@ import { UiStore } from "../ui/ui.store";
         } @else {
           <div style="padding:var(--sp-2) var(--sp-6) var(--sp-4);font-size:var(--fs-xs);color:var(--ink-4)">clean — no working changes</div>
         }
+        </div>
 
         <!-- actions -->
         <div style="padding:var(--sp-6);display:grid;gap:var(--sp-3)">
@@ -182,6 +186,16 @@ import { UiStore } from "../ui/ui.store";
       </div>
     }
   `,
+  styles: [
+    `
+      /* ~8 file rows, then scroll — token-derived so density scales it */
+      .gt-changes {
+        max-height: calc(var(--sp-9) * 8);
+        overflow-y: auto;
+        flex: none;
+      }
+    `,
+  ],
 })
 export class GitTabComponent {
   readonly projects = inject(ProjectActionsService);

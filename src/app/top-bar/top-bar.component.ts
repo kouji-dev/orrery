@@ -20,6 +20,7 @@ import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { treeAgentIds } from "../workspace/pane-model";
+import { TabCloseGuardService } from "../workspace/tab-close-guard.service";
 import { LogoComponent } from "./logo.component";
 import { NotificationCenterComponent } from "./notification-center.component";
 import { WindowControlsComponent } from "./window-controls.component";
@@ -191,10 +192,78 @@ import { TicketsStore } from "../stores/tickets.store";
         <app-window-controls />
       </div>
     </header>
+
+    <!-- unsaved-changes guard for closing a whole workspace tab -->
+    @if (closeGuard.pending(); as p) {
+      <div class="tcg-scrim" (mousedown)="closeGuard.cancel()">
+        <div class="tcg-card rise" (mousedown)="$event.stopPropagation()">
+          <div class="tcg-title">Unsaved changes</div>
+          @for (f of p.files.slice(0, 6); track f.agentId + ':' + f.path) {
+            <div class="tcg-path">{{ f.path }}</div>
+          }
+          @if (p.files.length > 6) {
+            <div class="tcg-path">…and {{ p.files.length - 6 }} more</div>
+          }
+          <div class="tcg-note">Closing this tab discards edits that were never saved.</div>
+          <div class="tcg-actions">
+            <button class="btn ghost-hair" (click)="closeGuard.cancel()">Cancel</button>
+            <span style="margin-left:auto"></span>
+            <button class="btn ghost-hair tcg-danger" (click)="closeGuard.discardAndClose()">Discard all</button>
+            <button class="btn primary" (click)="closeGuard.saveAndClose()">Save all & close</button>
+          </div>
+        </div>
+      </div>
+    }
   `,
   styles: [
     `
       .tab-x:hover { color: var(--ink) !important; }
+      .tcg-scrim {
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: grid;
+        place-items: center;
+        background: color-mix(in oklch, var(--bg), transparent 40%);
+      }
+      .tcg-card {
+        background: var(--elev);
+        border: 1px solid var(--hair-2);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow);
+        padding: var(--sp-6);
+        min-width: 320px;
+        max-width: 460px;
+      }
+      .tcg-title {
+        color: var(--ink);
+        font-size: var(--fs-ui);
+        font-weight: 600;
+      }
+      .tcg-path {
+        margin-top: var(--sp-2);
+        font-family: var(--font-mono);
+        font-size: var(--fs-xs);
+        color: var(--ink-2);
+        overflow-wrap: anywhere;
+      }
+      .tcg-note {
+        margin-top: var(--sp-3);
+        font-size: var(--fs-xs);
+        color: var(--ink-3);
+      }
+      .tcg-actions {
+        display: flex;
+        gap: var(--sp-3);
+        margin-top: var(--sp-5);
+      }
+      .tcg-actions .btn {
+        padding: var(--sp-1) var(--sp-4);
+        font-size: var(--fs-xs);
+      }
+      .tcg-danger {
+        color: var(--code-del-ink);
+      }
       .tab-strip { scrollbar-width: none; }
       .tab-strip::-webkit-scrollbar { display: none; }
       /* pending-update dot on the settings gear (mirrors the in-modal nav dot) */
@@ -215,6 +284,7 @@ export class TopBarComponent implements AfterViewInit, OnDestroy {
   readonly agentActions = inject(AgentActionsService);
   readonly tickets = inject(TicketsStore);
   readonly commands = inject(CommandRegistryService);
+  readonly closeGuard = inject(TabCloseGuardService);
   private readonly drag = inject(DragService);
 
   /** Platform-aware chip label for the Search Everywhere button ("Shift Shift" / ⇧⇧). */
@@ -343,12 +413,12 @@ export class TopBarComponent implements AfterViewInit, OnDestroy {
     }));
     items.push({ sep: true });
     items.push({ label: "Ungroup all", icon: "columns", accent: "var(--accent)", onClick: () => this.ui.ungroupTab(tab.id) });
-    items.push({ label: "Close group", icon: "x", danger: true, onClick: () => this.ui.closeTab(tab.id) });
+    items.push({ label: "Close group", icon: "x", danger: true, onClick: () => this.closeGuard.requestClose(tab.id) });
     this.ui.openMenu(e, items);
   }
 
   closeTab(e: MouseEvent, id: string) {
     e.stopPropagation();
-    this.ui.closeTab(id);
+    this.closeGuard.requestClose(id);
   }
 }

@@ -63,6 +63,23 @@ function parseBinding(str: string): Binding | null {
   return b;
 }
 
+/** Keymap capture (B6.2): a keydown → its "Ctrl+Shift+p" binding string, in
+ *  exactly the format `matchBinding` parses. Null for pure-modifier presses
+ *  and for chords without Ctrl/Alt — a bare (or Shift-only) key would fire
+ *  while typing, so it is not a recordable binding. */
+export function bindingFromEvent(e: KeyboardEvent): string | null {
+  const key = (e.key || "").toLowerCase();
+  if (["control", "shift", "alt", "meta", ""].includes(key)) return null;
+  const primary = IS_MAC ? e.metaKey : e.ctrlKey;
+  if (!primary && !e.altKey) return null;
+  const parts: string[] = [];
+  if (primary) parts.push("Ctrl");
+  if (e.altKey) parts.push("Alt");
+  if (e.shiftKey) parts.push("Shift");
+  parts.push(key);
+  return parts.join("+");
+}
+
 /** Does a keydown event match a binding like "Ctrl+Shift+p"? ("Mod" = Cmd on
  *  macOS, Ctrl elsewhere — Windows-first today, mac-proofed for Phase 0.) */
 export function matchBinding(e: KeyboardEvent, str: string): boolean {

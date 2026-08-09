@@ -42,11 +42,13 @@ import { fmtDur } from "../utils";
       <div style="display:flex;align-items:center;gap:var(--sp-3);padding-left:var(--sp-7)">
         <app-icon name="branch" size="sm" [px]="11" color="var(--ink-4)" />
         <span style="font-size:var(--fs-xs);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
-        @if (ch().data.length > 0) {
-          <span class="tnum" style="margin-left:auto;font-size:var(--fs-xs);display:flex;gap:var(--sp-2);flex:none">
-            <span style="color:var(--code-add-ink)">+{{ totAdd() }}</span>
-            <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
-          </span>
+        @if (tot(); as t) {
+          @if (t.files > 0) {
+            <span class="tnum" style="margin-left:auto;font-size:var(--fs-xs);display:flex;gap:var(--sp-2);flex:none">
+              <span style="color:var(--code-add-ink)">+{{ t.add }}</span>
+              <span style="color:var(--code-del-ink)">−{{ t.del }}</span>
+            </span>
+          }
         }
       </div>
       @if (ag.status === 'running') {
@@ -82,9 +84,10 @@ export class AgentRowComponent {
   // derived from the shared clock — only this text re-renders on a tick, the
   // agent input (and the agents array behind it) keeps its identity
   readonly elapsed = computed(() => this.runtime.elapsedFor(this.agent().id));
-  readonly ch = computed(() => this.work.changesFor(this.agent().id));
-  readonly totAdd = computed(() => this.ch().data.reduce((s, f) => s + f.add, 0));
-  readonly totDel = computed(() => this.ch().data.reduce((s, f) => s + f.del, 0));
+  /** Sidebar counters come from the dedicated totals map (init pass + full
+   *  scans) — NOT from changesFor, whose entries are LRU-evicted and whose
+   *  counts-only background scans would show +0 −0. */
+  readonly tot = computed(() => this.work.totalsFor(this.agent().id));
   readonly needs = computed(() => {
     const ag = this.agent();
     return (

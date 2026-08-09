@@ -86,6 +86,43 @@ describe("AgentWorkStore", () => {
     expect(store.changesFor("a").data[0].path).toBe("new");
   });
 
+  // ----- sidebar counter totals (separate map, never LRU-evicted) -----
+
+  const file = (path: string, add: number, del: number): AgentFile =>
+    ({ path, add, del, state: "M" }) as AgentFile;
+
+  it("initTotals populates counters for every agent in one call; scans win over a late init", async () => {
+    store.initTotals();
+    store.initTotals(); // guarded — one invoke
+    expect(invokes.filter((i) => i.cmd === Commands.AgentChangeTotals).length).toBe(1);
+    // a full scan lands while the init call is in flight
+    store.applyScan("a", [file("x", 7, 2)], "h1", true);
+    resolvers.shift()!([
+      { id: "a", add: 1, del: 1, files: 1 }, // stale vs the scan
+      { id: "b", add: 4, del: 0, files: 2 },
+    ]);
+    await Promise.resolve();
+    expect(store.totalsFor("a")).toEqual({ add: 7, del: 2, files: 1 }); // scan won
+    expect(store.totalsFor("b")).toEqual({ add: 4, del: 0, files: 2 });
+  });
+
+  it("a counts-only scan updates the file count but never zeroes line totals", () => {
+    store.applyScan("a", [file("x", 5, 3)], "h1", true);
+    // A2.2 background scan: same file plus a new one, all add/del = 0
+    store.applyScan("a", [file("x", 0, 0), file("y", 0, 0)], "h1", false);
+    expect(store.totalsFor("a")).toEqual({ add: 5, del: 3, files: 2 });
+  });
+
+  it("LRU eviction keeps totals; dropTotals (agent removal) removes them", () => {
+    for (const id of ["a1", "a2", "a3", "a4", "a5"]) store.applyScan(id, [file("x", 1, 1)], "h", true);
+    // a1 was evicted from the heavy maps…
+    expect(store.changesFor("a1").status).toBe("idle");
+    // …but its sidebar counters survive
+    expect(store.totalsFor("a1")).toEqual({ add: 1, del: 1, files: 1 });
+    store.dropTotals("a1");
+    expect(store.totalsFor("a1")).toBeNull();
+  });
+
   it("applyScan stores ready changes with zero bridge calls", () => {
     store.applyScan("a", [{ path: "x", add: 1, del: 0, state: "M" as const }], "h1");
     expect(store.changesFor("a").status).toBe("ready");

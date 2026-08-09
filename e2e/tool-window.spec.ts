@@ -4,9 +4,9 @@ import { expect, Page, test } from "@playwright/test";
  * E2E for the bottom tool window (IntelliJ-style dock) and its git panels:
  * the dock opens from the registry keybindings/palette (closed by default),
  * the tab strip renders git panels first with the accent underline, the
- * scope selectors follow the seeded project/worktree, and not-yet-native ops
- * (A3.2 branch/remote mutations, B4.4 local-history snapshots) render
- * design-faithful but DISABLED with explanatory tooltips.
+ * scope selectors follow the seeded project/worktree, and the LIVE branch /
+ * local-history panels (A3.2 / B4.4) render honest empty states when the
+ * backend is absent.
  *
  * Backend-free: every invoke rejects, so the specs assert chrome, real
  * seeded-store data, and disabled/empty states — never fake git data.
@@ -97,12 +97,13 @@ test("graph panel: real scope, filter chrome, and the B4.1 path filter disabled"
   await expect(dock.getByTitle("Worktree the panel reads from")).toHaveValue("e2e-tw1");
 });
 
-test("branches panel: real branch list; every A3.2 op disabled with a tooltip", async ({ page }) => {
+test("branches panel: live A3.2 chrome with honest no-backend states", async ({ page }) => {
   await openSeeded(page);
   await page.locator("app-tool-window").getByRole("button", { name: "Branches" }).click();
   const panel = page.locator("app-branches-panel");
 
   // REAL data: detected project branches + the seeded worktree branch
+  // (backend absent → the native detail load fails, names fall back)
   await expect(panel).toContainText("Branches · e2e-proj");
   await expect(panel).toContainText("main");
   await expect(panel).toContainText("dev");
@@ -110,36 +111,36 @@ test("branches panel: real branch list; every A3.2 op disabled with a tooltip", 
   // the scoped worktree's branch is HEAD
   await expect(panel.locator(".chip", { hasText: "HEAD" })).toHaveCount(1);
 
-  // remotes column: no fake remotes — an honest A3.2 note + disabled Add
+  // remotes column: backend rejected → honest empty state, no fake remotes
   await expect(panel).toContainText("Remotes");
-  await expect(panel).toContainText("no remotes to show yet");
-  const add = panel.getByRole("button", { name: "Add" });
-  await expect(add).toBeDisabled();
-  await expect(add).toHaveAttribute("title", /A3\.2/);
+  await expect(panel).toContainText("no remotes configured");
 
-  // header actions (Fetch / Pull / New branch) are disabled dual-path buttons
-  for (const name of ["Fetch", "Pull", "New branch"]) {
-    const btn = panel.locator("app-git-action-button", { hasText: name }).first();
-    await expect(btn.locator("button").first()).toBeDisabled();
-  }
-  // row ops (Checkout / Merge in / Delete…) all disabled with the A3.2 tooltip
+  // live ops: New branch stays disabled until a name is typed, then enables
+  const newBranch = panel.locator("app-git-action-button", { hasText: "New branch" }).first();
+  await expect(newBranch.locator("button").first()).toBeDisabled();
+  await panel.getByPlaceholder("new branch name…").fill("feat-e2e");
+  await expect(newBranch.locator("button").first()).toBeEnabled();
+
+  // row ops are enabled buttons now (invokes reject backend-side — no fake ok)
   const checkout = panel.locator("button.br-op", { hasText: "Checkout" }).first();
-  await expect(checkout).toBeDisabled();
-  await expect(checkout).toHaveAttribute("title", /A3\.2/);
+  await expect(checkout).toBeEnabled();
+  // Delete opens an inline confirm instead of acting immediately
+  await panel.locator("button.br-op", { hasText: "Delete" }).first().click();
+  await expect(panel).toContainText(/delete .+\?/);
+  await panel.locator("button.br-op", { hasText: "Cancel" }).first().click();
 });
 
-test("local history panel: honest B4.4 empty state and disabled actions", async ({ page }) => {
+test("local history panel: live B4.4 chrome with an honest empty timeline", async ({ page }) => {
   await openSeeded(page);
   await page.locator("app-tool-window").getByRole("button", { name: "Local History" }).click();
   const panel = page.locator("app-local-history-panel");
 
+  // backend absent → the timeline load fails to an honest empty state
   await expect(panel).toContainText("Snapshots");
   await expect(panel).toContainText("no snapshots yet");
-  await expect(panel).toContainText("B4.4");
+  await expect(panel).toContainText("captured automatically");
 
-  const showDiff = panel.getByRole("button", { name: "Show diff" });
-  await expect(showDiff).toBeDisabled();
-  await expect(showDiff).toHaveAttribute("title", /B4\.4/);
+  // revert needs a selected snapshot — disabled with none
   await expect(panel.getByRole("button", { name: "Revert to this point" })).toBeDisabled();
 });
 

@@ -5,7 +5,10 @@ import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { SettingsStore } from "../settings/settings.store";
+import { EditsStore } from "../stores/edits.store";
 import { UiStore } from "../ui/ui.store";
+import { FileSaveService } from "../workspace/file-save.service";
+import { TabCloseGuardService } from "../workspace/tab-close-guard.service";
 import { PaneLeaf, PaneNode } from "../workspace/pane-model";
 import { ToolWindowStore } from "../tool-window/tool-window.store";
 import { EditorNavService } from "./editor-nav.service";
@@ -56,6 +59,9 @@ export class CommandRegistryService {
   private recents = inject(RecentFilesService);
   private editorNav = inject(EditorNavService);
   private toolWindow = inject(ToolWindowStore);
+  private saver = inject(FileSaveService);
+  private edits = inject(EditsStore);
+  private closeGuard = inject(TabCloseGuardService);
 
   /** The open overlay (null = none). */
   readonly overlay = signal<OverlayState | null>(null);
@@ -112,6 +118,8 @@ export class CommandRegistryService {
     const anyRunning = this.agentActions.anyRunning();
     const rightPanel = this.ui.tweaks().rightPanel;
     const theme = this.ui.tweaks().theme;
+    const dirtyCount = this.edits.dirtyKeys().size;
+    const keymap = this.settings.settings().keymap;
 
     const c = (
       cmd: Omit<AppCommand, "enabled"> & { enabled?: boolean },
@@ -129,7 +137,7 @@ export class CommandRegistryService {
       c({
         id: "tab.close", label: "Close Tab", group: "Navigate", icon: "x",
         enabled: tabKind !== "orchestrator" && activeTab !== "backlog",
-        run: () => this.ui.closeTab(activeTab),
+        run: () => this.closeGuard.requestClose(activeTab),
       }),
 
       // ---- search ----
@@ -163,6 +171,14 @@ export class CommandRegistryService {
       c({ id: "project.add", label: "Add Project…", group: "Agents", icon: "folderOpen", run: () => this.ui.openAddProject() }),
 
       // ---- workspace ----
+      c({
+        id: "file.save", label: "Save All", group: "Workspace", icon: "file", kbd: "Ctrl+s",
+        // JetBrains semantics: Ctrl+S writes EVERY dirty buffer. Enabled with a
+        // file tab active OR any dirty buffer anywhere — a clean workspace
+        // saves as a silent no-op, so Ctrl+S never flashes "unavailable"
+        enabled: !!fileLeaf?.activeFile || dirtyCount > 0,
+        run: () => void this.saver.saveAll(),
+      }),
       c({ id: "ws.rightPanel", label: (rightPanel ? "Hide" : "Show") + " Right Panel", group: "Workspace", icon: "panelLeft", run: () => this.ui.setTweak("rightPanel", !this.ui.tweaks().rightPanel) }),
       c({ id: "ws.sidebar", label: "Toggle Compact Sidebar", group: "Workspace", icon: "columns", run: () => this.ui.toggleSidebarCompact() }),
       c({ id: "ws.theme", label: `Switch to ${theme === "dark" ? "Light" : "Dark"} Theme`, group: "Workspace", icon: theme === "dark" ? "sun" : "moon", run: () => this.ui.toggleTheme() }),
@@ -170,7 +186,14 @@ export class CommandRegistryService {
       // ---- tools ----
       c({ id: "settings.open", label: "Settings", group: "Tools", icon: "settings", kbd: "Ctrl+,", run: () => this.settings.openModal() }),
       c({ id: "app.whatsNew", label: "What's New", group: "Tools", icon: "flag", run: () => this.settings.openWhatsNew() }),
-    ];
+    ].map((cmd) => {
+      // B6.2 keymap: a user override replaces the default binding (and its alt
+      // variant — a stale alt could shadow another command's new binding).
+      // Applied HERE so the dispatcher, palette chips, Search Everywhere and
+      // the Keymap settings rows all see the same effective binding.
+      const kbd = keymap[cmd.id];
+      return kbd ? { ...cmd, kbd, kbdAlt: undefined } : cmd;
+    });
   });
 
   /** Install the global key listener (idempotent; call from the shell). */
@@ -180,7 +203,12 @@ export class CommandRegistryService {
     window.addEventListener("keydown", this.onKeydown, true);
   }
 
+  /** B6.2: true while the Keymap settings row is recording a chord — the
+   *  dispatcher must not RUN the chord being recorded. */
+  readonly captureMode = signal(false);
+
   private onKeydown = (e: KeyboardEvent): void => {
+    if (this.captureMode()) return; // the keymap recorder owns this keystroke
     const target = e.target as HTMLElement | null;
     const tag = target?.tagName ?? "";
     const typing = tag === "INPUT" || tag === "TEXTAREA" || !!target?.isContentEditable;

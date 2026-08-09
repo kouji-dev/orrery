@@ -1,10 +1,14 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   EventEmitter,
+  HostListener,
   Input,
   Output,
   computed,
+  effect,
+  inject,
   signal,
 } from "@angular/core";
 import { BlameLine } from "../../models";
@@ -125,9 +129,29 @@ interface Popup {
   imports: [IconComponent],
   template: `
     <div class="scroll-y" style="flex:1;position:relative;background:var(--bg)">
+      <!-- scoped find (B3.3): Ctrl+F while the pointer is over the blame view -->
+      @if (findOpen()) {
+        <div class="bf-bar" (mousedown)="$event.stopPropagation()">
+          <app-icon name="search" size="sm" [px]="11" color="var(--ink-4)" />
+          <input
+            class="bf-input"
+            [value]="query()"
+            (input)="query.set($any($event.target).value); activeIdx.set(0)"
+            (keydown.enter)="next()"
+            (keydown.shift.enter)="prev()"
+            (keydown.escape)="closeFind()"
+            placeholder="find in blame…"
+            spellcheck="false"
+          />
+          <span class="tnum bf-count">{{ matches().length ? activeIdx() + 1 : 0 }}/{{ matches().length }}</span>
+          <button class="btn" (click)="prev()" title="Previous match (Shift+Enter)"><app-icon name="chevronD" size="sm" [px]="10" style="display:inline-flex;transform:rotate(180deg)" /></button>
+          <button class="btn" (click)="next()" title="Next match (Enter)"><app-icon name="chevronD" size="sm" [px]="10" /></button>
+          <button class="btn" (click)="closeFind()" title="Close (Esc)"><app-icon name="x" size="sm" [px]="10" /></button>
+        </div>
+      }
       <pre style="margin:0;font-family:var(--font-mono);font-size:12px;line-height:1.7">
-        @for (row of rows(); track row.n) {
-          <div style="display:flex">
+        @for (row of rows(); track row.n; let i = $index) {
+          <div style="display:flex" [class.bf-hit]="isHit(i)" [class.bf-on]="isActiveHit(i)" [attr.data-bn]="row.n">
             <!-- author column -->
             <div
               (mouseenter)="onEnter($event, row)"
@@ -184,6 +208,52 @@ interface Popup {
       }
     </div>
   `,
+  styles: [
+    `
+      /* scoped-find bar: sticky over the scroller, code-surface metrics */
+      .bf-bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        padding: var(--sp-1) var(--sp-4);
+        background: var(--elev);
+        border-bottom: 1px solid var(--hair-2);
+      }
+      .bf-input {
+        flex: 1;
+        min-width: 0;
+        max-width: 240px;
+        background: var(--panel-2);
+        border: 1px solid var(--hair);
+        border-radius: var(--r-sm);
+        padding: var(--sp-1) var(--sp-3);
+        color: var(--ink);
+        font-family: var(--font-mono);
+        font-size: var(--fs-xs);
+        outline: none;
+      }
+      .bf-count {
+        font-size: var(--fs-2xs);
+        color: var(--ink-4);
+      }
+      .bf-bar .btn {
+        display: flex;
+        padding: var(--sp-1);
+        border-radius: 4px;
+        color: var(--ink-3);
+      }
+      .bf-hit {
+        background: color-mix(in oklch, var(--accent), transparent 92%);
+      }
+      .bf-on {
+        background: color-mix(in oklch, var(--accent), transparent 80%);
+        box-shadow: inset 2px 0 0 var(--accent);
+      }
+    `,
+  ],
 })
 export class AnnotateBlameComponent {
   @Input() set lines(v: BlameLine[]) { this._lines.set(v ?? []); }
@@ -194,6 +264,77 @@ export class AnnotateBlameComponent {
   readonly popup = signal<Popup | null>(null);
 
   readonly rows = computed(() => blameToRows(this._lines()));
+
+  // ----- scoped find (B3.3) -----
+  private readonly host = inject(ElementRef<HTMLElement>);
+  readonly findOpen = signal(false);
+  readonly query = signal("");
+  readonly activeIdx = signal(0);
+  private hovered = false;
+
+  /** Row indices whose code line contains the query (case-insensitive). */
+  readonly matches = computed<number[]>(() => {
+    const q = this.query().trim().toLowerCase();
+    if (!q) return [];
+    const out: number[] = [];
+    this.rows().forEach((r, i) => {
+      if (r.s.toLowerCase().includes(q)) out.push(i);
+    });
+    return out;
+  });
+
+  constructor() {
+    // keep the active hit visible as the query / index changes
+    effect(() => {
+      const m = this.matches();
+      const idx = this.activeIdx();
+      const row = m.length ? this.rows()[m[Math.min(idx, m.length - 1)]] : null;
+      if (!row) return;
+      queueMicrotask(() => {
+        this.host.nativeElement
+          .querySelector(`[data-bn="${row.n}"]`)
+          ?.scrollIntoView({ block: "nearest" });
+      });
+    });
+  }
+
+  isHit(i: number): boolean {
+    return this.matches().includes(i);
+  }
+  isActiveHit(i: number): boolean {
+    const m = this.matches();
+    return m.length > 0 && m[Math.min(this.activeIdx(), m.length - 1)] === i;
+  }
+  next(): void {
+    const n = this.matches().length;
+    if (n) this.activeIdx.update((i) => (i + 1) % n);
+  }
+  prev(): void {
+    const n = this.matches().length;
+    if (n) this.activeIdx.update((i) => (i - 1 + n) % n);
+  }
+  closeFind(): void {
+    this.findOpen.set(false);
+    this.query.set("");
+    this.activeIdx.set(0);
+  }
+
+  @HostListener("mouseenter") onHostEnter(): void { this.hovered = true; }
+  @HostListener("mouseleave") onHostLeave(): void { this.hovered = false; }
+
+  /** Ctrl+F opens the scoped find while the pointer is over this surface. */
+  @HostListener("document:keydown", ["$event"])
+  onDocKey(e: KeyboardEvent): void {
+    if (!this.hovered) return;
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      e.stopPropagation();
+      this.findOpen.set(true);
+      queueMicrotask(() => {
+        (this.host.nativeElement.querySelector(".bf-input") as HTMLInputElement | null)?.focus();
+      });
+    }
+  }
 
   readonly popupLeft = computed(() => {
     const p = this.popup();

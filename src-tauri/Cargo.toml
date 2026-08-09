@@ -48,6 +48,9 @@ clap = { version = "4.5", features = ["derive"] }
 toml_edit = "0.22"
 # system metrics: per-process cpu/mem sampling for the status-bar monitor
 sysinfo = "0.39"
+base64 = "0.22"
+regex = "1"
+blake3 = "1"
 
 # Windows-only: Job Object APIs so the whole agent process tree dies with us,
 # even on force-kill/crash (kill-on-job-close). Already in the tree via tauri.

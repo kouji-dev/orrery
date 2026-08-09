@@ -145,7 +145,7 @@ export class AgentRuntimeService {
       this.work.ensureCommits(ag.id);
     });
     void this.agentsStore
-      .onScan((p) => this.work.applyScan(p.id, p.changes, p.head))
+      .onScan((p) => this.work.applyScan(p.id, p.changes, p.head, p.countsFull ?? true))
       .then(() => this.scanReady.set(true))
       .catch(() => this.scanReady.set(true));
 
@@ -386,6 +386,7 @@ export class AgentRuntimeService {
     this.terminals.dispose(id);
     this.clearRuntime(id);
     this.work.dispose(id);
+    this.work.dropTotals(id);
     delete this.startedAt[id];
     delete this.finalElapsed[id];
     delete this.ptyState[id];

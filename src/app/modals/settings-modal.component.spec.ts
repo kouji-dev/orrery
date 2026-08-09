@@ -1,8 +1,9 @@
-import { Component, provideZonelessChangeDetection } from "@angular/core";
+import { Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { CommandRegistryService } from "../commands/command-registry.service";
 import { Bridge, BRIDGE } from "../data-source/bridge";
 import { Settings, ToolDetection } from "../models";
 import { RuntimeRowComponent } from "./runtime-row.component";
@@ -75,6 +76,9 @@ async function setup(stored: Partial<Settings> = {}): Promise<Setup> {
         },
       },
       { provide: VersionService, useValue: { version: () => "0.9.2" } },
+      // the real registry drags in the whole app dependency tree (recent
+      // files → paneRoots, …) — the modal only reads commands() + captureMode
+      { provide: CommandRegistryService, useValue: { commands: () => [], captureMode: signal(false) } },
     ],
   });
   TestBed.overrideComponent(SettingsModalComponent, {
@@ -111,7 +115,7 @@ const byText = (root: HTMLElement, selector: string, text: string) =>
 describe("SettingsModal sections render", () => {
   it("opens on Updates: nav, header, channel/policy segs, version chip", async () => {
     const s = await setup();
-    expect(s.el.querySelectorAll(".set-nav-item")).toHaveLength(4);
+    expect(s.el.querySelectorAll(".set-nav-item")).toHaveLength(5); // + Keymap (B6.2)
     expect(s.el.querySelector(".set-head .ht")?.textContent).toContain("Updates");
     expect(s.el.textContent).toContain("Install policy");
     expect(s.el.querySelector(".set-vchip")?.textContent).toContain("v0.9.2");

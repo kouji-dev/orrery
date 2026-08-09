@@ -1,5 +1,5 @@
 import { inject, Injectable, signal, WritableSignal } from "@angular/core";
-import { BRIDGE, Commands } from "../data-source/bridge";
+import { AgentChangeTotals, BRIDGE, Commands } from "../data-source/bridge";
 import { AgentFile, Commit, FileNode, Loadable } from "../models";
 
 /** Commits page size for the lazy feed (+ "Load more"). */
@@ -29,6 +29,10 @@ export class AgentWorkStore {
   private readonly changesMap = signal<Record<string, Loadable<AgentFile[]>>>({});
   private readonly commitsMap = signal<Record<string, CommitsEntry>>({});
   private readonly treesMap = signal<Record<string, Loadable<FileNode[]>>>({});
+  /** Sidebar counters: 3 numbers per agent, SEPARATE from the LRU'd file lists
+   *  above — every agent row shows counters, so eviction must never touch them. */
+  private readonly totalsMap = signal<Record<string, { add: number; del: number; files: number }>>({});
+  private totalsInit = false;
 
   // generation guards: a newer load supersedes an in-flight older one
   private changesGen: Record<string, number> = {};
@@ -54,6 +58,31 @@ export class AgentWorkStore {
 
   changesFor(id: string): Loadable<AgentFile[]> {
     return this.changesMap()[id] ?? IDLE;
+  }
+  /** Sidebar counters — null until the init pass (or a full scan) supplied them. */
+  totalsFor(id: string): { add: number; del: number; files: number } | null {
+    return this.totalsMap()[id] ?? null;
+  }
+
+  /** One initialization pass: full change totals for EVERY agent. After this,
+   *  only full-detail watcher scans (running/visible agents) update the map —
+   *  idle projects push nothing further. Safe to call more than once. */
+  initTotals(): void {
+    if (this.totalsInit) return;
+    this.totalsInit = true;
+    void this.bridge
+      .invoke<AgentChangeTotals[]>(Commands.AgentChangeTotals)
+      .then((all) => {
+        this.totalsMap.update((m) => {
+          const next = { ...m };
+          // scans may have landed while the init call ran — they win
+          for (const t of all) next[t.id] ??= { add: t.add, del: t.del, files: t.files };
+          return next;
+        });
+      })
+      .catch(() => {
+        this.totalsInit = false; // backend unavailable — allow a retry
+      });
   }
   commitsFor(id: string): CommitsEntry {
     return this.commitsMap()[id] ?? IDLE_COMMITS;
@@ -163,19 +192,45 @@ export class AgentWorkStore {
 
   /** Backend watcher push: adopt the scanned changes; commits refresh only when
    *  HEAD actually moved (and the feed was ever opened); tree reloads only when
-   *  previously loaded. Replaces the old ping → pull (`onWorktreeChanged`). */
-  applyScan(id: string, changes: AgentFile[], head: string | null): void {
+   *  previously loaded. Replaces the old ping → pull (`onWorktreeChanged`).
+   *  `countsFull=false` = an A2.2 counts-only scan whose add/del are all 0 —
+   *  it updates the file COUNT but must not zero the sidebar's line totals. */
+  applyScan(id: string, changes: AgentFile[], head: string | null, countsFull = true): void {
     this.touch(id);
     // supersede any in-flight pull so its late resolve can't stomp fresher push data
     this.changesGen[id] = (this.changesGen[id] ?? 0) + 1;
     this.patch(this.changesMap, id, { status: "ready", data: changes });
+    if (countsFull) {
+      this.patch(this.totalsMap, id, {
+        add: changes.reduce((s, f) => s + f.add, 0),
+        del: changes.reduce((s, f) => s + f.del, 0),
+        files: changes.length,
+      });
+    } else {
+      const cur = this.totalsMap()[id];
+      this.patch(this.totalsMap, id, {
+        add: cur?.add ?? 0,
+        del: cur?.del ?? 0,
+        files: changes.length,
+      });
+    }
     const moved = id in this.lastHead && this.lastHead[id] !== head;
     this.lastHead[id] = head;
     if (moved) this.refreshCommits(id);
     if (this.treeFor(id).status !== "idle") this.loadTree(id);
   }
 
-  /** Drop all of an agent's entries (on removal or LRU eviction). */
+  /** Agent REMOVED (not merely LRU-evicted): its sidebar counters go too. */
+  dropTotals(id: string): void {
+    this.totalsMap.update((m) => {
+      if (!(id in m)) return m;
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
+  }
+
+  /** Drop an agent's heavy entries (on removal or LRU eviction). Totals stay —
+   *  the sidebar shows counters for EVERY agent, eviction must not blank them. */
   dispose(id: string): void {
     const t = this.touched.indexOf(id);
     if (t >= 0) this.touched.splice(t, 1);

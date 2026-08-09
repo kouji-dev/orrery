@@ -12,7 +12,9 @@ import {
 } from "@angular/core";
 import { Agent, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { EditsStore } from "../stores/edits.store";
 import { DiagnosticsService } from "../shared/diagnostics.service";
+import { FileSaveService } from "./file-save.service";
 import { DragService } from "../shared/drag.service";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
@@ -107,16 +109,20 @@ import { UiStore } from "../ui/ui.store";
             <div #fileStrip class="file-strip" (wheel)="onStripWheel($event)">
               @for (f of lf.files ?? []; track f) {
                 @let onf = lf.view === 'file' && lf.activeFile === f;
+                @let dirty = isDirty(lf, f);
                 <div
                   class="file-tab"
                   [class.on]="onf"
-                  [title]="f"
+                  [class.dirty]="dirty"
+                  [title]="f + (dirty ? ' — unsaved changes' : '')"
                   [attr.data-path]="f"
                   (click)="$event.stopPropagation(); ctx().onFileSelect(lf.id, f)"
+                  (contextmenu)="onFileTabContext($event, lf, f)"
                 >
                   <app-icon name="file" size="sm" [px]="11" [color]="onf ? 'var(--accent)' : 'var(--ink-4)'" />
                   <span class="fn">{{ fname(f) }}</span>
-                  <button class="fx" title="Close file" (click)="$event.stopPropagation(); ctx().onFileClose(lf.id, f)">
+                  <span class="fdot" aria-label="unsaved changes"></span>
+                  <button class="fx" title="Close file" (click)="$event.stopPropagation(); requestFileClose(lf, f)">
                     <app-icon name="x" size="sm" [px]="10" />
                   </button>
                 </div>
@@ -170,6 +176,35 @@ import { UiStore } from "../ui/ui.store";
             <app-diff-view [agent]="ag" />
           }
         </div>
+
+        <!-- close-confirm for a dirty file tab (B1.1) -->
+        @if (confirmClose(); as cc) {
+          <div class="cc-scrim" (mousedown)="$event.stopPropagation()">
+            <div class="cc-card rise">
+              <div class="cc-title">Unsaved changes</div>
+              @for (p of cc.dirty; track p) {
+                <div class="cc-path">{{ p }}</div>
+              }
+              <div class="cc-note">Save before closing {{ cc.dirty.length === 1 ? 'this tab' : 'these tabs' }}?</div>
+              <div class="cc-actions">
+                <button class="btn ghost-hair" (click)="confirmClose.set(null)">Cancel</button>
+                <span style="margin-left:auto"></span>
+                <button class="btn ghost-hair cc-danger" (click)="discardAndClose(cc)">Discard</button>
+                <button class="btn primary" (click)="saveAndClose(cc)">{{ cc.dirty.length === 1 ? 'Save' : 'Save all' }}</button>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- file-tab context menu: single + bulk close -->
+        @if (tabMenu(); as tm) {
+          <div class="ftab-menu rise" [style.left.px]="tm.x" [style.top.px]="tm.y" (mousedown)="$event.stopPropagation()" (contextmenu)="$event.preventDefault()">
+            <button class="ftab-mi" (click)="tabMenuClose(lf, 'one')"><app-icon name="x" size="sm" [px]="12" />Close</button>
+            <button class="ftab-mi" [disabled]="!tabMenuTargets(lf, 'left').length" (click)="tabMenuClose(lf, 'left')"><app-icon name="chevron" size="sm" [px]="12" style="transform:rotate(180deg)" />Close All to the Left</button>
+            <button class="ftab-mi" [disabled]="!tabMenuTargets(lf, 'right').length" (click)="tabMenuClose(lf, 'right')"><app-icon name="chevron" size="sm" [px]="12" />Close All to the Right</button>
+            <button class="ftab-mi" (click)="tabMenuClose(lf, 'all')"><app-icon name="layers" size="sm" [px]="12" />Close All</button>
+          </div>
+        }
 
         <!-- drag drop preview -->
         @if (dropSide(); as side) {
@@ -322,9 +357,102 @@ import { UiStore } from "../ui/ui.store";
       .file-tab.on .fx {
         opacity: 1;
       }
+      /* unsaved-changes dot — swaps places with the close × on hover */
+      .file-tab .fdot {
+        display: none;
+        flex: none;
+        width: var(--sp-2);
+        height: var(--sp-2);
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      .file-tab.dirty:not(:hover) .fdot {
+        display: block;
+      }
+      .file-tab.dirty:not(:hover) .fx {
+        display: none;
+      }
       .file-tab .fx:hover {
         color: var(--ink);
         background: var(--panel-2);
+      }
+      /* close-confirm dialog for a dirty file tab */
+      .cc-scrim {
+        position: absolute;
+        inset: 0;
+        z-index: 30;
+        display: grid;
+        place-items: center;
+        background: color-mix(in srgb, var(--bg), transparent 35%);
+      }
+      .cc-card {
+        width: min(340px, 86%);
+        background: var(--elev);
+        border: 1px solid var(--hair-2);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow);
+        padding: var(--sp-6);
+      }
+      .cc-title {
+        color: var(--ink);
+        font-size: var(--fs-ui);
+        font-weight: 600;
+      }
+      .cc-path {
+        margin-top: var(--sp-2);
+        color: var(--ink-3);
+        font-family: var(--font-mono);
+        font-size: var(--fs-xs);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .cc-note {
+        margin-top: var(--sp-3);
+        color: var(--ink-2);
+        font-size: var(--fs-sm);
+      }
+      .cc-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-3);
+        margin-top: var(--sp-5);
+      }
+      .cc-danger {
+        color: var(--code-del-ink);
+      }
+      /* file-tab context menu */
+      .ftab-menu {
+        position: fixed;
+        z-index: 60;
+        min-width: 190px;
+        background: var(--elev);
+        border: 1px solid var(--hair-2);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow);
+        padding: var(--sp-2);
+      }
+      .ftab-mi {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-3);
+        width: 100%;
+        text-align: left;
+        padding: var(--sp-2) var(--sp-4);
+        border: none;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--ink-2);
+        font-size: var(--fs-sm);
+        cursor: pointer;
+      }
+      .ftab-mi:hover:not(:disabled) {
+        background: var(--panel-3);
+        color: var(--ink);
+      }
+      .ftab-mi:disabled {
+        color: var(--ink-4);
+        cursor: default;
       }
       .pane-divider {
         position: relative;
@@ -384,6 +512,12 @@ export class PaneNodeComponent {
 
   readonly pickOpen = signal(false);
   readonly dragging = signal(false);
+  /** Pending dirty-tab close awaiting Save / Discard / Cancel. `paths` is the
+   *  full close set (bulk actions include clean tabs); `dirty` the subset the
+   *  dialog is really about. */
+  readonly confirmClose = signal<{ leafId: string; agentId: string; paths: string[]; dirty: string[] } | null>(null);
+  /** Right-click context menu on a file tab (screen coords + anchor path). */
+  readonly tabMenu = signal<{ x: number; y: number; leafId: string; path: string } | null>(null);
   readonly fname = fileName;
   readonly views: { k: "terminal" | "diff"; icon: string }[] = [
     { k: "terminal", icon: "terminal" },
@@ -393,6 +527,8 @@ export class PaneNodeComponent {
   private host = inject(ElementRef<HTMLElement>);
   private drag = inject(DragService);
   private agentActions = inject(AgentActionsService);
+  private edits = inject(EditsStore);
+  private saver = inject(FileSaveService);
   readonly diagnostics = inject(DiagnosticsService);
   readonly ui = inject(UiStore);
   private picker = viewChild<ElementRef<HTMLElement>>("picker");
@@ -484,9 +620,112 @@ export class PaneNodeComponent {
     return this.ctx().agents().filter((a) => a.projectId === projectId);
   }
 
+  // ----- dirty file tabs: indicator + guarded close (B1.1) -----
+
+  isDirty(lf: PaneLeaf, path: string): boolean {
+    return !!lf.agentId && this.edits.isDirty(lf.agentId, path);
+  }
+
+  /** Close a file tab; a dirty buffer detours through Save/Discard/Cancel. */
+  requestFileClose(lf: PaneLeaf, path: string): void {
+    this.requestFilesClose(lf, [path]);
+  }
+
+  /** Close several tabs at once (context-menu bulk actions); any dirty buffer
+   *  in the set raises ONE dialog covering all of them. */
+  requestFilesClose(lf: PaneLeaf, paths: string[]): void {
+    if (paths.length === 0) return;
+    const dirty = lf.agentId ? paths.filter((p) => this.edits.isDirty(lf.agentId!, p)) : [];
+    if (dirty.length > 0 && lf.agentId) {
+      this.confirmClose.set({ leafId: lf.id, agentId: lf.agentId, paths, dirty });
+      return;
+    }
+    for (const p of paths) this.closeTab(lf.id, lf.agentId, p);
+  }
+
+  saveAndClose(cc: { leafId: string; agentId: string; paths: string[]; dirty: string[] }): void {
+    void Promise.all(cc.dirty.map((p) => this.saver.save(cc.agentId, p, cc.dirty.length === 1))).then(
+      (results) => {
+        if (results.some((ok) => !ok)) return; // a save failed — keep tabs + dialog's edits
+        if (cc.dirty.length > 1) this.ui.flash(`Saved ${cc.dirty.length} files`);
+        this.confirmClose.set(null);
+        for (const p of cc.paths) this.closeTab(cc.leafId, cc.agentId, p);
+      },
+    );
+  }
+
+  discardAndClose(cc: { leafId: string; agentId: string; paths: string[]; dirty: string[] }): void {
+    for (const p of cc.dirty) {
+      const buf = this.edits.get(cc.agentId, p);
+      if (buf) this.edits.discard(cc.agentId, p, buf.baseText);
+    }
+    this.confirmClose.set(null);
+    for (const p of cc.paths) this.closeTab(cc.leafId, cc.agentId, p);
+  }
+
+  // ----- file-tab context menu: single + bulk close -----
+
+  onFileTabContext(e: MouseEvent, lf: PaneLeaf, path: string): void {
+    e.preventDefault();
+    e.stopPropagation();
+    this.tabMenu.set({ x: e.clientX, y: e.clientY, leafId: lf.id, path });
+  }
+
+  /** Tabs a menu action would close, in strip order. */
+  tabMenuTargets(lf: PaneLeaf, mode: "one" | "left" | "right" | "all"): string[] {
+    const tm = this.tabMenu();
+    const files = lf.files ?? [];
+    const i = tm ? files.indexOf(tm.path) : -1;
+    if (i === -1) return [];
+    switch (mode) {
+      case "one":
+        return [files[i]];
+      case "left":
+        return files.slice(0, i);
+      case "right":
+        return files.slice(i + 1);
+      case "all":
+        return [...files];
+    }
+  }
+
+  tabMenuClose(lf: PaneLeaf, mode: "one" | "left" | "right" | "all"): void {
+    const targets = this.tabMenuTargets(lf, mode);
+    this.tabMenu.set(null);
+    this.requestFilesClose(lf, targets);
+  }
+
+  private closeTab(leafId: string, agentId: string | null, path: string): void {
+    // Drop the buffer only when no other leaf still shows this file — the
+    // EditsStore key (agent:path) is shared across panes.
+    if (agentId && !this.fileOpenElsewhere(agentId, path, leafId)) {
+      this.edits.close(agentId, path);
+    }
+    this.ctx().onFileClose(leafId, path);
+  }
+
+  private fileOpenElsewhere(agentId: string, path: string, exceptLeafId: string): boolean {
+    let found = false;
+    const walk = (n: PaneNode): void => {
+      if (found) return;
+      if (n.type === "leaf") {
+        if (n.id !== exceptLeafId && n.agentId === agentId && (n.files ?? []).includes(path)) {
+          found = true;
+        }
+        return;
+      }
+      walk(n.a);
+      walk(n.b);
+    };
+    for (const root of Object.values(this.ui.paneRoots())) walk(root);
+    return found;
+  }
+
   // ----- drag-and-drop: a sidebar agent / tab dropped onto this pane -----
   onDragOver(e: DragEvent, paneId: string) {
-    if (!this.drag.payload()?.agentId) return;
+    const p = this.drag.payload();
+    // file drags (B1.5) route through FileDropService, not the pane splitter
+    if (!p?.agentId || p.kind === "file") return;
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -506,15 +745,22 @@ export class PaneNodeComponent {
     if (!ct.contains(e.relatedTarget as Node)) this.ctx().onDropOver(null, "center");
   }
   onDrop(e: DragEvent, paneId: string) {
+    if (this.drag.payload()?.kind === "file") return; // FileDropService routes it
     e.preventDefault();
     this.ctx().onPaneDrop(paneId);
   }
 
   @HostListener("document:mousedown", ["$event"])
   onDocDown(e: MouseEvent) {
+    if (this.tabMenu()) this.tabMenu.set(null);
     if (!this.pickOpen()) return;
     const pk = this.picker()?.nativeElement;
     if (pk && !pk.contains(e.target as Node)) this.pickOpen.set(false);
+  }
+
+  @HostListener("document:keydown.escape")
+  onDocEsc(): void {
+    if (this.tabMenu()) this.tabMenu.set(null);
   }
 
   startDrag(ev: PointerEvent, sp: PaneSplit) {

@@ -1,12 +1,12 @@
 import { expect, Page, test } from "@playwright/test";
 
 /**
- * E2E for the inline-review flow in the agent Diff tab: the hover-plus gutter,
- * the inline composer, saved-comment cards, and the send-review button.
+ * E2E for the inline-review flow in the agent Diff tab: the hover-plus glyph
+ * margin, the inline composer, saved-comment cards, and the send-review button.
  *
  * The one invoke the flow needs (AgentDiff) is stubbed on AgentsStore, so REAL
- * CodeMirror (fetched from esm.sh at runtime, exactly like production) renders
- * the unified diff and the review extension runs unmodified.
+ * Monaco (the bundled lazy chunk, exactly like production) renders the inline
+ * diff and the review-comment attachment runs unmodified.
  */
 
 const seedAgent = (id: string, name: string) => `(() => {
@@ -41,26 +41,29 @@ async function openDiff(page: Page): Promise<void> {
   await page.evaluate(seedAgent("e2e-rv1", "e2e-review"));
   await page.evaluate(seedDiff("e2e-rv1"));
   await page.evaluate(ui(`.openAgent("e2e-rv1", "diff")`));
-  // real CodeMirror loads from esm.sh — allow the network fetch
-  await expect(page.locator(".cm-editor").first()).toBeVisible({ timeout: 20_000 });
+  // Monaco arrives as a lazy chunk — allow the first-load fetch + mount.
+  // (.monaco-editor alone would match the diff editor's hidden gutter node.)
+  await expect(page.locator(".monaco-diff-editor").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".view-line", { hasText: "line two CHANGED" })).toBeVisible({ timeout: 15_000 });
 }
 
-test("hovering a diff line shows the + gutter button", async ({ page }) => {
+test("hovering a diff line shows the + glyph in the margin", async ({ page }) => {
   await openDiff(page);
-  // hover the second content line → the review gutter grows a + for that row.
-  // The ext also registers an ALWAYS-PRESENT hidden spacer PlusMarker, so the
-  // decisive signal is a SECOND .rc-plus that is actually visible.
-  await page.locator(".cm-line", { hasText: "line two CHANGED" }).hover();
-  await expect(page.locator(".rc-plus:visible")).toHaveCount(1);
+  // hover a content line → the glyph margin grows a + for that row (exact
+  // count — the Monaco attachment has no hidden spacer marker)
+  await page.locator(".view-line", { hasText: "line two CHANGED" }).hover();
+  await expect(page.locator(".rc-glyph-plus")).toHaveCount(1);
 });
 
 test("clicking + opens the composer; saving renders the card and arms send-review", async ({ page }) => {
   await openDiff(page);
-  await page.locator(".cm-line", { hasText: "line two CHANGED" }).hover();
-  const plus = page.locator(".rc-plus:visible").first();
+  await page.locator(".view-line", { hasText: "line two CHANGED" }).hover();
+  const plus = page.locator(".rc-glyph-plus").first();
   await expect(plus).toBeVisible();
-  // press-release on the + (the ext listens on mousedown + window mouseup)
-  await plus.dispatchEvent("mousedown", { button: 0 });
+  // real press-release on the glyph (the attachment listens on editor
+  // mousedown in the glyph margin + window mouseup)
+  await plus.hover();
+  await page.mouse.down();
   await page.mouse.up();
 
   const composer = page.locator(".rc-composer");

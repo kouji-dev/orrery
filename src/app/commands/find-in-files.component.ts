@@ -15,6 +15,7 @@ import {
   BRIDGE,
   Commands,
   Events,
+  FileReplaceResult,
   SearchDonePayload,
   SearchMatchEntry,
   SearchResultsPayload,
@@ -78,8 +79,14 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
       <!-- query row -->
       <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);flex:none">
         <div style="display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm);flex:none">
-          <button class="btn" style="padding:var(--sp-2) var(--sp-4);border-radius:4px;font-size:var(--fs-xs);background:var(--panel-3);color:var(--ink);box-shadow:0 0 0 1px var(--hair-2)">Find</button>
-          <button class="btn" disabled title="Replace in Files — arrives with B3.2" style="padding:var(--sp-2) var(--sp-4);border-radius:4px;font-size:var(--fs-xs);color:var(--ink-3)">Replace</button>
+          <button class="btn" (click)="mode.set('find')" style="padding:var(--sp-2) var(--sp-4);border-radius:4px;font-size:var(--fs-xs)"
+            [style.background]="mode() === 'find' ? 'var(--panel-3)' : 'transparent'"
+            [style.color]="mode() === 'find' ? 'var(--ink)' : 'var(--ink-3)'"
+            [style.box-shadow]="mode() === 'find' ? '0 0 0 1px var(--hair-2)' : 'none'">Find</button>
+          <button class="btn" (click)="mode.set('replace')" title="Replace in Files" style="padding:var(--sp-2) var(--sp-4);border-radius:4px;font-size:var(--fs-xs)"
+            [style.background]="mode() === 'replace' ? 'var(--panel-3)' : 'transparent'"
+            [style.color]="mode() === 'replace' ? 'var(--ink)' : 'var(--ink-3)'"
+            [style.box-shadow]="mode() === 'replace' ? '0 0 0 1px var(--hair-2)' : 'none'">Replace</button>
         </div>
         <input
           #inp
@@ -110,6 +117,27 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
           }
         </select>
       </div>
+
+      <!-- replacement row (replace mode) -->
+      @if (mode() === 'replace') {
+        <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair);flex:none">
+          <span style="flex:none;font-size:var(--fs-xs);color:var(--ink-3);width:64px;text-align:right">replace →</span>
+          <input
+            [value]="replacement()"
+            (input)="replacement.set($any($event.target).value)"
+            placeholder="Replacement ($1 for capture groups in regex mode)…"
+            spellcheck="false"
+            autocomplete="off"
+            style="flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);outline:none"
+          />
+          <button
+            class="btn primary"
+            style="padding:var(--sp-2) var(--sp-5);font-size:var(--fs-xs);flex:none"
+            [disabled]="applying() || busy() || !selectedCount()"
+            (click)="apply()"
+          >{{ applying() ? 'Replacing…' : 'Replace ' + selectedCount() + ' in ' + selectedFileCount() + ' file' + (selectedFileCount() === 1 ? '' : 's') }}</button>
+        </div>
+      }
 
       <!-- status row -->
       <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair);flex:none;font-size:var(--fs-xs);color:var(--ink-3)">
@@ -143,6 +171,9 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
         @for (g of groups(); track g.key) {
           <div style="margin-bottom:var(--sp-1)">
             <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-6);position:sticky;top:0;background:var(--panel);z-index:1;border-bottom:1px solid var(--hair)">
+              @if (mode() === 'replace') {
+                <input type="checkbox" [checked]="fileIncluded(g)" (click)="$event.stopPropagation(); toggleFile(g)" title="Include / exclude this file" style="accent-color:var(--accent);flex:none" />
+              }
               <app-icon name="file" size="sm" color="var(--ink-3)" />
               <span style="font-size:var(--fs-sm)">{{ fname(g.path) }}</span>
               <span style="font-size:var(--fs-2xs);color:var(--ink-4);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(g.path) }}</span>
@@ -160,12 +191,20 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
                 [style.background]="sel() === i ? 'var(--panel-3)' : 'transparent'"
                 style="display:flex;align-items:flex-start;gap:var(--sp-4);padding:var(--sp-2) var(--sp-6) var(--sp-2) 26px;cursor:pointer;font-size:var(--fs-sm);line-height:1.55"
               >
+                @if (mode() === 'replace') {
+                  <input type="checkbox" [checked]="included(h)" (click)="$event.stopPropagation(); toggleHit(h)" style="accent-color:var(--accent);flex:none;margin-top:var(--sp-1)" />
+                }
                 <span class="tnum" style="flex:none;width:34px;text-align:right;color:var(--ink-4);font-size:var(--fs-xs)">{{ h.line }}</span>
                 <span style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;color:var(--ink-2)">
                   @for (s of segs(h); track $index) {
                     @if (s.hit) {
-                      <mark style="background:color-mix(in oklch, var(--accent), transparent 62%);color:var(--ink);border-radius:2px;padding:0 1px">{{ s.t }}</mark>
+                      <mark style="background:color-mix(in oklch, var(--accent), transparent 62%);color:var(--ink);border-radius:2px;padding:0 1px"
+                        [style.text-decoration]="mode() === 'replace' ? 'line-through' : 'none'">{{ s.t }}</mark>
                     } @else { <span>{{ s.t }}</span> }
+                  }
+                  @if (mode() === 'replace' && h.preview !== undefined) {
+                    <span style="color:var(--ink-4)"> → </span>
+                    <span style="background:var(--code-add-bg);color:var(--code-add-ink);border-radius:2px;padding:0 var(--sp-1)">{{ previewTrim(h) }}</span>
                   }
                 </span>
               </div>
@@ -195,6 +234,13 @@ export class FindInFilesComponent {
   readonly regex = signal(false);
   readonly focusedInput = signal(false);
   readonly sel = signal(0);
+
+  // ----- replace mode (B3.2) -----
+  readonly mode = signal<"find" | "replace">("find");
+  readonly replacement = signal("");
+  readonly applying = signal(false);
+  /** Match keys the user UNticked (default = everything included). */
+  readonly excluded = signal<ReadonlySet<string>>(new Set());
 
   readonly hits = signal<SearchMatchEntry[]>([]);
   readonly filesScanned = signal(0);
@@ -243,6 +289,97 @@ export class FindInFilesComponent {
     return this.flatIdx().get(h) ?? -1;
   }
 
+  // ----- replace selection (line granularity — one key per match row) -----
+
+  private hitKey(h: SearchMatchEntry): string {
+    return `${h.agentId ?? ""}|${h.path}:${h.line}`;
+  }
+  included(h: SearchMatchEntry): boolean {
+    return !this.excluded().has(this.hitKey(h));
+  }
+  toggleHit(h: SearchMatchEntry): void {
+    const key = this.hitKey(h);
+    this.excluded.update((s) => {
+      const next = new Set(s);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+  fileIncluded(g: Group): boolean {
+    return g.items.some((h) => this.included(h));
+  }
+  toggleFile(g: Group): void {
+    const anyIn = this.fileIncluded(g);
+    this.excluded.update((s) => {
+      const next = new Set(s);
+      for (const h of g.items) {
+        if (anyIn) next.add(this.hitKey(h));
+        else next.delete(this.hitKey(h));
+      }
+      return next;
+    });
+  }
+  readonly selectedCount = computed(() => this.flat().filter((h) => this.included(h)).length);
+  readonly selectedFileCount = computed(
+    () => this.groups().filter((g) => g.items.some((h) => this.included(h))).length,
+  );
+
+  /** Preview with leading whitespace trimmed like the match text. */
+  previewTrim(h: SearchMatchEntry): string {
+    return (h.preview ?? "").replace(/^\s+/, "");
+  }
+
+  /** Apply the replacement to every included match, then re-run the search. */
+  async apply(): Promise<void> {
+    if (this.applying()) return;
+    const agent = this.scopeAgent();
+    const projectId = agent?.projectId ?? this.projects.all()[0]?.id ?? null;
+    // group included hits per (agent, path) with the file's scan stamp
+    const byFile = new Map<
+      string,
+      { agentId: string | null; path: string; mtime: number; size: number; lines: number[] }
+    >();
+    for (const h of this.flat()) {
+      if (!this.included(h) || h.mtime === undefined || h.size === undefined) continue;
+      const key = `${h.agentId ?? ""}|${h.path}`;
+      let f = byFile.get(key);
+      if (!f) {
+        f = { agentId: h.agentId ?? null, path: h.path, mtime: h.mtime, size: h.size, lines: [] };
+        byFile.set(key, f);
+      }
+      f.lines.push(h.line);
+    }
+    if (!byFile.size) return;
+    this.applying.set(true);
+    try {
+      const results = await this.bridge.invoke<FileReplaceResult[]>(Commands.SearchReplaceApply, {
+        req: {
+          query: this.q(),
+          caseSensitive: this.caseSensitive(),
+          wholeWord: this.word(),
+          regex: this.regex(),
+          replacement: this.replacement(),
+          projectId,
+          files: [...byFile.values()],
+        },
+      });
+      const replaced = results.reduce((a, r) => a + r.replaced, 0);
+      const stale = results.filter((r) => r.stale).length;
+      const errors = results.filter((r) => r.error).length;
+      let msg = `Replaced ${replaced} line${replaced === 1 ? "" : "s"} in ${results.filter((r) => r.replaced > 0).length} file(s)`;
+      if (stale) msg += ` · ${stale} skipped (changed since scan)`;
+      if (errors) msg += ` · ${errors} failed`;
+      this.ui.flash(msg);
+      this.excluded.set(new Set());
+      void this.run(); // fresh scan reflects the new content
+    } catch (e) {
+      this.ui.flash("Replace failed: " + ((e as { message?: string })?.message ?? e));
+    } finally {
+      this.applying.set(false);
+    }
+  }
+
   constructor() {
     if (!this.scopeAgent()) this.scope.set("project");
 
@@ -276,6 +413,8 @@ export class FindInFilesComponent {
       this.word();
       this.regex();
       this.scope();
+      this.mode();
+      this.replacement();
       if (this.debounce) clearTimeout(this.debounce);
       this.debounce = setTimeout(() => this.run(), 250);
     });
@@ -316,6 +455,7 @@ export class FindInFilesComponent {
     this.truncated.set(false);
     this.error.set(null);
     this.sel.set(0);
+    this.excluded.set(new Set());
     this.earlyBatches = [];
     const q = this.q();
     if (!q) {
@@ -345,6 +485,7 @@ export class FindInFilesComponent {
           scope,
           agentId: agent?.id ?? null,
           projectId,
+          replacement: this.mode() === "replace" ? this.replacement() : null,
         },
       });
       this.searchId = id;

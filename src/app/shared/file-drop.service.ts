@@ -1,6 +1,8 @@
 import { inject, Injectable } from "@angular/core";
+import { AgentsStore } from "../stores/agents.store";
 import { TerminalService } from "../terminal.service";
 import { quotePath } from "../utils";
+import { DragService } from "./drag.service";
 
 /**
  * Turns an OS file drop into inserted text. With `dragDropEnabled: true` in
@@ -18,14 +20,31 @@ import { quotePath } from "../utils";
 @Injectable({ providedIn: "root" })
 export class FileDropService {
   private readonly terminals = inject(TerminalService);
+  private readonly drag = inject(DragService);
+  private readonly agents = inject(AgentsStore);
   private started = false;
   private unlisten?: () => void;
+  private unhookInternal?: () => void;
 
   /** Begin listening for OS file drops. Idempotent; silently no-ops when not
    *  running under Tauri (plain `ng serve` / unit tests). */
   start(): void {
     if (this.started) return;
     this.started = true;
+    // Internal drags (B1.5): a file-tree row dragged onto a prompt/terminal.
+    // Plain HTML5 dnd inside the window — works with or without Tauri.
+    const over = (e: DragEvent): void => {
+      if (this.drag.payload()?.kind === "file") e.preventDefault();
+    };
+    const drop = (e: DragEvent): void => {
+      this.handleInternalDrop(e);
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    this.unhookInternal = () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", drop);
+    };
     void import("@tauri-apps/api/webview")
       .then(({ getCurrentWebview }) =>
         getCurrentWebview().onDragDropEvent((event) => {
@@ -45,7 +64,30 @@ export class FileDropService {
   stop(): void {
     this.unlisten?.();
     this.unlisten = undefined;
+    this.unhookInternal?.();
+    this.unhookInternal = undefined;
     this.started = false;
+  }
+
+  /**
+   * A file-tree row released over the app (B1.5): resolve the agent's absolute
+   * path and insert it where the drop landed. Public for unit tests (jsdom
+   * can't synthesize trusted DragEvents).
+   */
+  handleInternalDrop(e: {
+    clientX: number;
+    clientY: number;
+    preventDefault(): void;
+  }): void {
+    const p = this.drag.payload();
+    if (p?.kind !== "file" || !p.agentId || !p.relPath) return;
+    e.preventDefault();
+    const wt = this.agents.all().find((a) => a.id === p.agentId)?.worktree;
+    this.drag.end();
+    if (!wt) return;
+    const sep = wt.includes("\\") ? "\\" : "/";
+    const rel = sep === "\\" ? p.relPath.replace(/\//g, "\\") : p.relPath;
+    this.routeAtCss([wt.replace(/[\\/]+$/, "") + sep + rel], e.clientX, e.clientY);
   }
 
   /**
@@ -55,10 +97,15 @@ export class FileDropService {
    * Tauri event.
    */
   route(paths: string[], physX: number, physY: number): void {
+    const dpr = window.devicePixelRatio || 1;
+    this.routeAtCss(paths, physX / dpr, physY / dpr);
+  }
+
+  /** Same routing with CSS-pixel coordinates (internal drags, tests). */
+  routeAtCss(paths: string[], cssX: number, cssY: number): void {
     if (!paths.length) return;
     const text = paths.map(quotePath).join(" ") + " ";
-    const dpr = window.devicePixelRatio || 1;
-    const el = document.elementFromPoint(physX / dpr, physY / dpr) as HTMLElement | null;
+    const el = document.elementFromPoint(cssX, cssY) as HTMLElement | null;
 
     // 1) A real text field (spawn prompt / any textarea/text input) → insert at
     //    the caret and notify Angular via a synthetic input event.

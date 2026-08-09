@@ -4,7 +4,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::{RecursiveMode, Watcher};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager as _, Runtime};
 use uuid::Uuid;
 
 use crate::git::service::FileChange;
@@ -24,6 +24,10 @@ const MAX_BURST: Duration = Duration::from_millis(1000);
 pub struct ScanResult {
     pub changes: Vec<FileChange>,
     pub head: Option<String>,
+    /// True when per-file line counts were computed (A2.2). Counts-only scans
+    /// carry add/del = 0 — the frontend must not treat those as authoritative
+    /// totals for the sidebar counters.
+    pub full: bool,
 }
 
 fn fingerprint(s: &ScanResult) -> u64 {
@@ -220,12 +224,20 @@ impl WatchService {
         scan: impl Fn() -> ScanResult + Send + 'static,
     ) {
         let ids = id.to_string();
+        let history_wt = path.clone();
         self.watch_with_emit(id, path, scan, move |s| {
+            // B4.4: every settled burst snapshots the dirty files' CURRENT
+            // content into local history (content-addressed — repeat bursts of
+            // identical content cost nothing). Runs on the debounce thread.
+            if let Some(history) = app.try_state::<crate::history::HistoryService>() {
+                let paths: Vec<String> = s.changes.iter().map(|c| c.path.clone()).collect();
+                let _ = history.snapshot(id, &history_wt, &paths, "watch");
+            }
             let _ = crate::core::emit::emit_keyed(
                 &app,
                 "agent://changed",
                 Some(ids.as_str()),
-                &serde_json::json!({ "id": ids, "changes": s.changes, "head": s.head }),
+                &serde_json::json!({ "id": ids, "changes": s.changes, "head": s.head, "countsFull": s.full }),
             );
         });
     }
@@ -546,6 +558,7 @@ mod tests {
         ScanResult {
             changes: paths.iter().map(|p| fc(p)).collect(),
             head: Some(head.into()),
+            full: true,
         }
     }
 
@@ -812,6 +825,7 @@ mod tests {
                 ScanResult {
                     changes: Vec::new(),
                     head: Some("h".into()),
+                    full: true,
                 }
             },
             |_s| {},
@@ -861,6 +875,7 @@ mod tests {
             || ScanResult {
                 changes: Vec::new(),
                 head: None,
+                full: true,
             },
             move |s| e.lock().unwrap().push(s),
         );
@@ -933,6 +948,7 @@ mod tests {
             move || ScanResult {
                 changes: scan_git.status(&scan_path),
                 head: scan_git.head_oid(&scan_path),
+                full: true,
             },
             move |s| e.lock().unwrap().push(s),
         );
