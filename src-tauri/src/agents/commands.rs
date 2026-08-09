@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Runtime, State};
+use tauri::{AppHandle, Manager as _, Runtime, State};
 use uuid::Uuid;
 
 use crate::agents::adapters::HookEnv;
@@ -94,6 +94,10 @@ pub async fn agent_remove<R: Runtime>(
     rt.stop(id);
     rt.drop_scrollback(id); // the A1.2 ring dies with the agent
     watch.unwatch(id); // stop watching its worktree before tearing it down
+    // B4.4: the agent's local-history snapshots die with it
+    if let Some(history) = app.try_state::<crate::history::HistoryService>() {
+        history.purge(id);
+    }
     let svc = svc.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_remove", || {
@@ -123,6 +127,44 @@ pub async fn agent_tree(
         crate::perf::timed("agent_tree", || {
             let agent = svc.get(id)?;
             Ok(crate::fs::tree(std::path::Path::new(&agent.worktree)))
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Sidebar counter totals for ONE agent (camelCase over the bridge).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeTotals {
+    pub id: String,
+    pub add: i64,
+    pub del: i64,
+    pub files: usize,
+}
+
+/// Initialization pass for the sidebar's per-agent change counters: FULL
+/// line-count totals for EVERY agent, in one call. After this, only watcher
+/// scans update them (full detail for running/visible agents — see
+/// `scan_detail`), so idle projects cost nothing further.
+#[tauri::command]
+pub async fn agent_change_totals(svc: State<'_, AgentService>) -> AppResult<Vec<ChangeTotals>> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_change_totals", || {
+            let mut out = Vec::new();
+            for a in svc.list()? {
+                let Ok(changes) = svc.changes(a.id) else {
+                    continue; // missing worktree — no counters to report
+                };
+                out.push(ChangeTotals {
+                    id: a.id.to_string(),
+                    add: changes.iter().map(|c| c.add).sum(),
+                    del: changes.iter().map(|c| c.del).sum(),
+                    files: changes.len(),
+                });
+            }
+            Ok(out)
         })
     })
     .await

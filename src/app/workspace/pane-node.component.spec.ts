@@ -3,7 +3,9 @@ import { TestBed } from "@angular/core/testing";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PaneNodeComponent } from "./pane-node.component";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { BRIDGE } from "../data-source/bridge";
 import { DiagnosticsService } from "../shared/diagnostics.service";
+import { EditsStore } from "../stores/edits.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
@@ -76,7 +78,8 @@ const LEAF: PaneLeaf = { type: "leaf", id: "pane1", agentId: "a1", view: "termin
 describe("PaneNodeComponent header actions", () => {
   const actions = { act: vi.fn(), toggleRun: vi.fn() };
   const diagnostics = { openWorktree: vi.fn(), openLog: vi.fn() };
-  const ui = { gitViewFor: () => null, setGitView: vi.fn() };
+  const ui = { gitViewFor: () => null, setGitView: vi.fn(), paneRoots: () => ({}), flash: vi.fn() };
+  const bridge = { invoke: vi.fn().mockResolvedValue(undefined) };
 
   function render(agent: Agent) {
     const f = TestBed.createComponent(PaneNodeComponent);
@@ -97,6 +100,7 @@ describe("PaneNodeComponent header actions", () => {
         { provide: AgentActionsService, useValue: actions },
         { provide: DiagnosticsService, useValue: diagnostics },
         { provide: UiStore, useValue: ui },
+        { provide: BRIDGE, useValue: bridge },
       ],
     });
     TestBed.overrideComponent(PaneNodeComponent, {
@@ -145,5 +149,177 @@ describe("PaneNodeComponent header actions", () => {
 
     const noSession = render(makeAgent({ sessionId: undefined }));
     expect(btn(noSession, "Continue last session")).toBeNull();
+  });
+
+  // ----- dirty file tabs: indicator + guarded close (B1.1) -----
+
+  const FILE_LEAF: PaneLeaf = {
+    type: "leaf",
+    id: "pane1",
+    agentId: "a1",
+    view: "file",
+    files: ["src/a.ts"],
+    activeFile: "src/a.ts",
+  };
+
+  function renderFileLeaf(ctx: PaneCtx) {
+    const f = TestBed.createComponent(PaneNodeComponent);
+    f.componentRef.setInput("node", FILE_LEAF);
+    f.componentRef.setInput("ctx", ctx);
+    f.detectChanges();
+    return f;
+  }
+
+  it("marks a tab dirty from the EditsStore and swaps × for the dot", () => {
+    const edits = TestBed.inject(EditsStore);
+    const f = renderFileLeaf(makeCtx([makeAgent()]));
+    expect(f.nativeElement.querySelector(".file-tab.dirty")).toBeNull();
+    edits.open("a1", "src/a.ts", "one");
+    edits.update("a1", "src/a.ts", "one!");
+    f.detectChanges();
+    expect(f.nativeElement.querySelector(".file-tab.dirty")).not.toBeNull();
+    expect(f.nativeElement.querySelector(".fdot")).not.toBeNull();
+  });
+
+  it("closing a clean tab closes immediately and drops the buffer", () => {
+    const edits = TestBed.inject(EditsStore);
+    edits.open("a1", "src/a.ts", "one");
+    const ctx = makeCtx([makeAgent()]);
+    const f = renderFileLeaf(ctx);
+    f.nativeElement.querySelector<HTMLButtonElement>(".fx")!.click();
+    expect(ctx.onFileClose).toHaveBeenCalledWith("pane1", "src/a.ts");
+    expect(edits.get("a1", "src/a.ts")).toBeUndefined();
+  });
+
+  it("closing a dirty tab opens the confirm dialog instead", () => {
+    const edits = TestBed.inject(EditsStore);
+    edits.open("a1", "src/a.ts", "one");
+    edits.update("a1", "src/a.ts", "one!");
+    const ctx = makeCtx([makeAgent()]);
+    const f = renderFileLeaf(ctx);
+    f.nativeElement.querySelector<HTMLButtonElement>(".fx")!.click();
+    f.detectChanges();
+    expect(ctx.onFileClose).not.toHaveBeenCalled();
+    expect(f.nativeElement.querySelector(".cc-card")).not.toBeNull();
+  });
+
+  it("Discard resets the buffer and closes; Cancel keeps everything", () => {
+    const edits = TestBed.inject(EditsStore);
+    edits.open("a1", "src/a.ts", "one");
+    edits.update("a1", "src/a.ts", "one!");
+    const ctx = makeCtx([makeAgent()]);
+    const f = renderFileLeaf(ctx);
+    f.componentInstance.confirmClose.set({ leafId: "pane1", agentId: "a1", paths: ["src/a.ts"], dirty: ["src/a.ts"] });
+    f.detectChanges();
+
+    const buttons = [...f.nativeElement.querySelectorAll<HTMLButtonElement>(".cc-actions button")];
+    const cancel = buttons.find((b) => b.textContent?.includes("Cancel"))!;
+    cancel.click();
+    f.detectChanges();
+    expect(ctx.onFileClose).not.toHaveBeenCalled();
+    expect(f.nativeElement.querySelector(".cc-card")).toBeNull();
+
+    f.componentInstance.confirmClose.set({ leafId: "pane1", agentId: "a1", paths: ["src/a.ts"], dirty: ["src/a.ts"] });
+    f.detectChanges();
+    const discard = [...f.nativeElement.querySelectorAll<HTMLButtonElement>(".cc-actions button")]
+      .find((b) => b.textContent?.includes("Discard"))!;
+    discard.click();
+    expect(ctx.onFileClose).toHaveBeenCalledWith("pane1", "src/a.ts");
+    expect(edits.get("a1", "src/a.ts")).toBeUndefined();
+  });
+
+  it("Save writes through the bridge, then closes the tab", async () => {
+    const edits = TestBed.inject(EditsStore);
+    edits.open("a1", "src/a.ts", "one");
+    edits.update("a1", "src/a.ts", "one!");
+    const ctx = makeCtx([makeAgent()]);
+    const f = renderFileLeaf(ctx);
+    f.componentInstance.saveAndClose({ leafId: "pane1", agentId: "a1", paths: ["src/a.ts"], dirty: ["src/a.ts"] });
+    // saveAndClose awaits Promise.all over the per-file saves — let the
+    // microtask chain fully drain before asserting
+    await new Promise((r) => setTimeout(r, 0));
+    expect(bridge.invoke).toHaveBeenCalledWith("file_write", {
+      id: "a1",
+      path: "src/a.ts",
+      content: "one!",
+    });
+    expect(ctx.onFileClose).toHaveBeenCalledWith("pane1", "src/a.ts");
+  });
+
+  // ----- file-tab context menu: single + bulk close -----
+
+  const MULTI_LEAF: PaneLeaf = {
+    type: "leaf",
+    id: "pane1",
+    agentId: "a1",
+    view: "file",
+    files: ["src/a.ts", "src/b.ts", "src/c.ts"],
+    activeFile: "src/b.ts",
+  };
+
+  function renderMultiLeaf(ctx: PaneCtx) {
+    const f = TestBed.createComponent(PaneNodeComponent);
+    f.componentRef.setInput("node", MULTI_LEAF);
+    f.componentRef.setInput("ctx", ctx);
+    f.detectChanges();
+    return f;
+  }
+
+  it("right-clicking a file tab opens the close menu with left/right enablement", () => {
+    const ctx = makeCtx([makeAgent()]);
+    const f = renderMultiLeaf(ctx);
+    const tabs = [...f.nativeElement.querySelectorAll<HTMLElement>(".file-tab")];
+    tabs[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    f.detectChanges();
+    const items = [...f.nativeElement.querySelectorAll<HTMLButtonElement>(".ftab-mi")];
+    expect(items.map((b) => b.textContent?.trim())).toEqual([
+      "Close",
+      "Close All to the Left",
+      "Close All to the Right",
+      "Close All",
+    ]);
+    // first tab: nothing to its left
+    expect(items[1].disabled).toBe(true);
+    expect(items[2].disabled).toBe(false);
+  });
+
+  it("Close All to the Right closes the tabs after the anchor, keeping the rest", () => {
+    const ctx = makeCtx([makeAgent()]);
+    const f = renderMultiLeaf(ctx);
+    const tabs = [...f.nativeElement.querySelectorAll<HTMLElement>(".file-tab")];
+    tabs[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    f.detectChanges();
+    const right = [...f.nativeElement.querySelectorAll<HTMLButtonElement>(".ftab-mi")]
+      .find((b) => b.textContent?.includes("Right"))!;
+    right.click();
+    expect(ctx.onFileClose).toHaveBeenCalledWith("pane1", "src/b.ts");
+    expect(ctx.onFileClose).toHaveBeenCalledWith("pane1", "src/c.ts");
+    expect(ctx.onFileClose).not.toHaveBeenCalledWith("pane1", "src/a.ts");
+    expect(f.componentInstance.tabMenu()).toBeNull();
+  });
+
+  it("Close All with a dirty buffer raises ONE dialog covering the whole set", () => {
+    const edits = TestBed.inject(EditsStore);
+    edits.open("a1", "src/b.ts", "one");
+    edits.update("a1", "src/b.ts", "one!");
+    const ctx = makeCtx([makeAgent()]);
+    const f = renderMultiLeaf(ctx);
+    const tabs = [...f.nativeElement.querySelectorAll<HTMLElement>(".file-tab")];
+    tabs[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    f.detectChanges();
+    [...f.nativeElement.querySelectorAll<HTMLButtonElement>(".ftab-mi")]
+      .find((b) => b.textContent?.trim() === "Close All")!
+      .click();
+    f.detectChanges();
+    // nothing closed yet; the dialog names only the dirty file
+    expect(ctx.onFileClose).not.toHaveBeenCalled();
+    const cc = f.componentInstance.confirmClose()!;
+    expect(cc.paths).toEqual(["src/a.ts", "src/b.ts", "src/c.ts"]);
+    expect(cc.dirty).toEqual(["src/b.ts"]);
+
+    // Discard closes every tab in the set
+    f.componentInstance.discardAndClose(cc);
+    expect(ctx.onFileClose).toHaveBeenCalledTimes(3);
+    expect(edits.get("a1", "src/b.ts")).toBeUndefined();
   });
 });

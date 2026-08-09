@@ -425,6 +425,11 @@ export interface Settings {
   projectsRoot: string;
   /** Relaunch agents that were running when the app last quit/crashed. */
   autoResume: boolean;
+  /** Write dirty editor buffers automatically shortly after typing stops. */
+  autosave: boolean;
+  /** User keybinding overrides: command id → binding ("Ctrl+Shift+p").
+   *  Absent id = the command's built-in default binding. */
+  keymap: Record<string, string>;
   /** Per-tool permission policy. Absent key = "off" (the tool's own flow). */
   autoApprove: Record<string, AutoApprovePolicy>;
   /** Permission prompts raise a native toast even when the app is unfocused. */

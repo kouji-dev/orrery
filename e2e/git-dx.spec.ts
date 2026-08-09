@@ -67,3 +67,24 @@ test("rebase is aiOnly until A3.4: usable, with no inline estimate while costs a
   await expect(rebase.locator(".btn.main")).toBeVisible();
   await expect(rebase.locator(".est-inline")).toHaveCount(0);
 });
+
+test("a long Changes list scrolls inside its cap — commit controls stay visible", async ({ page }) => {
+  await openGitTab(page, "e2e-g4", "e2e-scroll");
+  // seed 40 changed files straight into AgentWorkStore (backend-free)
+  await page.evaluate(`(() => {
+    const bar = window.ng.getComponent(document.querySelector("app-top-bar"));
+    const work = bar.agentActions["work"];
+    const files = Array.from({ length: 40 }, (_, i) =>
+      ({ path: "src/file-" + i + ".ts", add: 1, del: 0, state: "M" }));
+    work["patch"](work["changesMap"], "e2e-g4", { status: "ready", data: files });
+  })()`);
+
+  const list = page.locator(".gt-changes");
+  await expect(list).toBeVisible();
+  // the cap is real: the list overflows internally instead of growing
+  const overflows = await list.evaluate((el) => el.scrollHeight > el.clientHeight);
+  expect(overflows).toBe(true);
+  // and the commit controls below it are still on screen without scrolling
+  await expect(page.getByRole("button", { name: /^Commit all/ })).toBeInViewport();
+  await expect(page.getByPlaceholder("commit message…")).toBeInViewport();
+});

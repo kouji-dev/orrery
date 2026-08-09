@@ -1,6 +1,8 @@
 import { Injector, runInInjectionContext } from "@angular/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AgentsStore } from "../stores/agents.store";
 import { TerminalService } from "../terminal.service";
+import { DragService } from "./drag.service";
 import { FileDropService } from "./file-drop.service";
 
 interface TermStub {
@@ -8,17 +10,25 @@ interface TermStub {
   pasteToAgent: ReturnType<typeof vi.fn>;
 }
 
-function make(term: Partial<TermStub> = {}): { svc: FileDropService; term: TermStub } {
+function make(
+  term: Partial<TermStub> = {},
+  agents: { id: string; worktree: string }[] = [],
+): { svc: FileDropService; term: TermStub; drag: DragService } {
   const termStub: TermStub = {
     focusedAgentId: () => null,
     pasteToAgent: vi.fn(() => true),
     ...term,
   };
+  const drag = new DragService();
   const injector = Injector.create({
-    providers: [{ provide: TerminalService, useValue: termStub }],
+    providers: [
+      { provide: TerminalService, useValue: termStub },
+      { provide: DragService, useValue: drag },
+      { provide: AgentsStore, useValue: { all: () => agents } },
+    ],
   });
   const svc = runInInjectionContext(injector, () => new FileDropService());
-  return { svc, term: termStub };
+  return { svc, term: termStub, drag };
 }
 
 /** jsdom in this project doesn't implement elementFromPoint — install a mock
@@ -110,5 +120,50 @@ describe("FileDropService.route", () => {
     svc.route([], 0, 0);
     expect(spy).not.toHaveBeenCalled();
     expect(term.pasteToAgent).not.toHaveBeenCalled();
+  });
+});
+
+describe("FileDropService.handleInternalDrop (B1.5 tree-file drag)", () => {
+  const AGENTS = [{ id: "a1", worktree: "C:\\wt\\a1" }];
+
+  it("resolves the absolute worktree path and inserts it into the field under the drop", () => {
+    const ta = document.createElement("textarea");
+    document.body.appendChild(ta);
+    stubPoint(ta);
+    const { svc, drag } = make({}, AGENTS);
+    drag.start({ kind: "file", agentId: "a1", relPath: "src/lib.rs" });
+
+    const prevent = vi.fn();
+    svc.handleInternalDrop({ clientX: 3, clientY: 3, preventDefault: prevent });
+
+    expect(prevent).toHaveBeenCalled();
+    expect(ta.value).toBe("C:\\wt\\a1\\src\\lib.rs ");
+    expect(drag.payload()).toBeNull(); // drag state cleared
+  });
+
+  it("pastes into the terminal under the drop for PTY targets", () => {
+    const host = document.createElement("div");
+    host.setAttribute("data-agent-id", "a1");
+    document.body.appendChild(host);
+    stubPoint(host);
+    const { svc, term, drag } = make({}, [{ id: "a1", worktree: "/home/u/wt" }]);
+    drag.start({ kind: "file", agentId: "a1", relPath: "src/app.ts" });
+
+    svc.handleInternalDrop({ clientX: 0, clientY: 0, preventDefault: vi.fn() });
+    expect(term.pasteToAgent).toHaveBeenCalledWith("a1", "/home/u/wt/src/app.ts ");
+  });
+
+  it("ignores non-file drags entirely", () => {
+    const ta = document.createElement("textarea");
+    document.body.appendChild(ta);
+    stubPoint(ta);
+    const { svc, drag } = make({}, AGENTS);
+    drag.start({ kind: "agent", agentId: "a1" });
+
+    const prevent = vi.fn();
+    svc.handleInternalDrop({ clientX: 0, clientY: 0, preventDefault: prevent });
+    expect(prevent).not.toHaveBeenCalled();
+    expect(ta.value).toBe("");
+    expect(drag.payload()).not.toBeNull(); // untouched — pane splitter owns it
   });
 });

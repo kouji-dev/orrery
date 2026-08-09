@@ -125,7 +125,7 @@ pub struct Blame {
     pub lines: Vec<BlameLine>,
 }
 
-fn lang_from_path(rel: &str) -> &'static str {
+pub(crate) fn lang_from_path(rel: &str) -> &'static str {
     match Path::new(rel)
         .extension()
         .and_then(|e| e.to_str())

@@ -156,6 +156,25 @@ export const ALLOWLIST = [
   { file: "annotate-blame.component.ts", value: "11px" },
   { file: "annotate-blame.component.ts", value: "12px" },
   { file: "annotate-blame.component.ts", value: "14px" },
+  // review-comments.monaco is the Monaco port of the inline-review comment UX
+  // (cards, composer, gutter glyphs). Its geometry is ported 1:1 from the CM
+  // extension / design reference — like review-code and annotate-blame, code
+  // surfaces are intentionally NOT density-scaled.
+  { file: "review-comments.monaco.ts", value: "3px" },
+  { file: "review-comments.monaco.ts", value: "4px" },
+  { file: "review-comments.monaco.ts", value: "5px" },
+  { file: "review-comments.monaco.ts", value: "7px" },
+  { file: "review-comments.monaco.ts", value: "8px" },
+  { file: "review-comments.monaco.ts", value: "8.5px" },
+  { file: "review-comments.monaco.ts", value: "9px" },
+  { file: "review-comments.monaco.ts", value: "9.5px" },
+  { file: "review-comments.monaco.ts", value: "10px" },
+  { file: "review-comments.monaco.ts", value: "10.5px" },
+  { file: "review-comments.monaco.ts", value: "11px" },
+  { file: "review-comments.monaco.ts", value: "12px" },
+  { file: "review-comments.monaco.ts", value: "14px" },
+  { file: "review-comments.monaco.ts", value: "17px" },
+  { file: "review-comments.monaco.ts", value: "56px" },
   // send-review modal is a fixed-metric UI panel: the grouped-file list, comment
   // rows, global-note textarea, and footer all carry bespoke pixel geometry ported
   // 1:1 from the design reference. Like review-code, the comment-list surface is

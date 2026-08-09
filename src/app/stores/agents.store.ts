@@ -178,9 +178,9 @@ export class AgentsStore {
   /** Subscribe to backend worktree scan pushes — the watcher computes the
    *  changes + HEAD oid and ships them with the notification (no pull needed). */
   onScan(
-    cb: (p: { id: string; changes: AgentFile[]; head: string | null }) => void,
+    cb: (p: { id: string; changes: AgentFile[]; head: string | null; countsFull?: boolean }) => void,
   ): Promise<() => void> {
-    return this.bridge.on<{ id: string; changes: AgentFile[]; head: string | null }>(
+    return this.bridge.on<{ id: string; changes: AgentFile[]; head: string | null; countsFull?: boolean }>(
       Events.AgentChanged,
       cb,
     );

@@ -72,6 +72,15 @@ pub struct SearchMatch {
     pub text: String,
     /// [start, end) UTF-16 offsets of each match within `text`.
     pub ranges: Vec<(usize, usize)>,
+    /// Replace mode (B3.2): the line AFTER `replace_all`, windowed like `text`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
+    /// Replace mode: staleness fingerprint — mtime in ns since epoch + length.
+    /// Apply refuses files whose stamp changed since this scan.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mtime: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
 }
 
 #[derive(Clone, Serialize)]
@@ -159,6 +168,122 @@ pub fn build_matcher(
         .word(whole_word)
         .build(&pattern)
         .map_err(|e| format!("invalid pattern: {e}"))
+}
+
+/// The `regex`-crate twin of [`build_matcher`] for REPLACEMENT (B3.2): same
+/// pattern semantics (literal escaping, word boundaries, case), but with the
+/// crate's `$1`/`${name}` capture interpolation — previews computed here in
+/// Rust so the dialect can never diverge from what apply does.
+pub fn build_replacer(
+    query: &str,
+    case_sensitive: bool,
+    whole_word: bool,
+    regex: bool,
+) -> Result<regex::Regex, String> {
+    let mut pattern = if regex {
+        query.to_string()
+    } else {
+        escape_literal(query)
+    };
+    if whole_word {
+        pattern = format!(r"\b(?:{pattern})\b");
+    }
+    regex::RegexBuilder::new(&pattern)
+        .case_insensitive(!case_sensitive)
+        .build()
+        .map_err(|e| format!("invalid pattern: {e}"))
+}
+
+/// Post-replacement preview of one matched line (trailing EOL stripped,
+/// windowed to the same budget as `text`).
+pub fn preview_line(re: &regex::Regex, line: &str, replacement: &str) -> String {
+    let trimmed = line.trim_end_matches(['\n', '\r']);
+    let mut s = re.replace_all(trimmed, replacement).into_owned();
+    if s.len() > MAX_LINE_BYTES {
+        let cut = floor_char_boundary(&s, MAX_LINE_BYTES);
+        s.truncate(cut);
+        s.push('…');
+    }
+    s
+}
+
+/// Stat stamp used for replace staleness checks: (mtime ns since epoch, len).
+fn stamp_of(md: &std::fs::Metadata) -> (u64, u64) {
+    let ns = md
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    (ns, md.len())
+}
+
+/// Why a selected-line replace can fail per file.
+#[derive(Debug)]
+pub enum ReplaceError {
+    /// File changed since the scan (stamp mismatch) — skipped, not an error.
+    Stale,
+    Io(String),
+}
+
+/// Apply `re → replacement` to the SELECTED 1-based `lines` of `rel` under
+/// `root`. All-or-nothing per file: content is rewritten via a sibling temp
+/// file + rename. Returns the number of lines actually changed.
+pub fn apply_replace(
+    root: &Path,
+    rel: &str,
+    re: &regex::Regex,
+    replacement: &str,
+    mtime: u64,
+    size: u64,
+    lines: &std::collections::HashSet<u64>,
+) -> Result<usize, ReplaceError> {
+    // paths come from our own scan results, but never trust them with the FS
+    let p = Path::new(rel);
+    if p.is_absolute()
+        || p.components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_) | std::path::Component::CurDir))
+    {
+        return Err(ReplaceError::Io(format!("unsafe path: {rel}")));
+    }
+    let abs = root.join(p);
+    let md = std::fs::metadata(&abs).map_err(|e| ReplaceError::Io(format!("stat: {e}")))?;
+    if stamp_of(&md) != (mtime, size) {
+        return Err(ReplaceError::Stale);
+    }
+    let content =
+        std::fs::read_to_string(&abs).map_err(|e| ReplaceError::Io(format!("read: {e}")))?;
+    let mut out = String::with_capacity(content.len());
+    let mut changed = 0usize;
+    for (i, raw) in content.split_inclusive('\n').enumerate() {
+        let n = (i + 1) as u64;
+        if !lines.contains(&n) {
+            out.push_str(raw);
+            continue;
+        }
+        let body_end = raw.trim_end_matches(['\n', '\r']).len();
+        let (body, eol) = raw.split_at(body_end);
+        let replaced = re.replace_all(body, replacement);
+        if replaced != body {
+            changed += 1;
+        }
+        out.push_str(&replaced);
+        out.push_str(eol);
+    }
+    if changed == 0 {
+        return Ok(0); // nothing matched on the selected lines — no write
+    }
+    let file_name = abs
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file".into());
+    let tmp = abs.with_file_name(format!(".{file_name}.orrery-replace-tmp"));
+    std::fs::write(&tmp, &out).map_err(|e| ReplaceError::Io(format!("write: {e}")))?;
+    if let Err(e) = std::fs::rename(&tmp, &abs) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(ReplaceError::Io(format!("rename: {e}")));
+    }
+    Ok(changed)
 }
 
 /// Floor `i` to a char boundary of `s`.
@@ -265,7 +390,9 @@ pub(crate) fn worktree_fingerprint(root: &Path) -> u64 {
     h.finish()
 }
 
-/// The streaming search body — runs on its own thread per search.
+/// The streaming search body — runs on its own thread per search. `replacer`
+/// (B3.2 replace mode) adds a per-line post-replacement `preview` and a
+/// staleness stamp to every match.
 #[allow(clippy::too_many_arguments)]
 pub fn run<R: Runtime>(
     app: AppHandle<R>,
@@ -274,6 +401,7 @@ pub fn run<R: Runtime>(
     roots: Vec<SearchRoot>,
     matcher: RegexMatcher,
     max_results: usize,
+    replacer: Option<(regex::Regex, String)>,
 ) -> (usize, usize, bool, bool) {
     let mut searcher = SearcherBuilder::new()
         .binary_detection(BinaryDetection::quit(0))
@@ -302,6 +430,12 @@ pub fn run<R: Runtime>(
                 .replace('\\', "/");
             files += 1;
 
+            // replace mode: one stamp per file, carried on each of its matches
+            let stamp = replacer
+                .as_ref()
+                .and_then(|_| entry.metadata().ok())
+                .map(|md| stamp_of(&md));
+
             let mut per_file = 0usize;
             let result = searcher.search_path(
                 &matcher,
@@ -323,6 +457,11 @@ pub fn run<R: Runtime>(
                         line: lnum,
                         text,
                         ranges,
+                        preview: replacer
+                            .as_ref()
+                            .map(|(re, rep)| preview_line(re, line, rep)),
+                        mtime: stamp.map(|s| s.0),
+                        size: stamp.map(|s| s.1),
                     });
                     per_file += 1;
                     total += 1;
@@ -456,6 +595,72 @@ mod tests {
             true
         });
         assert_eq!(hits, 2);
+    }
+
+    #[test]
+    fn replacer_matches_grep_semantics_and_interpolates() {
+        // literal mode escapes regex metachars
+        let re = build_replacer("a.b", true, false, false).unwrap();
+        assert_eq!(re.replace_all("a.b axb", "X"), "X axb");
+        // case-insensitive default
+        let re = build_replacer("foo", false, false, false).unwrap();
+        assert_eq!(re.replace_all("Foo foo", "x"), "x x");
+        // whole word
+        let re = build_replacer("foo", true, true, false).unwrap();
+        assert_eq!(re.replace_all("foo food", "x"), "x food");
+        // regex mode with $1 capture interpolation
+        let re = build_replacer(r"greet(\w+)", true, false, true).unwrap();
+        assert_eq!(re.replace_all("greetHumain()", "salute$1"), "saluteHumain()");
+    }
+
+    #[test]
+    fn preview_windows_long_replacements() {
+        let re = build_replacer("x", true, false, false).unwrap();
+        let long = "x".repeat(2000);
+        let p = preview_line(&re, &long, "yy");
+        assert!(p.len() <= MAX_LINE_BYTES + 4);
+        assert!(p.ends_with('…'));
+        assert_eq!(preview_line(&re, "axa\n", "B"), "aBa");
+    }
+
+    #[test]
+    fn apply_replace_selected_lines_only_with_stamp_guard() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("f.txt");
+        std::fs::write(&p, "foo\nfoo\nfoo\r\nlast foo").unwrap();
+        let md = std::fs::metadata(&p).unwrap();
+        let (mtime, size) = stamp_of(&md);
+        let re = build_replacer("foo", true, false, false).unwrap();
+
+        // replace lines 2 and 4 only; CRLF on line 3 must survive untouched
+        let lines: std::collections::HashSet<u64> = [2u64, 4].into_iter().collect();
+        let n = apply_replace(dir.path(), "f.txt", &re, "bar", mtime, size, &lines).unwrap();
+        assert_eq!(n, 2);
+        assert_eq!(
+            std::fs::read_to_string(&p).unwrap(),
+            "foo\nbar\nfoo\r\nlast bar"
+        );
+
+        // stamp now differs from the original scan → stale skip
+        let out = apply_replace(dir.path(), "f.txt", &re, "baz", mtime, size, &lines);
+        assert!(matches!(out, Err(ReplaceError::Stale)));
+
+        // unsafe paths refused
+        let out = apply_replace(dir.path(), "../f.txt", &re, "z", 0, 0, &lines);
+        assert!(matches!(out, Err(ReplaceError::Io(_))));
+    }
+
+    #[test]
+    fn apply_replace_no_matching_selection_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("f.txt");
+        std::fs::write(&p, "alpha\nbeta").unwrap();
+        let (mtime, size) = stamp_of(&std::fs::metadata(&p).unwrap());
+        let re = build_replacer("zzz", true, false, false).unwrap();
+        let lines: std::collections::HashSet<u64> = [1u64, 2].into_iter().collect();
+        let n = apply_replace(dir.path(), "f.txt", &re, "x", mtime, size, &lines).unwrap();
+        assert_eq!(n, 0);
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "alpha\nbeta");
     }
 
     #[test]

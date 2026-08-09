@@ -4,7 +4,7 @@ import { BRIDGE, Commands, Events } from "../data-source/bridge";
 import { AutoApprovePolicy, Settings, SettingsEvents, UpdateInfo } from "../models";
 import { UiStore } from "../ui/ui.store";
 
-export type SettingsSection = "updates" | "agent" | "perms" | "notif";
+export type SettingsSection = "updates" | "agent" | "keymap" | "perms" | "notif";
 
 export const SOUND_OPTIONS = ["Ping", "Chime", "Pop", "Glass", "Submarine"] as const;
 
@@ -33,6 +33,10 @@ export function settingsDefaults(): Settings {
     worktreeRoot: "", // "" = ctor root (app-data/worktrees)
     projectsRoot: "", // "" = picker opens at the OS default
     autoResume: true,
+    // Why off: Ctrl+S + dirty state is the chosen save model (2026-08-08
+    // decision); autosave is the opt-in alternative, not the default.
+    autosave: false,
+    keymap: {}, // absent id = the command's default binding
     autoApprove: {}, // absent tool = "off" (the tool's own flow)
     remoteApproval: true,
     osNotifications: true,
@@ -161,6 +165,7 @@ export class SettingsStore {
       toolModel: { ...(p.toolModel ?? {}) },
       toolEffort: { ...(p.toolEffort ?? {}) },
       toolPath: { ...(p.toolPath ?? {}) },
+      keymap: { ...(p.keymap ?? {}) },
       autoApprove: { ...(p.autoApprove ?? {}) },
       costRates: { ...(p.costRates ?? {}) },
       events: { ...d.events, ...(p.events ?? {}) },
@@ -184,6 +189,17 @@ export class SettingsStore {
         delete next[tool];
       else next[tool] = value;
       return { ...s, [key]: next } as Settings;
+    });
+    this.persist();
+  }
+
+  /** Set (or clear, with null) one keybinding override (B6.2 keymap). */
+  setKeymapEntry(commandId: string, binding: string | null): void {
+    this.settings.update((s) => {
+      const next = { ...s.keymap };
+      if (binding == null || binding.trim() === "") delete next[commandId];
+      else next[commandId] = binding;
+      return { ...s, keymap: next };
     });
     this.persist();
   }

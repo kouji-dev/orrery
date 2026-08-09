@@ -11,24 +11,25 @@ import {
   signal,
   viewChild,
 } from "@angular/core";
-import type { Extension } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
+import type * as monacoApi from "monaco-editor";
+
 import { ReviewStore } from "../../agents/review.store";
 import { EditorNavService } from "../../commands/editor-nav.service";
 import { UiStore } from "../../ui/ui.store";
-import { buildTheme, CMCore, loadCMCore, loadLangExt } from "../code-lang";
 import { registerEditor } from "../editor-cap";
-import { chunkStats, DiffStats } from "./chunk-stats";
-import { reviewCommentsExt, ReviewCommentsApi } from "./review-comments.ext";
+import { applyMonacoTheme, loadMonaco, MonacoApi, monacoLanguage } from "../monaco-loader";
+import { DiffStats, lineChangeStats } from "./chunk-stats";
+import { attachReviewComments, MonacoReviewApi } from "./review-comments.monaco";
 
 /**
- * Unified inline-review code surface for the agent diff view + file view.
+ * Unified inline-review code surface for the agent diff view + file view —
+ * Monaco edition (B1.1 migration; formerly CodeMirror `unifiedMergeView`).
  *
- * Renders the CURRENT (new-side) content in a read-only CodeMirror editor;
- * `view="diff"` adds `unifiedMergeView` (Myers diff against `oldText`,
- * virtualized scrolling, deleted chunks as widgets) and `view="file"` is the
- * same editor without the merge layer. The review-comment UX (hover +, drag
- * range, composer, cards) is a CM extension — see review-comments.ext.ts.
+ * `view="diff"` renders a Monaco DiffEditor in INLINE mode (old text folded in
+ * as removed lines, unchanged regions collapsed) and `view="file"` a plain
+ * read-only editor. The review-comment UX (hover +, drag range, composer,
+ * cards) attaches to the modified/only editor — new-side line anchors, exactly
+ * as before. Stats come from the diff editor's own line changes.
  *
  * NOTE: Inputs use decorator @Input backed by signals (repo pattern) so the
  * component is testable under vitest JIT.
@@ -40,8 +41,7 @@ import { reviewCommentsExt, ReviewCommentsApi } from "./review-comments.ext";
   template: `<div #host class="code-host"></div>`,
   styles: [
     `
-      /* fill the pane so the editor's own scroller gets ALL available height —
-         the height chain here is what keeps large diffs scrollable */
+      /* fill the pane so the editor's own scroller gets ALL available height */
       :host {
         display: flex;
         flex-direction: column;
@@ -55,47 +55,19 @@ import { reviewCommentsExt, ReviewCommentsApi } from "./review-comments.ext";
         overflow: hidden;
         font-size: var(--fs-ui);
       }
-      :host ::ng-deep .cm-editor {
-        height: 100% !important;
+      :host ::ng-deep .monaco-editor,
+      :host ::ng-deep .monaco-editor .margin,
+      :host ::ng-deep .monaco-editor-background {
         background-color: var(--bg) !important;
       }
-      :host ::ng-deep .cm-scroller {
-        height: 100%;
-        overflow: auto;
+      /* flat row tints matching the app's diff palette */
+      :host ::ng-deep .monaco-editor .line-insert,
+      :host ::ng-deep .monaco-editor .char-insert {
+        background-color: var(--code-add-bg) !important;
       }
-      :host ::ng-deep .cm-content {
-        min-height: 100% !important;
-      }
-      :host ::ng-deep .cm-gutters {
-        min-height: 100% !important;
-        background-color: var(--bg) !important;
-      }
-      /* ----- unified merge layer: flat row tints (mirrors code-diff) ----- */
-      :host ::ng-deep .cm-changedLine {
-        background-color: rgba(52, 224, 161, 0.15) !important;
-      }
-      :host ::ng-deep .cm-deletedChunk {
-        background-color: rgba(255, 93, 122, 0.15) !important;
-      }
-      :host ::ng-deep .cm-insertedLine,
-      :host ::ng-deep .cm-deletedLine,
-      :host ::ng-deep .cm-deletedLine del {
-        background: none !important;
-        background-color: transparent !important;
-        text-decoration: none !important;
-      }
-      :host ::ng-deep .cm-changedText {
-        background-color: rgba(52, 224, 161, 0.34) !important;
-        border-radius: 2px;
-      }
-      :host ::ng-deep .cm-deletedChunk .cm-deletedText {
-        background-color: rgba(255, 93, 122, 0.34) !important;
-        border-radius: 2px;
-        text-decoration: none !important;
-      }
-      :host ::ng-deep .cm-collapsedLines {
-        color: var(--accent-2);
-        background: color-mix(in oklch, var(--accent-2), transparent 93%);
+      :host ::ng-deep .monaco-editor .line-delete,
+      :host ::ng-deep .monaco-editor .char-delete {
+        background-color: var(--code-del-bg) !important;
       }
     `,
   ],
@@ -120,23 +92,31 @@ export class UnifiedCodeComponent implements OnDestroy {
   @Input("newText") set newTextInput(v: string) { this.newText.set(v); }
   @Input("lang") set langInput(v: string) { this.lang.set(v); }
 
-  /** Exact header stats from the merge view's own diff (null for view="file"). */
+  /** Exact header stats from the diff editor's own line changes (null for view="file"). */
   @Output() readonly stats = new EventEmitter<DiffStats | null>();
 
   private readonly host = viewChild.required<ElementRef<HTMLElement>>("host");
-  private cmView: EditorView | null = null;
-  private cm: CMCore | null = null;
-  private api: ReviewCommentsApi | null = null;
+  private monaco: MonacoApi | null = null;
+  private editor: monacoApi.editor.IStandaloneCodeEditor | null = null;
+  private diffEditor: monacoApi.editor.IStandaloneDiffEditor | null = null;
+  private models: monacoApi.editor.ITextModel[] = [];
+  private subs: monacoApi.IDisposable[] = [];
+  private api: MonacoReviewApi | null = null;
   /** Unhooks this component's entry in the global editor cap (A0.6). */
   private unregisterCap: (() => void) | null = null;
-  /** Bumped when a new editor is live, so the comment-sync effect re-pushes. */
+  /** Bumped when a new editor is live, so dependent effects re-push. */
   private readonly viewGen = signal(0);
   private renderToken = 0;
 
   constructor() {
-    // Rebuild the editor when content, language, view mode, or theme changes.
+    // Rebuild when content, language, or view mode changes (theme is global).
     effect(() => {
-      void this.render(this.oldText(), this.newText(), this.view(), this.lang(), this.ui.tweaks().theme);
+      void this.render(this.oldText(), this.newText(), this.view(), this.lang());
+    });
+    // Theme switch restyles every live Monaco editor in place.
+    effect(() => {
+      const theme = this.ui.tweaks().theme;
+      if (this.monaco) applyMonacoTheme(this.monaco, theme);
     });
     // Push comment updates into the live editor (add/remove/clear from anywhere).
     effect(() => {
@@ -148,134 +128,152 @@ export class UnifiedCodeComponent implements OnDestroy {
         .list(agent)
         .filter((c) => c.file === file && c.view === mode)
         .map((c) => ({ id: c.id, fromLine: c.fromLine, toLine: c.toLine, note: c.note }));
-      if (this.cmView && this.api) this.api.setComments(this.cmView, comments);
+      this.api?.setComments(comments);
     });
     // Go-to-line / open-at-line (B2.3): consume a posted nav target once the
-    // editor for that agent+file is live. viewGen re-runs this after the async
-    // mount, so a target posted BEFORE the editor exists still lands.
+    // editor for that agent+file is live.
     effect(() => {
       const t = this.editorNav.target();
-      this.viewGen(); // re-check when a fresh editor mounts
-      const view = this.cmView;
-      const cm = this.cm;
-      if (!t || !view || !cm) return;
+      this.viewGen();
+      const editor = this.activeEditor();
+      const model = editor?.getModel() as monacoApi.editor.ITextModel | null | undefined;
+      if (!t || !editor || !model) return;
       if (t.agentId !== this.agent() || t.file !== this.file()) return;
-      const doc = view.state.doc;
-      const line = doc.line(Math.max(1, Math.min(t.line, doc.lines)));
-      const pos = Math.min(line.from + Math.max(0, t.col - 1), line.to);
-      view.dispatch({
-        selection: { anchor: pos },
-        effects: cm.view.EditorView.scrollIntoView(pos, { y: "center" }),
-      });
-      view.focus();
+      const line = Math.max(1, Math.min(t.line, model.getLineCount()));
+      editor.setPosition({ lineNumber: line, column: Math.max(1, t.col) });
+      editor.revealLineInCenter(line);
+      editor.focus();
       this.editorNav.consume(t);
     });
   }
 
   ngOnDestroy(): void {
-    this.unregisterCap?.();
-    this.unregisterCap = null;
-    this.cmView?.destroy();
-    this.cmView = null;
+    this.teardown();
   }
 
-  private async render(oldText: string, newText: string, mode: "diff" | "file", lang: string, theme: "dark" | "light"): Promise<void> {
-    const token = ++this.renderToken;
-    const el = this.host().nativeElement;
+  /** The editor review comments + nav act on: modified side (diff) or the only one. */
+  private activeEditor(): monacoApi.editor.ICodeEditor | null {
+    return this.diffEditor ? this.diffEditor.getModifiedEditor() : this.editor;
+  }
+
+  private teardown(): void {
     this.unregisterCap?.();
     this.unregisterCap = null;
-    this.cmView?.destroy();
-    this.cmView = null;
+    this.api?.dispose();
     this.api = null;
+    for (const s of this.subs) s.dispose();
+    this.subs = [];
+    this.editor?.dispose();
+    this.editor = null;
+    this.diffEditor?.dispose();
+    this.diffEditor = null;
+    for (const m of this.models) m.dispose();
+    this.models = [];
+  }
+
+  private async render(
+    oldText: string,
+    newText: string,
+    mode: "diff" | "file",
+    lang: string,
+  ): Promise<void> {
+    const token = ++this.renderToken;
+    const el = this.host().nativeElement;
+    this.teardown();
     el.textContent = "loading…";
 
-    let cm: CMCore;
+    let monaco: MonacoApi;
+    let langId: string;
     try {
-      cm = await loadCMCore();
+      monaco = await loadMonaco();
+      langId = await monacoLanguage(lang);
     } catch {
       if (token === this.renderToken) el.textContent = newText;
       return;
     }
     if (token !== this.renderToken) return;
-    this.cm = cm;
+    this.monaco = monaco;
+    applyMonacoTheme(monaco, this.ui.tweaks().theme);
 
     // Yield a macrotask so the triggering frame paints before the synchronous
-    // editor build (same rationale as code-diff.component.ts).
+    // editor build (same rationale as the CM implementation this replaces).
     await new Promise<void>((r) => setTimeout(r, 0));
     if (token !== this.renderToken) return;
     el.textContent = "";
 
     try {
-      const { EditorState, Compartment } = cm.state;
-      const { EditorView, lineNumbers } = cm.view;
-      const langComp = new Compartment();
-      const api = reviewCommentsExt(cm, {
-        save: (fromLine, toLine, note) => this.saveComment(fromLine, toLine, note),
-        remove: (id) => this.review.remove(this.agent(), id),
-      });
-      const exts: Extension[] = [
-        api.extension, // first → its gutter sits leftmost, like the old layout
-        lineNumbers(),
-        buildTheme(cm, theme),
-        EditorView.editable.of(false),
-        EditorState.readOnly.of(true),
-        EditorView.lineWrapping,
-        langComp.of([]),
-      ];
+      const common: monacoApi.editor.IEditorConstructionOptions = {
+        readOnly: true,
+        glyphMargin: true, // review-comment hover + / anchors
+        wordWrap: "on",
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        fontSize: parseFloat(getComputedStyle(el).fontSize) || 12,
+        fixedOverflowWidgets: true,
+        renderLineHighlight: "none",
+        stickyScroll: { enabled: false },
+      };
+      let capTarget: { dispose(): void };
       if (mode === "diff") {
-        exts.push(
-          cm.merge.unifiedMergeView({
-            original: oldText,
-            mergeControls: false,
-            gutter: true,
-            highlightChanges: true,
-            syntaxHighlightDeletions: true,
-            collapseUnchanged: { margin: 3, minSize: 4 },
-            diffConfig: { scanLimit: 500, timeout: 100 },
+        const diff = monaco.editor.createDiffEditor(el, {
+          ...common,
+          renderSideBySide: false, // unified/inline — deletions fold in as rows
+          hideUnchangedRegions: { enabled: true, contextLineCount: 3, minimumLineCount: 4 },
+          renderOverviewRuler: false,
+        });
+        const original = monaco.editor.createModel(oldText, langId);
+        const modified = monaco.editor.createModel(newText, langId);
+        diff.setModel({ original, modified });
+        this.models = [original, modified];
+        this.diffEditor = diff;
+        capTarget = diff;
+        // The diff computes async in the worker; line changes land afterwards.
+        this.subs.push(
+          diff.onDidUpdateDiff(() => {
+            if (this.diffEditor !== diff) return;
+            this.stats.emit(lineChangeStats(diff.getLineChanges() ?? [], oldText, newText));
           }),
         );
+        this.api = attachReviewComments(monaco, diff.getModifiedEditor(), this.commentHost());
+      } else {
+        const model = monaco.editor.createModel(newText, langId);
+        const editor = monaco.editor.create(el, { ...common, model });
+        this.models = [model];
+        this.editor = editor;
+        capTarget = editor;
+        this.stats.emit(null);
+        this.api = attachReviewComments(monaco, editor, this.commentHost());
       }
-      const view = new EditorView({ doc: newText, extensions: exts, parent: el });
-      this.cmView = view;
-      this.api = api;
-      // A0.6 editor cap: if too many editors are live, the oldest one (maybe
-      // this one, later) is demoted to plain text to bound the webview heap.
+      // A0.6 editor cap: demote to plain text to bound the webview heap.
+      const mine = capTarget;
       this.unregisterCap = registerEditor(() => {
-        if (this.cmView !== view) return; // superseded — nothing to demote
-        view.destroy();
-        this.cmView = null;
-        this.api = null;
+        if ((this.diffEditor ?? this.editor) !== mine) return; // superseded
+        this.teardown();
         el.textContent = newText;
       });
       this.viewGen.update((n) => n + 1);
-
-      if (mode === "diff") {
-        const gc = cm.merge.getChunks(view.state);
-        this.stats.emit(chunkStats(gc?.chunks ?? [], cm.merge.getOriginalDoc(view.state), view.state.doc));
-      } else {
-        this.stats.emit(null);
-      }
-
-      if (lang) {
-        void loadLangExt(lang).then((ext) => {
-          if (token !== this.renderToken || this.cmView !== view) return; // stale
-          view.dispatch({ effects: langComp.reconfigure(ext) });
-        });
-      }
     } catch (e) {
       console.warn("[unified-code] editor build failed, showing plain text", e);
       el.textContent = newText;
     }
   }
 
+  private commentHost(): { save(f: number, t: number, n: string): void; remove(id: string): void } {
+    return {
+      save: (fromLine, toLine, note) => this.saveComment(fromLine, toLine, note),
+      remove: (id) => this.review.remove(this.agent(), id),
+    };
+  }
+
   private saveComment(fromLine: number, toLine: number, note: string): void {
-    const v = this.cmView;
-    if (!v) return;
-    const doc = v.state.doc;
-    const from = Math.max(1, Math.min(fromLine, doc.lines));
-    const to = Math.max(from, Math.min(toLine, doc.lines));
-    const lines: string[] = [];
-    for (let n = from; n <= to; n++) lines.push(doc.line(n).text);
+    const model = this.activeEditor()?.getModel() as monacoApi.editor.ITextModel | null | undefined;
+    if (!model) return;
+    const lines = model.getLineCount();
+    const from = Math.max(1, Math.min(fromLine, lines));
+    const to = Math.max(from, Math.min(toLine, lines));
+    const text: string[] = [];
+    for (let n = from; n <= to; n++) text.push(model.getLineContent(n));
     this.review.add(this.agent(), {
       file: this.file(),
       view: this.view(),
@@ -283,8 +281,8 @@ export class UnifiedCodeComponent implements OnDestroy {
       fromLine: from,
       toLine: to,
       side: this.view() === "diff" ? "new" : "file",
-      snippet: (lines[0] ?? "").trim(),
-      lines,
+      snippet: (text[0] ?? "").trim(),
+      lines: text,
       note,
     });
   }

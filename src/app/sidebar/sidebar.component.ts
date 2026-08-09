@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Agent } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { AgentWorkStore } from "../agents/agent-work.store";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { TicketsStore } from "../stores/tickets.store";
 import { UiStore } from "../ui/ui.store";
@@ -55,7 +56,9 @@ import { ProjectGroupComponent } from "./project-group.component";
         </div>
       </div>
 
-      <div class="scroll-y" style="flex:1;padding:var(--sp-3) 0">
+      <!-- empty space below the groups still offers the panel-level actions;
+           project/agent rows stopPropagation via ui.openMenu, so theirs win -->
+      <div class="scroll-y" style="flex:1;padding:var(--sp-3) 0" (contextmenu)="onEmptyContext($event)">
         @for (p of projects.all(); track p.id) {
           @let pa = agentsFor(p.id);
           @if (!ui.query() || pa.length) {
@@ -88,6 +91,12 @@ export class SidebarComponent {
   private readonly ticketsStore = inject(TicketsStore);
   readonly collapsed = signal<Record<string, boolean>>({});
 
+  constructor() {
+    // one full-count pass for every agent's sidebar counters; afterwards only
+    // running/visible agents' watcher scans update them
+    inject(AgentWorkStore).initTotals();
+  }
+
   readonly activeAgent = computed(() => this.runtime.activeAgent()?.id ?? null);
   readonly totalRunning = computed(
     () => this.runtime.agents().filter((a) => a.status === "running").length,
@@ -109,5 +118,13 @@ export class SidebarComponent {
 
   toggle(id: string) {
     this.collapsed.update((c) => ({ ...c, [id]: !c[id] }));
+  }
+
+  /** Right-click on empty panel space: the panel-level actions. */
+  onEmptyContext(e: MouseEvent): void {
+    this.ui.openMenu(e, [
+      { label: "Add Project…", icon: "folderOpen", onClick: () => this.ui.openAddProject() },
+      { label: "Spawn Agent…", icon: "bolt", onClick: () => this.ui.openSpawn(null) },
+    ]);
   }
 }

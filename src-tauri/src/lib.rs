@@ -10,6 +10,7 @@ mod core;
 mod cost;
 mod fs;
 mod git;
+mod history;
 mod hooks;
 mod metrics;
 mod perf;
@@ -136,6 +137,9 @@ pub fn run() {
             app.manage(agent_service);
             app.manage(crate::watch::WatchService::new());
             app.manage(crate::search::SearchService::new());
+            app.manage(crate::history::HistoryService::new(
+                app.path().app_data_dir().expect("no app data dir"),
+            ));
             app.manage(RuntimeService::new());
             // loopback bridge for native agent hooks (permission round-trip + status)
             match hooks::HookBridge::start(app.handle().clone()) {
@@ -270,6 +274,7 @@ pub fn run() {
             agents::commands::agent_tree,
             agents::commands::agent_dir,
             agents::commands::agent_changes,
+            agents::commands::agent_change_totals,
             agents::commands::agent_commits,
             agents::commands::agent_commit,
             agents::commands::agent_discard,
@@ -302,9 +307,31 @@ pub fn run() {
             agents::commands::agent_merge_abort,
             agents::commands::agent_merge_continue,
             agents::commands::agent_session_state,
+            agents::fs_commands::file_write,
+            agents::fs_commands::file_create,
+            agents::fs_commands::dir_create,
+            agents::fs_commands::file_rename,
+            agents::fs_commands::file_delete,
+            agents::fs_commands::file_read_binary,
+            git::branches::project_branches_detail,
+            git::branches::project_remotes,
+            git::branches::project_fetch,
+            git::branches::project_pull,
+            git::branches::agent_pull,
+            git::branches::project_branch_create,
+            git::branches::project_branch_rename,
+            git::branches::project_branch_delete,
+            git::branches::project_branch_upstream,
+            git::branches::agent_checkout,
+            git::hunks::agent_file_hunks,
+            git::hunks::agent_hunk_revert,
+            history::commands::history_list,
+            history::commands::history_file,
+            history::commands::history_restore,
             search::commands::search_start,
             search::commands::search_cancel,
             search::commands::search_files,
+            search::commands::search_replace_apply,
             settings::commands::settings_get,
             settings::commands::settings_set,
             metrics::commands::system_metrics,

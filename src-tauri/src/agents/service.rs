@@ -293,8 +293,13 @@ impl AgentService {
             return crate::watch::ScanResult {
                 changes: Vec::new(),
                 head: None,
+                full: true,
             };
         };
+        // A RUNNING agent always scans full: it is the one actively producing
+        // changes, and the sidebar counters must track it without its terminal
+        // being on screen. Idle background agents stay on the cheap path.
+        let full = full || rec.status == "running";
         let p = Path::new(&rec.worktree);
         crate::watch::ScanResult {
             changes: if full {
@@ -303,6 +308,7 @@ impl AgentService {
                 self.git.status_counts_only(p)
             },
             head: self.git.head_oid(p),
+            full,
         }
     }
 

@@ -1,13 +1,9 @@
-import type { Text } from "@codemirror/state";
-import type { Chunk } from "@codemirror/merge";
-
 /**
- * Header stats derived from the ONE diff the unified merge view computed —
- * replaces the old triple bookkeeping (LCS rows vs multiset shared-line counts
- * vs whole-file hunk header) with a single source of truth.
+ * Header stats derived from the ONE diff the Monaco diff editor computed —
+ * single source of truth for the diff header (+N / −N / hunk label).
  *
- * Pure module (type-only CM imports) so vitest can exercise it against the
- * local @codemirror packages without touching the esm.sh runtime loader.
+ * Pure module: `LineChangeLite` is the slice of Monaco's `ILineChange` the
+ * math needs, so vitest exercises this with plain objects (no editor).
  */
 export interface DiffStats {
   add: number; // added (new-side) line count
@@ -16,37 +12,58 @@ export interface DiffStats {
   hunk: string; // "@@ -a,n +b,m @@" label for the first chunk
 }
 
-/** Lines covered by one side of a chunk. Chunk `to` is one past the end of the
- *  last changed line (may exceed doc length); an empty side has to === from. */
-function sideLines(doc: Text, from: number, to: number): number {
-  if (to <= from) return 0;
-  const end = Math.min(to - 1, doc.length);
-  return doc.lineAt(end).number - doc.lineAt(from).number + 1;
+/** Monaco `ILineChange` convention: an END of 0 means "no lines on this side",
+ *  with START then naming the line BEFORE the insertion/deletion point. */
+export interface LineChangeLite {
+  originalStartLineNumber: number;
+  originalEndLineNumber: number;
+  modifiedStartLineNumber: number;
+  modifiedEndLineNumber: number;
 }
 
-export function chunkStats(chunks: readonly Chunk[], oldDoc: Text, newDoc: Text): DiffStats {
-  // A truly empty side means added/deleted file — CM's Text still reports one
-  // (empty) line there, so bypass the chunk walk for exact +N / −N counts.
-  const oldEmpty = oldDoc.length === 0;
-  const newEmpty = newDoc.length === 0;
+function lineCount(s: string): number {
+  let n = 1;
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++;
+  return n;
+}
+
+function sideLines(start: number, end: number): number {
+  return end >= start && end > 0 ? end - start + 1 : 0;
+}
+
+export function lineChangeStats(
+  changes: readonly LineChangeLite[],
+  oldText: string,
+  newText: string,
+): DiffStats {
+  // A truly empty side means added/deleted file — bypass the change walk for
+  // exact +N / −N counts (Monaco still reports one empty line there).
+  const oldEmpty = oldText.length === 0;
+  const newEmpty = newText.length === 0;
   if (oldEmpty && newEmpty) return { add: 0, del: 0, hunks: 0, hunk: "@@ -0,0 +0,0 @@" };
-  if (oldEmpty) return { add: newDoc.lines, del: 0, hunks: 1, hunk: `@@ -0,0 +1,${newDoc.lines} @@` };
-  if (newEmpty) return { add: 0, del: oldDoc.lines, hunks: 1, hunk: `@@ -1,${oldDoc.lines} +0,0 @@` };
+  if (oldEmpty) {
+    const n = lineCount(newText);
+    return { add: n, del: 0, hunks: 1, hunk: `@@ -0,0 +1,${n} @@` };
+  }
+  if (newEmpty) {
+    const n = lineCount(oldText);
+    return { add: 0, del: n, hunks: 1, hunk: `@@ -1,${n} +0,0 @@` };
+  }
 
   let add = 0;
   let del = 0;
-  for (const c of chunks) {
-    del += sideLines(oldDoc, c.fromA, c.toA);
-    add += sideLines(newDoc, c.fromB, c.toB);
+  for (const c of changes) {
+    del += sideLines(c.originalStartLineNumber, c.originalEndLineNumber);
+    add += sideLines(c.modifiedStartLineNumber, c.modifiedEndLineNumber);
   }
   let hunk = "@@ -0,0 +0,0 @@";
-  if (chunks.length) {
-    const c = chunks[0];
-    const aLines = sideLines(oldDoc, c.fromA, c.toA);
-    const bLines = sideLines(newDoc, c.fromB, c.toB);
-    const aStart = aLines ? oldDoc.lineAt(c.fromA).number : Math.max(0, oldDoc.lineAt(Math.min(c.fromA, oldDoc.length)).number - 1);
-    const bStart = bLines ? newDoc.lineAt(c.fromB).number : Math.max(0, newDoc.lineAt(Math.min(c.fromB, newDoc.length)).number - 1);
-    hunk = `@@ -${aStart},${aLines} +${bStart},${bLines} @@`;
+  if (changes.length) {
+    const c = changes[0];
+    const aLines = sideLines(c.originalStartLineNumber, c.originalEndLineNumber);
+    const bLines = sideLines(c.modifiedStartLineNumber, c.modifiedEndLineNumber);
+    // an empty side's START already names the line before the change point —
+    // exactly the "@@" convention — so it is used as-is when the count is 0.
+    hunk = `@@ -${c.originalStartLineNumber},${aLines} +${c.modifiedStartLineNumber},${bLines} @@`;
   }
-  return { add, del, hunks: chunks.length, hunk };
+  return { add, del, hunks: changes.length, hunk };
 }

@@ -17,7 +17,6 @@ import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
 import { fileDir, fileName, fileStateLabel, langId, langTag, mix } from "../utils";
-import { diffWouldStall } from "./code-diff.component";
 import { UiStore } from "../ui/ui.store";
 import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
@@ -221,12 +220,6 @@ const LIST_DEFAULT = 236;
         @if (current() && diff(); as d) {
           @if (annotate()) {
             <app-annotate-blame [lines]="newBlame()" (openCommit)="onOpenCommit($event)" />
-          } @else if (stall()) {
-            <div class="diff-toobig">
-              <span>Large file with long lines — review rendered without inline diff.</span>
-              <button class="db-btn" (click)="forceReview.set(true)">Review anyway</button>
-            </div>
-            <app-unified-code [agent]="agent().id" [file]="current()!.path" view="file" [newText]="d.new" [lang]="langId()" />
           } @else {
             <app-unified-code [agent]="agent().id" [file]="current()!.path" view="diff" [oldText]="d.old" [newText]="d.new" [lang]="langId()" (stats)="stats.set($event)" />
           }
@@ -431,13 +424,8 @@ export class DiffViewComponent {
   private blameGen = 0;
 
   // ----- inline review signals -----
-  readonly forceReview = signal(false);
-  /** Exact header stats emitted by the unified merge view's own diff. */
+  /** Exact header stats emitted by the diff editor's own line changes. */
   readonly stats = signal<DiffStats | null>(null);
-  readonly stall = computed(() => {
-    const d = this.diff();
-    return !!d && !this.forceReview() && diffWouldStall(d.old, d.new);
-  });
 
   // ----- header derivations -----
   readonly langLabel = computed(() => {
@@ -485,7 +473,6 @@ export class DiffViewComponent {
     effect(() => {
       const id = this.agentId();
       const f = this.current();
-      this.forceReview.set(false);
       this.stats.set(null); // stale counts must not survive a file switch
       if (!f) {
         this.diff.set(null);

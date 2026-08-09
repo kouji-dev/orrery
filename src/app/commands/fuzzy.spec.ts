@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fzMatch, kbdLabel } from "./fuzzy";
+import { bindingFromEvent, fzMatch, kbdLabel, matchBinding } from "./fuzzy";
 import { fzSegments } from "./overlay-shell.component";
 
 describe("fzMatch", () => {
@@ -23,6 +23,32 @@ describe("fzMatch", () => {
     expect(boundary).not.toBeNull();
     expect(middle).not.toBeNull();
     expect(boundary.score).toBeGreaterThan(middle.score);
+  });
+});
+
+describe("bindingFromEvent (B6.2 keymap capture)", () => {
+  const ev = (init: KeyboardEventInit) => new KeyboardEvent("keydown", init);
+
+  it("produces strings matchBinding round-trips", () => {
+    const e = ev({ key: "s", ctrlKey: true, altKey: true });
+    const b = bindingFromEvent(e)!;
+    expect(b).toBe("Ctrl+Alt+s");
+    expect(matchBinding(e, b)).toBe(true);
+  });
+
+  it("captures shift as part of the chord", () => {
+    expect(bindingFromEvent(ev({ key: "P", ctrlKey: true, shiftKey: true }))).toBe("Ctrl+Shift+p");
+  });
+
+  it("rejects pure-modifier presses and unmodified keys", () => {
+    expect(bindingFromEvent(ev({ key: "Control", ctrlKey: true }))).toBeNull();
+    expect(bindingFromEvent(ev({ key: "Shift", shiftKey: true }))).toBeNull();
+    expect(bindingFromEvent(ev({ key: "x" }))).toBeNull(); // would fire while typing
+    expect(bindingFromEvent(ev({ key: "x", shiftKey: true }))).toBeNull(); // Shift+x = typing "X"
+  });
+
+  it("alt-only chords are recordable", () => {
+    expect(bindingFromEvent(ev({ key: "F7", altKey: true }))).toBe("Alt+f7");
   });
 });
 

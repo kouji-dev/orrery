@@ -101,7 +101,7 @@ function setup(
       { provide: TerminalService, useValue: terminals },
       { provide: SettingsStore, useValue: { settings: signal(settings), ready: () => Promise.resolve(settings) } },
       { provide: UiStore, useValue: { activeTab: signal("orchestrator"), paneRoots: signal({}), scopeAgentId: signal(null), flash: vi.fn(), openAgent: vi.fn() } },
-      { provide: AgentWorkStore, useValue: { applyScan: vi.fn(), ensureTree: vi.fn(), ensureCommits: vi.fn(), dispose: vi.fn() } },
+      { provide: AgentWorkStore, useValue: { applyScan: vi.fn(), ensureTree: vi.fn(), ensureCommits: vi.fn(), dispose: vi.fn(), dropTotals: vi.fn() } },
     ],
   });
   return TestBed.inject(AgentRuntimeService);

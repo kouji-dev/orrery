@@ -16,6 +16,8 @@ import { AutoApprovePolicy, CostRate, SettingsEvents } from "../models";
 import { COST_FEATURES_ENABLED } from "../cost/cost-flags";
 import { DEFAULT_RATES } from "../cost/estimate.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { AppCommand, CommandRegistryService } from "../commands/command-registry.service";
+import { bindingFromEvent, kbdLabel } from "../commands/fuzzy";
 import { DiagnosticsService } from "../shared/diagnostics.service";
 import {
   effectiveEffort,
@@ -292,6 +294,7 @@ export class ModelComboComponent {
 .set-row-help code{font-family:var(--font-mono);color:var(--ink-3);background:var(--panel-2);
   padding:0 var(--sp-2);border-radius:4px;font-size:var(--fs-xs);}
 .set-row-ctrl{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding-top:1px;}
+.set-kbd{font-family:var(--font-mono);font-size:var(--fs-xs);padding:var(--sp-1) var(--sp-4);min-width:110px;justify-content:center;}
 .set-row.wide .set-row-ctrl{width:100%;padding-top:0;}
 
 .set-reset{display:inline-flex;align-items:center;gap:var(--sp-2);height:var(--sp-7);padding:0 var(--sp-3) 0 var(--sp-2);
@@ -330,6 +333,7 @@ export class SetRowComponent {
 const SECTIONS: ReadonlyArray<{ id: SettingsSection; label: string; icon: string }> = [
   { id: "updates", label: "Updates", icon: "refresh" },
   { id: "agent", label: "Agent defaults", icon: "agent" },
+  { id: "keymap", label: "Keymap", icon: "bolt" },
   { id: "perms", label: "Permissions & safety", icon: "lock" },
   { id: "notif", label: "Notifications", icon: "bell" },
 ];
@@ -337,6 +341,7 @@ const SECTIONS: ReadonlyArray<{ id: SettingsSection; label: string; icon: string
 const SUBS: Record<SettingsSection, string> = {
   updates: "Channel, version & install behavior",
   agent: "Defaults for newly spawned agents",
+  keymap: "Keyboard shortcuts per command",
   perms: "Auto-approval & remote control",
   notif: "OS alerts, events & sound",
 };
@@ -512,6 +517,12 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                     <ng-container row-help>Re-attach to running agent sessions when Orrery relaunches.</ng-container>
                     <app-set-tgl [value]="s.autoResume" (changed)="store.set({ autoResume: $event })" />
                   </app-set-row>
+
+                  <app-set-row [dirty]="s.autosave !== D.autosave" (reset)="store.set({ autosave: D.autosave })">
+                    <ng-container row-label>Autosave edits</ng-container>
+                    <ng-container row-help>Write unsaved editor buffers 2s after you stop typing. Ctrl+S still saves on demand.</ng-container>
+                    <app-set-tgl [value]="s.autosave" (changed)="store.set({ autosave: $event })" />
+                  </app-set-row>
                 </div>
 
                 <div class="set-grp">
@@ -636,6 +647,34 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                     </app-set-row>
                   }
                 </div>
+              }
+
+              <!-- ── Keymap (B6.2) ───────────────────────────────────────── -->
+              @case ("keymap") {
+                @for (grp of keymapGroups(); track grp.name) {
+                  <div class="set-grp">
+                    <div class="set-grp-h">{{ grp.name }}<span class="ln"></span></div>
+                    @for (cmd of grp.commands; track cmd.id) {
+                      <app-set-row [dirty]="!!s.keymap[cmd.id]" (reset)="store.setKeymapEntry(cmd.id, null)">
+                        <ng-container row-label>{{ cmd.label }}</ng-container>
+                        <ng-container row-help>
+                          @if (capturing() === cmd.id) {
+                            press the new chord — Esc cancels, Backspace unbinds
+                          } @else if (conflictOf(cmd)) {
+                            also bound to "{{ conflictOf(cmd) }}"
+                          }
+                        </ng-container>
+                        <button
+                          class="btn ghost-hair set-kbd"
+                          (click)="startCapture(cmd.id)"
+                          [style.border-color]="capturing() === cmd.id ? 'var(--accent)' : conflictOf(cmd) ? 'var(--st-blocked)' : null"
+                          [style.color]="cmd.kbd ? 'var(--ink)' : 'var(--ink-4)'"
+                          [title]="'Click, then press the new shortcut'"
+                        >{{ capturing() === cmd.id ? 'recording…' : cmd.kbd ? kbdChip(cmd.kbd) : 'unassigned' }}</button>
+                      </app-set-row>
+                    }
+                  </div>
+                }
               }
 
               <!-- ── Permissions & safety ────────────────────────────────── -->
@@ -957,6 +996,67 @@ export class SettingsModalComponent {
   private readonly bridge = inject(BRIDGE);
   private readonly alerts = inject(NotificationAlertService);
   private readonly diag = inject(DiagnosticsService);
+  private readonly registry = inject(CommandRegistryService);
+
+  // ---- Keymap (B6.2) ----
+  /** Command id currently recording a new chord (null = not recording). */
+  readonly capturing = signal<string | null>(null);
+  readonly kbdChip = kbdLabel;
+
+  /** Registry commands by group, in registry order — the effective kbd on each
+   *  row already includes any override (the registry applies the keymap). */
+  readonly keymapGroups = computed(() => {
+    const groups = new Map<string, { name: string; commands: AppCommand[] }>();
+    for (const c of this.registry.commands()) {
+      if (!groups.has(c.group)) groups.set(c.group, { name: c.group, commands: [] });
+      groups.get(c.group)!.commands.push(c);
+    }
+    return [...groups.values()];
+  });
+
+  /** Another command sharing this one's effective binding, for the warn hint. */
+  conflictOf(cmd: AppCommand): string | null {
+    if (!cmd.kbd) return null;
+    const other = this.registry
+      .commands()
+      .find((c) => c.id !== cmd.id && (c.kbd === cmd.kbd || c.kbdAlt === cmd.kbd));
+    return other?.label ?? null;
+  }
+
+  /** Record the next chord for `id`. The registry's dispatcher is gated off
+   *  via `captureMode` for the duration, so the chord being recorded cannot
+   *  simultaneously RUN the command it currently belongs to. */
+  startCapture(id: string): void {
+    if (this.capturing()) this.stopCapture();
+    this.capturing.set(id);
+    this.registry.captureMode.set(true);
+    const h = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        this.stopCapture();
+        return;
+      }
+      if (e.key === "Backspace" || e.key === "Delete") {
+        this.store.setKeymapEntry(id, null);
+        this.stopCapture();
+        return;
+      }
+      const b = bindingFromEvent(e);
+      if (!b) return; // modifier-only / unmodified key — keep recording
+      this.store.setKeymapEntry(id, b);
+      this.stopCapture();
+    };
+    this.captureHandler = h;
+    window.addEventListener("keydown", h, true);
+  }
+  private captureHandler: ((e: KeyboardEvent) => void) | null = null;
+  private stopCapture(): void {
+    if (this.captureHandler) window.removeEventListener("keydown", this.captureHandler, true);
+    this.captureHandler = null;
+    this.capturing.set(null);
+    this.registry.captureMode.set(false);
+  }
 
   /** "Play" on the Cue & volume row: a full test notification (toast + cue)
    *  exactly as the current settings would deliver a real one. */
@@ -1016,6 +1116,7 @@ export class SettingsModalComponent {
     this.modelOpen.set(false);
   }
   close(): void {
+    this.stopCapture(); // a dangling recorder would keep eating keystrokes
     // A pending danger confirm means "Everything" was applied optimistically
     // but never confirmed — closing (Esc / backdrop / Cancel / Done) must not
     // leave the bypass enabled silently. Same revert as the confirm's Cancel.

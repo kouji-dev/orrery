@@ -35,6 +35,7 @@ export const Commands = {
   AgentTree: 'agent_tree',
   AgentDir: 'agent_dir',
   AgentChanges: 'agent_changes',
+  AgentChangeTotals: 'agent_change_totals',
   AgentCommits: 'agent_commits',
   AgentCommit: 'agent_commit',
   AgentDiscard: 'agent_discard',
@@ -116,6 +117,20 @@ export const Commands = {
   AgentMergeContinue: 'agent_merge_continue',
   /** Merge/rebase/cherry-pick in progress? + remaining conflict count. */
   AgentSessionState: 'agent_session_state',
+  // ---- worktree file operations (B1.1) ----
+  /** Write full file content, worktree-relative. Never stages; the watcher
+   *  pushes the resulting state change. */
+  FileWrite: 'file_write',
+  /** Create an empty file (errors if it exists; creates parent dirs). */
+  FileCreate: 'file_create',
+  /** Create a directory (recursive; errors if it exists). */
+  DirCreate: 'dir_create',
+  /** Rename/move a file or directory, worktree-relative on both sides. */
+  FileRename: 'file_rename',
+  /** Delete a file or directory (recursive for dirs). */
+  FileDelete: 'file_delete',
+  /** Read a binary file as base64 + mime (B1.4 image/PDF preview; 25MB cap). */
+  FileReadBinary: 'file_read_binary',
   // ---- find in files / search everywhere (B3.1 / B2.1) ----
   /** Start a streaming search → search id; results arrive on `search://results`
    *  batches and the run ends with one `search://done`. */
@@ -125,7 +140,85 @@ export const Commands = {
   /** All gitignore-filtered file paths of an agent's worktree (capped 20k) —
    *  the Files corpus for Search Everywhere / Go to File. */
   SearchFiles: 'search_files',
+  /** B3.2: apply a replace to selected matches — per-file atomic, stamp-guarded
+   *  (files changed since the scan are skipped as stale). */
+  SearchReplaceApply: 'search_replace_apply',
+  // ---- native branch & remote ops (A3.2) ----
+  /** Local branches with upstream/ahead-behind + worktree occupancy. */
+  ProjectBranchesDetail: 'project_branches_detail',
+  ProjectRemotes: 'project_remotes',
+  /** `git fetch --prune` (CLI shell-out so the OS credential helper auths). */
+  ProjectFetch: 'project_fetch',
+  /** `git pull --ff-only` in the project checkout (diverged → error). */
+  ProjectPull: 'project_pull',
+  /** `git pull --ff-only` in the agent's worktree. */
+  AgentPull: 'agent_pull',
+  ProjectBranchCreate: 'project_branch_create',
+  ProjectBranchRename: 'project_branch_rename',
+  ProjectBranchDelete: 'project_branch_delete',
+  ProjectBranchUpstream: 'project_branch_upstream',
+  /** Check out a branch in the agent's worktree (occupancy pre-checked). */
+  AgentCheckout: 'agent_checkout',
+  // ---- editor gutter change markers (B4.3) ----
+  /** Exact changed regions of a working file vs HEAD (context 0). */
+  AgentFileHunks: 'agent_file_hunks',
+  /** Revert ONE hunk (matched by newStart, recomputed server-side — stale
+   *  hunks error instead of clobbering the wrong lines). */
+  AgentHunkRevert: 'agent_hunk_revert',
+  // ---- local history (B4.4) ----
+  /** Newest-first snapshot timeline of an agent's worktree. */
+  HistoryList: 'history_list',
+  /** Snapshot content vs current content of one file (FileDiff shape). */
+  HistoryFile: 'history_file',
+  /** Restore files to a snapshot (guard-snapshots current content first). */
+  HistoryRestore: 'history_restore',
 } as const;
+
+/** One local-history snapshot (B4.4). */
+export interface HistorySnapshot {
+  id: string;
+  /** Unix ms. */
+  ts: number;
+  /** "watch" (settled fs burst) or "before-restore" (undo guard). */
+  trigger: string;
+  files: { path: string; hash: string; size: number }[];
+}
+
+/** One changed region vs HEAD (B4.3). `newLines === 0` = deletion AFTER
+ *  `newStart`; `oldLines === 0` = pure insertion. 1-based starts. */
+export interface FileHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+}
+
+/** Per-agent working-tree change totals — the sidebar counters. Fetched once
+ *  at startup (`agent_change_totals`), then kept fresh by full-detail watcher
+ *  scans (running/visible agents only). */
+export interface AgentChangeTotals {
+  id: string;
+  add: number;
+  del: number;
+  files: number;
+}
+
+/** One local branch of the project repo (A3.2). */
+export interface BranchInfo {
+  name: string;
+  /** Checked out in the project's main checkout. */
+  current: boolean;
+  /** Worktree name holding this branch ("" = main checkout; absent = free). */
+  checkedOutIn?: string;
+  upstream?: string;
+  ahead: number;
+  behind: number;
+}
+
+export interface RemoteInfo {
+  name: string;
+  url: string;
+}
 
 /** One agent's coalesced PTY output inside a multiplexed `agent://output`
  *  frame. The event payload is an ARRAY of these — the backend mux emits one
@@ -238,6 +331,19 @@ export interface SearchMatchEntry {
   line: number;
   text: string;
   ranges: [number, number][];
+  /** Replace mode (B3.2): the line after `replace_all`, windowed like `text`. */
+  preview?: string;
+  /** Replace mode: staleness stamp (mtime ns + length) checked by apply. */
+  mtime?: number;
+  size?: number;
+}
+
+/** Per-file outcome of `search_replace_apply`. */
+export interface FileReplaceResult {
+  path: string;
+  replaced: number;
+  stale: boolean;
+  error?: string;
 }
 
 export interface SearchResultsPayload {

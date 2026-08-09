@@ -118,12 +118,20 @@ test("Ctrl+Shift+F opens find-in-files with scope + toggles once an agent exists
   const find = page.locator("app-find-in-files");
   await expect(find.locator("input")).toBeVisible();
 
-  // control row: Find/Replace seg (Replace stubbed until B3.2), Aa/W/.* toggles, scope select
-  await expect(find.getByRole("button", { name: "Replace" })).toBeDisabled();
+  // control row: live Find/Replace seg (B3.2), Aa/W/.* toggles, scope select
+  const replaceTab = find.getByRole("button", { name: "Replace" });
+  await expect(replaceTab).toBeEnabled();
   await expect(find.getByRole("button", { name: "Aa" })).toBeVisible();
   await expect(find.getByRole("button", { name: ".*" })).toBeVisible();
   await expect(find.locator("select")).toBeVisible();
   await expect(find).toContainText("type to search");
+
+  // switching to Replace reveals the replacement row + apply button
+  await replaceTab.click();
+  await expect(find.getByPlaceholder(/Replacement/)).toBeVisible();
+  await expect(find.getByRole("button", { name: /^Replace \d/ })).toBeDisabled();
+  await find.getByRole("button", { name: "Find", exact: true }).click();
+  await expect(find.getByPlaceholder(/Replacement/)).toHaveCount(0);
 
   // idle empty-state hint before a query
   await expect(find).toContainText("results stream in as files are scanned");
@@ -132,9 +140,10 @@ test("Ctrl+Shift+F opens find-in-files with scope + toggles once an agent exists
   await expect(find).toHaveCount(0);
 });
 
-test("Search Everywhere: Actions is the default tab; Files is lazy and grouped by project", async ({ page }) => {
+test("Search Everywhere: Actions default; Files is lazy, grouped PER WORKTREE with duplicates", async ({ page }) => {
   await ready(page);
   await page.evaluate(seedAgent("e2e-se1", "e2e-grouped"));
+  await page.evaluate(seedAgent("e2e-se2", "e2e-other"));
   await page.keyboard.press("Shift");
   await page.keyboard.press("Shift");
   const se = page.locator("app-search-everywhere");
@@ -149,17 +158,22 @@ test("Search Everywhere: Actions is the default tab; Files is lazy and grouped b
   await se.getByRole("button", { name: /^Files/ }).click();
   await expect(se).toContainText("start typing to search files");
 
-  // seed the LIVE component's file corpus directly (signal write — no
-  // close/reopen dance, which raced the 380ms double-shift window under load)
+  // seed the LIVE component's corpora directly (signal write — no close/reopen
+  // dance, which raced the 380ms double-shift window under load): the SAME
+  // path exists in two worktrees of one project
   await page.evaluate(`window.ng.getComponent(document.querySelector("app-search-everywhere"))
-    ["fileList"].set([{ agentId: "e2e-se1", projectId: "p-e2e", paths: ["src/alpha.ts", "src/beta.ts"] }])`);
+    ["fileList"].set([
+      { agentId: "e2e-se1", projectId: "p-e2e", paths: ["src/alpha.ts", "src/beta.ts"] },
+      { agentId: "e2e-se2", projectId: "p-e2e", paths: ["src/alpha.ts"] },
+    ])`);
   // clicking the tab moved focus off the input — fill targets it directly
   await se.locator("input").fill("alpha");
 
-  // grouped result: sticky project header (no project record -> the honest
-  // "Outside project" bucket) above the matching file row
-  await expect(se.getByText("Outside project")).toBeVisible();
-  await expect(se).toContainText("alpha.ts");
+  // per-worktree groups: one header per worktree (project · agent), and the
+  // shared path appears once under EACH — no dedup across worktrees
+  await expect(se.getByText("Outside project · e2e-grouped")).toBeVisible();
+  await expect(se.getByText("Outside project · e2e-other")).toBeVisible();
+  await expect(se.getByText("alpha.ts")).toHaveCount(2);
   await expect(se).not.toContainText("beta.ts"); // filtered out
 
   await page.keyboard.press("Escape");

@@ -34,9 +34,12 @@ interface SeItem {
   sub: string;
   meta: string;
   icon: string;
-  /** Owning project id — drives the per-project grouping of file results.
+  /** Owning project id — half of the grouping key for file results.
    *  null/absent = outside any project (or a non-file corpus). */
   projectId?: string | null;
+  /** Owning agent (worktree). File results group per WORKTREE, so the same
+   *  path shows once per worktree that contains it — deliberately no dedup. */
+  agentId?: string | null;
   status?: AgentStatus;
   danger?: boolean;
   open: () => void;
@@ -192,18 +195,18 @@ export class SearchEverywhereComponent {
       this.items();
       this.sel.set(0);
     });
-    // fetch one file corpus PER PROJECT (the scope agent's worktree for its
-    // project, the first agent's for every other) so file results span — and
-    // group by — projects. Why cap 5: one invoke per project on overlay open.
+    // fetch one file corpus PER WORKTREE (scope agent first) so file results
+    // span — and group by — every worktree; the same path appears once per
+    // worktree that has it. Why cap 8: one invoke per worktree on overlay open.
     const scope = this.runtime.activeAgent();
     const picks: { id: string; projectId: string }[] = [];
     const seen = new Set<string>();
     for (const a of [scope, ...this.runtime.agents()]) {
-      if (!a || seen.has(a.projectId)) continue;
-      seen.add(a.projectId);
+      if (!a || seen.has(a.id)) continue;
+      seen.add(a.id);
       picks.push({ id: a.id, projectId: a.projectId });
     }
-    for (const p of picks.slice(0, 5)) {
+    for (const p of picks.slice(0, 8)) {
       void this.files
         .filesFor(p.id)
         .then((paths) =>
@@ -229,6 +232,7 @@ export class SearchEverywhereComponent {
         meta: langTag(p),
         icon: "file",
         projectId: fl.projectId,
+        agentId: fl.agentId,
         open: () => reg.openFileAt(fl.agentId, p),
       })),
     );
@@ -319,33 +323,46 @@ export class SearchEverywhereComponent {
     return scored.slice(0, 80);
   });
 
-  /** Header data for a project group (design: sticky icon·name·path·count). */
-  private headOf(projectId: string | null | undefined, count: number) {
+  /** Header data for a worktree group (design: sticky icon·name·path·count).
+   *  Name = project · agent, path = the worktree's branch — enough to tell two
+   *  checkouts of the same project apart at a glance. */
+  private headOf(projectId: string | null | undefined, agentId: string | null, count: number) {
     const p = this.projectHead(projectId);
-    return p
-      ? { icon: p.icon || "box", color: p.color || "var(--ink-4)", name: p.name, path: p.path, count }
-      : { icon: "folder", color: "var(--ink-4)", name: "Outside project", path: "", count };
+    const a = agentId ? this.runtime.agents().find((x) => x.id === agentId) : undefined;
+    const name = (p?.name ?? "Outside project") + (a ? " · " + a.name : "");
+    return {
+      icon: p?.icon || "folder",
+      color: p?.color || "var(--ink-4)",
+      name,
+      path: a?.branch ?? p?.path ?? "",
+      count,
+    };
   }
 
-  /** Display rows. Lazy tabs group by project — groups ordered by their BEST
-   *  HIT (first appearance in the ranked list), rows keeping score order
-   *  inside each group. Row indices stay aligned with `items()` so keyboard
-   *  selection and scroll targeting stay untouched by grouping. */
+  /** Display rows. Lazy tabs group PER WORKTREE (same path in two worktrees =
+   *  two rows in two groups) — groups ordered by their BEST HIT (first
+   *  appearance in the ranked list), rows keeping score order inside each
+   *  group. Row indices stay aligned with `items()` so keyboard selection and
+   *  scroll targeting stay untouched by grouping. */
   readonly rows = computed(() => {
     const its = this.items();
     type Row = { head: { icon: string; color: string; name: string; path: string; count: number } | null; first: boolean; r: (typeof its)[number]; i: number };
     if (!LAZY[this.tab()]) return its.map((r, i): Row => ({ head: null, first: i === 0, r, i }));
-    const groups = new Map<string, { projectId: string | null; rows: { r: (typeof its)[number]; i: number }[] }>();
+    const groups = new Map<
+      string,
+      { projectId: string | null; agentId: string | null; rows: { r: (typeof its)[number]; i: number }[] }
+    >();
     its.forEach((r, i) => {
-      const key = r.it.projectId ?? "_other";
-      if (!groups.has(key)) groups.set(key, { projectId: r.it.projectId ?? null, rows: [] });
+      const key = (r.it.projectId ?? "_other") + "|" + (r.it.agentId ?? "");
+      if (!groups.has(key))
+        groups.set(key, { projectId: r.it.projectId ?? null, agentId: r.it.agentId ?? null, rows: [] });
       groups.get(key)!.rows.push({ r, i });
     });
     const out: Row[] = [];
     let first = true;
     for (const g of groups.values()) {
       g.rows.forEach(({ r, i }, j) => {
-        out.push({ head: j === 0 ? this.headOf(g.projectId, g.rows.length) : null, first: first && j === 0, r, i });
+        out.push({ head: j === 0 ? this.headOf(g.projectId, g.agentId, g.rows.length) : null, first: first && j === 0, r, i });
       });
       first = false;
     }

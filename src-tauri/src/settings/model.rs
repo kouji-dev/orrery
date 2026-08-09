@@ -35,6 +35,11 @@ pub struct Settings {
     pub projects_root: String,
     /// Relaunch agents that were running when the app last quit/crashed.
     pub auto_resume: bool,
+    /// Write dirty editor buffers automatically shortly after typing stops.
+    pub autosave: bool,
+    /// User keybinding overrides: command id → binding ("Ctrl+Shift+p").
+    /// Absent id = the command's built-in default binding.
+    pub keymap: BTreeMap<String, String>,
     /// Per-tool permission policy: "off" | "allowlist" | "everything".
     pub auto_approve: BTreeMap<String, String>,
     /// Permission prompts raise a native toast even when the app is unfocused.
@@ -116,6 +121,10 @@ impl Default for Settings {
             worktree_root: String::new(),           // "" = ctor root (app-data/worktrees)
             projects_root: String::new(),           // "" = picker opens at the OS default
             auto_resume: true,
+            // Off: Ctrl+S + dirty state is the chosen save model; autosave is
+            // the opt-in alternative, not the default.
+            autosave: false,
+            keymap: BTreeMap::new(), // absent id = the command's default binding
             auto_approve: BTreeMap::new(), // absent tool = "off" (tool's own flow)
             remote_approval: true,
             os_notifications: true,
@@ -170,6 +179,8 @@ mod tests {
         assert_eq!(s.branch_template, "agent/{name}");
         assert_eq!(s.worktree_root, "", "empty = fall back to the ctor root");
         assert!(s.auto_resume);
+        assert!(!s.autosave, "Ctrl+S is the save model — autosave is opt-in");
+        assert!(s.keymap.is_empty(), "no binding overrides out of the box");
         assert!(s.auto_approve.is_empty(), "no tool defaults to bypassing");
         assert!(s.os_notifications);
         assert_eq!(s.sound_name, "Ping");
