@@ -313,6 +313,8 @@ pub fn run() {
             agents::fs_commands::file_rename,
             agents::fs_commands::file_delete,
             agents::fs_commands::file_read_binary,
+            agents::fs_commands::file_open_external,
+            agents::fs_commands::file_reveal,
             git::branches::project_branches_detail,
             git::branches::project_remotes,
             git::branches::project_fetch,
@@ -344,6 +346,7 @@ pub fn run() {
             update::update_install,
             core::commands::open_log,
             core::commands::open_path,
+            core::commands::reveal_path,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

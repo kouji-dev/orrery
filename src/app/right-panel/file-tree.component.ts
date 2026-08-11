@@ -22,6 +22,19 @@ interface FlatRow {
   depth: number;
 }
 
+/** Name the platform's own file manager, so the menu item reads the way the OS
+ *  does: Explorer on Windows, Finder on macOS, generic elsewhere. Exported for
+ *  the spec — the component reads it once from `navigator.userAgent`. */
+export function revealLabelFor(ua: string): string {
+  if (/Windows|Win32|Win64/i.test(ua)) return "Reveal in Explorer";
+  if (/Mac OS X|Macintosh/i.test(ua)) return "Reveal in Finder";
+  return "Reveal in File Manager";
+}
+
+function msgOf(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 @Component({
   selector: "app-file-tree",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -87,6 +100,10 @@ interface FlatRow {
             <button class="ft-mi" (click)="startInput('create-dir')"><app-icon name="folder" size="sm" [px]="12" />New Folder…</button>
             @if (m.node) {
               <button class="ft-mi" (click)="startRename()"><app-icon name="rename" size="sm" [px]="12" />Rename…</button>
+              <div class="ft-sep"></div>
+              <button class="ft-mi" (click)="openExternal(m.node)"><app-icon name="ext" size="sm" [px]="12" />Open in Default App</button>
+              <button class="ft-mi" (click)="reveal(m.node)"><app-icon name="folderOpen" size="sm" [px]="12" />{{ revealLabel }}</button>
+              <div class="ft-sep"></div>
               <button class="ft-mi danger" (click)="menuMode.set('delete')"><app-icon name="trash" size="sm" [px]="12" />Delete</button>
             }
           }
@@ -149,6 +166,11 @@ interface FlatRow {
       .ft-mi.danger:hover,
       .btn.danger {
         color: var(--code-del-ink);
+      }
+      .ft-sep {
+        height: 1px;
+        margin: var(--sp-2) var(--sp-1);
+        background: var(--hair);
       }
       .ft-label {
         padding: var(--sp-2) var(--sp-4);
@@ -283,6 +305,28 @@ export class FileTreeComponent {
     } catch (e) {
       this.ui.flash(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  /** File-manager wording the user's OS actually uses. */
+  readonly revealLabel = revealLabelFor(navigator.userAgent);
+
+  /** Hand the node to the OS: its associated app (an .html → the browser, a
+   *  .png → the image viewer). Directories open in the file manager. */
+  openExternal(node: FileNode): void {
+    this.toOs(Commands.FileOpenExternal, node, "couldn't open");
+  }
+
+  /** Show the node in the OS file manager with the item selected. */
+  reveal(node: FileNode): void {
+    this.toOs(Commands.FileReveal, node, "couldn't reveal");
+  }
+
+  private toOs(command: string, node: FileNode, failed: string): void {
+    const path = node.path.replace(/\\/g, "/");
+    this.closeMenu();
+    void this.bridge
+      .invoke(command, { id: this.agent().id, path })
+      .catch((e: unknown) => this.ui.flash(`${failed} ${node.name}: ${msgOf(e)}`));
   }
 
   async confirmDelete(): Promise<void> {

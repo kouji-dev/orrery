@@ -35,14 +35,8 @@ impl AgentAdapter for GeminiAdapter {
         true
     }
 
-    fn argv(&self, task: Option<&str>) -> Vec<String> {
-        let mut v = vec!["gemini".to_string()];
-        if let Some(t) = task {
-            if !t.is_empty() {
-                v.push(t.to_string());
-            }
-        }
-        v
+    fn base_argv(&self) -> Vec<String> {
+        vec!["gemini".to_string()]
     }
 
     // autoApprove: gemini inherits the trait default (NO flags for any policy)

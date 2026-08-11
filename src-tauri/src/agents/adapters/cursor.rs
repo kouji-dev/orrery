@@ -26,14 +26,8 @@ impl AgentAdapter for CursorAdapter {
         "cursor-agent"
     }
 
-    fn argv(&self, task: Option<&str>) -> Vec<String> {
-        let mut v = vec!["cursor-agent".to_string()];
-        if let Some(t) = task {
-            if !t.is_empty() {
-                v.push(t.to_string());
-            }
-        }
-        v
+    fn base_argv(&self) -> Vec<String> {
+        vec!["cursor-agent".to_string()]
     }
 
     // Resume a prior cursor-agent chat by id: `cursor-agent --resume <id>`

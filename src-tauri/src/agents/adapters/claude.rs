@@ -26,14 +26,8 @@ impl AgentAdapter for ClaudeAdapter {
         "claude"
     }
 
-    fn argv(&self, task: Option<&str>) -> Vec<String> {
-        let mut v = vec!["claude".to_string()];
-        if let Some(t) = task {
-            if !t.is_empty() {
-                v.push(t.to_string());
-            }
-        }
-        v
+    fn base_argv(&self) -> Vec<String> {
+        vec!["claude".to_string()]
     }
 
     // Resume a prior Claude Code session by its id: `claude --resume <id>` opens
