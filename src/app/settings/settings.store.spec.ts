@@ -200,6 +200,38 @@ describe("SettingsStore update check/install", () => {
     expect(store.updateCard()).toEqual({ version: "2.0.0" });
   });
 
+  // The background poll (UpdateWatcherService) settles through a separate door:
+  // re-arming the toast every 5 minutes would make "Later" meaningless, so a
+  // dismissal survives repeats of the SAME version and only a newer one re-asks.
+  it("a background re-check respects 'Later' until the offered version changes", async () => {
+    const { store } = make({ update: { version: "2.0.0" } });
+    await store.ready();
+    await store.checkNow();
+    store.dismissUpdate();
+    expect(store.updateCard()).toBeNull();
+
+    // same version on the next poll → still dismissed, still known
+    store.noteBackgroundUpdate({ version: "2.0.0" });
+    expect(store.updateCard()).toBeNull();
+    expect(store.updateKnown()).toBe(true);
+
+    // a NEWER release earns a fresh prompt
+    store.noteBackgroundUpdate({ version: "2.1.0" });
+    expect(store.updateCard()).toEqual({ version: "2.1.0" });
+  });
+
+  // The offer disappearing (installed elsewhere, release pulled) clears both the
+  // card and the nav dot — a toast for a version nobody serves is a lie.
+  it("a background re-check that finds nothing clears the known update", async () => {
+    const { store } = make({ update: { version: "2.0.0" } });
+    await store.ready();
+    await store.checkNow();
+    expect(store.updateKnown()).toBe(true);
+    store.noteBackgroundUpdate(null);
+    expect(store.updateKnown()).toBe(false);
+    expect(store.updateCard()).toBeNull();
+  });
+
   it("install invokes update_install with the channel and flashes on failure", async () => {
     const { store, invoke, flash } = make({ stored: { channel: "beta" } });
     await store.ready();

@@ -10,6 +10,7 @@ import { SpawnModalComponent } from '../modals/spawn-modal.component';
 import { UpdateToastComponent } from '../modals/update-toast.component';
 import { WhatsNewModalComponent } from '../modals/whats-new-modal.component';
 import { SettingsStore } from '../settings/settings.store';
+import { UpdateWatcherService } from '../updater/update-watcher.service';
 import { FileDropService } from '../shared/file-drop.service';
 import { UiStore } from '../ui/ui.store';
 import { OverviewComponent } from '../overview/overview.component';
@@ -168,5 +169,9 @@ export class ShellComponent {
     // backend whenever the visible surfaces change — tab switch, pane layout,
     // overview card visibility, window hidden/shown.
     inject(InterestService).start();
+    // Re-check for releases while the app RUNS (poll + on focus). The startup
+    // check happens once on the splash screen, so without this an instance that
+    // booted before a release shipped would only notice it after a restart.
+    inject(UpdateWatcherService).start();
   }
 }
