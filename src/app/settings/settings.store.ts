@@ -312,6 +312,24 @@ export class SettingsStore {
     this.lastCheckedAt.set(Date.now());
   }
 
+  /** A BACKGROUND re-check settled (see `UpdateWatcherService`): `null` means the
+   *  offer is gone — the user installed from elsewhere, or the release was pulled.
+   *
+   *  Unlike "Check now", this must not undo a "Later": re-arming the toast on
+   *  every poll would make the dismissal meaningless. The dismissal is therefore
+   *  cleared only when the offered version actually CHANGED — a newer release
+   *  earns a fresh prompt, the same one the user already waved off does not. */
+  noteBackgroundUpdate(info: UpdateInfo | null): void {
+    this.lastCheckedAt.set(Date.now());
+    if (!info) {
+      this.updateInfo.set(null);
+      this.updateDismissed.set(false);
+      return;
+    }
+    if (this.updateInfo()?.version !== info.version) this.updateDismissed.set(false);
+    this.updateInfo.set(info);
+  }
+
   /** "Later": hide the card; the nav dot (update KNOWN) stays. */
   dismissUpdate(): void {
     this.updateDismissed.set(true);
