@@ -131,6 +131,12 @@ export const Commands = {
   FileDelete: 'file_delete',
   /** Read a binary file as base64 + mime (B1.4 image/PDF preview; 25MB cap). */
   FileReadBinary: 'file_read_binary',
+  /** Open a worktree file/folder in the app the OS associates with it (an .html
+   *  in the browser, a .png in the image viewer). Worktree-relative path. */
+  FileOpenExternal: 'file_open_external',
+  /** Show a worktree file/folder in the OS file manager, item selected —
+   *  never launches the file's own handler. Worktree-relative path. */
+  FileReveal: 'file_reveal',
   // ---- find in files / search everywhere (B3.1 / B2.1) ----
   /** Start a streaming search → search id; results arrive on `search://results`
    *  batches and the run ends with one `search://done`. */

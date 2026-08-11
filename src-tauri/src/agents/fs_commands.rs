@@ -237,12 +237,83 @@ pub async fn file_delete(svc: State<'_, AgentService>, id: Uuid, path: String) -
     .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
+// ---- hand off to the OS (open with the default app / reveal in the file manager) ----
+
+/// Resolve a worktree-relative path to the absolute path the OS needs, refusing
+/// escapes (`safe_join`) and paths that no longer exist — handing a stale path to
+/// the shell would either do nothing or, worse, open the wrong thing.
+fn os_target(workdir: &Path, rel: &str) -> AppResult<String> {
+    let abs = safe_join(workdir, rel)?;
+    if !abs.exists() {
+        return Err(AppError::Other(format!("'{rel}' does not exist")));
+    }
+    Ok(abs.to_string_lossy().into_owned())
+}
+
+/// Open a worktree file (or folder) in whatever app the OS associates with it —
+/// an `.html` in the default browser, a `.png` in the image viewer, and so on.
+/// Directories open in the file manager.
+#[tauri::command]
+pub async fn file_open_external(
+    app: tauri::AppHandle,
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    path: String,
+) -> AppResult<()> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("file_open_external", || {
+            let target = os_target(&worktree_of(&svc, id)?, &path)?;
+            crate::core::commands::open_path(app, target)
+                .map_err(|e| AppError::Other(format!("open '{path}': {e}")))
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Show a worktree file in the OS file manager with the item itself selected
+/// (Explorer on Windows, Finder on macOS, the desktop's manager on Linux) —
+/// unlike `file_open_external`, this never launches the file's own handler.
+#[tauri::command]
+pub async fn file_reveal(
+    app: tauri::AppHandle,
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    path: String,
+) -> AppResult<()> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("file_reveal", || {
+            let target = os_target(&worktree_of(&svc, id)?, &path)?;
+            crate::core::commands::reveal_path(app, target)
+                .map_err(|e| AppError::Other(format!("reveal '{path}': {e}")))
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn dir() -> tempfile::TempDir {
         tempfile::tempdir().expect("tempdir")
+    }
+
+    // The OS hand-off resolves under the worktree and refuses both escapes and
+    // paths that are no longer there.
+    #[test]
+    fn os_target_resolves_existing_paths_and_refuses_the_rest() {
+        let d = dir();
+        create_file(d.path(), "docs/page.html").unwrap();
+        let abs = os_target(d.path(), "docs/page.html").unwrap();
+        assert_eq!(std::path::Path::new(&abs), d.path().join("docs/page.html"));
+        // a directory is a valid target too (opens the file manager)
+        assert!(os_target(d.path(), "docs").is_ok());
+        assert!(os_target(d.path(), "docs/gone.html").is_err(), "missing path");
+        assert!(os_target(d.path(), "../outside").is_err(), "escape");
     }
 
     #[test]

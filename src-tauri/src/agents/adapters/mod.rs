@@ -108,9 +108,36 @@ pub trait AgentAdapter: Send + Sync {
         which(self.binary())
     }
 
-    /// Program + args to launch the tool. The initial task prompt is included
-    /// only when `task` is `Some` (first launch); resumes pass `None`.
-    fn argv(&self, task: Option<&str>) -> Vec<String>;
+    /// Program + any fixed leading subcommand, WITHOUT the task prompt and
+    /// without run flags — the bare launch every other argv is built from.
+    fn base_argv(&self) -> Vec<String>;
+
+    /// The initial task prompt as trailing argv. Every supported CLI takes it as
+    /// one positional operand (`claude "<prompt>"`); a tool that ever needs a
+    /// flag form overrides this.
+    fn prompt_args(&self, task: &str) -> Vec<String> {
+        vec![task.to_string()]
+    }
+
+    /// Program + args to launch the tool: `base_argv` + the RUN flags + the task
+    /// prompt, in that order. The prompt is included only when `task` is `Some`
+    /// and non-empty (first launch); resumes pass `None`.
+    ///
+    /// Flags go BEFORE the prompt on purpose — that is the documented usage of
+    /// every supported CLI (`claude [options] [prompt]`), and it keeps the
+    /// prompt, which is arbitrary user text, from being able to displace or
+    /// swallow the run flags. A multi-line prompt used to do exactly that on
+    /// Windows: an npm `.cmd` shim is launched through `cmd.exe /c call`, whose
+    /// command line ends at the first newline, so every argument after the
+    /// prompt (auto-approve, `--model`, effort) was silently dropped.
+    fn argv(&self, task: Option<&str>, run_args: &[String]) -> Vec<String> {
+        let mut v = self.base_argv();
+        v.extend(run_args.iter().cloned());
+        if let Some(t) = task.filter(|t| !t.is_empty()) {
+            v.extend(self.prompt_args(t));
+        }
+        v
+    }
 
     /// Program + args to RESUME a prior CLI session by its captured session id —
     /// e.g. claude's `claude --resume <id>`. `None` (the default) means the tool
@@ -121,14 +148,18 @@ pub trait AgentAdapter: Send + Sync {
 
     /// Build the PTY launch command (program + args from `argv`). The runtime
     /// adds cwd + env stamps; this stays pure so it is trivially testable.
-    fn build_command(&self, task: Option<&str>) -> CommandBuilder {
-        command_from(self.argv(task))
+    fn build_command(&self, task: Option<&str>, run_args: &[String]) -> CommandBuilder {
+        command_from(self.argv(task, run_args))
     }
 
-    /// Build the PTY launch command to RESUME a session (program + args from
-    /// `resume_argv`). `None` when the tool has no resume-by-id flow.
-    fn build_resume_command(&self, session_id: &str) -> Option<CommandBuilder> {
-        self.resume_argv(session_id).map(command_from)
+    /// Build the PTY launch command to RESUME a session (`resume_argv` + the run
+    /// flags). `None` when the tool has no resume-by-id flow. A resume carries no
+    /// user-authored text, so the flags trail the session id here.
+    fn build_resume_command(&self, session_id: &str, run_args: &[String]) -> Option<CommandBuilder> {
+        self.resume_argv(session_id).map(|mut argv| {
+            argv.extend(run_args.iter().cloned());
+            command_from(argv)
+        })
     }
 
     /// Extra env to set on the agent process so its (globally-installed) hook
@@ -616,11 +647,13 @@ fn parse_shim(path: &Path) -> Option<Vec<String>> {
 
 /// npm's `.cmd` shim ends in one exec line shaped like
 /// `… "%_prog%"  "%dp0%\node_modules\<pkg>\cli.js" %*` (current npm) or
-/// `@"%~dp0\node.exe" "%~dp0\…\cli.js" %*` (older npm). Take the last line
-/// carrying `%*`, read its double-quoted tokens, expand `%dp0%`/`%~dp0` to the
-/// shim's directory and `%_prog%` per the shim's own logic (sibling `node.exe`,
-/// else `node` on PATH). Both the program and the script must exist on disk or
-/// the parse is rejected — never guess.
+/// `@"%~dp0\node.exe" "%~dp0\…\cli.js" %*` (older npm). Packages that ship a
+/// NATIVE binary instead of a JS entrypoint (today's `@anthropic-ai/claude-code`)
+/// generate a one-token line: `"%dp0%\node_modules\…\bin\claude.exe"   %*`.
+/// Take the last line carrying `%*`, read its double-quoted tokens, expand
+/// `%dp0%`/`%~dp0` to the shim's directory and `%_prog%` per the shim's own logic
+/// (sibling `node.exe`, else `node` on PATH). Every resolved path must exist on
+/// disk or the parse is rejected — never guess.
 #[cfg(windows)]
 fn parse_cmd_shim(text: &str, dir: &Path) -> Option<Vec<String>> {
     let exec_line = text
@@ -628,17 +661,34 @@ fn parse_cmd_shim(text: &str, dir: &Path) -> Option<Vec<String>> {
         .rev()
         .find(|l| l.contains("%*") && l.contains('"'))?;
     let quoted = quoted_tokens(exec_line);
-    // Why exactly 2: `program + script` is the entire npm shim contract; extra
-    // quoted tokens mean a hand-written wrapper doing something we can't model.
-    if quoted.len() != 2 {
-        return None;
+    match quoted.len() {
+        // Native-binary shim: the single token IS the program. Resolving it here
+        // (rather than wrapping the shim in `cmd.exe /c call`) is what keeps a
+        // multi-line task prompt intact — a cmd.exe command line ends at the
+        // first newline, silently truncating every argument after it.
+        //
+        // Deliberately stricter than the 2-token form: only an explicit
+        // shim-relative `.exe` that exists on disk qualifies. `%_prog%` alone
+        // would spawn a bare `node` (no script), and a bare NAME would go back
+        // through PATH — straight to this same shim.
+        1 => {
+            let prog = expand_dp0(&quoted[0], dir);
+            let p = Path::new(&prog);
+            let is_exe = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe"));
+            (is_exe && p.is_file()).then(|| vec![prog])
+        }
+        // `program + script` is the classic npm shim contract; more quoted
+        // tokens mean a hand-written wrapper doing something we can't model.
+        2 => {
+            let prog = resolve_cmd_shim_prog(&quoted[0], dir)?;
+            let script = expand_dp0(&quoted[1], dir);
+            if !Path::new(&script).is_file() {
+                return None;
+            }
+            Some(vec![prog, script])
+        }
+        _ => None,
     }
-    let prog = resolve_cmd_shim_prog(&quoted[0], dir)?;
-    let script = expand_dp0(&quoted[1], dir);
-    if !Path::new(&script).is_file() {
-        return None;
-    }
-    Some(vec![prog, script])
 }
 
 /// Resolve the program token of a `.cmd` shim exec line to a real on-disk
@@ -676,9 +726,11 @@ fn expand_dp0(token: &str, dir: &Path) -> String {
 }
 
 /// npm's `.ps1` shim invokes `& "$basedir/node$exe"  "$basedir/…/cli.js" $args`
-/// — a sibling-node branch, then a bare `"node$exe"` PATH fallback. Scan the
-/// invocation lines in order and return the first whose program + script both
-/// resolve to real files (`$basedir` → shim dir, `$exe` → ".exe" on Windows).
+/// — a sibling-node branch, then a bare `"node$exe"` PATH fallback. A package
+/// shipping a native binary generates the one-token form instead:
+/// `& "$basedir/node_modules/…/bin/claude.exe"   $args`. Scan the invocation
+/// lines in order and return the first that fully resolves to real files
+/// (`$basedir` → shim dir, `$exe` → ".exe" on Windows).
 #[cfg(windows)]
 fn parse_ps1_shim(text: &str, dir: &Path) -> Option<Vec<String>> {
     for line in text
@@ -686,6 +738,16 @@ fn parse_ps1_shim(text: &str, dir: &Path) -> Option<Vec<String>> {
         .filter(|l| l.contains("$args") && l.contains("& \""))
     {
         let quoted = quoted_tokens(line);
+        // Native-binary shim — the single token is the program itself. Same
+        // strictness as the `.cmd` one-token form: an existing explicit `.exe`.
+        if quoted.len() == 1 {
+            let prog = expand_ps1_vars(&quoted[0], dir);
+            let p = Path::new(&prog);
+            if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("exe")) && p.is_file() {
+                return Some(vec![prog]);
+            }
+            continue;
+        }
         if quoted.len() != 2 {
             continue;
         }
@@ -908,6 +970,29 @@ mod tests {
         "  $ret=$LASTEXITCODE\n}\nexit $ret\n",
     );
 
+    /// npm's shims for a package that ships a NATIVE binary instead of a JS
+    /// entrypoint (today's `@anthropic-ai/claude-code`): one quoted token on the
+    /// exec line — the `.exe` itself, no interpreter.
+    #[cfg(windows)]
+    const NATIVE_CMD_SHIM: &str = concat!(
+        "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\n",
+        "SETLOCAL\r\nCALL :find_dp0\r\n",
+        "\"%dp0%\\node_modules\\test-pkg\\bin\\tool.exe\"   %*\r\n",
+    );
+
+    #[cfg(windows)]
+    const NATIVE_PS1_SHIM: &str = concat!(
+        "#!/usr/bin/env pwsh\n",
+        "$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent\n\n",
+        "$exe=\"\"\n",
+        "if ($PSVersionTable.PSVersion -lt \"6.0\" -or $IsWindows) {\n  $exe=\".exe\"\n}\n",
+        "if ($MyInvocation.ExpectingInput) {\n",
+        "  $input | & \"$basedir/node_modules/test-pkg/bin/tool.exe\"   $args\n",
+        "} else {\n",
+        "  & \"$basedir/node_modules/test-pkg/bin/tool.exe\"   $args\n",
+        "}\nexit $LASTEXITCODE\n",
+    );
+
     /// Lay out a fake npm bin dir: node.exe sibling + the target cli.js.
     #[cfg(windows)]
     fn npm_dir_with(shim_name: &str, shim_body: &str) -> (tempfile::TempDir, std::path::PathBuf) {
@@ -953,6 +1038,62 @@ mod tests {
         // No pwsh wrapper for a resolvable ps1 shim.
         let (prog, _args) = launch_prefix(&shim.to_string_lossy());
         assert_ne!(prog, powershell_program());
+    }
+
+    // A package shipping a native binary generates a ONE-token shim
+    // (`"%dp0%\…\bin\tool.exe" %*`) — the shape `@anthropic-ai/claude-code`
+    // installs today. It must resolve to a direct spawn of that exe: the cmd.exe
+    // wrapper it used to fall back to ends its command line at the first newline,
+    // which silently truncated a multi-line task prompt and everything after it.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_shim_argv_parses_native_binary_shims_to_direct_exe_spawn() {
+        for (name, body) in [
+            ("tool.cmd", NATIVE_CMD_SHIM),
+            ("tool.ps1", NATIVE_PS1_SHIM),
+        ] {
+            let (dir, shim) = npm_dir_with(name, body);
+            let exe = dir
+                .path()
+                .join("node_modules")
+                .join("test-pkg")
+                .join("bin")
+                .join("tool.exe");
+            std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+            std::fs::write(&exe, b"MZ").unwrap();
+
+            let argv = resolve_shim_argv(&shim).unwrap_or_else(|| panic!("{name} must resolve"));
+            assert_eq!(argv.len(), 1, "{name}: the exe IS the argv: {argv:?}");
+            assert!(Path::new(&argv[0]).is_file(), "{name}: resolved exe exists");
+            assert!(
+                argv[0].to_ascii_lowercase().ends_with("tool.exe"),
+                "{name}: {}",
+                argv[0]
+            );
+            // launch_prefix rides the same resolution — no wrapper process.
+            let (prog, args) = launch_prefix(&shim.to_string_lossy());
+            assert_eq!(prog, argv[0], "{name}: direct spawn");
+            assert!(args.is_empty(), "{name}: no wrapper args: {args:?}");
+        }
+    }
+
+    // …but only when the single token is an explicit, existing `.exe`. A missing
+    // target, a bare `%_prog%` (which would spawn a scriptless `node`), or a bare
+    // NAME (which would resolve back through PATH to this same shim) must all be
+    // rejected so the wrapper fallback runs instead.
+    #[cfg(windows)]
+    #[test]
+    fn resolve_shim_argv_rejects_unresolvable_one_token_shims() {
+        let cases: &[(&str, &str)] = &[
+            // target does not exist on disk (never created in npm_dir_with)
+            ("missing.cmd", NATIVE_CMD_SHIM),
+            ("prog.cmd", "@ECHO off\r\nSETLOCAL\r\n\"%_prog%\" %*\r\n"),
+            ("bare.cmd", "@ECHO off\r\nSETLOCAL\r\n\"node\" %*\r\n"),
+        ];
+        for (name, body) in cases {
+            let (_dir, shim) = npm_dir_with(name, body);
+            assert_eq!(resolve_shim_argv(&shim), None, "{name} must not resolve");
+        }
     }
 
     // "Never guess": a hand-written .cmd that doesn't match the npm shape must
@@ -1073,8 +1214,36 @@ mod tests {
     #[test]
     fn argv_includes_task_only_on_first_launch() {
         let a = ClaudeAdapter;
-        assert_eq!(a.argv(None), vec!["claude"]);
-        assert_eq!(a.argv(Some("fix login")), vec!["claude", "fix login"]);
+        assert_eq!(a.argv(None, &[]), vec!["claude"]);
+        assert_eq!(a.argv(Some("fix login"), &[]), vec!["claude", "fix login"]);
+        // An empty prompt is not an argument at all.
+        assert_eq!(a.argv(Some(""), &[]), vec!["claude"]);
+    }
+
+    // The run flags come BEFORE the prompt for every tool. The prompt is user
+    // text and must never be positioned where it can displace a setting — a
+    // multi-line one truncated the argv on the Windows `cmd.exe /c call` launch
+    // path, dropping the auto-approve + model flags that used to trail it.
+    #[test]
+    fn argv_puts_run_flags_before_the_prompt() {
+        let run = vec!["--dangerously-skip-permissions".to_string()];
+        for (tool, bin) in [
+            ("claude", "claude"),
+            ("codex", "codex"),
+            ("cursor", "cursor-agent"),
+            ("gemini", "gemini"),
+        ] {
+            let a = adapter_for(tool).unwrap();
+            assert_eq!(
+                a.argv(Some("line one\nline two"), &run),
+                vec![
+                    bin,
+                    "--dangerously-skip-permissions",
+                    "line one\nline two"
+                ],
+                "{tool}: flags precede the prompt"
+            );
+        }
     }
 
     #[test]
@@ -1229,7 +1398,7 @@ mod tests {
             fn binary(&self) -> &str {
                 "bare"
             }
-            fn argv(&self, _task: Option<&str>) -> Vec<String> {
+            fn base_argv(&self) -> Vec<String> {
                 vec!["bare".into()]
             }
             fn install_hooks(&self, _home: &Path, _hook_bin: &Path) -> std::io::Result<()> {
@@ -1243,7 +1412,7 @@ mod tests {
         assert_eq!(Bare.decide_keys(4), "4\r");
         // resume_argv defaults to None (no resume-by-id flow) → no resume command.
         assert_eq!(Bare.resume_argv("abc"), None);
-        assert!(Bare.build_resume_command("abc").is_none());
+        assert!(Bare.build_resume_command("abc", &[]).is_none());
         // auto_approve_args defaults to no flags — even for "everything".
         assert!(Bare.auto_approve_args("everything").is_empty());
     }
@@ -1303,3 +1472,4 @@ mod tests {
         );
     }
 }
+

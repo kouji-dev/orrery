@@ -34,3 +34,14 @@ pub fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
         .open_path(path, None::<&str>)
         .map_err(|e| format!("open path failed: {e}"))
 }
+
+/// Show a path in the OS file manager with the item SELECTED, rather than
+/// launching it. `open_path` on a file would run its associated app; this always
+/// lands in Explorer/Finder with the file highlighted — the "Reveal in Explorer"
+/// action. The caller supplies the absolute path.
+#[tauri::command]
+pub fn reveal_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    app.opener()
+        .reveal_item_in_dir(path)
+        .map_err(|e| format!("reveal path failed: {e}"))
+}

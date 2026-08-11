@@ -548,13 +548,17 @@ fn kill_proc(p: &mut Proc) {
 /// prompt is passed only on the first launch (`send_prompt`); resumes open the
 /// tool bare. Unknown tools fall back to invoking the id verbatim.
 ///
-/// `approve_policy`, `model`, and `effort` append the adapter's run flags on
-/// BOTH the normal and the resume launch — they are properties of the agent run,
+/// `approve_policy`, `model`, and `effort` add the adapter's run flags to BOTH
+/// the normal and the resume launch — they are properties of the agent run,
 /// not of how the session was entered: the auto-approve flag ("everything" → the
 /// tool's skip-permissions flag; else none), `--model <model>` (empty → omitted),
 /// and the effort flag (only tools with an effort knob, e.g. codex's
 /// `--config model_reasoning_effort`). Unknown tools get no flags (no adapter
 /// knows their CLI).
+///
+/// On a fresh launch the flags are placed BEFORE the task prompt (`claude
+/// [options] [prompt]`), so the prompt — arbitrary, possibly multi-line user
+/// text — cannot displace them. See `AgentAdapter::argv`.
 /// Swap argv[0] for a user-set manual executable path, keeping every arg the
 /// adapter appended. No-op when `program` is `None`/blank or the command somehow
 /// has no argv. The replacement is an absolute path, so the later
@@ -604,18 +608,12 @@ fn tool_command(
             v
         })
         .unwrap_or_default();
-    let with_run_args = |mut cmd: CommandBuilder| {
-        for a in &run_args {
-            cmd.arg(a);
-        }
-        cmd
-    };
 
     // Prefer a resume-by-id launch when a session id is present AND the adapter
     // supports it (no prompt — the session continues from where it left off).
     if let (Some(id), Some(adapter)) = (resume_session, adapter.as_ref()) {
-        if let Some(cmd) = adapter.build_resume_command(id) {
-            return with_run_args(cmd);
+        if let Some(cmd) = adapter.build_resume_command(id, &run_args) {
+            return cmd;
         }
     }
 
@@ -625,9 +623,15 @@ fn tool_command(
         None
     };
     match adapter {
-        Some(adapter) => with_run_args(adapter.build_command(prompt)),
+        // The adapter places the run flags BEFORE the prompt — see
+        // `AgentAdapter::argv`: the prompt is arbitrary user text and must never
+        // be able to displace the run's own settings.
+        Some(adapter) => adapter.build_command(prompt, &run_args),
         None => {
             let mut c = CommandBuilder::new(tool);
+            for a in &run_args {
+                c.arg(a);
+            }
             if let Some(t) = prompt {
                 c.arg(t);
             }
@@ -829,7 +833,9 @@ fn wrap_for_ext(found: &std::path::Path, args_tail: &[String]) -> Vec<String> {
         // `C:\Program …`. Prefixing `call` makes the first token after `/c` a
         // non-quote, which suppresses that stripping, so both the quoted shim path
         // and quoted args survive intact.
-        Some("cmd") | Some("bat") => vec!["cmd.exe".into(), "/c".into(), "call".into(), full],
+        Some("cmd") | Some("bat") => {
+            return cmd_wrapped(vec!["cmd.exe".into(), "/c".into(), "call".into(), full], args_tail)
+        }
         Some("ps1") => vec![
             crate::agents::adapters::powershell_program(),
             "-NoProfile".into(),
@@ -839,10 +845,33 @@ fn wrap_for_ext(found: &std::path::Path, args_tail: &[String]) -> Vec<String> {
             full,
         ],
         // Other PATHEXT kinds (.vbs, .js, .py, …): cmd resolves the association.
-        Some(_) => vec!["cmd.exe".into(), "/c".into(), "call".into(), full],
+        Some(_) => {
+            return cmd_wrapped(vec!["cmd.exe".into(), "/c".into(), "call".into(), full], args_tail)
+        }
         None => vec![full],
     };
     out.extend(args_tail.iter().cloned());
+    out
+}
+
+/// Append `args_tail` to a `cmd.exe /c`-wrapped launch, with every embedded
+/// newline collapsed to a space.
+///
+/// cmd.exe parses its command line only up to the first CR/LF — everything after
+/// it is dropped, quoted or not. A multi-line task prompt therefore used to eat
+/// the whole rest of the argv, and orrery launched the tool with the prompt
+/// truncated to its first line. Argument ORDER is the real fix (run flags now
+/// precede the prompt, so settings can never be the thing that goes missing);
+/// this keeps the prompt itself whole on the one launch path that cannot carry
+/// newlines. Wrapper-free launches — a real `.exe`, or a shim we resolved to its
+/// target — pass the prompt through untouched.
+#[cfg(windows)]
+fn cmd_wrapped(mut out: Vec<String>, args_tail: &[String]) -> Vec<String> {
+    out.extend(
+        args_tail
+            .iter()
+            .map(|a| a.replace("\r\n", " ").replace(['\r', '\n'], " ")),
+    );
     out
 }
 
@@ -889,15 +918,16 @@ mod tests {
         assert_eq!(argv_of(&cmd), vec!["gemini"], "no resume_argv → bare launch");
     }
 
-    // autoApprove "everything" appends the adapter's bypass flag AFTER the normal
-    // argv — on the fresh launch AND on a resume (the policy belongs to the run,
-    // not the entry path). "off"/"allowlist" leave the argv untouched.
+    // autoApprove "everything" adds the adapter's bypass flag — on the fresh
+    // launch AND on a resume (the policy belongs to the run, not the entry path).
+    // On a fresh launch it precedes the prompt. "off"/"allowlist" leave the argv
+    // untouched.
     #[test]
     fn tool_command_appends_auto_approve_flag_for_everything() {
         let cmd = tool_command("claude", "fix the bug", "", None, true, None, "everything");
         assert_eq!(
             argv_of(&cmd),
-            vec!["claude", "fix the bug", "--dangerously-skip-permissions"]
+            vec!["claude", "--dangerously-skip-permissions", "fix the bug"]
         );
         let cmd = tool_command(
             "claude",
@@ -951,10 +981,58 @@ mod tests {
             let cmd = tool_command(tool, "t", model, None, true, None, "off");
             assert_eq!(
                 argv_of(&cmd),
-                vec![*bin, "t", "--model", model],
+                vec![*bin, "--model", model, "t"],
                 "{tool} must launch with --model {model}"
             );
         }
+    }
+
+    // The initial task prompt is the LAST argument on a fresh launch, whatever it
+    // contains. Nothing the user types into it can reorder, displace, or truncate
+    // the run's own settings — the bug this ordering fixes: a multi-line prompt
+    // ate every flag after it on the Windows `cmd.exe /c call` shim launch path.
+    #[test]
+    fn tool_command_prompt_never_displaces_run_settings() {
+        let multiline = "refactor the parser\n\n- keep the tests green\n- no new deps";
+        let cmd = tool_command(
+            "claude",
+            multiline,
+            "opus",
+            None,
+            true,
+            None,
+            "everything",
+        );
+        assert_eq!(
+            argv_of(&cmd),
+            vec![
+                "claude",
+                "--dangerously-skip-permissions",
+                "--model",
+                "opus",
+                multiline
+            ],
+            "every flag precedes the prompt; the prompt is passed whole"
+        );
+        // Same for the one tool with an effort knob (flags stay grouped up front).
+        let cmd = tool_command(
+            "codex",
+            multiline,
+            "gpt-5.1-codex",
+            Some("high"),
+            true,
+            None,
+            "everything",
+        );
+        assert_eq!(
+            argv_of(&cmd).last().map(String::as_str),
+            Some(multiline),
+            "codex: the prompt trails every flag"
+        );
+        assert!(
+            argv_of(&cmd).contains(&"--dangerously-bypass-approvals-and-sandbox".to_string()),
+            "codex: bypass flag survives a multi-line prompt"
+        );
     }
 
     // An empty model (record never carried one) forwards nothing — the agent runs
@@ -975,11 +1053,11 @@ mod tests {
             argv_of(&cmd),
             vec![
                 "codex",
-                "t",
                 "--model",
                 "gpt-5.1-codex",
                 "--config",
-                "model_reasoning_effort=high"
+                "model_reasoning_effort=high",
+                "t"
             ]
         );
     }
@@ -989,7 +1067,7 @@ mod tests {
         // claude has `effort: false` in the catalog — even if an effort slips
         // through, it adds nothing (only --model is forwarded).
         let cmd = tool_command("claude", "t", "opus", Some("high"), true, None, "off");
-        assert_eq!(argv_of(&cmd), vec!["claude", "t", "--model", "opus"]);
+        assert_eq!(argv_of(&cmd), vec!["claude", "--model", "opus", "t"]);
     }
 
     // Model + effort are part of the run, so they ride a resume launch too (after
@@ -1462,6 +1540,42 @@ mod tests {
                 r"C:\tools\claude.py".into(),
                 "task".into()
             ]
+        );
+    }
+
+    // cmd.exe reads its command line only up to the first CR/LF, so a multi-line
+    // argument would drop itself AND every argument after it. Whenever we have to
+    // go through `cmd.exe /c call`, newlines are collapsed to spaces so nothing is
+    // silently lost. Wrapper-free launches keep the argument byte-for-byte.
+    #[cfg(windows)]
+    #[test]
+    fn wrap_for_ext_collapses_newlines_only_on_the_cmd_exe_path() {
+        use std::path::Path;
+        let prompt = "line one\r\nline two\nline three".to_string();
+        let tail = vec![prompt.clone(), "--dangerously-skip-permissions".into()];
+
+        let wrapped = wrap_for_ext(Path::new(r"C:\npm\claude.cmd"), &tail);
+        assert_eq!(
+            wrapped,
+            vec![
+                "cmd.exe".to_string(),
+                "/c".into(),
+                "call".into(),
+                r"C:\npm\claude.cmd".into(),
+                "line one line two line three".into(),
+                "--dangerously-skip-permissions".into(),
+            ],
+            "every argument survives the wrapper"
+        );
+        assert!(
+            !wrapped.iter().any(|a| a.contains('\n') || a.contains('\r')),
+            "no newline reaches cmd.exe: {wrapped:?}"
+        );
+
+        // A real .exe is spawned directly — the prompt is passed untouched.
+        assert_eq!(
+            wrap_for_ext(Path::new(r"C:\winget\claude.exe"), &tail),
+            vec![r"C:\winget\claude.exe".to_string(), prompt, "--dangerously-skip-permissions".into()]
         );
     }
 
