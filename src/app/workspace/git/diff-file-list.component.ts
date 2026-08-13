@@ -2,16 +2,26 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  ElementRef,
+  HostListener,
+  inject,
   input,
   output,
   signal,
 } from "@angular/core";
 import { NgTemplateOutlet } from "@angular/common";
-import { CommitFile } from "../../models";
-import { fileDir, fileName } from "../../utils";
+import { Agent, CommitFile } from "../../models";
+import { fileDir, fileName, revealLabelFor } from "../../utils";
 import { IconComponent } from "../../shared/icon.component";
 import { StateBadgeComponent } from "../../shared/git/state-badge.component";
 import { AddDelComponent } from "../../shared/git/add-del.component";
+import { BRIDGE, Commands } from "../../data-source/bridge";
+import { EditsStore } from "../../stores/edits.store";
+import { UiStore } from "../../ui/ui.store";
+
+function msgOf(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 
 // ---- tree node types ----
 interface DirNode {
@@ -124,6 +134,7 @@ function buildTree(files: CommitFile[]): TreeNode[] {
           @for (f of files(); track f.path) {
             <div
               (click)="select.emit(f.path)"
+              (contextmenu)="onContext($event, f)"
               [style.background]="selPath() === f.path ? 'var(--panel-3)' : 'transparent'"
               style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);cursor:pointer;margin:1px var(--sp-2);border-radius:var(--r-sm)"
               (mouseenter)="onEnter($event, f.path)"
@@ -153,6 +164,44 @@ function buildTree(files: CommitFile[]): TreeNode[] {
       </div>
     </div>
 
+    <!-- context menu: file actions, only ever opened from a file row -->
+    @if (menu(); as m) {
+      <div class="dfl-menu rise" [style.left.px]="m.x" [style.top.px]="m.y" (mousedown)="$event.stopPropagation()" (contextmenu)="$event.preventDefault()">
+        @switch (menuMode()) {
+          @case ("actions") {
+            <button class="dfl-mi" (click)="startRename()"><app-icon name="rename" size="sm" [px]="12" />Rename…</button>
+            <div class="dfl-sep"></div>
+            <button class="dfl-mi" (click)="openExternal(m.file)"><app-icon name="ext" size="sm" [px]="12" />Open in Default App</button>
+            <button class="dfl-mi" (click)="reveal(m.file)"><app-icon name="folderOpen" size="sm" [px]="12" />{{ revealLabel }}</button>
+            <div class="dfl-sep"></div>
+            <button class="dfl-mi danger" (click)="menuMode.set('delete')"><app-icon name="trash" size="sm" [px]="12" />Delete</button>
+          }
+          @case ("delete") {
+            <div class="dfl-label">Delete <b>{{ name(m.file.path) }}</b>?</div>
+            <div class="dfl-row">
+              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
+              <button class="btn ghost-hair danger" (click)="confirmDelete()">Delete</button>
+            </div>
+          }
+          @default {
+            <div class="dfl-label">Rename {{ name(m.file.path) }}</div>
+            <input
+              class="dfl-input"
+              [value]="nameInput()"
+              (input)="nameInput.set($any($event.target).value)"
+              (keydown.enter)="commitRename()"
+              (keydown.escape)="closeMenu()"
+              spellcheck="false"
+            />
+            <div class="dfl-row">
+              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
+              <button class="btn primary" [disabled]="!nameInput().trim()" (click)="commitRename()">OK</button>
+            </div>
+          }
+        }
+      </div>
+    }
+
     <!-- recursive tree row template -->
     <ng-template #treeRows let-nodes="nodes" let-depth="depth">
       @for (node of nodes; track node.path) {
@@ -165,6 +214,7 @@ function buildTree(files: CommitFile[]): TreeNode[] {
         } @else {
           <div
             (click)="select.emit(node.path)"
+            (contextmenu)="onContext($event, node.file)"
             [style.padding-left.px]="8 + depth * 13 + 4"
             [style.background]="selPath() === node.path ? 'var(--panel-3)' : 'transparent'"
             style="display:flex;align-items:center;gap:var(--sp-3);padding-top:var(--sp-1);padding-bottom:var(--sp-1);padding-right:var(--sp-3);cursor:pointer;margin:1px var(--sp-2);border-radius:var(--r-sm)"
@@ -190,10 +240,88 @@ function buildTree(files: CommitFile[]): TreeNode[] {
         min-height: 0;
         height: 100%;
       }
+      .dfl-menu {
+        position: fixed;
+        z-index: 60;
+        min-width: 190px;
+        background: var(--elev);
+        border: 1px solid var(--hair-2);
+        border-radius: var(--r-md);
+        box-shadow: var(--shadow);
+        padding: var(--sp-2);
+      }
+      .dfl-mi {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-3);
+        width: 100%;
+        text-align: left;
+        padding: var(--sp-2) var(--sp-4);
+        border: none;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--ink-2);
+        font-size: var(--fs-sm);
+        cursor: pointer;
+      }
+      .dfl-mi:hover {
+        background: var(--panel-3);
+        color: var(--ink);
+      }
+      .dfl-mi.danger:hover,
+      .btn.danger {
+        color: var(--code-del-ink);
+      }
+      .dfl-sep {
+        height: 1px;
+        margin: var(--sp-2) var(--sp-1);
+        background: var(--hair);
+      }
+      .dfl-label {
+        padding: var(--sp-2) var(--sp-4);
+        font-size: var(--fs-xs);
+        color: var(--ink-3);
+        max-width: 260px;
+        overflow-wrap: anywhere;
+      }
+      .dfl-label b {
+        color: var(--ink);
+      }
+      .dfl-input {
+        width: 100%;
+        margin: var(--sp-1) 0;
+        background: var(--panel-2);
+        border: 1px solid var(--hair);
+        border-radius: var(--r-sm);
+        padding: var(--sp-2) var(--sp-3);
+        color: var(--ink);
+        font-family: var(--font-mono);
+        font-size: var(--fs-sm);
+        outline: none;
+      }
+      .dfl-input:focus {
+        border-color: color-mix(in oklch, var(--accent), transparent 50%);
+      }
+      .dfl-row {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--sp-3);
+        padding: var(--sp-2) var(--sp-1) var(--sp-1);
+      }
+      .dfl-row .btn {
+        padding: var(--sp-1) var(--sp-4);
+        font-size: var(--fs-xs);
+      }
     `,
   ],
 })
 export class DiffFileListComponent {
+  private readonly bridge = inject(BRIDGE);
+  private readonly ui = inject(UiStore);
+  private readonly edits = inject(EditsStore);
+  private readonly host = inject(ElementRef<HTMLElement>);
+
+  readonly agent = input.required<Agent>();
   readonly files = input<CommitFile[]>([]);
   readonly selPath = input<string | null | undefined>(null);
   readonly title = input<string>("");
@@ -201,6 +329,90 @@ export class DiffFileListComponent {
   readonly select = output<string>();
 
   readonly treeMode = signal(true);
+
+  // ----- context-menu file actions (rename / open / reveal / delete) -----
+  readonly menu = signal<{ x: number; y: number; file: CommitFile } | null>(null);
+  readonly menuMode = signal<"actions" | "rename" | "delete">("actions");
+  readonly nameInput = signal("");
+  readonly revealLabel = revealLabelFor(navigator.userAgent);
+
+  onContext(e: MouseEvent, file: CommitFile): void {
+    e.preventDefault();
+    e.stopPropagation();
+    this.menu.set({ x: e.clientX, y: e.clientY, file });
+    this.menuMode.set("actions");
+    this.nameInput.set("");
+  }
+
+  closeMenu(): void {
+    this.menu.set(null);
+  }
+
+  startRename(): void {
+    this.menuMode.set("rename");
+    this.nameInput.set(this.name(this.menu()!.file.path));
+    queueMicrotask(() => {
+      const el = this.host.nativeElement.querySelector(".dfl-input") as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    });
+  }
+
+  async commitRename(): Promise<void> {
+    const m = this.menu();
+    const newName = this.nameInput().trim();
+    if (!m || !newName) return;
+    const from = m.file.path.replace(/\\/g, "/");
+    const i = from.lastIndexOf("/");
+    const dir = i === -1 ? "" : from.slice(0, i);
+    const to = dir ? `${dir}/${newName}` : newName;
+    try {
+      await this.bridge.invoke(Commands.FileRename, { id: this.agent().id, from, to });
+      this.edits.close(this.agent().id, from);
+      this.closeMenu();
+    } catch (e) {
+      this.ui.flash(msgOf(e));
+    }
+  }
+
+  openExternal(file: CommitFile): void {
+    this.toOs(Commands.FileOpenExternal, file, "couldn't open");
+  }
+
+  reveal(file: CommitFile): void {
+    this.toOs(Commands.FileReveal, file, "couldn't reveal");
+  }
+
+  private toOs(command: string, file: CommitFile, failed: string): void {
+    const path = file.path.replace(/\\/g, "/");
+    this.closeMenu();
+    void this.bridge
+      .invoke(command, { id: this.agent().id, path })
+      .catch((e: unknown) => this.ui.flash(`${failed} ${this.name(path)}: ${msgOf(e)}`));
+  }
+
+  async confirmDelete(): Promise<void> {
+    const m = this.menu();
+    if (!m) return;
+    const path = m.file.path.replace(/\\/g, "/");
+    try {
+      await this.bridge.invoke(Commands.FileDelete, { id: this.agent().id, path });
+      this.edits.close(this.agent().id, path);
+      this.closeMenu();
+    } catch (e) {
+      this.ui.flash(msgOf(e));
+    }
+  }
+
+  @HostListener("document:mousedown")
+  onDocDown(): void {
+    if (this.menu()) this.closeMenu();
+  }
+
+  @HostListener("document:keydown.escape")
+  onDocEsc(): void {
+    if (this.menu()) this.closeMenu();
+  }
 
   readonly totalAdd = computed(() => this.files().reduce((s, f) => s + f.add, 0));
   readonly totalDel = computed(() => this.files().reduce((s, f) => s + f.del, 0));
