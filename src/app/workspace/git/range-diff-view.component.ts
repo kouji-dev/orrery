@@ -63,6 +63,7 @@ import { DiffOrBlameComponent } from "./diff-or-blame.component";
         <!-- left: aggregated changed-files list -->
         <div style="min-height:0;border-right:1px solid var(--hair);background:var(--panel)">
           <app-diff-file-list
+            [agent]="agent()"
             [files]="rangeFiles()"
             [selPath]="selPath()"
             title="Range files"

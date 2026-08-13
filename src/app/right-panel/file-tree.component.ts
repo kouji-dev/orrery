@@ -16,19 +16,11 @@ import { DragService } from "../shared/drag.service";
 import { EditsStore } from "../stores/edits.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
+import { revealLabelFor } from "../utils";
 
 interface FlatRow {
   node: FileNode;
   depth: number;
-}
-
-/** Name the platform's own file manager, so the menu item reads the way the OS
- *  does: Explorer on Windows, Finder on macOS, generic elsewhere. Exported for
- *  the spec — the component reads it once from `navigator.userAgent`. */
-export function revealLabelFor(ua: string): string {
-  if (/Windows|Win32|Win64/i.test(ua)) return "Reveal in Explorer";
-  if (/Mac OS X|Macintosh/i.test(ua)) return "Reveal in Finder";
-  return "Reveal in File Manager";
 }
 
 function msgOf(e: unknown): string {

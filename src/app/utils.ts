@@ -26,6 +26,14 @@ export function fmtDur(sec: number): string {
   return h + "h " + (m % 60) + "m";
 }
 
+/** Name the platform's own file manager, so a menu item reads the way the OS
+ *  does: Explorer on Windows, Finder on macOS, generic elsewhere. */
+export function revealLabelFor(ua: string): string {
+  if (/Windows|Win32|Win64/i.test(ua)) return "Reveal in Explorer";
+  if (/Mac OS X|Macintosh/i.test(ua)) return "Reveal in Finder";
+  return "Reveal in File Manager";
+}
+
 export function fileName(p: string): string {
   const parts = p.replace(/\/$/, "").split("/");
   return parts[parts.length - 1] + (p.endsWith("/") ? "/" : "");
