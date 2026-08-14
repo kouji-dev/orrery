@@ -13,6 +13,7 @@ import {
 import { Agent, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { EditsStore } from "../stores/edits.store";
+import { ScrollStateService } from "./scroll-state.service";
 import { DiagnosticsService } from "../shared/diagnostics.service";
 import { FileSaveService } from "./file-save.service";
 import { DragService } from "../shared/drag.service";
@@ -528,6 +529,7 @@ export class PaneNodeComponent {
   private drag = inject(DragService);
   private agentActions = inject(AgentActionsService);
   private edits = inject(EditsStore);
+  private scroll = inject(ScrollStateService);
   private saver = inject(FileSaveService);
   readonly diagnostics = inject(DiagnosticsService);
   readonly ui = inject(UiStore);
@@ -700,6 +702,7 @@ export class PaneNodeComponent {
     // EditsStore key (agent:path) is shared across panes.
     if (agentId && !this.fileOpenElsewhere(agentId, path, leafId)) {
       this.edits.close(agentId, path);
+      this.scroll.clear(agentId, path);
     }
     this.ctx().onFileClose(leafId, path);
   }

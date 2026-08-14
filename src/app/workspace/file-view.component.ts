@@ -8,6 +8,7 @@ import {
   inject,
   input,
   signal,
+  untracked,
 } from "@angular/core";
 import { DomSanitizer, SafeResourceUrl } from "@angular/platform-browser";
 import { marked } from "marked";
@@ -20,6 +21,7 @@ import { fileDir, fileName, langId, langTag } from "../utils";
 import { BRIDGE, Commands, FileHunk } from "../data-source/bridge";
 import { renderMermaidBlocks } from "./md-mermaid";
 import { MonacoFileEditorComponent } from "./monaco-file-editor.component";
+import { ScrollStateService } from "./scroll-state.service";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
 
@@ -97,7 +99,7 @@ const MAX_CHARS = 1_500_000;
       @if (mediaError(); as me) {
         <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-sm);padding:var(--sp-7);text-align:center">{{ me }}</div>
       } @else if (kind() === 'image' && mediaDataUrl()) {
-        <div class="scroll-y media-body">
+        <div class="scroll-y media-body" (scroll)="onBodyScroll($event)">
           <img [src]="mediaDataUrl()" [alt]="fname(path())" />
         </div>
       } @else if (kind() === 'pdf' && mediaSafeUrl()) {
@@ -108,7 +110,7 @@ const MAX_CHARS = 1_500_000;
     } @else if (notice(); as n) {
       <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-sm);padding:var(--sp-7);text-align:center">{{ n }}</div>
     } @else if (isMarkdown() && preview()) {
-      <div class="scroll-y md-body" style="flex:1;padding:var(--sp-7) var(--sp-8)" [innerHTML]="mdHtml()"></div>
+      <div class="scroll-y md-body" (scroll)="onBodyScroll($event)" style="flex:1;padding:var(--sp-7) var(--sp-8)" [innerHTML]="mdHtml()"></div>
     } @else if (annotate()) {
       <app-annotate-blame [lines]="blame()" (openCommit)="onOpenCommit($event)" />
     } @else {
@@ -170,6 +172,10 @@ export class FileViewComponent {
   private edits = inject(EditsStore);
   private destroyRef = inject(DestroyRef);
   private host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private scroll = inject(ScrollStateService);
+  /** Key the current body is showing — the reload effect fires with the NEXT
+   *  agent/path already in the signals, so saving must use this, not them. */
+  private bodyKey: { agent: string; path: string } | null = null;
 
   readonly loading = signal(false);
   readonly preview = signal(true); // markdown opens rendered; Raw is one click
@@ -225,6 +231,9 @@ export class FileViewComponent {
     effect(() => {
       const id = this.agent().id;
       const path = this.path();
+      const prev = this.bodyKey;
+      if (prev && (prev.agent !== id || prev.path !== path)) this.saveBodyScroll(prev);
+      this.bodyKey = { agent: id, path };
       void this.load(id, path);
     });
 
@@ -239,6 +248,8 @@ export class FileViewComponent {
       })
       .then((u) => (unsub = u));
     this.destroyRef.onDestroy(() => {
+      // covers the pane switching this leaf to terminal/diff/git
+      if (this.bodyKey) this.saveBodyScroll(this.bodyKey);
       unsub?.();
       this.dropObjectUrl();
     });
@@ -280,6 +291,34 @@ export class FileViewComponent {
         }),
       );
     });
+
+    // Restore a saved scroll offset once a plain body (md preview / media) is
+    // showing. Same two-frame wait as the mermaid effect — the [innerHTML] /
+    // [src] bindings land during change detection. Re-applying to an already
+    // positioned body is a no-op, so no showing-vs-reloading distinction.
+    effect(() => {
+      const showingMd = this.isMarkdown() && this.preview() && this.kind() === "text" && this.notice() === null && this.content();
+      const showingMedia = this.kind() === "image" && this.mediaDataUrl();
+      if (!showingMd && !showingMedia) return;
+      const top = untracked(() => this.scroll.getPlain(this.agent().id, this.path()));
+      if (top === undefined) return;
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const body = this.host.nativeElement.querySelector<HTMLElement>(".scroll-y");
+          if (body) body.scrollTop = top;
+        }),
+      );
+    });
+  }
+
+  onBodyScroll(e: Event): void {
+    const el = e.target as HTMLElement;
+    this.scroll.savePlain(this.agent().id, this.path(), el.scrollTop);
+  }
+
+  private saveBodyScroll(key: { agent: string; path: string }): void {
+    const body = this.host.nativeElement.querySelector<HTMLElement>(".scroll-y");
+    if (body) this.scroll.savePlain(key.agent, key.path, body.scrollTop);
   }
 
   reload() {

@@ -21,6 +21,7 @@ import { EditsStore } from "../stores/edits.store";
 import { UiStore } from "../ui/ui.store";
 import { registerEditor } from "./editor-cap";
 import { applyMonacoTheme, loadMonaco, MonacoApi, monacoLanguage } from "./monaco-loader";
+import { ScrollStateService } from "./scroll-state.service";
 import { attachReviewComments, MonacoReviewApi } from "./review/review-comments.monaco";
 
 /**
@@ -117,6 +118,7 @@ export class MonacoFileEditorComponent implements OnDestroy {
   private readonly ui = inject(UiStore);
   private readonly editorNav = inject(EditorNavService);
   private readonly edits = inject(EditsStore);
+  private readonly scroll = inject(ScrollStateService);
 
   // Inputs: decorator @Input backed by signals (vitest JIT / NG0950 pattern).
   readonly agent = signal("");
@@ -152,6 +154,9 @@ export class MonacoFileEditorComponent implements OnDestroy {
   /** Bumped when a fresh editor is live, so dependent effects re-push. */
   private readonly viewGen = signal(0);
   private renderToken = 0;
+  /** Key the live editor was built for — teardown runs after the agent/file
+   *  signals already hold the NEXT file, so saving must use this, not them. */
+  private mountedKey: { agent: string; file: string } | null = null;
   /** Guards the store-update feedback loop while we setValue programmatically. */
   private applyingExternal = false;
 
@@ -234,6 +239,10 @@ export class MonacoFileEditorComponent implements OnDestroy {
     this.hunkSub = null;
     this.hunkDecos = null;
     this.revertAsk.set(null);
+    if (this.editor && this.mountedKey) {
+      this.scroll.saveView(this.mountedKey.agent, this.mountedKey.file, this.editor.saveViewState());
+    }
+    this.mountedKey = null;
     this.editor?.dispose();
     this.editor = null;
     this.model?.dispose();
@@ -331,6 +340,9 @@ export class MonacoFileEditorComponent implements OnDestroy {
       });
       this.model = model;
       this.editor = editor;
+      this.mountedKey = { agent, file };
+      const viewState = this.scroll.getView(agent, file);
+      if (viewState) editor.restoreViewState(viewState);
       this.reviewApi = attachReviewComments(monaco, editor, {
         save: (fromLine, toLine, note) => this.saveComment(fromLine, toLine, note),
         remove: (id) => this.review.remove(this.agent(), id),
@@ -353,6 +365,10 @@ export class MonacoFileEditorComponent implements OnDestroy {
       // A0.6 editor cap: demote to plain text, buffer survives in the store.
       this.unregisterCap = registerEditor(() => {
         if (this.editor !== editor) return; // superseded — nothing to demote
+        if (this.mountedKey) {
+          this.scroll.saveView(this.mountedKey.agent, this.mountedKey.file, editor.saveViewState());
+        }
+        this.mountedKey = null;
         this.reviewApi?.dispose();
         this.reviewApi = null;
         editor.dispose();

@@ -14,6 +14,7 @@ import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
 import { DragService } from "../shared/drag.service";
 import { EditsStore } from "../stores/edits.store";
+import { ScrollStateService } from "../workspace/scroll-state.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { revealLabelFor } from "../utils";
@@ -44,13 +45,13 @@ function msgOf(e: unknown): string {
         <button class="btn" (click)="refresh()" [disabled]="loading()" title="Rescan worktree" style="padding:var(--sp-1);border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
       </div>
 
-      @if (loading()) {
-        <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">scanning worktree…</div>
-      } @else if (rows().length) {
-        <!-- virtualized: only visible rows are rendered -->
+      @if (rows().length) {
+        <!-- virtualized: only visible rows are rendered. Data wins over the
+             loading flag so background watcher scans never unmount the
+             viewport (which would drop its scroll offset and flicker). -->
         <cdk-virtual-scroll-viewport itemSize="24" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y">
           <div
-            *cdkVirtualFor="let row of rows()"
+            *cdkVirtualFor="let row of rows(); trackBy: trackPath"
             (click)="onRow(row.node)"
             (contextmenu)="onContext($event, row.node)"
             [attr.draggable]="row.node.isDir ? null : 'true'"
@@ -78,6 +79,8 @@ function msgOf(e: unknown): string {
             }
           </div>
         </cdk-virtual-scroll-viewport>
+      } @else if (loading()) {
+        <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">scanning worktree…</div>
       } @else {
         <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">empty worktree</div>
       }
@@ -207,6 +210,7 @@ export class FileTreeComponent {
   private ui = inject(UiStore);
   private bridge = inject(BRIDGE);
   private edits = inject(EditsStore);
+  private scroll = inject(ScrollStateService);
   private host = inject(ElementRef<HTMLElement>);
   readonly dragSvc = inject(DragService);
   readonly agent = input.required<Agent>();
@@ -285,6 +289,7 @@ export class FileTreeComponent {
         const to = dir ? `${dir}/${name}` : name;
         await this.bridge.invoke(Commands.FileRename, { id, from, to });
         this.edits.close(id, from); // stale buffer under the old path
+        this.scroll.clear(id, from);
       } else {
         const base = this.scopeDir(m.node);
         const path = base ? `${base}/${name}` : name;
@@ -329,6 +334,7 @@ export class FileTreeComponent {
       const path = m.node.path.replace(/\\/g, "/");
       await this.bridge.invoke(Commands.FileDelete, { id, path });
       this.edits.close(id, path);
+      this.scroll.clear(id, path);
       this.closeMenu();
       this.work.loadTree(id);
     } catch (e) {
@@ -384,6 +390,9 @@ export class FileTreeComponent {
     walk(this.nodes(), 0);
     return out;
   });
+
+  // keyed by path: each rescan delivers fresh FileNode identities
+  readonly trackPath = (_: number, r: FlatRow): string => r.node.path;
 
   isOpen(node: FileNode): boolean {
     return this.openMap()[node.path] === true;

@@ -4,6 +4,7 @@ import { EditsStore } from "../stores/edits.store";
 import { UiStore } from "../ui/ui.store";
 import { FileSaveService } from "./file-save.service";
 import { treeAgentIds } from "./pane-model";
+import { ScrollStateService } from "./scroll-state.service";
 
 export interface PendingTabClose {
   tabId: string;
@@ -22,6 +23,7 @@ export class TabCloseGuardService {
   private readonly ui = inject(UiStore);
   private readonly edits = inject(EditsStore);
   private readonly saver = inject(FileSaveService);
+  private readonly scroll = inject(ScrollStateService);
 
   readonly pending = signal<PendingTabClose | null>(null);
 
@@ -34,6 +36,7 @@ export class TabCloseGuardService {
         )
       : [];
     if (files.length === 0) {
+      this.evictScroll(tabId);
       this.ui.closeTab(tabId);
       return;
     }
@@ -67,6 +70,22 @@ export class TabCloseGuardService {
 
   private finish(p: PendingTabClose): void {
     this.pending.set(null);
+    this.evictScroll(p.tabId);
     this.ui.closeTab(p.tabId);
+  }
+
+  /** Closing the workspace tab closes its file tabs — drop their positions.
+   *  Agents also present in another tab's pane tree keep theirs. */
+  private evictScroll(tabId: string): void {
+    const root = this.ui.paneRoots()[tabId];
+    if (!root) return;
+    const elsewhere = new Set(
+      Object.entries(this.ui.paneRoots())
+        .filter(([id]) => id !== tabId)
+        .flatMap(([, r]) => treeAgentIds(r)),
+    );
+    for (const agentId of treeAgentIds(root)) {
+      if (!elsewhere.has(agentId)) this.scroll.clearAgent(agentId);
+    }
   }
 }
