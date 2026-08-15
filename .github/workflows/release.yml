@@ -32,17 +32,67 @@ permissions:
   contents: write # dispatch path pushes the bump commit + tag back to main
 
 jobs:
-  build:
-    runs-on: windows-latest
+  # Bump/version/notes run ONCE here (not in the build matrix): the dispatch
+  # path pushes a commit + tag, which two parallel builds would race. Both
+  # builders then check out the exact SHA this job resolved.
+  prepare:
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
       notes: ${{ steps.notes.outputs.notes }}
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
       - uses: actions/checkout@v6
         with:
           # full history + tags: the auto release notes are the commit list
           # since the previous v* tag (and bump.mjs needs the tags to range)
           fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Bump version (dispatch only — same script as `pnpm release`)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          node scripts/release/bump.mjs ${{ inputs.bump }}
+      - name: Resolve version (auto-detected from package.json)
+        id: ver
+        run: |
+          v=$(node -p "require('./package.json').version")
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${{ github.ref_name }}"; tag="${tag#v}"
+            if [ "$tag" != "$v" ]; then
+              echo "tag v$tag != package.json $v — bump with pnpm release[:patch]" >&2; exit 1
+            fi
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Auto release notes (commits since the previous release, no merges)
+        id: notes
+        run: |
+          {
+            echo "notes<<NOTES_EOF"
+            node scripts/release/notes.mjs
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Resolve build SHA (post-bump HEAD)
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest # x64 NSIS + MSI
+            slug: windows
+          - os: macos-14 # Apple Silicon (aarch64) dmg + updater .app.tar.gz — unsigned (no Apple identity yet)
+            slug: mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: pnpm/action-setup@v6
         with:
           # pnpm 10+ required: the repo keeps config (allowBuilds) in a
@@ -58,37 +108,13 @@ jobs:
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
-      - name: Bump version (dispatch only — same script as `pnpm release`)
-        if: github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          node scripts/release/bump.mjs ${{ inputs.bump }}
-      - name: Resolve version (auto-detected from package.json)
-        id: ver
-        shell: pwsh
-        run: |
-          $v = node -p "require('./package.json').version"
-          if ("${{ github.event_name }}" -eq "push") {
-            $tag = "${{ github.ref_name }}".TrimStart("v")
-            if ($tag -ne $v) { Write-Error "tag v$tag != package.json $v — bump with pnpm release[:patch]"; exit 1 }
-          }
-          "version=$v" >> $env:GITHUB_OUTPUT
-      - name: Auto release notes (commits since the previous release, no merges)
-        id: notes
-        shell: pwsh
-        run: |
-          $notes = (node scripts/release/notes.mjs) -join "`n"
-          Add-Content $env:GITHUB_OUTPUT "notes<<NOTES_EOF"
-          Add-Content $env:GITHUB_OUTPUT $notes
-          Add-Content $env:GITHUB_OUTPUT "NOTES_EOF"
       - name: Build Tauri app with signed updater artifacts
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build
-      - name: Stage release files (flat)
+      - name: Stage release files (flat, windows)
+        if: matrix.slug == 'windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist-release | Out-Null
@@ -98,13 +124,21 @@ jobs:
           # MSI updater signature (per-machine installs update via the MSI). Tolerant:
           # if it's absent, make-latest-json just omits the MSI updater entry.
           Copy-Item src-tauri/target/release/bundle/msi/*.msi.sig dist-release/ -ErrorAction SilentlyContinue
+      - name: Stage release files (flat, mac)
+        if: matrix.slug == 'mac'
+        run: |
+          mkdir -p dist-release
+          cp src-tauri/target/release/bundle/dmg/*.dmg dist-release/
+          # Updater payload + minisign signature — what latest.json's darwin entry points at.
+          cp src-tauri/target/release/bundle/macos/*.app.tar.gz dist-release/
+          cp src-tauri/target/release/bundle/macos/*.app.tar.gz.sig dist-release/
       - uses: actions/upload-artifact@v7
         with:
-          name: release-files
+          name: release-files-${{ matrix.slug }}
           path: dist-release/
 
   publish:
-    needs: build
+    needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -113,23 +147,24 @@ jobs:
           node-version: 22
       - uses: actions/download-artifact@v8
         with:
-          name: release-files
+          pattern: release-files-*
+          merge-multiple: true
           path: artifacts
       # Typed dispatch notes win; otherwise the auto commit list; otherwise the
       # plain title. Multiline-safe: env + --notes-file, never inline quoting.
       - name: Resolve notes
         env:
           TYPED: ${{ inputs.notes }}
-          AUTO: ${{ needs.build.outputs.notes }}
+          AUTO: ${{ needs.prepare.outputs.notes }}
         run: |
           NOTES="$TYPED"
           [ -z "$NOTES" ] && NOTES="$AUTO"
-          [ -z "$NOTES" ] && NOTES="Orrery v${{ needs.build.outputs.version }}"
+          [ -z "$NOTES" ] && NOTES="Orrery v${{ needs.prepare.outputs.version }}"
           printf '%s\n' "$NOTES" > notes.md
       - name: Build latest.json
         run: >
           node scripts/release/make-latest-json.mjs
-          --version ${{ needs.build.outputs.version }}
+          --version ${{ needs.prepare.outputs.version }}
           --dir artifacts
           --out artifacts/latest.json
           --repo kouji-dev/orrery-releases
@@ -138,19 +173,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: >
-          gh release create "v${{ needs.build.outputs.version }}"
+          gh release create "v${{ needs.prepare.outputs.version }}"
           --repo kouji-dev/orrery-releases
           --target main
-          --title "v${{ needs.build.outputs.version }}"
+          --title "v${{ needs.prepare.outputs.version }}"
           --notes-file notes.md
-          artifacts/*-setup.exe artifacts/*.msi artifacts/latest.json
+          artifacts/*-setup.exe artifacts/*.msi artifacts/*.dmg artifacts/*.app.tar.gz artifacts/latest.json
 
   # release => changelog. After the app is published, append this release's entry
   # to changelog.json in the PUBLIC orrery-releases repo (orrery is private). Both
   # the app and the landing changelog page fetch that file at runtime, so there's
   # no landing redeploy to wait on.
   changelog:
-    needs: [build, publish]
+    needs: [prepare, publish]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -164,7 +199,7 @@ jobs:
         env:
           RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           SUMMARY: ${{ inputs.summary }}
-          TAG: v${{ needs.build.outputs.version }}
+          TAG: v${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${RELEASES_TOKEN}@github.com/kouji-dev/orrery-releases.git" releases-repo

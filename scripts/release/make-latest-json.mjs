@@ -58,9 +58,12 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   };
   stage('windows-x86_64', files.find((f) => f.endsWith('-setup.exe')));
   stage('windows-x86_64-msi', files.find((f) => f.endsWith('.msi')));
+  // macOS updater payload (Apple Silicon builds; the .dmg is the human download,
+  // the updater consumes the .app.tar.gz). Optional: a windows-only run still ships.
+  stage('darwin-aarch64', files.find((f) => f.endsWith('.app.tar.gz')));
 
-  if (!installers.length) {
-    console.error(`no signed installer (*-setup.exe / *.msi) in ${a.dir}`);
+  if (!installers.some((i) => i.key.startsWith('windows-'))) {
+    console.error(`no signed Windows installer (*-setup.exe / *.msi) in ${a.dir}`);
     process.exit(1);
   }
 
