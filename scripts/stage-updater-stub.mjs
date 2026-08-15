@@ -9,6 +9,14 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// The stub is Windows-only (MSI/NSIS install machinery); on macOS the app uses
+// tauri-plugin-updater's stock installer and the resource isn't bundled (it
+// lives in tauri.windows.conf.json), so there is nothing to build or stage.
+if (process.platform !== "win32") {
+  console.log(`stage-updater-stub: skipped on ${process.platform} (Windows-only stub)`);
+  process.exit(0);
+}
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const srcTauri = join(root, "src-tauri");
 

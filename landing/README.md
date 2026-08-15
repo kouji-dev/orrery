@@ -9,6 +9,9 @@ is what ships.
 | `index.html` | Home / landing page. Self-contains the design CSS; loads the two scripts below. |
 | `home.js` | Interactions — nav, mobile menu, scroll reveals, the epicycle rosette logo, and mounting/scaling the console mock. |
 | `console-mock.js` | Data-driven, faithful static render of the app's "Orchestrator" view (the product showcase). |
+| `agents.js` | `<orrery-agent>` — native custom element rendering an AI-tool brand mark + label (registry-driven; used in the hero orbit and tool strip). New agents = one sprite `<symbol>` in `index.html` + one registry entry. |
+| `dl-button.js` | `<orrery-download>` — native custom element (light DOM) for the split download button + installer dropdown, reused in the nav (`size="sm"`), hero and bottom CTA band. |
+| `version.js` | Resolves the latest release via one GitHub API call, updates `.js-ver` labels and feeds every `<orrery-download>` its direct installer URLs for the visitor's OS (mac → `.dmg`, otherwise `-setup.exe`), falling back to the releases page when offline/rate-limited. |
 | `changelog.html` | Self-contained changelog page, populated from real Orrery releases (`git log` on `origin/main`). |
 
 Brand: Space Grotesk + JetBrains Mono, on the app's own purple `#a855f7` /
