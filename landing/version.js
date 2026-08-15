@@ -61,7 +61,12 @@
   fetch(API, { headers: { Accept: "application/vnd.github+json" } })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (j) {
-      if (!j || !j.tag_name) return;
+      if (!j || !j.tag_name) {
+        // rate-limited / bad payload — the download CTA degrades to the releases page
+        if (window.track) window.track("release_lookup", { status: "error" });
+        return;
+      }
+      if (window.track) window.track("release_lookup", { status: "ok", version: j.tag_name });
       var data = {
         tag: j.tag_name,
         exe: pickAsset(j.assets, /-setup\.exe$/i),
@@ -78,6 +83,7 @@
     })
     .catch(function () {
       /* offline or rate-limited — the baked/cached fallback stays in place */
+      if (window.track) window.track("release_lookup", { status: "error" });
     });
 
   // 3) Total downloads across all releases (single page covers ~100 releases).
