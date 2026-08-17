@@ -14,14 +14,14 @@ import { UiStore } from "../ui/ui.store";
     <svg [attr.width]="size()" [attr.height]="size()" viewBox="0 0 100 100" fill="none" aria-hidden="true" style="display:block">
       <defs>
         <linearGradient id="orrery-rose" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="var(--accent-3)" />
-          <stop offset=".5" stop-color="var(--accent)" />
-          <stop offset="1" stop-color="var(--accent-2)" />
+          <stop offset="0" stop-color="var(--brand-1)" />
+          <stop offset=".5" stop-color="var(--brand-2)" />
+          <stop offset="1" stop-color="var(--brand-3)" />
         </linearGradient>
         <radialGradient id="orrery-core" cx="50%" cy="50%">
-          <stop offset="0" stop-color="#fff" stop-opacity=".95" />
-          <stop offset=".4" stop-color="var(--accent)" />
-          <stop offset="1" stop-color="var(--accent)" stop-opacity=".2" />
+          <stop offset="0" stop-color="var(--brand-core)" stop-opacity=".95" />
+          <stop offset=".4" stop-color="var(--brand-2)" />
+          <stop offset="1" stop-color="var(--brand-2)" stop-opacity=".2" />
         </radialGradient>
         <!-- theme tiles, from Logo Lab v2 ai-grad (dark) / ai-light (light) -->
         <linearGradient id="orrery-tile-dark" x1="0" y1="0" x2="1" y2="1">

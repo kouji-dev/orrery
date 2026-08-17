@@ -67,10 +67,10 @@ function relTime(when: number, now = Date.now()): string {
 
 /**
  * Age background using the same color-mix formula from the design reference.
- * age 0 = newest → most opaque accent; age 1 = oldest → most transparent.
+ * age 0 = newest → most opaque ink; age 1 = oldest → most transparent.
  */
 function ageBgA(age: number): string {
-  return `color-mix(in oklch, var(--accent), transparent ${86 + Math.round(age * 11)}%)`;
+  return `color-mix(in oklch, var(--ui-ink), transparent ${86 + Math.round(age * 11)}%)`;
 }
 
 export function blameToRows(lines: BlameLine[], now = Date.now()): BlameRow[] {
@@ -200,7 +200,7 @@ interface Popup {
             <span class="chip tnum" style="font-size:9.5px;padding:0 6px">{{ p.row.sha.slice(0,7) }}</span>
           </div>
           <div style="font-size:10.5px;color:var(--ink-2);line-height:1.45">{{ p.row.summary }}</div>
-          <div style="font-size:9px;color:var(--accent-2);margin-top:7px;display:flex;align-items:center;gap:5px">
+          <div style="font-size:9px;color:var(--ink-2);margin-top:7px;display:flex;align-items:center;gap:5px">
             <app-icon name="enter" [px]="11"></app-icon>
             click → open commit diff
           </div>
@@ -246,11 +246,11 @@ interface Popup {
         color: var(--ink-3);
       }
       .bf-hit {
-        background: color-mix(in oklch, var(--accent), transparent 92%);
+        background: var(--ui-sel);
       }
       .bf-on {
-        background: color-mix(in oklch, var(--accent), transparent 80%);
-        box-shadow: inset 2px 0 0 var(--accent);
+        background: var(--ui-sel-2);
+        box-shadow: inset 2px 0 0 var(--ui-ind);
       }
     `,
   ],

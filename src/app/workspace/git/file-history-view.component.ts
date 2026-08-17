@@ -62,7 +62,7 @@ function relTime(when: number): string {
         <!-- header -->
         <div class="fh-left-head">
           <div style="display:flex;align-items:center;gap:var(--sp-3)">
-            <app-icon name="clock" size="sm" style="color:var(--accent-2)" />
+            <app-icon name="clock" size="sm" style="color:var(--ink-3)" />
             <span style="color:var(--ink-4);font-size:var(--fs-xs)">{{ dir() }}</span>
             <span style="font-size:var(--fs-sm);color:var(--ink);margin-left:calc(-1 * var(--sp-2))">{{ name() }}</span>
           </div>
@@ -127,7 +127,7 @@ function relTime(when: number): string {
       <div class="fh-right">
         <!-- diff header -->
         <div class="fh-diff-head">
-          <app-icon name="diff" size="sm" style="color:var(--accent)" />
+          <app-icon name="diff" size="sm" style="color:var(--ink-3)" />
           <span style="font-size:var(--fs-xs);color:var(--ink-2)">{{ name() }} across revisions</span>
           <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3)" class="tnum">
             <span class="chip fh-chip-a" style="font-size:var(--fs-2xs);padding:1px var(--sp-3)">A {{ shortSha(baseSha()) }}</span>
@@ -141,10 +141,10 @@ function relTime(when: number): string {
         <!-- revision context bar -->
         <div class="fh-rev-bar tnum">
           @if (baseRev(); as a) {
-            <span><b style="color:var(--accent)">A</b> {{ rel(a.when) }} · {{ a.summary }}</span>
+            <span><b style="color:var(--ink)">A</b> {{ rel(a.when) }} · {{ a.summary }}</span>
           }
           @if (compareRev(); as b) {
-            <span><b style="color:var(--accent-2)">B</b> {{ rel(b.when) }} · {{ b.summary }}</span>
+            <span><b style="color:var(--ink)">B</b> {{ rel(b.when) }} · {{ b.summary }}</span>
           }
         </div>
 
@@ -239,12 +239,12 @@ function relTime(when: number): string {
         background: var(--panel-2);
       }
       .fh-rev-base {
-        background: color-mix(in oklch, var(--accent), transparent 90%) !important;
-        box-shadow: inset 0 0 0 1px var(--accent);
+        background: color-mix(in oklch, var(--side-a), transparent 90%) !important;
+        box-shadow: inset 0 0 0 1px var(--side-a);
       }
       .fh-rev-compare {
-        background: color-mix(in oklch, var(--accent-2), transparent 90%) !important;
-        box-shadow: inset 0 0 0 1px var(--accent-2);
+        background: color-mix(in oklch, var(--side-b), transparent 90%) !important;
+        box-shadow: inset 0 0 0 1px var(--side-b);
       }
 
       /* role column: fixed width so dot/labels align with the connector */
@@ -266,8 +266,8 @@ function relTime(when: number): string {
         font-size: var(--fs-2xs);
         font-weight: 700;
       }
-      .fh-rev-label-base  { color: var(--accent); }
-      .fh-rev-label-compare { color: var(--accent-2); }
+      .fh-rev-label-base  { color: var(--side-a); }
+      .fh-rev-label-compare { color: var(--side-b); }
 
       /* commit message + meta row */
       .fh-rev-msg {
@@ -312,12 +312,12 @@ function relTime(when: number): string {
 
       /* A / B sha chips */
       .fh-chip-a {
-        color: var(--accent);
-        border-color: color-mix(in oklch, var(--accent), transparent 55%);
+        color: var(--ink-2);
+        border-color: var(--hair-2);
       }
       .fh-chip-b {
-        color: var(--accent-2);
-        border-color: color-mix(in oklch, var(--accent-2), transparent 55%);
+        color: var(--ink-2);
+        border-color: var(--hair-2);
       }
 
       /* revision context bar: shows rel + summary for both ends */

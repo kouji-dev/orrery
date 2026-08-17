@@ -16,6 +16,9 @@ import { UpdateOutcome } from '../updater/updater';
   selector: 'app-loading',
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
+    /* The one sanctioned home for the brand triad: it runs before any product
+       chrome exists. Everything that is not the triad follows the tokens, so
+       the splash follows the theme. */
     :host {
       position: fixed;
       inset: 0;
@@ -24,29 +27,44 @@ import { UpdateOutcome } from '../updater/updater';
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: #07080d;
-      color: #e8ebf2;
+      background: var(--bg);
+      color: var(--ink);
       font-family: 'JetBrains Mono', ui-monospace, monospace;
       background-image:
-        linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-        radial-gradient(46% 38% at 50% 43%, rgba(168, 85, 247, 0.16), transparent 72%);
-      background-size: 34px 34px, 34px 34px, 100% 100%, 100% 100%;
+        linear-gradient(var(--bg-grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+        radial-gradient(46% 38% at 50% 43%, color-mix(in oklch, var(--ink), transparent 95%), transparent 72%);
+      background-size: 34px 34px, 34px 34px, 100% 100%;
     }
-    .ob-mark { filter: drop-shadow(0 0 26px rgba(168, 85, 247, 0.4)); }
+    /* the halo is a STATIC sibling behind the SVG, so the 26px blur rasterises
+       once instead of being recomputed on every frame the mark redraws */
+    .ob-mark { position: relative; }
+    .ob-halo {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 62%;
+      height: 62%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      pointer-events: none;
+      background: color-mix(in oklch, var(--brand-2), transparent 78%);
+      filter: blur(26px);
+    }
     .ob-word {
       font-family: 'Space Grotesk', sans-serif;
       font-weight: 600;
       font-size: var(--fs-display);
       letter-spacing: 0.01em;
+      color: var(--ink);
       margin-top: var(--sp-10);
     }
-    .ob-word .o { color: #a855f7; }
+    .ob-word .o { color: var(--brand-2); }
     .ob-status {
       font-size: var(--fs-xs);
       letter-spacing: 0.2em;
       text-transform: uppercase;
-      color: #6b7488;
+      color: var(--ink-3);
       margin-top: var(--sp-7);
       height: var(--sp-6);
     }
@@ -55,15 +73,28 @@ import { UpdateOutcome } from '../updater/updater';
       width: 188px;
       height: var(--sp-1);
       border-radius: 2px;
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--hair);
       overflow: hidden;
     }
+    /* compositor-only progress: scaleX, never width */
     .ob-bar > i {
       display: block;
       height: 100%;
+      width: 100%;
       border-radius: 2px;
-      background: linear-gradient(90deg, #ff5d9e, #a855f7, #22d3ee);
-      transition: width 0.15s linear;
+      transform-origin: left center;
+      will-change: transform;
+      background: linear-gradient(90deg, var(--brand-1), var(--brand-2), var(--brand-3));
+      transition: transform 0.15s linear;
+    }
+    .ob-core-pulse {
+      transform-box: fill-box;
+      transform-origin: 50% 50%;
+      animation: ob-bootpulse 2.4s ease-in-out infinite;
+    }
+    @keyframes ob-bootpulse {
+      0%, 100% { opacity: 0.9; }
+      50% { opacity: 0.55; }
     }
     /* "Orrery × Kouji.dev" credit — synced with the loading-screen design + landing footer */
     .ob-credit {
@@ -76,15 +107,15 @@ import { UpdateOutcome } from '../updater/updater';
       font-size: 13px;
       font-weight: 600;
       letter-spacing: -0.01em;
-      color: #aab2c5;
+      color: var(--ink-2);
     }
-    .ob-cred-mark { filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.35)); display: block; }
-    .ob-cred-wm .o { color: #a855f7; }
-    .ob-cred-x { color: #444b5e; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; margin: 0 1px; }
+    .ob-cred-mark { filter: drop-shadow(0 0 8px color-mix(in oklch, var(--brand-2), transparent 65%)); display: block; }
+    .ob-cred-wm .o { color: var(--brand-2); }
+    .ob-cred-x { color: var(--ink-4); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; margin: 0 1px; }
     .ob-cred-link {
       text-decoration: none;
       cursor: pointer;
-      background: linear-gradient(100deg, #ff5d9e, #a855f7, #22d3ee);
+      background: linear-gradient(100deg, var(--brand-1), var(--brand-2), var(--brand-3));
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -92,10 +123,10 @@ import { UpdateOutcome } from '../updater/updater';
     .ob-cred-link:hover { filter: brightness(1.12); text-decoration: underline; text-underline-offset: 2px; }
   `],
   template: `
-    <div class="ob-mark"><svg #svg width="168" height="168" viewBox="0 0 100 100" fill="none"></svg></div>
+    <div class="ob-mark"><span class="ob-halo"></span><svg #svg width="168" height="168" viewBox="0 0 100 100" fill="none"></svg></div>
     <div class="ob-word"><span class="o">O</span>rrery</div>
     <div class="ob-status">{{ updater.status() || 'initializing orchestrator' }}</div>
-    <div class="ob-bar"><i [style.width.%]="barPct()"></i></div>
+    <div class="ob-bar"><i [style.transform]="'scaleX(' + barPct() / 100 + ')'"></i></div>
     <div class="ob-credit">
       <svg #creditMark width="18" height="18" viewBox="0 0 100 100" fill="none" class="ob-cred-mark" aria-hidden="true"></svg>
       <span class="ob-cred-wm"><span class="o">O</span>rrery</span>
@@ -177,26 +208,42 @@ export class LoadingComponent implements AfterViewInit {
     if (cm) {
       cm.innerHTML =
         '<defs>' +
-          '<linearGradient id="cm-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>' +
-          '<radialGradient id="cm-c"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#a855f7"/><stop offset="1" stop-color="#a855f7" stop-opacity="0"/></radialGradient>' +
+          '<linearGradient id="cm-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--brand-1)"/><stop offset=".5" stop-color="var(--brand-2)"/><stop offset="1" stop-color="var(--brand-3)"/></linearGradient>' +
+          '<radialGradient id="cm-c"><stop offset="0" stop-color="var(--brand-core)"/><stop offset=".45" stop-color="var(--brand-2)"/><stop offset="1" stop-color="var(--brand-2)" stop-opacity="0"/></radialGradient>' +
         '</defs>' +
         '<path d="' + d + '" fill="none" stroke="url(#cm-g)" stroke-width="6" stroke-linejoin="round"/>' +
         '<circle cx="50" cy="50" r="13" fill="url(#cm-c)"/>';
     }
     svg.innerHTML =
       '<defs>' +
-        '<linearGradient id="ob-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5d9e"/><stop offset=".5" stop-color="#a855f7"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>' +
+        '<linearGradient id="ob-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--brand-1)"/><stop offset=".5" stop-color="var(--brand-2)"/><stop offset="1" stop-color="var(--brand-3)"/></linearGradient>' +
+        '<radialGradient id="ob-c"><stop offset="0" stop-color="var(--brand-core)"/><stop offset=".42" stop-color="var(--brand-2)"/><stop offset="1" stop-color="var(--brand-2)" stop-opacity="0"/></radialGradient>' +
       '</defs>' +
-      '<circle cx="50" cy="50" r="22" fill="none" stroke="#6b7488" stroke-width=".6" stroke-opacity=".3"/>' +
+      '<circle cx="50" cy="50" r="22" fill="none" stroke="var(--ink-4)" stroke-width=".6" stroke-opacity=".3"/>' +
       '<path id="ob-path" d="' + d + '" fill="none" stroke="url(#ob-g)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>' +
-      '<circle cx="50" cy="50" r="8.5" fill="#a855f7" fill-opacity=".25"/>';
+      '<g id="ob-epi-g"><circle cx="50" cy="50" r="13" fill="none" stroke="var(--ink-4)" stroke-width=".6" stroke-opacity=".4"/></g>' +
+      '<line id="ob-arm" stroke="var(--brand-3)" stroke-width="1" stroke-opacity=".6"/>' +
+      '<circle class="ob-core-pulse" cx="50" cy="50" r="8.5" fill="url(#ob-c)"/>' +
+      '<g id="ob-pen-g"><circle cx="50" cy="50" r="4" fill="var(--brand-3)"/></g>';
     const path = svg.querySelector('#ob-path') as SVGPathElement;
+    const epiG = svg.querySelector('#ob-epi-g') as SVGGElement;
+    const penG = svg.querySelector('#ob-pen-g') as SVGGElement;
+    const arm = svg.querySelector('#ob-arm') as SVGLineElement;
     const reduce = window.matchMedia?.('(prefers-reduced-motion:reduce)').matches;
     const L = path.getTotalLength();
     path.style.strokeDasharray = String(L);
+    const finish = () => {
+      // the construction scaffolding fades once the curve is drawn
+      epiG.style.transition = arm.style.transition = 'opacity .3s';
+      epiG.style.opacity = '0';
+      arm.style.opacity = '0';
+      const s = epi(0);
+      penG.setAttribute('transform', `translate(${(s[0] - 50).toFixed(2)},${(s[1] - 50).toFixed(2)})`);
+    };
     if (reduce) {
       path.style.strokeDashoffset = '0';
       this.introFrac.set(1);
+      finish();
       return;
     }
     path.style.strokeDashoffset = String(L);
@@ -204,11 +251,21 @@ export class LoadingComponent implements AfterViewInit {
     const ease = (x: number) => 1 - Math.pow(1 - x, 3);
     let start: number | null = null;
     const frame = (now: number) => {
+      // read first, then one batched write pass — the pen and the epicycle each
+      // move as a <g> transform, nothing triggers layout
       if (start === null) start = now;
       const p = Math.min(1, (now - start) / DUR), e = ease(p);
+      const t = e * TAU, dx = A * Math.cos(t), dy = A * Math.sin(t), pp = epi(t);
       path.style.strokeDashoffset = String(L * (1 - e));
+      epiG.setAttribute('transform', `translate(${dx.toFixed(2)},${dy.toFixed(2)})`);
+      penG.setAttribute('transform', `translate(${(pp[0] - 50).toFixed(2)},${(pp[1] - 50).toFixed(2)})`);
+      arm.setAttribute('x1', (50 + dx).toFixed(2));
+      arm.setAttribute('y1', (50 + dy).toFixed(2));
+      arm.setAttribute('x2', pp[0].toFixed(2));
+      arm.setAttribute('y2', pp[1].toFixed(2));
       this.introFrac.set(e);
       if (p < 1) requestAnimationFrame(frame);
+      else finish();
     };
     requestAnimationFrame(frame);
   }

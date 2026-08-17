@@ -12,7 +12,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from "@angular/co
         [attr.cy]="c()"
         [attr.r]="r()"
         fill="none"
-        [attr.stroke]="color() || 'var(--accent)'"
+        [attr.stroke]="color() || 'var(--ui-ink)'"
         [attr.stroke-width]="stroke()"
         stroke-linecap="round"
         [attr.stroke-dasharray]="circ()"

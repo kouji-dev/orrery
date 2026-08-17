@@ -70,7 +70,7 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
   template: `
     <app-overlay-shell [width]="720" top="9vh" label="Search everywhere" (closed)="registry.close()">
       <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);flex:none">
-        <app-icon name="search" color="var(--accent)" />
+        <app-icon name="search" color="var(--ui-ink)" />
         <input
           #inp
           [value]="q()"
@@ -94,7 +94,7 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
             style="padding:var(--sp-4) var(--sp-5);border-radius:0;position:relative;font-size:var(--fs-sm)"
           >
             @if (on) {
-              <span style="position:absolute;left:8px;right:8px;bottom:0;height:var(--sp-1);background:linear-gradient(90deg,var(--accent),var(--accent-2))"></span>
+              <span style="position:absolute;left:8px;right:8px;bottom:0;height:var(--sp-1);background:var(--ui-ind)"></span>
             }
             {{ t.label }}
             <!-- lazy tabs hide their count until a query exists (design SE_LAZY) -->
@@ -131,14 +131,14 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
             (click)="open(i)"
             (mouseenter)="sel.set(i)"
             [style.background]="sel() === i ? 'var(--panel-3)' : 'transparent'"
-            [style.border-left]="'2px solid ' + (sel() === i ? 'var(--accent)' : 'transparent')"
+            [style.border-left]="'2px solid ' + (sel() === i ? 'var(--ui-focus)' : 'transparent')"
             [style.color]="r.it.danger ? 'var(--st-blocked)' : 'inherit'"
             style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-7);cursor:pointer"
           >
-            <app-icon [name]="r.it.icon" size="sm" [color]="sel() === i ? 'var(--accent)' : 'var(--ink-3)'" />
+            <app-icon [name]="r.it.icon" size="sm" [color]="sel() === i ? 'var(--ui-ink)' : 'var(--ink-3)'" />
             <span style="font-size:var(--fs-ui);flex:none;max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
               @for (s of r.segs; track $index) {
-                @if (s.hit) { <b style="color:var(--accent-2);font-weight:600">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
+                @if (s.hit) { <b style="color:var(--ui-ink);font-weight:600">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
               }
             </span>
             @if (r.it.sub) {

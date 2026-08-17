@@ -36,19 +36,19 @@ export class StateBadgeComponent {
 
   readonly ink = computed(() => {
     switch (this.state()) {
-      case "A": return "var(--code-add-ink)";
-      case "D": return "var(--code-del-ink)";
-      case "R": return "var(--st-waiting)";
-      default:  return "var(--accent-2)"; // M and unknown
+      case "A": return "var(--vcs-added)";
+      case "D": return "var(--vcs-deleted)";
+      case "R": return "var(--vcs-renamed)";
+      default:  return "var(--vcs-modified)"; // M and unknown
     }
   });
 
   readonly bg = computed(() => {
     switch (this.state()) {
-      case "A": return "var(--code-add-bg)";
-      case "D": return "var(--code-del-bg)";
-      case "R": return "color-mix(in oklch, var(--st-waiting), transparent 86%)";
-      default:  return "color-mix(in oklch, var(--accent-2), transparent 86%)";
+      case "A": return "color-mix(in oklch, var(--vcs-added), transparent 88%)";
+      case "D": return "transparent";
+      case "R": return "color-mix(in oklch, var(--vcs-renamed), transparent 88%)";
+      default:  return "color-mix(in oklch, var(--vcs-modified), transparent 88%)";
     }
   });
 }

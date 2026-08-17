@@ -28,20 +28,20 @@ export interface TicketStatusMeta {
 }
 export const TICKET_STATUS: Record<TicketStatus, TicketStatusMeta> = {
   todo: { label: "To do", color: "var(--ink-3)" },
-  inprogress: { label: "In progress", color: "var(--accent)" },
+  inprogress: { label: "In progress", color: "var(--st-running)" },
   done: { label: "Done", color: "var(--st-done)" },
 };
 export const TICKET_STATUS_ORDER: TicketStatus[] = ["todo", "inprogress", "done"];
 
 // ── Avatar helpers ────────────────────────────────────────────────────────────
 const AV_COLORS = [
-  "#a855f7",
-  "#22d3ee",
-  "#34e0a1",
-  "#ff6b35",
-  "#ff4d8d",
-  "#3b82f6",
-  "#f5c451",
+  "var(--id-1)",
+  "var(--id-2)",
+  "var(--id-3)",
+  "var(--id-4)",
+  "var(--id-5)",
+  "var(--id-6)",
+  "var(--id-7)",
 ];
 export function avColor(name: string): string {
   let h = 0;
@@ -111,12 +111,12 @@ export function fmtCreated(ts: number): string {
         <div style="display:flex;align-items:center;gap:var(--sp-4);margin-bottom:var(--sp-2)">
           <span class="disp" style="font-size:var(--fs-ui);font-weight:600;color:var(--ink)">{{ c.author }}</span>
           @if (isAgent) {
-            <span class="chip up" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--accent-2);border-color:color-mix(in oklch,var(--accent-2),transparent 60%)">AGENT</span>
+            <span class="chip up" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--ui-ink);border-color:var(--ui-line)">AGENT</span>
           }
           <span class="tnum" style="font-size:var(--fs-xs);color:var(--ink-4)">{{ when() }}</span>
         </div>
         <div
-          [style.background]="isAgent ? 'color-mix(in oklch,var(--accent-2),transparent 94%)' : 'var(--panel)'"
+          [style.background]="isAgent ? 'var(--ui-sel)' : 'var(--panel)'"
           style="border:1px solid var(--hair);border-radius:var(--r-md);padding:var(--sp-4) var(--sp-6)"
         >
           <app-rich-view [html]="c.body" [compact]="true" />
@@ -169,7 +169,7 @@ export class TicketCommentComponent {
 
         <!-- breadcrumb + status pill -->
         <div style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-sm);color:var(--ink-3);margin-bottom:var(--sp-4)">
-          <app-icon name="layers" size="sm" [color]="'var(--accent)'" />
+          <app-icon name="layers" size="sm" [color]="'var(--ui-ink)'" />
           <span>Backlog</span>
           <app-icon name="chevron" size="sm" style="width:var(--sp-5);height:var(--sp-5)" [color]="'var(--ink-4)'" />
           <span class="tnum">{{ isDraft ? 'New ticket' : '#' + (tk ? shortId(tk.id) : '') }}</span>
@@ -404,7 +404,7 @@ export class TicketCommentComponent {
                 <button
                   class="btn ghost-hair"
                   (click)="dispatch()"
-                  style="justify-content:center;color:var(--accent);border-color:color-mix(in oklch,var(--accent),transparent 55%)"
+                  style="justify-content:center;color:var(--ui-ink);border-color:var(--ui-line)"
                 >
                   <app-icon name="bolt" size="sm" />Dispatch an agent
                 </button>
@@ -418,7 +418,7 @@ export class TicketCommentComponent {
               <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
                 <span class="field-label" style="margin:0">Branch</span>
                 <span style="display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-sm);color:var(--ink-2)">
-                  <app-icon name="branch" size="sm" style="width:var(--sp-6);height:var(--sp-6)" [color]="'var(--accent-2)'" />
+                  <app-icon name="branch" size="sm" style="width:var(--sp-6);height:var(--sp-6)" [color]="'var(--ink-3)'" />
                   {{ ag.branch.replace('agent/', '') }}
                 </span>
               </div>

@@ -94,18 +94,18 @@ const ROW_H = 30;
             (click)="toggleSel(c.sha, $event.shiftKey)"
             (dblclick)="openCommit(c.sha)"
             [style.background]="on ? 'var(--panel-3)' : ''"
-            [style.border-left]="'2px solid ' + (on ? 'var(--accent)' : 'transparent')"
+            [style.border-left]="'2px solid ' + (on ? 'var(--ui-focus)' : 'transparent')"
             style="height:30px;display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6) 0 0;cursor:pointer"
           >
             <!-- single-lane cell: the branch log is a first-parent chain -->
             <svg [attr.width]="29" [attr.height]="rowH" style="flex:none;display:block">
               @if (i > 0) {
-                <line x1="11" y1="0" x2="11" [attr.y2]="rowH / 2" stroke="var(--accent)" stroke-width="1.6" stroke-opacity=".75" />
+                <line x1="11" y1="0" x2="11" [attr.y2]="rowH / 2" stroke="var(--lane-1)" stroke-width="1.6" stroke-opacity=".75" />
               }
               @if (!last || entry().hasMore) {
-                <line x1="11" [attr.y1]="rowH / 2" x2="11" [attr.y2]="rowH" stroke="var(--accent)" stroke-width="1.6" stroke-opacity=".75" />
+                <line x1="11" [attr.y1]="rowH / 2" x2="11" [attr.y2]="rowH" stroke="var(--lane-1)" stroke-width="1.6" stroke-opacity=".75" />
               }
-              <circle cx="11" [attr.cy]="rowH / 2" r="3.6" fill="var(--accent)" />
+              <circle cx="11" [attr.cy]="rowH / 2" r="3.6" fill="var(--lane-1)" />
             </svg>
             @if (i === 0) {
               <span class="chip" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);flex:none;color:var(--st-done);border-color:color-mix(in oklch, var(--st-done), transparent 60%)">

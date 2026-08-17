@@ -8,7 +8,7 @@ import {
 
 /**
  * Short-sha chip. When `(chipClick)` is observed the chip becomes interactive
- * (pointer cursor, accent hover). `dim` renders the sha in a muted ink.
+ * (pointer cursor, ink hover). `dim` renders the sha in a muted ink.
  */
 @Component({
   selector: "app-sha-chip",
@@ -31,8 +31,8 @@ import {
   styles: [
     `
       .clickable:hover {
-        color: var(--accent-2) !important;
-        border-color: color-mix(in oklch, var(--accent-2), transparent 55%);
+        color: var(--ink) !important;
+        border-color: var(--hair-2);
       }
     `,
   ],

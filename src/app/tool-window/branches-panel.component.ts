@@ -101,12 +101,12 @@ import { UiStore } from "../ui/ui.store";
               @let held = b.checkedOutIn !== undefined;
               <div
                 style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair)"
-                [style.background]="b.current ? 'color-mix(in oklch, var(--accent), transparent 92%)' : 'transparent'"
+                [style.background]="b.current ? 'var(--ui-sel)' : 'transparent'"
               >
-                <app-icon name="branch" size="sm" [color]="b.current ? 'var(--accent)' : 'var(--ink-4)'" />
+                <app-icon name="branch" size="sm" [color]="b.current ? 'var(--ui-ink)' : 'var(--ink-4)'" />
                 <span style="font-size:var(--fs-sm)" [style.color]="b.current ? 'var(--ink)' : 'var(--ink-2)'">{{ b.name }}</span>
                 @if (b.current) {
-                  <span class="chip" style="font-size:var(--fs-3xs);padding:0 var(--sp-2);color:var(--accent);border-color:color-mix(in oklch, var(--accent), transparent 58%)">HEAD</span>
+                  <span class="chip" style="font-size:var(--fs-3xs);padding:0 var(--sp-2);color:var(--ui-ink);border-color:var(--ui-line)">HEAD</span>
                 } @else if (held) {
                   <span class="chip" style="font-size:var(--fs-3xs);padding:0 var(--sp-2);color:var(--ink-4)" [title]="'checked out in ' + (b.checkedOutIn || 'the project checkout')">in use</span>
                 }

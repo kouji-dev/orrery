@@ -65,11 +65,11 @@ const MAX_CHARS = 1_500_000;
           (click)="annotate.set(!annotate())"
           title="Annotate — show who last changed each line"
           [style.color]="annotate() ? 'var(--ink)' : 'var(--ink-3)'"
-          [style.background]="annotate() ? 'color-mix(in oklch, var(--accent), transparent 86%)' : 'transparent'"
-          [style.border]="'1px solid ' + (annotate() ? 'color-mix(in oklch, var(--accent), transparent 60%)' : 'var(--hair)')"
+          [style.background]="annotate() ? 'var(--ui-sel)' : 'transparent'"
+          [style.border]="'1px solid ' + (annotate() ? 'var(--ui-sel-2)' : 'var(--hair)')"
           style="padding:var(--sp-1) var(--sp-4);gap:var(--sp-2);border-radius:var(--r-sm);font-size:var(--fs-xs)"
         >
-          <app-icon name="git" size="sm" [px]="12" [color]="annotate() ? 'var(--accent)' : null" />
+          <app-icon name="git" size="sm" [px]="12" [color]="annotate() ? 'var(--ui-ink)' : null" />
           Annotate
         </button>
         }
@@ -130,7 +130,7 @@ const MAX_CHARS = 1_500_000;
       .md-body ::ng-deep h1, .md-body ::ng-deep h2, .md-body ::ng-deep h3 { color: var(--ink); margin: var(--sp-6) 0 var(--sp-3); }
       .md-body ::ng-deep code { background: var(--panel-2); padding: 1px var(--sp-2); border-radius: 4px; font-size: var(--fs-sm); }
       .md-body ::ng-deep pre { background: var(--panel-2); padding: var(--sp-5) var(--sp-6); border-radius: 8px; overflow-x: auto; }
-      .md-body ::ng-deep a { color: var(--accent-2); }
+      .md-body ::ng-deep a { color: var(--ui-link); }
       .md-body ::ng-deep .mmd { margin: var(--sp-5) 0; overflow-x: auto; }
       .md-body ::ng-deep .mmd svg { max-width: 100%; height: auto; }
       .ec-banner {

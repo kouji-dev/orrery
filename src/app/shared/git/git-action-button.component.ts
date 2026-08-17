@@ -71,7 +71,7 @@ export interface GitActionAiEvent {
           [style.padding]="pad()"
           [style.font-size]="fs()"
         >
-          @if (icon()) { <app-icon [name]="icon()!" size="sm" [color]="aiOnly() ? 'var(--accent)' : null" /> }
+          @if (icon()) { <app-icon [name]="icon()!" size="sm" [color]="aiOnly() ? 'var(--ui-ink)' : null" /> }
           <span class="lbl">{{ primaryConfirming() && primaryEstimate() ? 'Confirm ≈' + usd(primaryEstimate()!.usdHigh) + ' — click again' : label() }}</span>
           @if (costEnabled && aiOnly() && primaryEstimate(); as pe) {
             <span class="tnum est-inline">~{{ tok(pe.tokensHigh) }} tok · ≈{{ usd(pe.usdHigh) }}</span>
@@ -90,7 +90,7 @@ export interface GitActionAiEvent {
         @if (open()) {
           <div class="menu rise" [style.left]="menuAlign() === 'left' ? '0' : 'auto'" [style.right]="menuAlign() === 'left' ? 'auto' : '0'">
             <div class="menu-head">
-              <app-icon name="sparkles" size="sm" [px]="12" color="var(--accent)" />
+              <app-icon name="sparkles" size="sm" [px]="12" color="var(--ui-ink)" />
               <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-3)">{{ costEnabled ? 'AI path · spends tokens' : 'AI path' }}</span>
               @if (costEnabled && est.capUsd() > 0) {
                 <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">
@@ -106,14 +106,14 @@ export interface GitActionAiEvent {
                 (click)="pressVariant(v.variant, v.estimate)"
                 [style.opacity]="v.overCap ? 0.45 : 1"
               >
-                <app-icon [name]="v.variant.icon || 'sparkles'" size="sm" [px]="12" color="var(--accent-2)" />
+                <app-icon [name]="v.variant.icon || 'sparkles'" size="sm" [px]="12" color="var(--ink-3)" />
                 <span class="row-lbl">
                   {{ confirming() === v.variant.id ? 'Confirm ≈' + usd(v.estimate.usdHigh) + ' — click again' : v.variant.label }}
                 </span>
                 @if (costEnabled) {
                   <span class="tnum row-est">
                     <span>~{{ tok(v.estimate.tokensHigh) }} tok</span>
-                    <span style="color:var(--accent-2)">≈{{ usd(v.estimate.usdHigh) }}</span>
+                    <span style="color:var(--ink)">≈{{ usd(v.estimate.usdHigh) }}</span>
                   </span>
                 }
               </button>

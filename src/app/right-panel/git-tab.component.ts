@@ -28,7 +28,7 @@ import { UiStore } from "../ui/ui.store";
         <!-- branch header -->
         <div style="padding:var(--sp-5) var(--sp-6);border-bottom:1px solid var(--hair)">
           <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-2);min-width:0">
-            <app-icon name="branch" size="sm" color="var(--accent-2)" />
+            <app-icon name="branch" size="sm" color="var(--ink-3)" />
             <span [title]="ag.branch" style="font-size:var(--fs-sm);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch }}</span>
           </div>
           <div class="tnum" style="font-size:var(--fs-xs);color:var(--ink-4);display:flex;gap:var(--sp-4)">
@@ -67,15 +67,15 @@ import { UiStore } from "../ui/ui.store";
         <div style="padding:var(--sp-5) var(--sp-6) var(--sp-3);display:flex;align-items:center;gap:var(--sp-3)">
           @if (changes().length) {
             <button (click)="toggleAll()" [title]="allSelected() ? 'Deselect all' : 'Select all'"
-              [style.border]="'1px solid ' + (allSelected() ? 'var(--accent)' : 'var(--hair-2)')"
-              [style.background]="allSelected() ? 'var(--accent)' : 'transparent'"
+              [style.border]="'1px solid ' + (allSelected() ? 'var(--ui-focus)' : 'var(--hair-2)')"
+              [style.background]="allSelected() ? 'var(--ui-fill)' : 'transparent'"
               style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:4px;display:grid;place-items:center;cursor:pointer;padding:0">
-              @if (allSelected()) { <app-icon name="check" size="sm" [px]="10" color="#06070b" /> }
+              @if (allSelected()) { <app-icon name="check" size="sm" [px]="10" color="var(--ui-on-fill)" /> }
             </button>
           }
           <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">Changes</span>
           <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4)">{{ changes().length }}</span>
-          @if (selected().size) { <span class="tnum" style="font-size:var(--fs-2xs);color:var(--accent)">{{ selected().size }} selected</span> }
+          @if (selected().size) { <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ui-ink)">{{ selected().size }} selected</span> }
           @if (changesLoading()) { <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4)">· scanning…</span> }
         </div>
 
@@ -92,10 +92,10 @@ import { UiStore } from "../ui/ui.store";
               style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-2) var(--sp-6);font-size:var(--fs-sm);cursor:pointer"
             >
               <span
-                [style.border]="'1px solid ' + (isSelected(f.path) ? 'var(--accent)' : 'var(--hair-2)')"
-                [style.background]="isSelected(f.path) ? 'var(--accent)' : 'transparent'"
+                [style.border]="'1px solid ' + (isSelected(f.path) ? 'var(--ui-focus)' : 'var(--hair-2)')"
+                [style.background]="isSelected(f.path) ? 'var(--ui-fill)' : 'transparent'"
                 style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:3px;display:grid;place-items:center"
-              >@if (isSelected(f.path)) { <app-icon name="check" size="sm" [px]="9" color="#06070b" /> }</span>
+              >@if (isSelected(f.path)) { <app-icon name="check" size="sm" [px]="9" color="var(--ui-on-fill)" /> }</span>
               <span [style.color]="stateInk(f.state)" style="flex:none;width:12px;text-align:center;font-size:var(--fs-2xs);font-weight:700">{{ f.state }}</span>
               <span [title]="f.path" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                 <span style="color:var(--ink-4)">{{ fdir(f.path) }}</span>{{ fname(f.path) }}
@@ -319,7 +319,7 @@ export class GitTabComponent {
   }
 
   stateInk(state: string): string {
-    return state === "A" ? "var(--code-add-ink)" : state === "D" ? "var(--code-del-ink)" : "var(--accent-2)";
+    return state === "A" ? "var(--vcs-added)" : state === "D" ? "var(--vcs-deleted)" : "var(--vcs-modified)";
   }
 
   // ---- AgentCommitHistory output handlers (no-op: wired to diff tab later) ----

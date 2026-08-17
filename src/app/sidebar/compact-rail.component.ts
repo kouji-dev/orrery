@@ -25,7 +25,7 @@ import { mix } from "../utils";
       style="display:flex;flex-direction:column;align-items:center;min-height:0;width:54px;background:var(--panel);border-right:1px solid var(--hair);padding:var(--sp-4) 0;gap:var(--sp-2);position:relative"
     >
       <button class="rail-btn" (click)="ui.toggleSidebarCompact()" title="Expand sidebar" style="margin-bottom:var(--sp-1)">
-        <app-icon name="columns" size="sm" color="var(--accent)" />
+        <app-icon name="columns" size="sm" color="var(--ui-ink)" />
       </button>
       <div style="width:24px;height:1px;background:var(--hair);margin:var(--sp-1) 0 var(--sp-2)"></div>
 
@@ -36,14 +36,14 @@ import { mix } from "../utils";
           (click)="ui.openBacklog()"
           title="Backlog"
           [style.background]="ui.activeTabKind() === 'backlog' ? 'var(--panel-2)' : 'transparent'"
-          [style.border-color]="ui.activeTabKind() === 'backlog' ? 'color-mix(in oklch,var(--accent),transparent 50%)' : 'transparent'"
+          [style.border-color]="ui.activeTabKind() === 'backlog' ? 'var(--ui-line)' : 'transparent'"
         >
-          <app-icon name="layers" size="sm" [color]="ui.activeTabKind() === 'backlog' ? 'var(--accent)' : 'var(--ink-3)'" />
+          <app-icon name="layers" size="sm" [color]="ui.activeTabKind() === 'backlog' ? 'var(--ui-ink)' : 'var(--ink-3)'" />
         </button>
         @if (openTicketCount() > 0) {
           <span
             class="tnum"
-            style="position:absolute;top:2px;right:2px;min-width:var(--sp-6);height:var(--sp-6);padding:0 var(--sp-1);border-radius:7px;background:var(--accent);color:#06070b;font-size:var(--fs-3xs);font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
+            style="position:absolute;top:2px;right:2px;min-width:var(--sp-6);height:var(--sp-6);padding:0 var(--sp-1);border-radius:7px;background:var(--ui-fill);color:var(--ui-on-fill);font-size:var(--fs-3xs);font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
           >{{ openTicketCount() }}</span>
         }
       </div>
@@ -83,7 +83,7 @@ import { mix } from "../utils";
               @if (needsOf(pa) > 0) {
                 <span
                   class="tnum"
-                  style="position:absolute;top:2px;right:2px;min-width:var(--sp-6);height:var(--sp-6);padding:0 var(--sp-1);border-radius:7px;background:var(--st-blocked);color:#fff;font-size:var(--fs-3xs);font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
+                  style="position:absolute;top:2px;right:2px;min-width:var(--sp-6);height:var(--sp-6);padding:0 var(--sp-1);border-radius:7px;background:var(--st-blocked);color:var(--on-solid);font-size:var(--fs-3xs);font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
                 >{{ needsOf(pa) }}</span>
               }
             </button>
@@ -99,9 +99,9 @@ import { mix } from "../utils";
         class="rail-btn"
         (click)="ui.openSpawn(null)"
         title="Spawn agent"
-        style="background:linear-gradient(180deg,var(--accent),color-mix(in oklch,var(--accent),#000 14%));border:none;box-shadow:0 0 14px -5px rgba(var(--accent-rgb),.8)"
+        style="background:var(--ui-sel);border:1px solid var(--ui-sel-2);box-shadow:none"
       >
-        <app-icon name="bolt" size="sm" color="#06070b" />
+        <app-icon name="bolt" size="sm" color="var(--ui-ink)" />
       </button>
 
       @if (hoverProj(); as hp) {

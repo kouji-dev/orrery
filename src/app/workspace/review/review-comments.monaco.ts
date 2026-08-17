@@ -185,22 +185,22 @@ function ensureStyles(): void {
   const style = document.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
-.monaco-editor .rc-covered { box-shadow: inset 2px 0 0 var(--accent); }
-.monaco-editor .rc-selected { background: color-mix(in oklch, var(--accent), transparent 84%); }
+.monaco-editor .rc-covered { box-shadow: inset 2px 0 0 var(--ui-ind); }
+.monaco-editor .rc-selected { background: var(--ui-sel); }
 .monaco-editor .rc-glyph-plus {
-  cursor: grab; border-radius: 4px; background: var(--accent);
+  cursor: grab; border-radius: 4px; background: var(--ui-fill);
   -webkit-mask: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>') center / 11px 11px no-repeat, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude;
   transform: scale(0.78);
 }
 .monaco-editor .rc-glyph-anchor {
-  border-radius: 4px; background: var(--accent);
+  border-radius: 4px; background: var(--ui-fill);
   -webkit-mask: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2.4" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>') center / 10px 10px no-repeat, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude;
   transform: scale(0.72);
 }
 .monaco-editor .rc-glyph-dot {
-  background: radial-gradient(circle at center, color-mix(in oklch, var(--accent), transparent 30%) 0 2.5px, transparent 3px);
+  background: radial-gradient(circle at center, var(--ui-line) 0 2.5px, transparent 3px);
 }
 /* Monaco's view-zone layer is display-only by default — the comment cards and
    composer are interactive, so their zones must accept pointer events and
@@ -212,21 +212,21 @@ function ensureStyles(): void {
   z-index: 10;
 }
 .rc-card { display: flex; background: var(--panel); border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
-.rc-card-bar { width: 24px; flex: none; background: color-mix(in oklch, var(--accent), transparent 86%); box-shadow: inset 2px 0 0 var(--accent); }
+.rc-card-bar { width: 24px; flex: none; background: var(--ui-sel); box-shadow: inset 2px 0 0 var(--ui-ind); }
 .rc-card-body { flex: 1; padding: 9px 14px 9px 12px; min-width: 0; }
 .rc-card-head { display: flex; align-items: center; gap: 7px; }
-.rc-card-avatar { width: 17px; height: 17px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 8.5px; font-weight: 700; color: var(--accent); background: color-mix(in oklch, var(--accent), transparent 84%); border: 1px solid color-mix(in oklch, var(--accent), transparent 60%); }
+.rc-card-avatar { width: 17px; height: 17px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 8.5px; font-weight: 700; color: var(--ui-ink); background: var(--ui-sel); border: 1px solid var(--ui-sel-2); }
 .rc-card-who { font-size: 11px; color: var(--ink-2); }
 .rc-card-ref { font-size: 9.5px; color: var(--ink-4); }
-.rc-card-chip { font-size: 8.5px; padding: 0 5px; color: var(--accent); border: 1px solid color-mix(in oklch, var(--accent), transparent 60%); border-radius: 999px; }
+.rc-card-chip { font-size: 8.5px; padding: 0 5px; color: var(--ui-ink); border: 1px solid var(--ui-sel-2); border-radius: 999px; }
 .rc-card-del { margin-left: auto; background: transparent; border: none; color: var(--ink-4); cursor: pointer; display: flex; padding: 3px; border-radius: 3px; }
 .rc-card-del:hover { color: var(--code-del-ink); }
 .rc-card-note { font-size: 12px; color: var(--ink); line-height: 1.5; margin-top: 5px; white-space: pre-wrap; word-break: break-word; }
-.rc-composer { display: flex; background: color-mix(in oklch, var(--accent), transparent 95%); border-top: 1px solid color-mix(in oklch, var(--accent), transparent 70%); border-bottom: 1px solid var(--hair); }
-.rc-composer-bar { width: 24px; flex: none; background: color-mix(in oklch, var(--accent), transparent 70%); }
+.rc-composer { display: flex; background: var(--ui-sel); border-top: 1px solid var(--ui-sel-2); border-bottom: 1px solid var(--hair); }
+.rc-composer-bar { width: 24px; flex: none; background: var(--ui-sel-2); }
 .rc-composer-body { flex: 1; padding: 10px 14px 10px 12px; }
 .rc-composer-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
-.rc-composer-icon { color: var(--accent); }
+.rc-composer-icon { color: var(--ui-ink); }
 .rc-composer-label { font-size: 10.5px; color: var(--ink-2); }
 .rc-composer-label b { color: var(--ink); }
 .rc-composer-tag { margin-left: auto; font-size: 8.5px; color: var(--ink-4); }

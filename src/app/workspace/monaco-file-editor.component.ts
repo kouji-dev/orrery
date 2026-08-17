@@ -73,17 +73,17 @@ import { attachReviewComments, MonacoReviewApi } from "./review/review-comments.
       }
       /* B4.3 change markers in the line-decorations column */
       :host ::ng-deep .gm-added {
-        background: var(--code-add-ink);
+        background: var(--sem-add);
         width: 3px !important;
         cursor: pointer;
       }
       :host ::ng-deep .gm-modified {
-        background: var(--accent);
+        background: var(--sem-change);
         width: 3px !important;
         cursor: pointer;
       }
       :host ::ng-deep .gm-deleted {
-        background: linear-gradient(to bottom, transparent 60%, var(--code-del-ink) 60%);
+        background: linear-gradient(to bottom, transparent 60%, var(--sem-del) 60%);
         width: 7px !important;
         cursor: pointer;
       }

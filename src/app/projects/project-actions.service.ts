@@ -88,7 +88,7 @@ export class ProjectActionsService {
       {
         label: "Spawn agent here",
         icon: "plus",
-        accent: "var(--accent)",
+        accent: "var(--ui-ink)",
         onClick: () => this.ui.spawning.set({ project: id }),
       },
       { sep: true },

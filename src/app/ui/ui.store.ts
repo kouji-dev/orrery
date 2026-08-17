@@ -1,7 +1,6 @@
 import { computed, effect, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS, ORG, WORKTREE_ROOT } from "../data";
 import { ContextMenuState, GitView, MenuItem, Tab, Tweaks, VizMode } from "../models";
-import { hexRgb } from "../utils";
 import {
   dropAgent,
   firstLeafOf,
@@ -16,7 +15,6 @@ import {
 
 const TWEAK_DEFAULTS: Tweaks = {
   theme: "dark",
-  palette: ["#a855f7", "#22d3ee"],
   density: "regular",
   defaultViz: "grid",
   rightPanel: true,
@@ -105,18 +103,13 @@ export class UiStore {
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    // reflect tweaks onto <html> + accent css vars
+    // reflect tweaks onto <html>; the accent is fixed by the design tokens
     effect(() => {
       const t = this.tweaks();
       const r = document.documentElement;
       r.setAttribute("data-theme", t.theme);
       r.setAttribute("data-density", t.density);
       r.setAttribute("data-motion", t.motion ? "on" : "off");
-      const [a1, a2] = t.palette;
-      r.style.setProperty("--accent", a1);
-      r.style.setProperty("--accent-2", a2);
-      r.style.setProperty("--accent-rgb", hexRgb(a1));
-      r.style.setProperty("--accent-2-rgb", hexRgb(a2));
     });
     // keep viz in sync with the default
     effect(() => this.viz.set(this.tweaks().defaultViz));

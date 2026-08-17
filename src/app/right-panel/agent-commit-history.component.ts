@@ -38,7 +38,7 @@ import { fileName } from "../utils";
 
     <!-- selection range bar -->
     @if (selecting()) {
-      <div class="rise" style="display:flex;align-items:center;gap:var(--sp-3);margin:var(--sp-1) var(--sp-4) var(--sp-4);padding:var(--sp-3) var(--sp-5);border-radius:var(--r-sm);background:color-mix(in oklch,var(--accent),transparent 90%);border:1px solid color-mix(in oklch,var(--accent),transparent 70%)">
+      <div class="rise" style="display:flex;align-items:center;gap:var(--sp-3);margin:var(--sp-1) var(--sp-4) var(--sp-4);padding:var(--sp-3) var(--sp-5);border-radius:var(--r-sm);background:var(--ui-sel);border:1px solid var(--ui-sel-2)">
         <span style="font-size:var(--fs-sm);color:var(--ink)"><b class="tnum">{{ sel().length }}</b> selected</span>
         <button class="btn" (click)="clearSel()" style="margin-left:auto;padding:var(--sp-1) var(--sp-4);font-size:var(--fs-xs);color:var(--ink-3)">Clear</button>
         <button class="btn primary" (click)="emitRange()" style="padding:var(--sp-1) var(--sp-5);font-size:var(--fs-sm)">
@@ -56,7 +56,7 @@ import { fileName } from "../utils";
       @let selected = sel().includes(c.sha);
       <div
         style="margin:0 var(--sp-3);border-radius:var(--r-sm)"
-        [style.background]="selected ? 'color-mix(in oklch,var(--accent),transparent 90%)' : 'transparent'"
+        [style.background]="selected ? 'var(--ui-sel)' : 'transparent'"
       >
         <!-- row header -->
         <div
@@ -68,12 +68,12 @@ import { fileName } from "../utils";
           <button
             (click)="$event.stopPropagation(); toggleSel(c.sha)"
             title="Select for range diff"
-            [style.border]="'1px solid ' + (selected ? 'var(--accent)' : 'var(--hair-2)')"
-            [style.background]="selected ? 'var(--accent)' : 'transparent'"
+            [style.border]="'1px solid ' + (selected ? 'var(--ui-focus)' : 'var(--hair-2)')"
+            [style.background]="selected ? 'var(--ui-fill)' : 'transparent'"
             [style.opacity]="selecting() || selected ? '1' : '0.5'"
             style="flex:none;width:var(--sp-6);height:var(--sp-6);margin-top:1px;border-radius:4px;display:grid;place-items:center;cursor:pointer;padding:0"
           >
-            @if (selected) { <app-icon name="check" size="sm" [px]="10" color="#06070b" /> }
+            @if (selected) { <app-icon name="check" size="sm" [px]="10" color="var(--ui-on-fill)" /> }
           </button>
 
           <!-- main content -->
@@ -91,7 +91,7 @@ import { fileName } from "../utils";
                 style="font-size:var(--fs-sm);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0"
               >{{ c.msg }}</span>
               @if (isHead) {
-                <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3);color:var(--accent-2);flex:none">HEAD</span>
+                <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3);color:var(--ink-2);flex:none">HEAD</span>
               }
             </div>
 

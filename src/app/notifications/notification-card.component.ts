@@ -39,7 +39,7 @@ interface Presentation {
          via the native title tooltip. cursor:pointer + the accent hover/active
          states signal it is the selection control. */
       .opt {
-        font-family: var(--font-mono);
+        font-family: var(--font-ui);
         font-size: var(--fs-2xs);
         line-height: 1.4;
         padding: var(--sp-1) var(--sp-4);
@@ -57,15 +57,15 @@ interface Presentation {
       }
       .opt:hover {
         transform: translateY(-1px);
-        border-color: var(--accent);
+        border-color: var(--ui-focus);
         color: var(--ink-2);
-        background: color-mix(in oklch, var(--accent), transparent 88%);
+        background: var(--ui-sel);
       }
       .opt:active {
         transform: translateY(0);
-        border-color: var(--accent);
-        color: var(--accent);
-        background: color-mix(in oklch, var(--accent), transparent 78%);
+        border-color: var(--ui-focus);
+        color: var(--ui-ink);
+        background: var(--ui-sel-2);
       }
     `,
   ],
@@ -112,8 +112,8 @@ interface Presentation {
                   @for (s of n.suggestions; track s.rule) {
                     <span
                       [title]="s.description"
-                      [style.color]="s.behavior === 'deny' ? 'var(--st-blocked)' : 'var(--accent)'"
-                      [style.border-color]="s.behavior === 'deny' ? 'var(--st-blocked)' : 'var(--accent)'"
+                      [style.color]="s.behavior === 'deny' ? 'var(--sem-del)' : 'var(--ui-ink)'"
+                      [style.border-color]="s.behavior === 'deny' ? 'var(--sem-del)' : 'var(--ui-sel-2)'"
                       style="display:inline-flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:var(--fs-2xs);padding:var(--sp-1) var(--sp-3);border-radius:5px;border:1px solid;background:var(--panel)"
                     >
                       <span class="up" style="font-size:var(--fs-3xs);letter-spacing:0.05em;opacity:0.8">{{ s.behavior }}</span>
@@ -184,15 +184,15 @@ export class NotificationCardComponent {
   readonly presentation = computed<Presentation>(() => {
     const n = this.notification();
     if (n.questions?.length) {
-      return { layout: "question", icon: "question", color: "var(--accent-2)" };
+      return { layout: "question", icon: "question", color: "var(--sem-attn)" };
     }
     if (n.kind === "permission" && (n.command || n.description || n.filePath)) {
-      return { layout: "command", icon: "shield", color: "var(--st-blocked)" };
+      return { layout: "command", icon: "shield", color: "var(--sem-attn)" };
     }
     if (n.kind === "done") {
       return { layout: "done", icon: "check", color: "var(--st-done)" };
     }
-    return { layout: "info", icon: "bell", color: "var(--accent-2)" };
+    return { layout: "info", icon: "bell", color: "var(--ink-2)" };
   });
 
   /** Body click: open the agent's terminal and let a host (dropdown) close.

@@ -56,7 +56,7 @@ interface VizDef {
                 [style.box-shadow]="on ? '0 0 0 1px var(--hair-2)' : 'none'"
                 style="padding:var(--sp-2) var(--sp-4);border-radius:var(--r-sm)"
               >
-                <app-icon [name]="v.icon" size="sm" [color]="on ? 'var(--accent)' : null" />{{ v.label }}
+                <app-icon [name]="v.icon" size="sm" [color]="on ? 'var(--ui-ink)' : null" />{{ v.label }}
               </button>
             }
           </div>

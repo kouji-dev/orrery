@@ -25,10 +25,10 @@ const GUTTER_W = 196;
 const LINENO_W = 44;
 
 // ---- age background (mirrors ageBgA from design) ----
-// age 0 = newest (almost fully transparent accent), age 1 = oldest (more accent).
+// age 0 = newest (almost fully transparent ink), age 1 = oldest (more ink).
 function ageBg(age: number): string {
   const pct = 86 + Math.round(age * 11); // 86..97 %
-  return `color-mix(in oklch, var(--accent), transparent ${pct}%)`;
+  return `color-mix(in oklch, var(--ui-ink), transparent ${pct}%)`;
 }
 
 // ---- relative time ----
@@ -190,7 +190,7 @@ interface HoverState {
           <div style="font-size:10.5px;color:var(--ink-2);line-height:1.45;text-wrap:pretty">
             {{ h.summary }}
           </div>
-          <div style="font-size:9px;color:var(--accent-2);margin-top:7px;display:flex;align-items:center;gap:5px">
+          <div style="font-size:9px;color:var(--ink-2);margin-top:7px;display:flex;align-items:center;gap:5px">
             <app-icon name="enter" size="sm" [px]="11" />
             click → open commit diff
           </div>

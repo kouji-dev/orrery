@@ -43,7 +43,7 @@ import { TicketsStore } from "../stores/tickets.store";
         <app-logo style="pointer-events:none" />
         <div style="display:flex;flex-direction:column;line-height:1.12;pointer-events:none">
           <span class="disp" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-lg);font-weight:600;letter-spacing:0.005em">
-            <span><span style="color:var(--accent)">O</span>rrery</span>
+            <span><span style="color:var(--ui-ink)">O</span>rrery</span>
             <button type="button" (click)="settings.openWhatsNew()" title="View release changelog"
               style="pointer-events:auto;border:none;background:transparent;cursor:pointer;padding:0;display:inline-flex;align-items:center;font:inherit;color:inherit">
               <app-version-badge />
@@ -78,7 +78,7 @@ import { TicketsStore } from "../stores/tickets.store";
             (drop)="onDrop($event, tab)"
             (contextmenu)="onTabContext($event, tab)"
             [style.opacity]="dragId() === tab.id ? 0.45 : 1"
-            [style.box-shadow]="dz === 'merge' ? 'inset 0 0 0 2px color-mix(in oklch, var(--accent), transparent 35%)' : null"
+            [style.box-shadow]="dz === 'merge' ? 'inset 0 0 0 2px var(--ui-line)' : null"
             [style.background]="active ? 'var(--panel-2)' : (isOrch ? 'var(--panel)' : 'transparent')"
             [style.color]="active ? 'var(--ink)' : 'var(--ink-3)'"
             [style.position]="isOrch ? 'sticky' : 'relative'"
@@ -87,29 +87,29 @@ import { TicketsStore } from "../stores/tickets.store";
             style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);cursor:pointer;white-space:nowrap;flex:none;border-right:1px solid var(--hair)"
           >
             @if (active) {
-              <span style="position:absolute;left:0;right:0;top:0;height:var(--sp-1);background:linear-gradient(90deg,var(--accent),var(--accent-2))"></span>
+              <span style="position:absolute;left:0;right:0;top:0;height:var(--sp-1);background:var(--ui-ind)"></span>
             }
             @if (dz === 'before') {
-              <span style="position:absolute;left:-1px;top:4px;bottom:4px;width:3px;border-radius:2px;background:var(--accent)"></span>
+              <span style="position:absolute;left:-1px;top:4px;bottom:4px;width:3px;border-radius:2px;background:var(--ui-fill)"></span>
             }
             @if (dz === 'after') {
-              <span style="position:absolute;right:-1px;top:4px;bottom:4px;width:3px;border-radius:2px;background:var(--accent)"></span>
+              <span style="position:absolute;right:-1px;top:4px;bottom:4px;width:3px;border-radius:2px;background:var(--ui-fill)"></span>
             }
             @if (dz === 'merge') {
-              <span style="position:absolute;inset:0;background:color-mix(in oklch, var(--accent), transparent 90%);pointer-events:none"></span>
+              <span style="position:absolute;inset:0;background:var(--ui-sel);pointer-events:none"></span>
             }
 
             @if (isOrch) {
-              <app-icon name="layers" size="sm" [color]="active ? 'var(--accent)' : null" />
+              <app-icon name="layers" size="sm" [color]="active ? 'var(--ui-ink)' : null" />
               <span style="font-size:var(--fs-ui)">Orchestrator</span>
             } @else if (tab.kind === 'backlog') {
-              <app-icon name="layers" size="sm" [color]="active ? 'var(--accent)' : null" />
+              <app-icon name="layers" size="sm" [color]="active ? 'var(--ui-ink)' : null" />
               <span style="font-size:var(--fs-ui)">Backlog</span>
             } @else if (tab.kind === 'ticket') {
-              <app-icon name="file" size="sm" [color]="active ? 'var(--accent)' : null" />
+              <app-icon name="file" size="sm" [color]="active ? 'var(--ui-ink)' : null" />
               <span style="font-size:var(--fs-ui);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ticketTabLabel(tab) }}</span>
             } @else if (isGroup) {
-              <app-icon name="columns" size="sm" [color]="active ? 'var(--accent)' : 'var(--ink-3)'" />
+              <app-icon name="columns" size="sm" [color]="active ? 'var(--ui-ink)' : 'var(--ink-3)'" />
               <span style="display:flex;gap:var(--sp-1)">
                 @for (a of tas.slice(0, 3); track a.id) { <app-status-dot [status]="a.status" /> }
               </span>
@@ -270,8 +270,8 @@ import { TicketsStore } from "../stores/tickets.store";
       .tb-settings { position: relative; }
       .tb-upd-dot {
         position: absolute; top: 3px; right: 3px; width: var(--sp-3); height: var(--sp-3);
-        border-radius: 50%; background: var(--set-amber, var(--accent));
-        box-shadow: 0 0 7px -1px var(--set-amber, var(--accent));
+        border-radius: 50%; background: var(--set-amber, var(--sem-attn));
+        box-shadow: 0 0 7px -1px var(--set-amber, var(--sem-attn));
       }
     `,
   ],
@@ -412,7 +412,7 @@ export class TopBarComponent implements AfterViewInit, OnDestroy {
       onClick: () => this.ui.detachAgent(tab.id, a.id),
     }));
     items.push({ sep: true });
-    items.push({ label: "Ungroup all", icon: "columns", accent: "var(--accent)", onClick: () => this.ui.ungroupTab(tab.id) });
+    items.push({ label: "Ungroup all", icon: "columns", accent: "var(--ui-ink)", onClick: () => this.ui.ungroupTab(tab.id) });
     items.push({ label: "Close group", icon: "x", danger: true, onClick: () => this.closeGuard.requestClose(tab.id) });
     this.ui.openMenu(e, items);
   }

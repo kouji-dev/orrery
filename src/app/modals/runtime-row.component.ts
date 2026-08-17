@@ -117,9 +117,9 @@ import { ToolBadgeComponent } from "../shared/tool-badge.component";
       padding:0 var(--sp-5);background:var(--panel);border:1px solid var(--hair);border-radius:8px;color:var(--ink-2);font-size:var(--fs-sm);}
     .set-rt-pathchip app-icon{color:var(--ink-4);flex:none;display:inline-flex;}
     .set-rt-pathchip .pt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);}
-    .set-rt-link{background:none;border:none;color:var(--ink-4);font-family:var(--font-mono);font-size:var(--fs-xs);
+    .set-rt-link{background:none;border:none;color:var(--ink-4);font-family:var(--font-ui);font-size:var(--fs-xs);
       cursor:pointer;padding:0;display:inline-flex;align-items:center;gap:var(--sp-2);transition:color .12s;flex:none;}
-    .set-rt-link:hover{color:var(--accent);}
+    .set-rt-link:hover{color:var(--ui-ink);}
     .set-rt-shim{display:flex;align-items:flex-start;gap:var(--sp-3);padding-left:var(--sp-11);
       font-size:var(--fs-2xs);color:var(--ink-4);line-height:1.45;}
     .set-rt-shim app-icon{flex:none;margin-top:1px;}
@@ -131,15 +131,15 @@ import { ToolBadgeComponent } from "../shared/tool-badge.component";
     .set-rt-field{display:flex;align-items:center;gap:var(--sp-4);}
     .set-rt-input{flex:1;min-width:0;display:flex;align-items:center;gap:var(--sp-4);height:var(--ctl-h-lg);padding:0 var(--sp-5);
       background:var(--panel);border:1px solid var(--hair);border-radius:8px;transition:border-color .12s,box-shadow .12s;}
-    .set-rt-input:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in oklch,var(--accent),transparent 88%);}
+    .set-rt-input:focus-within{border-color:var(--ui-focus);box-shadow:var(--ui-ring);}
     .set-rt-input app-icon{color:var(--ink-4);flex:none;display:inline-flex;}
     .set-rt-input input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);
-      font-family:var(--font-mono);font-size:var(--fs-ui);}
+      font-family:var(--font-ui);font-size:var(--fs-ui);}
     .set-rt-input input::placeholder{color:var(--ink-4);}
     .set-rt-act{display:flex;align-items:center;gap:var(--sp-3);flex:none;}
     .set-rt-fail{display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--set-danger);}
     .set-rt-fail app-icon{flex:none;display:inline-flex;}
-    .set-rt-cancel{background:none;border:none;color:var(--ink-4);font-family:var(--font-mono);font-size:var(--fs-xs);
+    .set-rt-cancel{background:none;border:none;color:var(--ink-4);font-family:var(--font-ui);font-size:var(--fs-xs);
       cursor:pointer;padding:0;margin-left:auto;transition:color .12s;}
     .set-rt-cancel:hover{color:var(--ink-2);}
     app-icon.spin{display:inline-flex;animation:rt-spin .9s linear infinite;}

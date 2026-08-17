@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, signal } from "@angular/core";
-import { PALETTES } from "../data";
 import { VizMode } from "../models";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -18,7 +17,7 @@ import { IconComponent } from "../shared/icon.component";
     @if (open()) {
       <section class="tweak-panel" aria-label="Tweaks">
         <header class="tweak-head">
-          <span class="tweak-brand"><app-icon name="spark" size="sm" [color]="'var(--accent)'" /></span>
+          <span class="tweak-brand"><app-icon name="spark" size="sm" [color]="'var(--ui-ink)'" /></span>
           <span class="disp" style="font-size:var(--fs-md);font-weight:600">Tweaks</span>
           <span style="flex:1"></span>
           <button class="tweak-x" (click)="open.set(false)" title="Close"><app-icon name="x" size="sm" /></button>
@@ -32,20 +31,6 @@ import { IconComponent } from "../shared/icon.component";
           <div class="seg">
             @for (m of ['dark', 'light']; track m) {
               <button [class.on]="t.theme === m" (click)="ui.setTweak('theme', $any(m))">{{ m }}</button>
-            }
-          </div>
-        </div>
-        <div class="tweak-row">
-          <span class="tweak-label">Accent palette</span>
-          <div style="display:flex;gap:var(--sp-3)">
-            @for (p of palettes; track p.name) {
-              <button
-                class="swatch"
-                [class.on]="t.palette[0] === p.value[0] && t.palette[1] === p.value[1]"
-                [title]="p.name"
-                (click)="ui.setTweak('palette', p.value)"
-                [style.background]="'linear-gradient(135deg,' + p.value[0] + ',' + p.value[1] + ')'"
-              ></button>
             }
           </div>
         </div>
@@ -105,12 +90,12 @@ import { IconComponent } from "../shared/icon.component";
       .tweak-fab:hover {
         transform: translateY(-2px);
         color: var(--ink);
-        border-color: rgba(var(--accent-rgb), 0.5);
+        border-color: var(--ui-line);
       }
       .tweak-fab.on {
-        color: var(--accent);
-        border-color: rgba(var(--accent-rgb), 0.6);
-        box-shadow: var(--shadow), 0 0 18px -6px rgba(var(--accent-rgb), 0.7);
+        color: var(--ui-ink);
+        border-color: var(--ui-line);
+        box-shadow: var(--shadow);
       }
       .tweak-fab svg {
         width: 19px;
@@ -127,8 +112,8 @@ import { IconComponent } from "../shared/icon.component";
         background: var(--panel);
         border: 1px solid var(--hair-2);
         border-radius: 14px;
-        box-shadow: var(--shadow), 0 0 0 1px rgba(var(--accent-rgb), 0.04);
-        font-family: var(--font-mono);
+        box-shadow: var(--shadow);
+        font-family: var(--font-ui);
         transform-origin: bottom right;
         animation: tweakin 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
       }
@@ -147,7 +132,7 @@ import { IconComponent } from "../shared/icon.component";
       .tweak-brand {
         display: flex;
         align-items: center;
-        color: var(--accent);
+        color: var(--ui-ink);
       }
       .tweak-x {
         border: none;
@@ -195,7 +180,7 @@ import { IconComponent } from "../shared/icon.component";
         border-radius: var(--r-sm);
       }
       .seg button {
-        font-family: var(--font-mono);
+        font-family: var(--font-ui);
         font-size: var(--fs-xs);
         text-transform: capitalize;
         padding: var(--sp-1) var(--sp-4);
@@ -209,18 +194,6 @@ import { IconComponent } from "../shared/icon.component";
         background: var(--panel-3);
         color: var(--ink);
         box-shadow: 0 0 0 1px var(--hair-2);
-      }
-      .swatch {
-        /* circle: width tracks height so it stays round across densities */
-        width: var(--ctl-h-sm);
-        height: var(--ctl-h-sm);
-        border-radius: 50%;
-        cursor: pointer;
-        border: 2px solid transparent;
-      }
-      .swatch.on {
-        border-color: var(--ink);
-        box-shadow: 0 0 0 2px var(--elev);
       }
       .toggle {
         width: 34px;
@@ -248,12 +221,12 @@ import { IconComponent } from "../shared/icon.component";
           background 0.15s;
       }
       .toggle.on {
-        background: var(--accent);
-        border-color: var(--accent);
+        background: var(--ui-fill);
+        border-color: var(--ui-focus);
       }
       .toggle.on span {
         transform: translateX(15px);
-        background: #06070b;
+        background: var(--ui-on-fill);
       }
     `,
   ],
@@ -268,7 +241,6 @@ export class TweaksPanelComponent {
     if (this.open() && !this.host.nativeElement.contains(e.target as Node)) this.open.set(false);
   }
 
-  readonly palettes = Object.entries(PALETTES).map(([name, value]) => ({ name, value }));
   readonly vizOptions: VizMode[] = ["grid", "kanban", "graph", "timeline"];
 
   setViz(e: Event) {

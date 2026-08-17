@@ -97,7 +97,7 @@ import { UiStore } from "../ui/ui.store";
                   (click)="$event.stopPropagation(); ctx().onView(lf.id, v.k)"
                   [title]="v.k"
                   [style.background]="lf.view === v.k ? 'var(--panel-3)' : 'transparent'"
-                  [style.color]="lf.view === v.k ? 'var(--accent)' : 'var(--ink-3)'"
+                  [style.color]="lf.view === v.k ? 'var(--ui-ink)' : 'var(--ink-3)'"
                   style="display:flex;padding:var(--sp-1) var(--sp-2);border-radius:3px;border:none;cursor:pointer"
                 ><app-icon [name]="v.icon" size="sm" [px]="12" /></button>
               }
@@ -120,7 +120,7 @@ import { UiStore } from "../ui/ui.store";
                   (click)="$event.stopPropagation(); ctx().onFileSelect(lf.id, f)"
                   (contextmenu)="onFileTabContext($event, lf, f)"
                 >
-                  <app-icon name="file" size="sm" [px]="11" [color]="onf ? 'var(--accent)' : 'var(--ink-4)'" />
+                  <app-icon name="file" size="sm" [px]="11" [color]="onf ? 'var(--ui-ink)' : 'var(--ink-4)'" />
                   <span class="fn">{{ fname(f) }}</span>
                   <span class="fdot" aria-label="unsaved changes"></span>
                   <button class="fx" title="Close file" (click)="$event.stopPropagation(); requestFileClose(lf, f)">
@@ -220,7 +220,7 @@ import { UiStore } from "../ui/ui.store";
               [style.height]="zone()[5]"
             >
               <div class="drop-label">
-                <app-icon [name]="side === 'center' ? 'swap' : (side === 'left' || side === 'right') ? 'splitCol' : 'splitRow'" size="sm" [px]="12" color="#06070b" />
+                <app-icon [name]="side === 'center' ? 'swap' : (side === 'left' || side === 'right') ? 'splitCol' : 'splitRow'" size="sm" [px]="12" color="var(--ui-on-fill)" />
                 {{ side === 'center' ? 'Replace' : 'Split ' + side }}
               </div>
             </div>
@@ -257,8 +257,8 @@ import { UiStore } from "../ui/ui.store";
         border: 1px solid var(--hair);
       }
       .pane-leaf.focused {
-        border-color: color-mix(in oklch, var(--accent), transparent 55%);
-        box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent), transparent 70%);
+        border-color: var(--ui-line);
+        box-shadow: 0 0 0 1px var(--ui-sel-2);
       }
       .pane-btn {
         display: flex;
@@ -282,18 +282,14 @@ import { UiStore } from "../ui/ui.store";
       }
       /* play/pause adopts the merge button's primary look so it's more visible */
       .pane-btn.primary {
-        background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
-        color: #06070b;
+        background: var(--ui-fill);
+        color: var(--ui-on-fill);
         padding: var(--sp-1) var(--sp-4);
-        box-shadow: 0 0 16px -5px rgba(var(--accent-rgb), 0.85);
       }
       .pane-btn.primary:hover:not(:disabled) {
-        filter: brightness(1.08);
-        background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
-        color: #06070b;
-      }
-      [data-theme="light"] .pane-btn.primary {
-        color: #fff;
+        filter: brightness(1.06);
+        background: var(--ui-fill);
+        color: var(--ui-on-fill);
       }
       /* open-file tabs live inline in the pane header, right after the view
          toggle. The strip is also the flex spacer (flex:1) and scrolls
@@ -365,7 +361,7 @@ import { UiStore } from "../ui/ui.store";
         width: var(--sp-2);
         height: var(--sp-2);
         border-radius: 50%;
-        background: var(--accent);
+        background: var(--ui-ind);
       }
       .file-tab.dirty:not(:hover) .fdot {
         display: block;
@@ -460,21 +456,21 @@ import { UiStore } from "../ui/ui.store";
         background: transparent;
       }
       .pane-divider .grip-handle {
-        background: color-mix(in oklch, var(--accent), transparent 45%);
+        background: var(--ui-line);
         border-radius: 999px;
+        box-shadow: 0 0 0 1px var(--ui-sel);
         transition: background 0.12s, box-shadow 0.12s;
       }
       .pane-divider:hover .grip-handle,
       .pane-divider.on .grip-handle {
-        background: var(--accent);
-        box-shadow: 0 0 14px 0 rgba(var(--accent-rgb), 0.9);
+        background: var(--ui-fill);
       }
       .drop-zone {
         position: absolute;
-        background: color-mix(in oklch, var(--accent), transparent 78%);
-        border: 2px solid var(--accent);
+        background: var(--ui-sel);
+        border: 2px solid var(--ui-focus);
         border-radius: var(--r-md);
-        box-shadow: 0 0 24px -4px rgba(var(--accent-rgb), 0.6) inset;
+        box-shadow: none;
         transition: all 0.08s ease;
       }
       .drop-label {
@@ -487,8 +483,8 @@ import { UiStore } from "../ui/ui.store";
         gap: var(--sp-3);
         padding: var(--sp-2) var(--sp-4);
         border-radius: 999px;
-        background: var(--accent);
-        color: #06070b;
+        background: var(--ui-fill);
+        color: var(--ui-on-fill);
         font-size: var(--fs-xs);
         font-weight: 600;
         white-space: nowrap;

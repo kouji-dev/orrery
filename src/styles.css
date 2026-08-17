@@ -32,9 +32,15 @@
   --color-add-ink: var(--code-add-ink);
   --color-del-bg: var(--code-del-bg);
   --color-del-ink: var(--code-del-ink);
+  --color-sem-add: var(--sem-add);
+  --color-sem-del: var(--sem-del);
+  --color-sem-attn: var(--sem-attn);
+  --color-sem-change: var(--sem-change);
+  --color-sem-live: var(--sem-live);
 
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-disp: "Space Grotesk", "JetBrains Mono", ui-monospace, monospace;
+  --font-disp: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   --radius-sm: 5px;
   --radius-md: 8px;
@@ -42,26 +48,97 @@
 }
 
 :root {
-  /* accent (overridden by tweak service) */
-  --accent: #a855f7;
-  --accent-2: #22d3ee;
+  /* ---- UI accent. The ONLY decorative hue. Allowed on: focus ring, text
+     selection, active tab/rail indicator, primary button fill, meters. ---- */
+  --accent: #a855f7;        /* fills, indicators */
+  --accent-fill: #b082f7;   /* filled accent surface — text 6.83:1, 5.86:1 vs panel-2 */
+  --accent-on: #0d0d0f;     /* ink on a filled accent surface */
+  --accent-ink: #c39afc;    /* accent-as-text / icon on dark */
   --accent-rgb: 168, 85, 247;
+
+  /* brand mark only — the logo gradient. Never in functional chrome. */
+  --brand-1: #ff5d9e;
+  --brand-2: #a855f7;
+  --brand-3: #22d3ee;
+  --accent-2: #22d3ee;      /* legacy alias of brand-3, brand surfaces only */
+  --accent-3: #ff5d9e;      /* legacy alias of brand-1 */
   --accent-2-rgb: 34, 211, 238;
-  /* brand mark accent (Rose Pulse) — fixed across accent-palette tweaks; the
-     Orrery logo gradient sweeps rose → violet → cyan */
-  --accent-3: #ff5d9e;
   --accent-3-rgb: 255, 93, 158;
 
-  /* status colors */
-  --st-running: #22d3ee;
-  --st-blocked: #ff5d7a;
-  --st-waiting: #c084fc;
-  --st-done: #34e0a1;
-  --st-idle: #6b7488;
+  /* ---- semantic hues. One meaning-class each. Only these hold values. ---- */
+  --sem-add: #57c98a;       /* additive, succeeded */
+  --sem-del: #e06c7a;       /* destructive, failed */
+  --sem-attn: #d9a441;      /* needs a human: conflict, waiting, warn */
+  --sem-change: #5e9cf5;    /* changed in place: modified, renamed */
+  --sem-live: #3fb6c4;      /* running now, streaming */
 
-  /* type */
+  /* ---- vocabularies alias the semantic hues. Never a raw hex. ---- */
+  /* agent status */
+  --st-running: var(--sem-live);
+  --st-blocked: var(--sem-del);
+  --st-waiting: var(--sem-attn);
+  --st-done: var(--sem-add);
+  --st-idle: var(--ink-3);
+
+  /* VCS file state */
+  --vcs-added: var(--sem-add);
+  --vcs-modified: var(--sem-change);
+  --vcs-renamed: var(--sem-change);   /* + arrow glyph carries the rest */
+  --vcs-deleted: var(--ink-3);        /* dim + strikethrough, NOT red */
+  --vcs-conflicted: var(--sem-attn);
+  --vcs-untracked: var(--ink-3);
+  --vcs-ignored: var(--ink-4);
+
+  /* log levels — sys is the quietest line in the terminal, not the loudest */
+  --log-err: var(--sem-del);
+  --log-warn: var(--sem-attn);
+  --log-info: var(--ink-2);
+  --log-sys: var(--ink-3);
+
+  /* diff sides: column position + A/B badge carry the meaning. Neutral tints. */
+  --side-a: color-mix(in oklch, var(--ink), transparent 96%);
+  --side-b: color-mix(in oklch, var(--ink), transparent 92%);
+
+  /* UI-accent roles — the only consumers of --accent */
+  --ui-ink: var(--accent-ink);
+  --ui-fill: var(--accent-fill);
+  --ui-on-fill: var(--accent-on);
+  --ui-ind: var(--accent);
+  --ui-sel: color-mix(in oklch, var(--accent), transparent 88%);
+  --ui-sel-2: color-mix(in oklch, var(--accent), transparent 74%);
+  --ui-line: color-mix(in oklch, var(--accent), transparent 55%);
+  --ui-focus: var(--accent);
+  --ui-ring: 0 0 0 3px color-mix(in oklch, var(--accent), transparent 84%);
+  --ui-meter: var(--accent);
+  --ui-link: var(--accent-ink);
+
+  /* commit-graph lanes: identity, not meaning — muted, flat chroma */
+  --lane-1: #8f7bd6; --lane-2: #5e8fb8; --lane-3: #67a888; --lane-4: #c09a54;
+  --lane-5: #b8798f; --lane-6: #6f8fc4; --lane-7: #9d86b8;
+
+  /* identity palette — projects, avatars, authors. Identity, not meaning. */
+  --id-1: var(--lane-1); --id-2: var(--lane-2); --id-3: var(--lane-3); --id-4: var(--lane-4);
+  --id-5: var(--lane-5); --id-6: var(--lane-6); --id-7: var(--lane-7);
+
+  /* agent-tool marks — external brands, kept verbatim */
+  --tool-claude: #d98a5b;
+  --tool-codex: #10a37f;
+  --tool-cursor: #6e9bff;
+  --tool-gemini: #8a7cff;
+
+  /* ink that sits on a solid semantic or danger fill */
+  --on-solid: #ffffff;
+
+  /* brand splash + icon plate (pre-theme surfaces, deliberately fixed) */
+  --brand-core: #ffffff;
+  --brand-plate: #090a0f;
+  --boot-bg: #07080d;
+  --boot-grid: rgba(255, 255, 255, 0.022);
+
+  /* type — Inter for chrome, JetBrains Mono for code, paths, refs, figures */
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-disp: "Space Grotesk", var(--font-mono);
+  --font-disp: var(--font-ui);
 
   /* radii (fixed — not density-scaled) */
   --r-sm: 5px;
@@ -141,51 +218,76 @@
   --fs-display: 40px;
 }
 
-/* ---------- DARK (default) ---------- */
+/* ---------- DARK (default) — GRAPHITE ramp ----------
+   Chroma held flat at ~0.005 OKLCH across the whole ramp; it never rises
+   with elevation. Elevation is a lightness step plus a hairline. */
 [data-theme="dark"] {
-  --bg: #090a0f;
-  --bg-grid: rgba(255, 255, 255, 0.018);
-  --panel: #0e1018;
-  --panel-2: #11141e;
-  --panel-3: #161a26;
-  --elev: #1a1f2e;
-  --hair: rgba(255, 255, 255, 0.07);
-  --hair-2: rgba(255, 255, 255, 0.12);
-  --ink: #e8ebf2;
-  --ink-2: #aab2c5;
-  --ink-3: #6b7488;
-  --ink-4: #444b5e;
-  --code-add-bg: rgba(52, 224, 161, 0.1);
-  --code-add-ink: #5ef0bb;
-  --code-del-bg: rgba(255, 93, 122, 0.1);
-  --code-del-ink: #ff8ba0;
-  --glow: 0 0 0 1px rgba(var(--accent-rgb), 0.35), 0 0 24px -4px rgba(var(--accent-rgb), 0.45);
-  --shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.7);
+  --bg: #121315;        /* L 18.6%  C .0044 */
+  --panel: #17181a;     /* L 20.9%  C .0042 */
+  --panel-2: #1d1e20;   /* L 23.5%  C .0041  <- editor surface */
+  --panel-3: #232427;   /* L 26.0%  C .0058 */
+  --elev: #2c2d30;      /* L 29.7%  C .0056 */
+  --hair: #353739;
+  --hair-2: #444548;
+  --bg-grid: rgba(255, 255, 255, 0.02);
+  --ink: #dee0e2;       /* 12.6:1 on panel-2 */
+  --ink-2: #b0b1b3;     /*  7.8:1 */
+  --ink-3: #8a8b8c;     /*  4.9:1 */
+  --ink-4: #68696b;     /*  3.0:1 — non-text / disabled only */
+  --code-add-bg: color-mix(in oklch, var(--sem-add), transparent 88%);
+  --code-add-ink: #7fd7a5;
+  --code-del-bg: color-mix(in oklch, var(--sem-del), transparent 88%);
+  --code-del-ink: #ef8a95;
+  --glow: 0 0 0 1px color-mix(in oklch, var(--accent), transparent 45%);
+  --shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.65);
   --scan: rgba(255, 255, 255, 0.02);
+  --scrim: rgba(4, 5, 9, 0.58);        /* modal backdrop */
+  --desk-1: #11131d;                   /* desktop behind the app window */
+  --desk-2: #050609;
   color-scheme: dark;
 }
 
-/* ---------- LIGHT ---------- */
+/* ---------- LIGHT ----------
+   "Paper" — One Light's structure and soft ink, shifted down into real grey.
+   Pure neutral (chroma 0.0000). Elevation goes DOWN, not up: the editor is the
+   single brightest surface and everything else recedes. --elev is capped short
+   of white so popovers never glare. */
 [data-theme="light"] {
-  --bg: #eef0f4;
-  --bg-grid: rgba(20, 24, 40, 0.022);
-  --panel: #ffffff;
-  --panel-2: #f6f7fa;
-  --panel-3: #eceef3;
-  --elev: #ffffff;
-  --hair: rgba(20, 24, 40, 0.1);
-  --hair-2: rgba(20, 24, 40, 0.16);
-  --ink: #161a26;
-  --ink-2: #4a5266;
-  --ink-3: #7b8398;
-  --ink-4: #aab0bf;
-  --code-add-bg: rgba(20, 160, 110, 0.12);
-  --code-add-ink: #0a8f5e;
-  --code-del-bg: rgba(220, 60, 90, 0.12);
-  --code-del-ink: #c23252;
-  --glow: 0 0 0 1px rgba(var(--accent-rgb), 0.3), 0 0 20px -6px rgba(var(--accent-rgb), 0.35);
-  --shadow: 0 12px 36px -14px rgba(20, 24, 40, 0.3);
-  --scan: rgba(20, 24, 40, 0.015);
+  --bg: #dedede;        /* L 90.1%  app shell, gutters */
+  --panel: #e8e8e8;     /* L 93.1%  sidebars, rail, status bar */
+  --panel-2: #f2f2f2;   /* L 96.1%  editor — the ONE bright surface */
+  --panel-3: #e4e4e4;   /* L 91.9%  rows, inputs, tab strip (recessed) */
+  --elev: #f7f7f7;      /* L 97.6%  popovers — capped, never #fff */
+  --hair: #d1d1d1;
+  --hair-2: #bababa;
+  --bg-grid: rgba(0, 0, 0, 0.022);
+  /* One Light's signature: soft foreground, not near-black. ~10:1, not 16:1. */
+  --ink: #3b3b3b;       /* 10.0:1 on panel-2 */
+  --ink-2: #515151;     /*  7.1:1 */
+  --ink-3: #6e6e6e;     /*  4.6:1 */
+  --ink-4: #8c8c8c;     /*  3.0:1 — non-text / disabled ONLY */
+  --accent: #8d4dcc;
+  --accent-fill: #752cb3;   /* white text 7.6:1 · vs editor 6.8:1 */
+  --accent-on: #ffffff;
+  --accent-ink: #8d4dcc;    /* 4.6:1 — accent as text/icon */
+  --accent-rgb: 141, 77, 204;
+  /* One Light's own syntax palette fails AA on light (#50a14f = 2.86:1,
+     #4078f2 = 3.62:1). These keep its muted character but clear 4.6:1. */
+  --sem-add: #1e7d3e;
+  --sem-del: #bf4240;
+  --sem-attn: #996100;
+  --sem-change: #1c6dc8;
+  --sem-live: #00788b;
+  --code-add-bg: color-mix(in oklch, var(--sem-add), transparent 90%);
+  --code-add-ink: #146b33;
+  --code-del-bg: color-mix(in oklch, var(--sem-del), transparent 90%);
+  --code-del-ink: #a83234;
+  --glow: 0 0 0 1px color-mix(in oklch, var(--accent), transparent 50%);
+  --shadow: 0 6px 18px -10px rgba(0, 0, 0, 0.28);
+  --scan: rgba(0, 0, 0, 0.015);
+  --scrim: rgba(30, 30, 30, 0.34);
+  --desk-1: #c4c4c4;
+  --desk-2: #a8a8a8;
   color-scheme: light;
 }
 
@@ -209,7 +311,7 @@ body {
 }
 
 body {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--fs-ui);
   background: var(--bg);
   color: var(--ink);
@@ -221,27 +323,6 @@ body {
 app-root {
   display: block;
   height: 100vh;
-}
-
-/* background texture: faint grid + accent vignette */
-.bg-texture {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  background-image:
-    linear-gradient(var(--bg-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
-  background-size: 34px 34px;
-}
-.bg-glow {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  background:
-    radial-gradient(60% 50% at 18% 0%, rgba(var(--accent-rgb), 0.1), transparent 70%),
-    radial-gradient(50% 50% at 100% 100%, rgba(var(--accent-2-rgb), 0.07), transparent 70%);
 }
 
 /* ---------- shell grid ---------- */
@@ -329,7 +410,17 @@ app-timeline-view {
 }
 
 /* ---------- generic atoms ---------- */
-.mono {
+/* type split: Inter for chrome, JetBrains Mono for code + data */
+.mono,
+.tnum,
+code,
+pre,
+kbd,
+.kbd,
+.terminal,
+.diff,
+.path,
+.sha {
   font-family: var(--font-mono);
 }
 .disp {
@@ -396,7 +487,7 @@ app-timeline-view {
 }
 
 .btn {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--fs-ui);
   color: var(--ink-2);
   background: transparent;
@@ -422,17 +513,13 @@ app-timeline-view {
   border-color: var(--hair-2);
 }
 .btn.primary {
-  color: #06070b;
-  background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
+  color: var(--ui-on-fill);
+  background: var(--ui-fill);
   font-weight: 600;
-  box-shadow: 0 0 20px -6px rgba(var(--accent-rgb), 0.7);
 }
 .btn.primary:hover {
-  filter: brightness(1.08);
-  color: #06070b;
-}
-[data-theme="light"] .btn.primary {
-  color: #fff;
+  filter: brightness(1.06);
+  color: var(--ui-on-fill);
 }
 .btn:disabled {
   opacity: 0.4;
@@ -486,15 +573,11 @@ app-timeline-view {
   flex: none;
 }
 .action-pill .pill-seg.run {
-  color: #06070b;
-  background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
-  box-shadow: 0 0 16px -8px rgba(var(--accent-rgb), 0.7);
+  color: var(--ui-on-fill);
+  background: var(--ui-fill);
 }
 .action-pill .pill-seg.run:hover {
-  filter: brightness(1.08);
-}
-[data-theme="light"] .action-pill .pill-seg.run {
-  color: #fff;
+  filter: brightness(1.06);
 }
 .action-pill .pill-seg.run.running {
   background: transparent;
@@ -519,7 +602,7 @@ app-timeline-view {
   cursor: pointer;
   background: transparent;
   color: var(--ink-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--fs-sm);
   transition: background 0.12s, color 0.12s;
 }
@@ -535,15 +618,12 @@ app-timeline-view {
   display: grid;
   place-items: center;
   border: 1px solid var(--hair-2);
-  color: #06070b;
+  color: var(--ui-on-fill);
   transition: background 0.12s, border-color 0.12s;
 }
 .tag-row .tag-check.on {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-[data-theme="light"] .tag-row .tag-check.on {
-  color: #fff;
+  background: var(--ui-fill);
+  border-color: var(--ui-focus);
 }
 .tag-row .tag-count {
   margin-left: auto;
@@ -588,8 +668,8 @@ app-timeline-view {
   color: var(--ink);
 }
 .winbtn.danger:hover {
-  background: #e5484d;
-  color: #fff;
+  background: var(--sem-del);
+  color: var(--on-solid);
 }
 
 /* icon sizing atoms: square (width == height, same token) so glyphs never
@@ -623,9 +703,9 @@ app-timeline-view {
   min-height: 0;
 }
 
-/* gradient text */
+/* gradient text — brand mark only */
 .grad-ink {
-  background: linear-gradient(100deg, var(--accent), var(--accent-2));
+  background: linear-gradient(100deg, var(--brand-2), var(--brand-3));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -687,7 +767,7 @@ app-timeline-view {
   top: 0;
   bottom: 0;
   width: 38%;
-  background: linear-gradient(90deg, transparent, var(--accent-2), transparent);
+  background: linear-gradient(90deg, transparent, var(--ui-meter), transparent);
   animation: slide 1.5s linear infinite;
 }
 @keyframes slide {
@@ -710,7 +790,7 @@ app-timeline-view {
   display: block;
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background: var(--ui-meter);
 }
 
 /* tree + project rows */
@@ -764,7 +844,7 @@ app-timeline-view {
 
 /* native select styling */
 .osel {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--fs-ui);
   color: var(--ink);
   background: var(--panel-2);
@@ -787,7 +867,7 @@ app-timeline-view {
   background-repeat: no-repeat;
 }
 .osel:focus {
-  border-color: var(--accent);
+  border-color: var(--ui-focus);
 }
 .field-label {
   font-size: var(--fs-2xs);
@@ -808,7 +888,7 @@ app-timeline-view {
    the same in the editor and the saved view. */
 .rte-content,
 .rte-view {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--fs-ui);
   line-height: 1.6;
   color: var(--ink-2);
@@ -883,7 +963,7 @@ app-timeline-view {
   margin: var(--sp-1) 0;
 }
 :is(.rte-content, .rte-view) :is(a, .rte-link) {
-  color: var(--accent-2);
+  color: var(--ui-link);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
@@ -923,7 +1003,7 @@ app-timeline-view {
   margin: 0 0 var(--sp-4);
   padding: var(--sp-2) var(--sp-6);
   color: var(--ink-3);
-  border-left: 2px solid color-mix(in oklch, var(--accent), transparent 40%);
+  border-left: 2px solid var(--ui-line);
 }
 :is(.rte-content, .rte-view) :is(strong, b, .rte-bold) {
   color: var(--ink);

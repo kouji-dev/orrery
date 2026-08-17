@@ -10,7 +10,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     id: "claude",
     name: "Claude Code",
     short: "claude",
-    accent: "#d98a5b",
+    accent: "var(--tool-claude)",
     // aliases (not dated IDs) so they always resolve to the latest — fable is
     // Fable 5 (claude-fable-5), opus is 4.8 today. First entry = spawn default.
     models: ["fable", "opus", "sonnet", "haiku"],
@@ -20,7 +20,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     id: "codex",
     name: "Codex",
     short: "codex",
-    accent: "#10a37f",
+    accent: "var(--tool-codex)",
     // gpt-5.6 tier (Sol = flagship/CLI default, Terra = balanced, Luna = fast)
     // GA July 2026; gpt-5.5 kept for pinned workflows
     models: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
@@ -30,7 +30,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     id: "cursor",
     name: "Cursor",
     short: "cursor",
-    accent: "#6e9bff",
+    accent: "var(--tool-cursor)",
     models: ["composer-2.5", "composer-2", "auto"],
     effort: false,
   },
@@ -38,7 +38,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     id: "gemini",
     name: "Gemini",
     short: "gemini",
-    accent: "#8a7cff",
+    accent: "var(--tool-gemini)",
     models: ["gemini-3-pro", "gemini-3-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash"],
     effort: false,
   },
@@ -54,7 +54,7 @@ export const PROJECTS: Project[] = [
     repo: "github.com/northwind/payments-service",
     branch: "main",
     head: "a3f91c2",
-    color: "#a855f7",
+    color: "var(--id-1)",
     icon: "box",
     hasGit: true,
     folderExists: true,
@@ -84,7 +84,7 @@ export const PROJECTS: Project[] = [
     repo: "github.com/northwind/web-dashboard",
     branch: "main",
     head: "7d10b4e",
-    color: "#22d3ee",
+    color: "var(--id-2)",
     icon: "globe",
     hasGit: true,
     folderExists: true,
@@ -110,7 +110,7 @@ export const PROJECTS: Project[] = [
     repo: "github.com/northwind/infra-terraform",
     branch: "main",
     head: "f02ce91",
-    color: "#34e0a1",
+    color: "var(--id-3)",
     icon: "server",
     hasGit: true,
     folderExists: true,
@@ -399,12 +399,6 @@ export const COMMITS: Commit[] = [
 ];
 
 // spawn helpers
-export const PALETTES: Record<string, [string, string]> = {
-  Nebula: ["#a855f7", "#22d3ee"],
-  Plasma: ["#ff4d8d", "#a855f7"],
-  Reactor: ["#00e5c7", "#3b82f6"],
-  Ember: ["#ff6b35", "#ffd23f"],
-};
-export const PROJECT_COLORS = ["#a855f7", "#22d3ee", "#34e0a1", "#ff6b35", "#ff4d8d", "#3b82f6", "#f5c451"];
+export const PROJECT_COLORS = ["var(--id-1)", "var(--id-2)", "var(--id-3)", "var(--id-4)", "var(--id-5)", "var(--id-6)", "var(--id-7)"];
 export const PROJECT_ICONS = ["box", "globe", "server", "database", "grid", "layers", "terminal", "spark"];
 export const SPAWN_NAMES = ["refund-flow", "rate-limiter", "audit-log", "webhook-dlq", "fee-engine", "ledger-sync", "fraud-rules", "currency-fx"];

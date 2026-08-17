@@ -19,7 +19,7 @@ type ColDef = { key: TicketStatus; label: string; color: string };
 
 const COLS: ColDef[] = [
   { key: "todo", label: "To do", color: "var(--ink-3)" },
-  { key: "inprogress", label: "In progress", color: "var(--accent)" },
+  { key: "inprogress", label: "In progress", color: "var(--st-running)" },
   { key: "done", label: "Done", color: "var(--st-done)" },
 ];
 
@@ -99,8 +99,8 @@ const COLS: ColDef[] = [
       <div class="scroll-y" style="flex:1" (click)="filterOpen.set(false)">
         @if (isEmpty()) {
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-6);min-height:100%;padding:var(--sp-11) var(--sp-8);text-align:center">
-            <div style="width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:color-mix(in oklch,var(--accent),transparent 88%);border:1px solid color-mix(in oklch,var(--accent),transparent 60%)">
-              <app-icon name="layers" size="lg" color="var(--accent)" />
+            <div style="width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:var(--ui-sel);border:1px solid var(--ui-sel-2)">
+              <app-icon name="layers" size="lg" color="var(--ui-ink)" />
             </div>
             <div>
               <div class="disp" style="font-size:var(--fs-lg);font-weight:600">No tickets yet</div>

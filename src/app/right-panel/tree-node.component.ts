@@ -17,7 +17,7 @@ import { IconComponent } from "../shared/icon.component";
           style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-1) var(--sp-4);cursor:pointer;border-radius:5px"
         >
           <app-icon [name]="open() ? 'chevronD' : 'chevron'" size="sm" [px]="11" color="var(--ink-4)" />
-          <app-icon [name]="open() ? 'folderOpen' : 'folder'" size="sm" [px]="13" [color]="n.ignored ? 'var(--ink-4)' : 'var(--accent)'" />
+          <app-icon [name]="open() ? 'folderOpen' : 'folder'" size="sm" [px]="13" [color]="n.ignored ? 'var(--ink-4)' : 'var(--ui-ink)'" />
           <span [style.color]="n.ignored ? 'var(--ink-4)' : 'var(--ink-2)'" [style.opacity]="n.ignored ? 0.7 : 1" style="font-size:var(--fs-sm)">{{ n.name }}</span>
           @if (n.ignored) { <span class="chip" style="margin-left:auto;font-size:var(--fs-3xs);padding:0 var(--sp-2);color:var(--ink-4)">ignored</span> }
         </div>

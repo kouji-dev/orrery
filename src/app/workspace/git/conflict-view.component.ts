@@ -108,12 +108,12 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
         <div class="cf-side">
           <div class="cf-side-head">
             <div style="display:flex;align-items:center;gap:var(--sp-3)">
-              <app-icon name="branch" size="sm" color="var(--st-blocked)" />
+              <app-icon name="branch" size="sm" color="var(--vcs-conflicted)" />
               <span style="font-size:var(--fs-ui);font-weight:600;color:var(--ink)">Merge {{ s.theirs }} → {{ s.ours }}</span>
             </div>
             <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-4);margin-top:var(--sp-4);font-size:var(--fs-2xs);color:var(--ink-4)">
-              <span style="display:flex;align-items:center;gap:var(--sp-2)"><span class="sq" style="background:var(--accent)"></span>ours · {{ s.ours }}</span>
-              <span style="display:flex;align-items:center;gap:var(--sp-2)"><span class="sq" style="background:var(--accent-2)"></span>theirs · {{ s.theirs }}</span>
+              <span style="display:flex;align-items:center;gap:var(--sp-2)"><span class="sq" style="background:var(--ink-4)"></span>ours · {{ s.ours }}</span>
+              <span style="display:flex;align-items:center;gap:var(--sp-2)"><span class="sq" style="background:var(--ink-2)"></span>theirs · {{ s.theirs }}</span>
             </div>
             <div style="margin-top:var(--sp-5)">
               <div class="tnum" style="display:flex;justify-content:space-between;font-size:var(--fs-2xs);color:var(--ink-3);margin-bottom:var(--sp-2)">
@@ -121,7 +121,7 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
               </div>
               <div class="meter">
                 <i [style.width.%]="totalConflicts() ? (totalResolved() / totalConflicts()) * 100 : 0"
-                   [style.background]="allDone() ? 'var(--st-done)' : 'linear-gradient(90deg, var(--accent), var(--accent-2))'"></i>
+                   [style.background]="allDone() ? 'var(--st-done)' : 'var(--ui-ind)'"></i>
               </div>
             </div>
           </div>
@@ -132,13 +132,13 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
               @let done = rc === conflictCount(f);
               <div class="cf-file" [class.on]="f.path === activePath()" (click)="selectFile(f.path)">
                 <span class="cf-dot" [class.done]="done">
-                  @if (done) { <app-icon name="check" size="sm" [px]="10" color="#06070b" /> } @else { <span class="pip"></span> }
+                  @if (done) { <app-icon name="check" size="sm" [px]="10" color="var(--ui-on-fill)" /> } @else { <span class="pip"></span> }
                 </span>
                 <div style="flex:1;min-width:0">
                   <div style="font-size:var(--fs-sm);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fname(f.path) }}</div>
                   <div style="font-size:var(--fs-2xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(f.path) }}</div>
                 </div>
-                <span class="tnum" style="flex:none;font-size:var(--fs-2xs)" [style.color]="done ? 'var(--st-done)' : 'var(--st-blocked)'">{{ rc }}/{{ conflictCount(f) }}</span>
+                <span class="tnum" style="flex:none;font-size:var(--fs-2xs)" [style.color]="done ? 'var(--st-done)' : 'var(--vcs-conflicted)'">{{ rc }}/{{ conflictCount(f) }}</span>
               </div>
             }
           </div>
@@ -158,9 +158,9 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
         @if (activeFile(); as f) {
           <div class="cf-main">
             <div class="cf-main-head">
-              <app-icon name="merge" size="sm" color="var(--st-blocked)" [px]="13" />
+              <app-icon name="merge" size="sm" color="var(--vcs-conflicted)" [px]="13" />
               <span style="color:var(--ink-4)">{{ fdir(f.path) }}</span><span style="margin-left:calc(-1 * var(--sp-2))">{{ fname(f.path) }}</span>
-              <span class="chip tnum" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--st-blocked);border-color:color-mix(in oklch, var(--st-blocked), transparent 55%)">3-way merge</span>
+              <span class="chip tnum" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--vcs-conflicted);border-color:color-mix(in oklch, var(--vcs-conflicted), transparent 55%)">3-way merge</span>
               <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3)">
                 <button class="btn ghost-hair sm" (click)="acceptAll('ours')">Accept all ours</button>
                 <button class="btn ghost-hair sm" (click)="acceptAll('theirs')">theirs</button>
@@ -203,7 +203,7 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
                   @let done = !!res.res;
                   <div class="cf-block" [attr.data-conf]="idx" [class.done]="done">
                     <div class="cf-block-head" [class.done]="done">
-                      <span class="st-dot" [style.background]="done ? 'var(--st-done)' : 'var(--st-blocked)'"></span>
+                      <span class="st-dot" [style.background]="done ? 'var(--st-done)' : 'var(--vcs-conflicted)'"></span>
                       <span style="font-size:var(--fs-sm);font-weight:600;color:var(--ink)">Conflict {{ confNum(idx) }}</span>
                       <span style="font-size:var(--fs-2xs)" [style.color]="done ? 'var(--st-done)' : 'var(--st-blocked)'">
                         {{ done ? 'resolved · ' + resLabel(res) : 'unresolved' }}
@@ -224,9 +224,9 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
                     }
 
                     <div style="display:flex;gap:var(--sp-3);padding:var(--sp-4)">
-                      <div class="side" [class.chosen]="res.res === 'ours'" style="--side:var(--accent)">
+                      <div class="side" [class.chosen]="res.res === 'ours'" style="--side:var(--ink-4)">
                         <div class="side-head">
-                          <span class="sq" style="background:var(--accent)"></span>
+                          <span class="sq" style="background:var(--ink-4)"></span>
                           <span style="font-size:var(--fs-xs);font-weight:600;color:var(--ink)">Ours</span>
                           <span class="tnum" style="font-size:var(--fs-3xs);color:var(--ink-4)">{{ s.ours }}</span>
                           <button class="btn accept" [class.on]="res.res === 'ours'" (click)="resolveSeg(idx, 'ours')">
@@ -235,9 +235,9 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
                         </div>
                         <pre class="side-code">@for (l of seg.ours; track $index) {<div class="ln"><span class="g">{{ res.res === 'ours' ? '✓' : '·' }}</span><code>{{ l }}</code></div>}</pre>
                       </div>
-                      <div class="side" [class.chosen]="res.res === 'theirs'" style="--side:var(--accent-2)">
+                      <div class="side" [class.chosen]="res.res === 'theirs'" style="--side:var(--ink-2)">
                         <div class="side-head">
-                          <span class="sq" style="background:var(--accent-2)"></span>
+                          <span class="sq" style="background:var(--ink-2)"></span>
                           <span style="font-size:var(--fs-xs);font-weight:600;color:var(--ink)">Theirs</span>
                           <span class="tnum" style="font-size:var(--fs-3xs);color:var(--ink-4)">{{ s.theirs }}</span>
                           <button class="btn accept" [class.on]="res.res === 'theirs'" (click)="resolveSeg(idx, 'theirs')">
@@ -253,7 +253,7 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
                         <app-icon name="enter" size="sm" [px]="12" [color]="done ? 'var(--st-done)' : 'var(--ink-4)'" />
                         <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-4)">Result</span>
                         @if (done) {
-                          <button class="btn sm" style="margin-left:auto" [style.color]="editing() === idx ? 'var(--accent)' : 'var(--ink-3)'"
+                          <button class="btn sm" style="margin-left:auto" [style.color]="editing() === idx ? 'var(--ui-ink)' : 'var(--ink-3)'"
                             (click)="editing.set(editing() === idx ? null : idx)">
                             <app-icon name="rename" size="sm" [px]="11" />{{ editing() === idx ? 'done' : 'edit' }}
                           </button>
@@ -356,8 +356,8 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
         border-radius: 50%;
         display: grid;
         place-items: center;
-        background: color-mix(in oklch, var(--st-blocked), transparent 80%);
-        border: 1px solid color-mix(in oklch, var(--st-blocked), transparent 50%);
+        background: color-mix(in oklch, var(--vcs-conflicted), transparent 80%);
+        border: 1px solid color-mix(in oklch, var(--vcs-conflicted), transparent 50%);
       }
       .cf-dot.done {
         background: var(--st-done);
@@ -367,7 +367,7 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
         width: 5px;
         height: 5px;
         border-radius: 50%;
-        background: var(--st-blocked);
+        background: var(--vcs-conflicted);
       }
       .cf-actions {
         padding: var(--sp-4);
@@ -438,7 +438,7 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
       }
       .cf-block {
         margin: var(--sp-4) var(--sp-6);
-        border: 1px solid color-mix(in oklch, var(--st-blocked), transparent 55%);
+        border: 1px solid color-mix(in oklch, var(--vcs-conflicted), transparent 55%);
         border-radius: var(--r-md);
         overflow: hidden;
         background: var(--panel);
@@ -451,7 +451,7 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
         align-items: center;
         gap: var(--sp-3);
         padding: var(--sp-3) var(--sp-4);
-        background: color-mix(in oklch, var(--st-blocked), transparent 91%);
+        background: color-mix(in oklch, var(--vcs-conflicted), transparent 91%);
       }
       .cf-block-head.done {
         background: color-mix(in oklch, var(--st-done), transparent 90%);
@@ -522,7 +522,7 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
         min-height: 70px;
         resize: vertical;
         background: var(--panel-2);
-        border: 1px solid var(--accent);
+        border: 1px solid var(--ui-focus);
         outline: none;
         color: var(--code-add-ink);
         font-family: var(--font-mono);

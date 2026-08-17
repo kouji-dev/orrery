@@ -55,8 +55,6 @@ declare const ngDevMode: boolean | undefined;
     ToolWindowComponent,
   ],
   template: `
-    <div class="bg-texture"></div>
-    <div class="bg-glow"></div>
     <div class="shell">
       <app-top-bar />
 

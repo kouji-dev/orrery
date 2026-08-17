@@ -25,7 +25,7 @@ import { UiStore } from "../ui/ui.store";
   template: `
     <div
       (click)="ui.closeDeleteWorktree()"
-      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
+      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:var(--scrim);backdrop-filter:blur(3px)"
     >
       <div
         class="surface rise"
@@ -80,9 +80,9 @@ import { UiStore } from "../ui/ui.store";
         padding: 0 var(--sp-6);
         border-radius: 7px;
         border: none;
-        background: var(--st-blocked);
-        color: #fff;
-        font-family: var(--font-mono);
+        background: var(--sem-del);
+        color: var(--on-solid);
+        font-family: var(--font-ui);
         font-size: var(--fs-sm);
         font-weight: 600;
         cursor: pointer;

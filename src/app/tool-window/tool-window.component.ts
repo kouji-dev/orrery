@@ -36,7 +36,7 @@ import { TOOL_PANELS, ToolWindowStore } from "./tool-window.store";
           [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'"
         >
           @if (on) { <span class="tab-line"></span> }
-          <app-icon [name]="p.icon" size="sm" [color]="on ? 'var(--accent)' : null" />{{ p.label }}
+          <app-icon [name]="p.icon" size="sm" [color]="on ? 'var(--ui-ink)' : null" />{{ p.label }}
         </button>
       }
 
@@ -131,12 +131,12 @@ import { TOOL_PANELS, ToolWindowStore } from "./tool-window.store";
         right: 8px;
         bottom: 0;
         height: var(--sp-1);
-        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        background: var(--ui-ind);
       }
       .btn.follow {
         padding: var(--sp-1) var(--sp-3);
         font-size: var(--fs-xs);
-        color: var(--accent-2);
+        color: var(--ink-2);
         flex: none;
       }
     `,

@@ -53,7 +53,7 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
       <button
         type="button"
         class="sb-link"
-        [style.color]="toolWindow.panel() ? 'var(--accent)' : null"
+        [style.color]="toolWindow.panel() ? 'var(--ui-ink)' : null"
         (click)="toolWindow.toggle('graph')"
         title="Git Graph (tool window)"
       >
@@ -97,7 +97,7 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
             name="sparkles"
             size="sm"
             [px]="11"
-            [color]="'var(--accent)'"
+            [color]="'var(--ui-ink)'"
           />\${{ cost.cost()!.totalCost.toFixed(2) }}
           <span
             class="cost-tip"
@@ -128,7 +128,7 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
         title="Open Resources (dev console)"
         style="display:flex;align-items:center;gap:var(--sp-3);border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:var(--fs-xs);padding:0;color:var(--ink-3)"
       >
-        <app-icon name="cpu" size="sm" [px]="11" [color]="'var(--accent)'" />
+        <app-icon name="cpu" size="sm" [px]="11" [color]="'var(--ui-ink)'" />
         <!-- A0.6 agents-only readout: what the footer answers is "what are the
              AGENTS costing me" — Orrery's own footprint (and the full recursive
              tree) lives in the Resources tab this deep-links to -->
@@ -141,7 +141,7 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
         >
           <span
             [style.width.%]="cpuBar()"
-            style="position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:2px"
+            style="position:absolute;inset:0 auto 0 0;background:var(--ui-meter);border-radius:2px"
           ></span>
         </span>
       </button>

@@ -54,8 +54,8 @@ describe("TICKET_STATUS", () => {
     expect(TICKET_STATUS["todo"].label).toBe("To do");
   });
 
-  it("inprogress maps to accent color", () => {
-    expect(TICKET_STATUS["inprogress"].color).toBe("var(--accent)");
+  it("inprogress maps to st-running color", () => {
+    expect(TICKET_STATUS["inprogress"].color).toBe("var(--st-running)");
     expect(TICKET_STATUS["inprogress"].label).toBe("In progress");
   });
 
@@ -192,9 +192,9 @@ describe("avatar helpers", () => {
     expect(initials("John Doe")).toBe("JD");
   });
 
-  it("avColor returns a hex color string from palette", () => {
+  it("avColor returns an identity token from the palette", () => {
     const c = avColor("Alice");
-    expect(c).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(c).toMatch(/^var\(--id-[1-7]\)$/);
   });
 
   it("avColor is deterministic", () => {

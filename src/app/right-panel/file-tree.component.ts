@@ -39,7 +39,7 @@ function msgOf(e: unknown): string {
          propagation, so node-scoped menus still win on the rows themselves. -->
     <div (contextmenu)="onContext($event, null)" style="display:flex;flex-direction:column;min-height:0;flex:1">
       <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair)">
-        <app-icon name="folder" size="sm" [color]="project() ? project()!.color : 'var(--accent)'" />
+        <app-icon name="folder" size="sm" [color]="project() ? project()!.color : 'var(--ui-ink)'" />
         <span style="flex:1;min-width:0;font-size:var(--fs-sm);color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="ag.worktree">{{ wtName(ag.worktree) }}</span>
         @if (loading()) { <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4);flex:none">scanning…</span> }
         <button class="btn" (click)="refresh()" [disabled]="loading()" title="Rescan worktree" style="padding:var(--sp-1);border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
@@ -62,7 +62,7 @@ function msgOf(e: unknown): string {
           >
             @if (row.node.isDir) {
               <app-icon [name]="isOpen(row.node) ? 'chevronD' : 'chevron'" size="sm" [px]="11" color="var(--ink-4)" />
-              <app-icon [name]="isOpen(row.node) ? 'folderOpen' : 'folder'" size="sm" [px]="13" [color]="row.node.ignored ? 'var(--ink-4)' : 'var(--accent)'" />
+              <app-icon [name]="isOpen(row.node) ? 'folderOpen' : 'folder'" size="sm" [px]="13" [color]="row.node.ignored ? 'var(--ink-4)' : 'var(--ui-ink)'" />
             } @else {
               <span style="width:11px;flex:none"></span>
               <app-icon name="file" size="sm" [px]="12" [color]="stateOf(row.node.path) ? stateInk(stateOf(row.node.path)!) : 'var(--ink-4)'" />
@@ -190,7 +190,7 @@ function msgOf(e: unknown): string {
         outline: none;
       }
       .ft-input:focus {
-        border-color: color-mix(in oklch, var(--accent), transparent 50%);
+        border-color: var(--ui-focus);
       }
       .ft-row {
         display: flex;
@@ -369,12 +369,12 @@ export class FileTreeComponent {
   }
   stateInk(state: string): string {
     return state === "A"
-      ? "var(--code-add-ink)"
+      ? "var(--vcs-added)"
       : state === "D"
-        ? "var(--code-del-ink)"
+        ? "var(--vcs-deleted)"
         : state === "R"
-          ? "var(--accent)"
-          : "var(--accent-2)";
+          ? "var(--vcs-renamed)"
+          : "var(--vcs-modified)";
   }
 
   // flatten the open tree into the list of visible rows (depth carries indentation)

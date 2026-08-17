@@ -28,7 +28,7 @@ import { SearchEverywhereComponent } from "./search-everywhere.component";
   template: `
     <app-overlay-shell [width]="600" label="Command palette" (closed)="registry.close()">
       <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);flex:none">
-        <app-icon name="bolt" color="var(--accent)" />
+        <app-icon name="bolt" color="var(--ui-ink)" />
         <input
           #inp
           [value]="q()"
@@ -54,14 +54,14 @@ import { SearchEverywhereComponent } from "./search-everywhere.component";
             (click)="pick(i)"
             (mouseenter)="sel.set(i)"
             [style.background]="sel() === i ? 'var(--panel-3)' : 'transparent'"
-            [style.border-left]="'2px solid ' + (sel() === i ? 'var(--accent)' : 'transparent')"
+            [style.border-left]="'2px solid ' + (sel() === i ? 'var(--ui-focus)' : 'transparent')"
             [style.color]="it.c.danger ? 'var(--st-blocked)' : 'inherit'"
             style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-7);cursor:pointer"
           >
-            <app-icon [name]="it.c.icon" size="sm" [color]="sel() === i ? 'var(--accent)' : 'var(--ink-3)'" />
+            <app-icon [name]="it.c.icon" size="sm" [color]="sel() === i ? 'var(--ui-ink)' : 'var(--ink-3)'" />
             <span [style.opacity]="it.c.enabled ? 1 : 0.42" style="flex:1;font-size:var(--fs-ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
               @for (s of it.segs; track $index) {
-                @if (s.hit) { <b style="color:var(--accent-2);font-weight:600">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
+                @if (s.hit) { <b style="color:var(--ui-ink);font-weight:600">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
               }
             </span>
             @if (q()) { <span style="font-size:var(--fs-2xs);color:var(--ink-4);flex:none">{{ it.c.group }}</span> }
@@ -158,7 +158,7 @@ export class CommandPaletteComponent {
     <app-overlay-shell [width]="480" top="16vh" label="Recent files" (closed)="registry.close()">
       <div #wrap tabindex="0" (keydown)="onKeys($event)" style="outline:none;display:flex;flex-direction:column;min-height:0">
         <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-5) var(--sp-7);border-bottom:1px solid var(--hair)">
-          <app-icon name="clock" size="sm" color="var(--accent)" />
+          <app-icon name="clock" size="sm" color="var(--ui-ink)" />
           <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">Recent files</span>
           <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ items().length }}</span>
         </div>
@@ -172,10 +172,10 @@ export class CommandPaletteComponent {
               (click)="pick(i)"
               (mouseenter)="sel.set(i)"
               [style.background]="sel() === i ? 'var(--panel-3)' : 'transparent'"
-              [style.border-left]="'2px solid ' + (sel() === i ? 'var(--accent)' : 'transparent')"
+              [style.border-left]="'2px solid ' + (sel() === i ? 'var(--ui-focus)' : 'transparent')"
               style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-7);cursor:pointer"
             >
-              <app-icon name="file" size="sm" [color]="sel() === i ? 'var(--accent)' : 'var(--ink-3)'" />
+              <app-icon name="file" size="sm" [color]="sel() === i ? 'var(--ui-ink)' : 'var(--ink-3)'" />
               <span style="font-size:var(--fs-ui)">{{ fname(it.path) }}</span>
               <span style="font-size:var(--fs-xs);color:var(--ink-4);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(it.path) }}</span>
               @if (it.agentName) { <span class="chip" style="font-size:var(--fs-3xs);padding:1px var(--sp-3)">{{ it.agentName }}</span> }
@@ -256,7 +256,7 @@ export class RecentFilesOverlayComponent {
   template: `
     <app-overlay-shell [width]="380" top="20vh" label="Go to line" (closed)="registry.close()">
       <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);flex:none">
-        <app-icon name="enter" color="var(--accent)" />
+        <app-icon name="enter" color="var(--ui-ink)" />
         <input
           #inp
           [value]="v()"
@@ -271,7 +271,7 @@ export class RecentFilesOverlayComponent {
       </div>
       <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-4) var(--sp-7);font-size:var(--fs-xs);color:var(--ink-4)">
         @if (parsed(); as p) {
-          <span style="color:var(--accent-2)">→ line {{ p.line }}{{ p.col > 1 ? ', column ' + p.col : '' }}</span>
+          <span style="color:var(--ink-2)">→ line {{ p.line }}{{ p.col > 1 ? ', column ' + p.col : '' }}</span>
         } @else {
           <span>enter a line number</span>
         }

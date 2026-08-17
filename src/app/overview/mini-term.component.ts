@@ -30,14 +30,14 @@ interface Row {
 
 // Per-kind row color. user=cyan, agent=default stream, tool=dimmed cyan (info),
 // success=green, error=red, question=purple, info=muted. No --info token exists,
-// so tool uses a dimmed --accent-2 — distinct from the brighter user cyan.
+// so tool uses a dimmed --sem-live — distinct from the brighter user stream.
 const KIND_COLOR: Record<ActivityKind, string> = {
-  user: "var(--accent-2)",
+  user: "var(--sem-live)",
   agent: "var(--ink-2)",
-  tool: "color-mix(in oklch, var(--accent-2), var(--ink-4) 55%)",
+  tool: "color-mix(in oklch, var(--sem-live), var(--ink-4) 55%)",
   success: "var(--st-done)",
   error: "var(--st-blocked)",
-  question: "var(--accent)",
+  question: "var(--ui-ink)",
   info: "var(--ink-4)",
 };
 
