@@ -11,10 +11,21 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <script>
+      /* Apply the persisted theme before first paint so light-mode users never
+         see a dark flash while Angular boots (UiStore re-applies it later). */
+      try {
+        var t = JSON.parse(localStorage.getItem("orrery.tweaks") || "null");
+        if (t && (t.theme === "light" || t.theme === "dark")) {
+          document.documentElement.setAttribute("data-theme", t.theme);
+        }
+      } catch (e) {}
+    </script>
     <style>
-      /* First-paint background — matches the graphite dark --bg so the window
-         is never white before Angular renders the loading screen. */
+      /* First-paint background — matches the theme's --bg so the window is
+         never the wrong brightness before Angular renders the loading screen. */
       html, body { background: #121315; margin: 0; }
+      html[data-theme="light"], html[data-theme="light"] body { background: #dedede; }
     </style>
   </head>
   <body>

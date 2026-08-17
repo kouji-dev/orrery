@@ -36,6 +36,15 @@ import { UpdateOutcome } from '../updater/updater';
         radial-gradient(46% 38% at 50% 43%, color-mix(in oklch, var(--ink), transparent 95%), transparent 72%);
       background-size: 34px 34px, 34px 34px, 100% 100%;
     }
+    /* Light re-tunes the brand triad for the paper ramp: the dark-theme
+       values (esp. cyan #22d3ee and the white glow core) vanish on #dedede.
+       Scoped to the splash — product chrome never uses the triad anyway. */
+    :host-context([data-theme='light']) {
+      --brand-1: #d6437e;
+      --brand-2: #7c3aed;
+      --brand-3: #0e7490;
+      --brand-core: #ede4ff;
+    }
     /* the halo is a STATIC sibling behind the SVG, so the 26px blur rasterises
        once instead of being recomputed on every frame the mark redraws */
     .ob-mark { position: relative; }
@@ -50,6 +59,10 @@ import { UpdateOutcome } from '../updater/updater';
       pointer-events: none;
       background: color-mix(in oklch, var(--brand-2), transparent 78%);
       filter: blur(26px);
+    }
+    /* on paper the glow reads as a smudge — keep it, but far softer */
+    :host-context([data-theme='light']) .ob-halo {
+      background: color-mix(in oklch, var(--brand-2), transparent 90%);
     }
     .ob-word {
       font-family: 'Space Grotesk', sans-serif;
