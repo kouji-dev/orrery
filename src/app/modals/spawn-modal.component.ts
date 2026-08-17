@@ -56,7 +56,7 @@ function slugName(title: string): string {
     @let linked = !!ticketId();
     <div
       (click)="ui.closeSpawn()"
-      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
+      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:var(--scrim);backdrop-filter:blur(3px)"
     >
       <div
         class="surface rise"
@@ -64,7 +64,7 @@ function slugName(title: string): string {
         style="width:540px;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;box-shadow:var(--shadow)"
       >
         <div style="padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:var(--sp-4);flex:none">
-          <app-icon name="agent" color="var(--accent)" />
+          <app-icon name="agent" color="var(--ui-ink)" />
           <span class="disp" style="font-size:var(--fs-lg);font-weight:600;white-space:nowrap">Spawn agent</span>
           <span class="chip" style="margin-left:auto;font-size:var(--fs-2xs)">new git worktree + branch</span>
         </div>
@@ -99,7 +99,7 @@ function slugName(title: string): string {
               class="osel"
               [value]="ticketId()"
               (change)="applyTicket($any($event.target).value)"
-              [style.border-color]="linked ? 'color-mix(in oklch, var(--accent), transparent 55%)' : 'var(--hair)'"
+              [style.border-color]="linked ? 'var(--ui-line)' : 'var(--hair)'"
             >
               <option value="" [selected]="!ticketId()">None — start from scratch</option>
               @if (openTicketsTodo().length) {
@@ -118,7 +118,7 @@ function slugName(title: string): string {
               }
             </select>
             @if (linked) {
-              <div style="display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-3);font-size:var(--fs-xs);color:var(--accent-2)">
+              <div style="display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-3);font-size:var(--fs-xs);color:var(--ink-2)">
                 <app-icon name="link" size="sm" />Name linked · the ticket is prepended to the prompt on spawn
               </div>
             } @else {
@@ -131,7 +131,7 @@ function slugName(title: string): string {
             <label class="field-label">Name</label>
             <div
               style="display:flex;align-items:center;gap:var(--sp-4);background:var(--panel-2);border-radius:var(--r-md);padding:0 var(--sp-5)"
-              [style.border]="linked ? '1px solid var(--accent)' : '1px solid var(--hair)'"
+              [style.border]="linked ? '1px solid var(--ui-focus)' : '1px solid var(--hair)'"
             >
               <app-icon name="agent" size="sm" color="var(--ink-4)" />
               <input
@@ -183,9 +183,9 @@ function slugName(title: string): string {
                     <button
                       class="btn ghost-hair"
                       (click)="effort.set(ef)"
-                      [style.border-color]="effort() === ef ? 'var(--accent)' : 'var(--hair)'"
+                      [style.border-color]="effort() === ef ? 'var(--ui-focus)' : 'var(--hair)'"
                       [style.color]="effort() === ef ? 'var(--ink)' : 'var(--ink-3)'"
-                      [style.background]="effort() === ef ? mix('var(--accent)', 90) : 'transparent'"
+                      [style.background]="effort() === ef ? 'var(--ui-sel)' : 'transparent'"
                       style="flex:1;justify-content:center;font-size:var(--fs-sm);text-transform:capitalize"
                     >{{ ef }}</button>
                   }
@@ -222,7 +222,7 @@ function slugName(title: string): string {
       </div>
     </div>
   `,
-  styles: [`.spawn-textarea:focus { border-color: var(--accent) !important; }`],
+  styles: [`.spawn-textarea:focus { border-color: var(--ui-focus) !important; }`],
 })
 export class SpawnModalComponent implements AfterViewInit, OnInit {
   readonly ui = inject(UiStore);

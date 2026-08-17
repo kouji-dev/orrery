@@ -22,17 +22,17 @@ import { ProjectGroupComponent } from "./project-group.component";
           [style.color]="ui.activeTabKind() === 'backlog' ? 'var(--ink)' : 'var(--ink-3)'"
           style="display:flex;align-items:center;gap:var(--sp-3);width:100%;padding:var(--sp-2) var(--sp-3);border-radius:var(--r-sm);border:none;cursor:pointer;font-size:var(--fs-ui);margin-bottom:var(--sp-3)"
         >
-          <app-icon name="layers" size="sm" [color]="ui.activeTabKind() === 'backlog' ? 'var(--accent)' : null" />
+          <app-icon name="layers" size="sm" [color]="ui.activeTabKind() === 'backlog' ? 'var(--ui-ink)' : null" />
           <span>Backlog</span>
           @if (openTicketCount() > 0) {
             <span
               class="tnum"
-              style="margin-left:auto;min-width:16px;height:var(--sp-7);padding:0 var(--sp-2);border-radius:8px;background:var(--accent);color:#06070b;font-size:var(--fs-2xs);font-weight:700;display:grid;place-items:center"
+              style="margin-left:auto;min-width:16px;height:var(--sp-7);padding:0 var(--sp-2);border-radius:8px;background:var(--ui-fill);color:var(--ui-on-fill);font-size:var(--fs-2xs);font-weight:700;display:grid;place-items:center"
             >{{ openTicketCount() }}</span>
           }
         </button>
         <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)">
-          <app-icon name="layers" size="sm" color="var(--accent)" />
+          <app-icon name="layers" size="sm" color="var(--ui-ink)" />
           <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">Projects</span>
           <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ projects.all().length }}</span>
           <span class="chip tnum" style="margin-left:auto;font-size:var(--fs-2xs);padding:1px var(--sp-3)">

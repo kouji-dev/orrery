@@ -337,15 +337,18 @@ export class TerminalService implements OnDestroy {
   }
 
   // ── Search ────────────────────────────────────────────────────────────────
-  // Subtle accent-tinted decorations so matches read against the dark theme.
+  // Translucent accent tints (mirroring --ui-sel / --ui-sel-2) so the matched
+  // text keeps its own ANSI color and stays legible on BOTH themes — a solid
+  // accent fill drowned the glyphs, worst on the light paper ramp.
   private searchDecorations(): ISearchOptions["decorations"] {
     const cs = getComputedStyle(document.documentElement);
     const accent = cs.getPropertyValue("--accent").trim() || "#a855f7";
+    const rgb = cs.getPropertyValue("--accent-rgb").trim() || "168, 85, 247";
     return {
-      matchBackground: accent,
-      matchBorder: accent,
+      matchBackground: `rgba(${rgb}, 0.28)`,
+      matchBorder: `rgba(${rgb}, 0.55)`,
       matchOverviewRuler: accent,
-      activeMatchBackground: accent,
+      activeMatchBackground: `rgba(${rgb}, 0.5)`,
       activeMatchBorder: accent,
       activeMatchColorOverviewRuler: accent,
     };
@@ -461,16 +464,63 @@ export class TerminalService implements OnDestroy {
     }
   }
 
+  /* xterm parses colors itself (hex/rgb only — no var()/color-mix), so the
+   * ANSI ramps are concrete values tuned to the design tokens per theme:
+   * dark mirrors the graphite semantic hues; light is the One Light-flavored
+   * palette re-tuned to clear AA on the paper ramp — xterm's stock VGA
+   * palette is dark-background-only and unreadable on #dedede. */
+  private static readonly ANSI_DARK = {
+    black: "#17181a",
+    red: "#e06c7a", //   --sem-del
+    green: "#57c98a", // --sem-add
+    yellow: "#d9a441", // --sem-attn
+    blue: "#5e9cf5", //  --sem-change
+    magenta: "#b082f7", // --accent-fill
+    cyan: "#3fb6c4", //  --sem-live
+    white: "#b0b1b3", // --ink-2
+    brightBlack: "#68696b", // --ink-4
+    brightRed: "#ef8a95",
+    brightGreen: "#7fd7a5",
+    brightYellow: "#e6bc6b",
+    brightBlue: "#85b4f8",
+    brightMagenta: "#c9a8f5",
+    brightCyan: "#6cc9d4",
+    brightWhite: "#dee0e2", // --ink
+  } as const;
+
+  private static readonly ANSI_LIGHT = {
+    black: "#3b3b3b", // --ink
+    red: "#bf4240", //   --sem-del (light)
+    green: "#1e7d3e", // --sem-add (light)
+    yellow: "#996100", // --sem-attn (light)
+    blue: "#1c6dc8", //  --sem-change (light)
+    magenta: "#752cb3", // --accent-fill (light)
+    cyan: "#00788b", //  --sem-live (light)
+    white: "#6e6e6e", // --ink-3 — "white" text must stay visible on paper
+    brightBlack: "#515151", // --ink-2
+    brightRed: "#a83234",
+    brightGreen: "#146b33",
+    brightYellow: "#7a4d00",
+    brightBlue: "#1a5da8",
+    brightMagenta: "#8d4dcc",
+    brightCyan: "#006277",
+    brightWhite: "#3b3b3b", // bright-white output darkens, never vanishes
+  } as const;
+
   private theme(): ITheme {
-    const cs = getComputedStyle(document.documentElement);
+    const root = document.documentElement;
+    const cs = getComputedStyle(root);
+    const light = root.getAttribute("data-theme") === "light";
     const v = (name: string, fallback: string) =>
       cs.getPropertyValue(name).trim() || fallback;
+    const accentRgb = v("--accent-rgb", light ? "141, 77, 204" : "168, 85, 247");
     return {
-      background: v("--bg", "#0b0d10"),
-      foreground: v("--ink-2", "#c8ccd4"),
-      cursor: v("--accent", "#a855f7"),
-      cursorAccent: v("--bg", "#0b0d10"),
-      selectionBackground: v("--sel", "rgba(168,85,247,0.25)"),
+      background: v("--bg", light ? "#dedede" : "#121315"),
+      foreground: v("--ink-2", light ? "#515151" : "#b0b1b3"),
+      cursor: v("--accent", light ? "#8d4dcc" : "#a855f7"),
+      cursorAccent: v("--bg", light ? "#dedede" : "#121315"),
+      selectionBackground: `rgba(${accentRgb}, ${light ? 0.22 : 0.28})`,
+      ...(light ? TerminalService.ANSI_LIGHT : TerminalService.ANSI_DARK),
     };
   }
 }

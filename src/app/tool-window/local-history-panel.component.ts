@@ -37,7 +37,7 @@ import { LocalHistoryStore } from "./local-history.store";
         <!-- snapshots -->
         <div style="display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--hair)">
           <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);flex:none">
-            <app-icon name="clock" size="sm" color="var(--accent)" />
+            <app-icon name="clock" size="sm" color="var(--ui-ink)" />
             <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-3)">Snapshots</span>
             <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ store.snapshots().length }}</span>
             <button class="btn" (click)="refresh()" title="Refresh" style="padding:var(--sp-1);border-radius:4px">
@@ -50,9 +50,9 @@ import { LocalHistoryStore } from "./local-history.store";
               <div
                 (click)="select(s)"
                 style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-6);cursor:pointer;border-bottom:1px solid var(--hair)"
-                [style.background]="on ? 'color-mix(in oklch, var(--accent), transparent 92%)' : 'transparent'"
+                [style.background]="on ? 'var(--ui-sel)' : 'transparent'"
               >
-                <app-icon [name]="s.trigger === 'before-restore' ? 'discard' : 'clock'" size="sm" [px]="12" [color]="on ? 'var(--accent)' : 'var(--ink-4)'" />
+                <app-icon [name]="s.trigger === 'before-restore' ? 'discard' : 'clock'" size="sm" [px]="12" [color]="on ? 'var(--ui-ink)' : 'var(--ink-4)'" />
                 <div style="flex:1;min-width:0">
                   <div class="tnum" style="font-size:var(--fs-sm)" [style.color]="on ? 'var(--ink)' : 'var(--ink-2)'">{{ when(s.ts) }}</div>
                   <div style="font-size:var(--fs-2xs);color:var(--ink-4)">
@@ -97,7 +97,7 @@ import { LocalHistoryStore } from "./local-history.store";
                     style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-6);cursor:pointer"
                     [style.background]="fon ? 'var(--panel-3)' : 'transparent'"
                   >
-                    <app-icon name="file" size="sm" [px]="11" [color]="fon ? 'var(--accent)' : 'var(--ink-4)'" />
+                    <app-icon name="file" size="sm" [px]="11" [color]="fon ? 'var(--ui-ink)' : 'var(--ink-4)'" />
                     <span style="flex:1;min-width:0;font-size:var(--fs-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [style.color]="fon ? 'var(--ink)' : 'var(--ink-3)'" [title]="f.path">{{ f.path }}</span>
                     <button class="btn lh-op" [disabled]="store.busy()" title="restore only this file" (click)="$event.stopPropagation(); restoreFile(f.path)">
                       <app-icon name="discard" size="sm" [px]="10" />

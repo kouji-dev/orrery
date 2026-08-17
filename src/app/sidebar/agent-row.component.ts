@@ -28,7 +28,7 @@ import { fmtDur } from "../utils";
       style="display:flex;flex-direction:column;gap:var(--sp-1);padding:var(--sp-3) var(--sp-5) var(--sp-3);cursor:pointer;position:relative;border-radius:var(--r-md);margin:1px var(--sp-4) 1px var(--sp-6)"
     >
       @if (active()) {
-        <span style="position:absolute;left:-8px;top:7px;bottom:7px;width:2.5px;border-radius:3px;background:linear-gradient(var(--accent),var(--accent-2))"></span>
+        <span style="position:absolute;left:-8px;top:7px;bottom:7px;width:2.5px;border-radius:3px;background:var(--ui-ind)"></span>
       }
       <div style="display:flex;align-items:center;gap:var(--sp-3)">
         <app-status-dot [status]="ag.status" />

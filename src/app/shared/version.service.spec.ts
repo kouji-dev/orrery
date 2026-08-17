@@ -13,22 +13,22 @@ afterEach(() => {
 });
 
 describe("VersionService", () => {
-  it("dev build → DEV tag in amber", () => {
+  it("dev build → DEV tag in attention amber", () => {
     vi.mocked(isDevMode).mockReturnValue(true);
     vi.mocked(getVersion).mockResolvedValue("0.1.1");
     const s = new VersionService();
     expect(s.isDev).toBe(true);
     expect(s.label).toBe("DEV");
-    expect(s.color).toBe("#f5c451");
+    expect(s.color).toBe("var(--sem-attn)");
   });
 
-  it("production build → BETA tag in accent-2", () => {
+  it("production build → BETA tag in quiet ink", () => {
     vi.mocked(isDevMode).mockReturnValue(false);
     vi.mocked(getVersion).mockResolvedValue("0.1.1");
     const s = new VersionService();
     expect(s.isDev).toBe(false);
     expect(s.label).toBe("BETA");
-    expect(s.color).toBe("var(--accent-2)");
+    expect(s.color).toBe("var(--ink-2)");
   });
 
   it("populates the version from Tauri getVersion", async () => {

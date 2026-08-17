@@ -27,10 +27,10 @@ import { IconComponent } from "../shared/icon.component";
         class="btn ghost-hair"
         (click)="open.set(!open())"
         [style.font-size]="'11.5px'"
-        [style.color]="n ? 'var(--accent)' : 'var(--ink-2)'"
-        [style.border-color]="n ? 'color-mix(in oklch, var(--accent), transparent 58%)' : 'var(--hair)'"
+        [style.color]="n ? 'var(--ui-ink)' : 'var(--ink-2)'"
+        [style.border-color]="n ? 'var(--ui-line)' : 'var(--hair)'"
       >
-        <app-icon name="tag" size="sm" [color]="n ? 'var(--accent)' : 'var(--ink-3)'" />
+        <app-icon name="tag" size="sm" [color]="n ? 'var(--ui-ink)' : 'var(--ink-3)'" />
         {{ n ? n + ' tag' + (n > 1 ? 's' : '') : 'Tags' }}
         <app-icon name="chevronD" size="sm" color="var(--ink-4)" />
       </button>

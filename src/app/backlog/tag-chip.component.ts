@@ -27,9 +27,9 @@ import { IconComponent } from "../shared/icon.component";
       (mouseleave)="hovered.set(false)"
       [style.cursor]="clickable() ? 'pointer' : 'default'"
       [style.padding]="removable() ? '3px 4px 3px 8px' : '3px 8px'"
-      [style.color]="on ? 'var(--accent)' : (dim() ? 'var(--ink-3)' : 'var(--ink-2)')"
-      [style.border]="'1px solid ' + (on ? 'color-mix(in oklch, var(--accent), transparent 52%)' : (h ? 'var(--hair-2)' : 'var(--hair)'))"
-      [style.background]="on ? 'color-mix(in oklch, var(--accent), transparent 88%)' : (h ? 'var(--panel-3)' : 'var(--panel-2)')"
+      [style.color]="on ? 'var(--ui-ink)' : (dim() ? 'var(--ink-3)' : 'var(--ink-2)')"
+      [style.border]="'1px solid ' + (on ? 'var(--ui-line)' : (h ? 'var(--hair-2)' : 'var(--hair)'))"
+      [style.background]="on ? 'var(--ui-sel)' : (h ? 'var(--panel-3)' : 'var(--panel-2)')"
       style="display:inline-flex;align-items:center;gap:var(--sp-2);flex:none;max-width:170px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1;letter-spacing:0.01em;border-radius:999px;white-space:nowrap;user-select:none;transition:background .12s,border-color .12s,color .12s"
     >
       <app-icon name="tag" size="sm" [px]="10" style="flex:none;opacity:0.65" />

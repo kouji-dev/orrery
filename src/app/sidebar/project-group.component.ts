@@ -73,7 +73,7 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
   styles: [
     `
       .proj-spawn:hover {
-        color: var(--accent) !important;
+        color: var(--ui-ink) !important;
         background: var(--panel-3) !important;
       }
     `,

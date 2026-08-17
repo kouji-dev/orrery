@@ -43,15 +43,15 @@ import { snakeTag } from "./tags.util";
 
       @if (q() && norm() !== q().trim().toLowerCase()) {
         <div style="font-size:var(--fs-2xs);color:var(--ink-4);padding:0 var(--sp-1)">
-          saves as <span class="tnum" style="color:var(--accent-2)">{{ norm() || '…' }}</span>
+          saves as <span class="tnum" style="color:var(--ink)">{{ norm() || '…' }}</span>
         </div>
       }
 
       <div class="scroll-y" style="display:flex;flex-direction:column;gap:var(--sp-1);max-height:208px;overflow-y:auto">
         @if (canCreate()) {
           <button type="button" class="tag-row" (click)="attach(norm())">
-            <app-icon name="plus" size="sm" color="var(--accent)" style="flex:none" />
-            <span>Create</span><span class="tnum" style="color:var(--accent)">{{ norm() }}</span>
+            <app-icon name="plus" size="sm" color="var(--ui-ink)" style="flex:none" />
+            <span>Create</span><span class="tnum" style="color:var(--ui-ink)">{{ norm() }}</span>
           </button>
         }
         @for (t of matches(); track t) {

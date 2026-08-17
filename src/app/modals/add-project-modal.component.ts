@@ -24,7 +24,7 @@ import { mix } from "../utils";
   template: `
     <div
       (click)="ui.closeAddProject()"
-      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
+      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:var(--scrim);backdrop-filter:blur(3px)"
     >
       <div
         class="surface rise"
@@ -73,7 +73,7 @@ import { mix } from "../utils";
               style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-6);border-radius:var(--r-md)"
             >
               <span style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:4px;display:grid;place-items:center;background:var(--st-done)">
-                <app-icon name="check" size="sm" [px]="11" color="#06070b" />
+                <app-icon name="check" size="sm" [px]="11" color="var(--ui-on-fill)" />
               </span>
               <div style="flex:1">
                 <div style="font-size:var(--fs-sm);color:var(--ink)">Git repository already exists</div>
@@ -87,17 +87,17 @@ import { mix } from "../utils";
               style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-6);border-radius:var(--r-md);cursor:pointer;background:var(--panel-2);border:1px solid var(--hair)"
             >
               <span
-                [style.border]="'1px solid ' + (gitInit() ? 'var(--accent)' : 'var(--hair-2)')"
-                [style.background]="gitInit() ? 'var(--accent)' : 'transparent'"
+                [style.border]="'1px solid ' + (gitInit() ? 'var(--ui-focus)' : 'var(--hair-2)')"
+                [style.background]="gitInit() ? 'var(--ui-fill)' : 'transparent'"
                 style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:4px;display:grid;place-items:center"
               >
-                @if (gitInit()) { <app-icon name="check" size="sm" [px]="11" color="#06070b" /> }
+                @if (gitInit()) { <app-icon name="check" size="sm" [px]="11" color="var(--ui-on-fill)" /> }
               </span>
               <div style="flex:1">
                 <div style="font-size:var(--fs-sm);color:var(--ink)">Run git init (no .git found)</div>
                 <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">initializes a repo so agents can branch + commit</div>
               </div>
-              <app-icon name="bolt" size="sm" color="var(--accent)" />
+              <app-icon name="bolt" size="sm" color="var(--ui-ink)" />
             </div>
           }
 
@@ -109,8 +109,8 @@ import { mix } from "../utils";
                 <button
                   class="btn"
                   (click)="icon.set(ic)"
-                  [style.border]="'1px solid ' + (icon() === ic ? 'var(--accent)' : 'var(--hair)')"
-                  [style.background]="icon() === ic ? mix('var(--accent)', 90) : 'var(--panel-2)'"
+                  [style.border]="'1px solid ' + (icon() === ic ? 'var(--ui-focus)' : 'var(--hair)')"
+                  [style.background]="icon() === ic ? 'var(--ui-sel)' : 'var(--panel-2)'"
                   style="padding:var(--sp-4);border-radius:var(--r-md)"
                 >
                   <app-icon [name]="ic" size="sm" [color]="icon() === ic ? color() : 'var(--ink-3)'" />

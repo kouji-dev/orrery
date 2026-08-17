@@ -64,7 +64,7 @@ export function countChanged(node: TreeItem): number {
 }
 
 export const STATE_COLOR: Record<string, string> = {
-  A: "var(--code-add-ink)",
-  M: "var(--accent-2)",
-  D: "var(--code-del-ink)",
+  A: "var(--vcs-added)",
+  M: "var(--vcs-modified)",
+  D: "var(--vcs-deleted)",
 };

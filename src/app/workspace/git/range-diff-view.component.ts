@@ -42,7 +42,7 @@ import { DiffOrBlameComponent } from "./diff-or-blame.component";
       <!-- ---- header ---- -->
       <div style="padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair);background:var(--panel);flex:none">
         <div style="display:flex;align-items:center;gap:var(--sp-3)">
-          <app-icon name="diff" size="sm" style="color:var(--accent)" />
+          <app-icon name="diff" size="sm" style="color:var(--ui-ink)" />
           <span style="font-size:var(--fs-md);font-weight:600;color:var(--ink)">
             Range diff · {{ shas().length }} commits
           </span>

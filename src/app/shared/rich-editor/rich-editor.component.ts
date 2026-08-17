@@ -152,9 +152,9 @@ import {
     }
     .rte-btn:hover { background: var(--panel-3); color: var(--ink); }
     .rte-btn.on {
-      background: color-mix(in oklch, var(--accent), transparent 86%);
-      color: var(--accent);
-      border-color: color-mix(in oklch, var(--accent), transparent 60%);
+      background: var(--ui-sel);
+      color: var(--ui-ink);
+      border-color: var(--ui-sel-2);
     }
     .rte-btn .bold { font-weight: 800; }
     .rte-btn .ital { font-style: italic; font-family: Georgia, serif; }
@@ -189,7 +189,7 @@ import {
       font-family: var(--font-mono); font-size: var(--fs-sm);
     }
     .rte-block-opt:hover { background: var(--panel-3); color: var(--ink); }
-    .rte-block-opt.on { color: var(--accent); }
+    .rte-block-opt.on { color: var(--ui-ink); }
     .rte-block-opt .pv { color: var(--ink); }
     .rte-block-opt .pv.paragraph { font-family: var(--font-mono); font-weight: 400; }
     .rte-block-opt .pv.h1 { font-family: var(--font-disp); font-size: var(--fs-lg); font-weight: 600; }
@@ -217,8 +217,8 @@ import {
     }
     .rte-link-add {
       padding: var(--sp-2) var(--sp-4); border: none; border-radius: var(--r-sm);
-      background: linear-gradient(180deg, var(--accent), color-mix(in oklch, var(--accent), #000 14%));
-      color: white; font-family: var(--font-disp); font-size: var(--fs-sm);
+      background: var(--ui-fill);
+      color: var(--ui-on-fill); font-family: var(--font-disp); font-size: var(--fs-sm);
       cursor: pointer; white-space: nowrap;
     }
 

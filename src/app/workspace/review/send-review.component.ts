@@ -33,7 +33,7 @@ function refLines(c: { fromLine: number; toLine: number }): string {
     <!-- backdrop -->
     <div
       (click)="close.emit()"
-      style="position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,0.5);backdrop-filter:blur(3px)"
+      style="position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:24px;background:var(--scrim);backdrop-filter:blur(3px)"
     >
       <!-- card -->
       <div
@@ -43,7 +43,7 @@ function refLines(c: { fromLine: number; toLine: number }): string {
       >
         <!-- header -->
         <div style="padding:14px 18px;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:9px;flex:none">
-          <app-icon name="chat" style="color:var(--accent)" />
+          <app-icon name="chat" style="color:var(--ui-ink)" />
           <span class="disp" style="font-size:14px;font-weight:600">Send review</span>
           <span class="tnum" style="font-size:11px;color:var(--ink-3)">
             {{ comments().length }} comment{{ comments().length !== 1 ? 's' : '' }} · {{ groups().length }} file{{ groups().length !== 1 ? 's' : '' }}
@@ -76,7 +76,7 @@ function refLines(c: { fromLine: number; toLine: number }): string {
                 <!-- comment rows -->
                 @for (c of g.items; track c.id) {
                   <div style="display:flex;gap:10px;padding:8px 18px 10px;margin:0 10px;border-radius:var(--r-sm)">
-                    <span class="tnum" style="flex:none;width:54px;padding-top:2px;font-size:10.5px;color:var(--accent-2);text-align:right">:{{ linesOf(c) }}</span>
+                    <span class="tnum" style="flex:none;width:54px;padding-top:2px;font-size:10.5px;color:var(--ink-3);text-align:right">:{{ linesOf(c) }}</span>
                     <div style="flex:1;min-width:0">
                       <div class="tnum" style="font-size:11px;color:var(--ink-3);background:var(--panel-2);border:1px solid var(--hair);border-radius:4px;padding:4px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
                         @if (blockComment(c)) {
@@ -85,7 +85,7 @@ function refLines(c: { fromLine: number; toLine: number }): string {
                         {{ c.snippet || '(blank line)' }}
                       </div>
                       <div style="display:flex;gap:6px;margin-top:6px">
-                        <span style="color:var(--accent);flex:none">→</span>
+                        <span style="color:var(--ui-ink);flex:none">→</span>
                         <span style="font-size:12px;color:var(--ink);line-height:1.5;white-space:pre-wrap;word-break:break-word">{{ c.note }}</span>
                       </div>
                     </div>
@@ -204,12 +204,12 @@ export class SendReviewModalComponent {
         class="btn"
         (click)="open.set(true)"
         title="Review all pending comments and send them to this agent"
-        style="padding:5px 11px;color:var(--ink);border:1px solid color-mix(in oklch,var(--accent),transparent 55%);background:color-mix(in oklch,var(--accent),transparent 86%)"
+        style="padding:5px 11px;color:var(--ink);border:1px solid var(--ui-line);background:var(--ui-sel)"
       >
-        <app-icon name="chat" size="sm" style="color:var(--accent)" />Send review
+        <app-icon name="chat" size="sm" style="color:var(--ui-ink)" />Send review
         <span
           class="tnum"
-          style="font-size:10px;font-weight:700;color:#06070b;background:var(--accent);border-radius:999px;padding:1px 6px;margin-left:2px"
+          style="font-size:10px;font-weight:700;color:var(--ui-on-fill);background:var(--ui-fill);border-radius:999px;padding:1px 6px;margin-left:2px"
         >{{ count() }}</span>
       </button>
     }

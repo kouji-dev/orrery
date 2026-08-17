@@ -38,11 +38,11 @@ interface TabDef {
           @for (t of tabs(); track t.key) {
             @let on = tab() === t.key;
             <button class="btn" (click)="tab.set(t.key)" [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'" style="padding:var(--sp-3) var(--sp-5);border-radius:0;position:relative;flex:1;justify-content:center">
-              @if (on) { <span style="position:absolute;left:8px;right:8px;bottom:0;height:var(--sp-1);background:linear-gradient(90deg,var(--accent),var(--accent-2))"></span> }
-              <app-icon [name]="t.icon" size="sm" [color]="on ? 'var(--accent)' : null" />
+              @if (on) { <span style="position:absolute;left:8px;right:8px;bottom:0;height:var(--sp-1);background:var(--ui-ind)"></span> }
+              <app-icon [name]="t.icon" size="sm" [color]="on ? 'var(--ui-ink)' : null" />
               <span style="font-size:var(--fs-sm)">{{ t.label }}</span>
               @if (t.badge) {
-                <span class="chip tnum" [style.border-color]="mix('var(--accent)', 60)" style="font-size:var(--fs-2xs);padding:0 var(--sp-2);color:var(--accent)">{{ t.badge }}</span>
+                <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-2);color:var(--ui-ink);border-color:var(--ui-sel-2)">{{ t.badge }}</span>
               }
             </button>
           }

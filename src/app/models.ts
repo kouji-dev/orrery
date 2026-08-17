@@ -250,7 +250,6 @@ export interface Tab {
 
 export interface Tweaks {
   theme: "dark" | "light";
-  palette: [string, string];
   density: "compact" | "regular" | "comfy";
   defaultViz: VizMode;
   rightPanel: boolean;

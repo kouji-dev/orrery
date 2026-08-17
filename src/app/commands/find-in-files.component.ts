@@ -96,7 +96,7 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
           placeholder="Search in files…"
           spellcheck="false"
           autocomplete="off"
-          [style.border-color]="focusedInput() ? 'var(--accent)' : 'var(--hair)'"
+          [style.border-color]="focusedInput() ? 'var(--ui-focus)' : 'var(--hair)'"
           (focus)="focusedInput.set(true)"
           (blur)="focusedInput.set(false)"
           style="flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-3) var(--sp-4);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui);outline:none"
@@ -144,7 +144,7 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
         @if (error(); as err) {
           <span style="color:var(--st-blocked)">{{ err }}</span>
         } @else if (busy()) {
-          <span style="display:flex;align-items:center;gap:var(--sp-3);color:var(--accent-2)">
+          <span style="display:flex;align-items:center;gap:var(--sp-3);color:var(--st-running)">
             <span class="dot running" style="background:var(--st-running)"></span>streaming results… {{ filesScanned() }} files
           </span>
         } @else {
@@ -172,13 +172,13 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
           <div style="margin-bottom:var(--sp-1)">
             <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-6);position:sticky;top:0;background:var(--panel);z-index:1;border-bottom:1px solid var(--hair)">
               @if (mode() === 'replace') {
-                <input type="checkbox" [checked]="fileIncluded(g)" (click)="$event.stopPropagation(); toggleFile(g)" title="Include / exclude this file" style="accent-color:var(--accent);flex:none" />
+                <input type="checkbox" [checked]="fileIncluded(g)" (click)="$event.stopPropagation(); toggleFile(g)" title="Include / exclude this file" style="accent-color:var(--ui-fill);flex:none" />
               }
               <app-icon name="file" size="sm" color="var(--ink-3)" />
               <span style="font-size:var(--fs-sm)">{{ fname(g.path) }}</span>
               <span style="font-size:var(--fs-2xs);color:var(--ink-4);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(g.path) }}</span>
               @if (g.root) {
-                <span class="chip" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--accent-2)">{{ g.root }}</span>
+                <span class="chip" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--ink-2)">{{ g.root }}</span>
               }
               <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4)">{{ g.count }}</span>
             </div>
@@ -192,13 +192,13 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
                 style="display:flex;align-items:flex-start;gap:var(--sp-4);padding:var(--sp-2) var(--sp-6) var(--sp-2) 26px;cursor:pointer;font-size:var(--fs-sm);line-height:1.55"
               >
                 @if (mode() === 'replace') {
-                  <input type="checkbox" [checked]="included(h)" (click)="$event.stopPropagation(); toggleHit(h)" style="accent-color:var(--accent);flex:none;margin-top:var(--sp-1)" />
+                  <input type="checkbox" [checked]="included(h)" (click)="$event.stopPropagation(); toggleHit(h)" style="accent-color:var(--ui-fill);flex:none;margin-top:var(--sp-1)" />
                 }
                 <span class="tnum" style="flex:none;width:34px;text-align:right;color:var(--ink-4);font-size:var(--fs-xs)">{{ h.line }}</span>
                 <span style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;color:var(--ink-2)">
                   @for (s of segs(h); track $index) {
                     @if (s.hit) {
-                      <mark style="background:color-mix(in oklch, var(--accent), transparent 62%);color:var(--ink);border-radius:2px;padding:0 1px"
+                      <mark style="background:var(--ui-sel-2);color:var(--ink);border-radius:2px;padding:0 1px"
                         [style.text-decoration]="mode() === 'replace' ? 'line-through' : 'none'">{{ s.t }}</mark>
                     } @else { <span>{{ s.t }}</span> }
                   }
@@ -423,9 +423,9 @@ export class FindInFilesComponent {
   optStyle(on: boolean): string {
     return (
       "padding:var(--sp-1) var(--sp-3);font-size:var(--fs-xs);border-radius:4px;min-width:26px;justify-content:center;" +
-      `border:1px solid ${on ? "color-mix(in oklch, var(--accent), transparent 55%)" : "var(--hair)"};` +
+      `border:1px solid ${on ? "var(--ui-line)" : "var(--hair)"};` +
       `color:${on ? "var(--ink)" : "var(--ink-3)"};` +
-      `background:${on ? "color-mix(in oklch, var(--accent), transparent 86%)" : "transparent"}`
+      `background:${on ? "var(--ui-sel)" : "transparent"}`
     );
   }
 

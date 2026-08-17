@@ -41,29 +41,29 @@ import { VersionService } from "../shared/version.service";
         position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%); z-index: 84;
         display: flex; align-items: center; gap: var(--sp-5); width: 392px; max-width: calc(100vw - 32px);
         padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-5); border-radius: var(--r-md);
-        font-family: var(--font-mono); color: var(--ink); background: var(--panel); border: 1px solid var(--hair-2);
+        font-family: var(--font-ui); color: var(--ink); background: var(--panel); border: 1px solid var(--hair-2);
         box-shadow: var(--shadow);
       }
       .ut-ic {
         flex: none; width: 34px; height: 34px; border-radius: var(--r-sm); display: grid; place-items: center;
-        color: var(--accent); background: color-mix(in oklch, var(--accent), transparent 86%);
-        box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent), transparent 58%);
+        color: var(--ui-ink); background: var(--ui-sel);
+        box-shadow: inset 0 0 0 1px var(--ui-line);
       }
       .ut-ic svg { width: var(--sp-6); height: var(--sp-6); }
       .ut-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
       .ut-t1 { font-size: var(--fs-sm); color: var(--ink); }
-      .ut-t1 b { color: var(--accent); font-weight: 600; }
+      .ut-t1 b { color: var(--ui-ink); font-weight: 600; }
       .ut-t2 { font-size: var(--fs-2xs); color: var(--ink-4); }
       .ut-act { flex: none; display: flex; align-items: center; gap: var(--sp-3); }
       .ut-notes, .ut-later {
-        background: transparent; border: none; color: var(--ink-4); font-family: var(--font-mono);
+        background: transparent; border: none; color: var(--ink-4); font-family: var(--font-ui);
         font-size: var(--fs-xs); cursor: pointer; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm);
       }
       .ut-notes:hover, .ut-later:hover { color: var(--ink-2); }
       .ut-install {
         display: inline-flex; align-items: center; gap: var(--sp-2); height: 28px; padding: 0 var(--sp-5);
-        border-radius: var(--r-sm); font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 600;
-        cursor: pointer; border: none; color: #06070b; background: var(--accent);
+        border-radius: var(--r-sm); font-family: var(--font-ui); font-size: var(--fs-xs); font-weight: 600;
+        cursor: pointer; border: none; color: var(--ui-on-fill); background: var(--ui-fill);
       }
       .ut-install:hover:not(:disabled) { filter: brightness(1.08); }
       .ut-install:disabled { opacity: 0.7; cursor: default; }

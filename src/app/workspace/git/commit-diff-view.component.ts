@@ -59,7 +59,7 @@ function relTime(when: number): string {
       <!-- ---- CommitContextHeader ---- -->
       <div style="padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair);background:var(--panel);flex:none">
         <div style="display:flex;align-items:center;gap:var(--sp-3)">
-          <app-icon name="commit" size="sm" style="color:var(--accent-2)" />
+          <app-icon name="commit" size="sm" style="color:var(--ink-3)" />
           <span style="font-size:var(--fs-md);font-weight:600;color:var(--ink);text-wrap:pretty">
             {{ commit()?.msg ?? sha() }}
           </span>

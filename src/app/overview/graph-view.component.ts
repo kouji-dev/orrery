@@ -22,8 +22,8 @@ interface Laid {
       <svg [attr.viewBox]="'0 0 ' + W + ' ' + g.H" style="width:100%;max-width:920px;height:auto">
         <defs>
           <radialGradient id="orch-core" cx="50%" cy="50%">
-            <stop offset="0" stop-color="var(--accent)" stop-opacity="0.4" />
-            <stop offset="1" stop-color="var(--accent)" stop-opacity="0" />
+            <stop offset="0" stop-color="var(--ui-ink)" stop-opacity="0.4" />
+            <stop offset="1" stop-color="var(--ui-ink)" stop-opacity="0" />
           </radialGradient>
         </defs>
 
@@ -58,7 +58,7 @@ interface Laid {
 
         <!-- root node -->
         <circle [attr.cx]="xRoot" [attr.cy]="g.rootY" r="40" fill="url(#orch-core)" />
-        <circle [attr.cx]="xRoot" [attr.cy]="g.rootY" r="20" fill="var(--panel-3)" stroke="var(--accent)" stroke-width="1.6" />
+        <circle [attr.cx]="xRoot" [attr.cy]="g.rootY" r="20" fill="var(--panel-3)" stroke="var(--ui-ink)" stroke-width="1.6" />
         <text [attr.x]="xRoot" [attr.y]="g.rootY + 1" text-anchor="middle" font-family="var(--font-disp)" font-size="9" font-weight="700" fill="var(--ink)">ORCH</text>
         <text [attr.x]="xRoot" [attr.y]="g.rootY + 36" text-anchor="middle" font-family="var(--font-mono)" font-size="9" fill="var(--ink-3)">{{ ui.org }}</text>
 

@@ -48,7 +48,7 @@ import { IconComponent } from "../shared/icon.component";
         align-items: flex-start;
         gap: var(--sp-3);
         width: 100%;
-        font-family: var(--font-mono);
+        font-family: var(--font-ui);
         font-size: var(--fs-xs);
         line-height: 1.4;
         padding: var(--sp-3) var(--sp-4);
@@ -64,14 +64,14 @@ import { IconComponent } from "../shared/icon.component";
           background 0.12s ease;
       }
       .opt:hover {
-        border-color: var(--accent);
+        border-color: var(--ui-focus);
         color: var(--ink-2);
-        background: color-mix(in oklch, var(--accent), transparent 90%);
+        background: var(--ui-sel);
       }
       .opt.sel {
-        border-color: var(--accent);
+        border-color: var(--ui-focus);
         color: var(--ink);
-        background: color-mix(in oklch, var(--accent), transparent 84%);
+        background: var(--ui-sel);
       }
       /* the radio/checkbox mark — square for multi, round for single */
       .mark {
@@ -84,13 +84,13 @@ import { IconComponent } from "../shared/icon.component";
         display: flex;
         align-items: center;
         justify-content: center;
-        color: var(--accent);
+        color: var(--ui-ink);
       }
       .mark.box {
         border-radius: 3px;
       }
       .opt.sel .mark {
-        border-color: var(--accent);
+        border-color: var(--ui-focus);
       }
       .otherText {
         width: 100%;
@@ -98,12 +98,12 @@ import { IconComponent } from "../shared/icon.component";
         box-sizing: border-box;
         resize: none;
         overflow: hidden;
-        font-family: var(--font-mono);
+        font-family: var(--font-ui);
         font-size: var(--fs-xs);
         line-height: 1.5;
         padding: var(--sp-3) var(--sp-4);
         border-radius: var(--r-sm, 5px);
-        border: 1px solid var(--accent);
+        border: 1px solid var(--ui-focus);
         background: var(--panel-2, var(--panel));
         color: var(--ink);
         outline: none;
@@ -124,9 +124,9 @@ import { IconComponent } from "../shared/icon.component";
         text-transform: uppercase;
         padding: 1px var(--sp-3);
         border-radius: 999px;
-        border: 1px solid var(--accent-2);
-        color: var(--accent-2);
-        background: color-mix(in oklch, var(--accent-2), transparent 88%);
+        border: 1px solid var(--ui-sel-2);
+        color: var(--ui-ink);
+        background: var(--ui-sel);
       }
       .hint {
         margin-top: var(--sp-3);
@@ -148,7 +148,7 @@ import { IconComponent } from "../shared/icon.component";
             >Question {{ i + 1 }} of {{ qs.length }}</span
           >
           @if (q.header) {
-            <span class="up" style="font-size:var(--fs-3xs);letter-spacing:0.06em;color:var(--accent)">{{ q.header }}</span>
+            <span class="up" style="font-size:var(--fs-3xs);letter-spacing:0.06em;color:var(--ui-ink)">{{ q.header }}</span>
           }
           @if (q.multiSelect) {
             <span class="badge" title="Multi-select is experimental: the claude TUI's space-toggle is unreliable. Use Terminal if it doesn't take."

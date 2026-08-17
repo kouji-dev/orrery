@@ -26,7 +26,7 @@ import { ConflictViewComponent } from "./conflict-view.component";
         <button class="btn ghost-hair" (click)="close.emit()" title="Back to working changes" style="padding:var(--sp-1) var(--sp-3)">
           <app-icon name="chevron" size="sm" [px]="12" />Working changes
         </button>
-        <app-icon name="branch" size="sm" color="var(--accent-2)" [px]="12" />
+        <app-icon name="branch" size="sm" color="var(--ink-3)" [px]="12" />
         <span style="font-size:var(--fs-xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch }}</span>
       </div>
       @switch (gv.kind) {

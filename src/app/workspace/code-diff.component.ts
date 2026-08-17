@@ -49,7 +49,7 @@ function blameClass(author: string, fade: number): string {
   if (!blameClasses.has(cls)) {
     blameClasses.add(cls);
     blameSheet().sheet?.insertRule(
-      `.${cls} { color: ${authorColor(author)}; background: color-mix(in oklch, var(--accent), transparent ${fade}%); }`,
+      `.${cls} { color: ${authorColor(author)}; background: color-mix(in oklch, var(--ui-ink), transparent ${fade}%); }`,
     );
   }
   return cls;

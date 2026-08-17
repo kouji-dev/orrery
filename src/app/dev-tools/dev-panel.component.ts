@@ -260,7 +260,7 @@ type Sort = { key: string; dir: number };
               <div class="dvc-split">
                 <span class="tnum" style="color:var(--ink-2)">Orrery <b style="color:var(--ink)">{{ fmtMem(orreryPriv()) }}</b></span>
                 <span style="color:var(--ink-4)">·</span>
-                <span class="tnum" style="color:var(--ink-2)">agents <b style="color:var(--accent-2)">{{ fmtMem(agentsPriv()) }}</b></span>
+                <span class="tnum" style="color:var(--ink-2)">agents <b style="color:var(--ink)">{{ fmtMem(agentsPriv()) }}</b></span>
                 <span class="dvc-chip" style="font-size:var(--fs-2xs)">private working set</span>
                 <span style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">job-object accounting · descendants rediscovered at slower cadence</span>
               </div>
@@ -300,7 +300,7 @@ type Sort = { key: string; dir: number };
                       <td class="tnum" style="color:var(--ink-4)">{{ r.n.pid || '—' }}</td>
                       <td class="tnum" [style.color]="r.n.cpu > 60 ? 'var(--lat-r)' : r.n.cpu > 25 ? 'var(--lat-a)' : 'var(--ink-2)'">{{ r.n.cpu.toFixed(1) }}%</td>
                       <td class="tnum" [style.color]="r.n.privBytes > 1073741824 ? 'var(--lat-r)' : 'var(--ink)'">{{ fmtMem(r.n.privBytes) }}</td>
-                      <td class="tnum" [style.color]="r.n.children.length ? 'var(--accent-2)' : 'var(--ink-4)'">{{ r.n.children.length ? fmtMem(r.n.subtreePrivBytes) : '—' }}</td>
+                      <td class="tnum" [style.color]="r.n.children.length ? 'var(--ink-2)' : 'var(--ink-4)'">{{ r.n.children.length ? fmtMem(r.n.subtreePrivBytes) : '—' }}</td>
                     </tr>
                   }
                 </tbody>
@@ -403,34 +403,31 @@ type Sort = { key: string; dir: number };
   `,
   styles: [
     `
-.dvcon,.dvc-fab{--lat-g:#35e0a1;--lat-a:#f5c451;--lat-r:#ff5d7a;
-  --lat-g-bg:rgba(53,224,161,.08);--lat-a-bg:rgba(245,196,81,.13);--lat-r-bg:rgba(255,93,122,.18);
+.dvcon,.dvc-fab{--lat-g:var(--sem-add);--lat-a:var(--sem-attn);--lat-r:var(--sem-del);
+  --lat-g-bg:color-mix(in oklch,var(--sem-add),transparent 90%);--lat-a-bg:color-mix(in oklch,var(--sem-attn),transparent 86%);--lat-r-bg:color-mix(in oklch,var(--sem-del),transparent 82%);
   --lat-r-ring:rgba(255,93,122,.4);}
-[data-theme="light"] .dvcon,[data-theme="light"] .dvc-fab{--lat-g:#0a8f5e;--lat-a:#a9700f;--lat-r:#d6304e;
-  --lat-g-bg:rgba(10,143,94,.09);--lat-a-bg:rgba(169,112,15,.13);--lat-r-bg:rgba(214,48,78,.14);
-  --lat-r-ring:rgba(214,48,78,.34);}
 .dvc-fab{position:relative;width:var(--topbar-h);height:var(--topbar-h);border-radius:13px;
   display:grid;place-items:center;cursor:pointer;border:1px solid var(--hair-2);
   background:linear-gradient(180deg,var(--panel-3),var(--panel));color:var(--ink-2);
   box-shadow:var(--shadow);transition:transform .16s,color .16s,border-color .16s,box-shadow .16s;}
-.dvc-fab:hover{transform:translateY(-2px);color:var(--ink);border-color:rgba(var(--accent-rgb),.5);}
-.dvc-fab.on{color:var(--accent);border-color:rgba(var(--accent-rgb),.6);box-shadow:var(--shadow),0 0 18px -6px rgba(var(--accent-rgb),.7);}
+.dvc-fab:hover{transform:translateY(-2px);color:var(--ink);border-color:var(--ui-line);}
+.dvc-fab.on{color:var(--ui-ink);border-color:var(--ui-line);box-shadow:var(--shadow);}
 .dvc-fab svg{width:19px;height:19px;}
-.dvc-fab .dvc-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 var(--sp-2);border-radius:999px;background:var(--lat-r);color:#fff;font-size:var(--fs-xs);font-weight:700;line-height:1;display:grid;place-items:center;border:2px solid var(--panel);font-variant-numeric:tabular-nums;animation:dvcpulse 1.8s ease-in-out infinite;}
-@keyframes dvcpulse{0%{box-shadow:0 0 0 0 rgba(255,93,122,.5);}70%{box-shadow:0 0 0 7px rgba(255,93,122,0);}100%{box-shadow:0 0 0 0 rgba(255,93,122,0);}}
+.dvc-fab .dvc-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 var(--sp-2);border-radius:999px;background:var(--lat-r);color:var(--on-solid);font-size:var(--fs-xs);font-weight:700;line-height:1;display:grid;place-items:center;border:2px solid var(--panel);font-variant-numeric:tabular-nums;animation:dvcpulse 1.8s ease-in-out infinite;}
+@keyframes dvcpulse{0%{box-shadow:0 0 0 0 color-mix(in oklch,var(--sem-del),transparent 50%);}70%{box-shadow:0 0 0 7px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
 .dvcon{position:fixed;right:18px;bottom:92px;z-index:91;width:860px;max-width:calc(100vw - 32px);
   max-height:calc(100vh - 148px);display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel);border:1px solid var(--hair-2);border-radius:14px;
-  box-shadow:var(--shadow),0 0 0 1px rgba(var(--accent-rgb),.04);font-family:var(--font-mono);
+  box-shadow:var(--shadow);font-family:var(--font-ui);
   transform-origin:bottom right;animation:dvcin .22s cubic-bezier(.2,.7,.2,1);}
 @keyframes dvcin{from{opacity:0;transform:translateY(8px) scale(.985);}to{opacity:1;transform:none;}}
 .dvc-head{flex:none;display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-4) var(--sp-5) var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);background:linear-gradient(180deg,var(--panel-3),var(--panel));}
-.dvc-brand{display:flex;align-items:center;color:var(--accent);}
+.dvc-brand{display:flex;align-items:center;color:var(--ui-ink);}
 .dvc-tabs{display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;}
-.dvc-tab{display:inline-flex;align-items:center;gap:var(--sp-3);height:var(--ctl-h);font-family:var(--font-mono);font-size:var(--fs-sm);color:var(--ink-3);background:transparent;border:none;border-radius:6px;padding:0 var(--sp-5);cursor:pointer;transition:all .12s;}
+.dvc-tab{display:inline-flex;align-items:center;gap:var(--sp-3);height:var(--ctl-h);font-family:var(--font-ui);font-size:var(--fs-sm);color:var(--ink-3);background:transparent;border:none;border-radius:6px;padding:0 var(--sp-5);cursor:pointer;transition:all .12s;}
 .dvc-tab:hover{color:var(--ink-2);}
 .dvc-tab.on{color:var(--ink);background:var(--panel-3);box-shadow:0 0 0 1px var(--hair-2);}
-.dvc-tab.on svg{color:var(--accent);}
+.dvc-tab.on svg{color:var(--ui-ink);}
 .dvc-tab svg{width:var(--sp-6);height:var(--sp-6);color:var(--ink-4);}
 .dvc-cnt{display:inline-flex;align-items:center;justify-content:center;height:var(--sp-7);font-size:var(--fs-2xs);padding:0 var(--sp-2);border-radius:999px;background:var(--panel);border:1px solid var(--hair);color:var(--ink-3);min-width:16px;}
 .dvc-tab.on .dvc-cnt{color:var(--ink-2);border-color:var(--hair-2);}
@@ -440,7 +437,7 @@ type Sort = { key: string; dir: number };
 .dvc-live.on .dvc-ld{animation:dvcblink 1.5s ease-in-out infinite;}
 @keyframes dvcblink{0%,100%{opacity:1;}50%{opacity:.35;}}
 .dvc-sp{flex:1;}
-.dvc-ic{display:inline-flex;align-items:center;gap:var(--sp-3);font-family:var(--font-mono);font-size:var(--fs-sm);color:var(--ink-2);background:transparent;border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);cursor:pointer;transition:all .12s;}
+.dvc-ic{display:inline-flex;align-items:center;gap:var(--sp-3);font-family:var(--font-ui);font-size:var(--fs-sm);color:var(--ink-2);background:transparent;border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);cursor:pointer;transition:all .12s;}
 .dvc-ic:hover{color:var(--ink);background:var(--panel-3);border-color:var(--hair-2);}
 .dvc-ic.ok{color:var(--lat-g);border-color:color-mix(in oklch,var(--lat-g),transparent 55%);}
 .dvc-ic svg{width:var(--sp-6);height:var(--sp-6);}
@@ -457,7 +454,7 @@ type Sort = { key: string; dir: number };
 .dvc-tbl thead th:last-child{padding-right:var(--sp-6);}
 .dvc-tbl thead th:hover{color:var(--ink-2);background:var(--panel-3);}
 .dvc-tbl thead th.srt{color:var(--ink);}
-.dvc-arr{display:inline-block;width:9px;margin-left:var(--sp-1);color:var(--accent);font-size:var(--fs-3xs);vertical-align:middle;}
+.dvc-arr{display:inline-block;width:9px;margin-left:var(--sp-1);color:var(--ui-ink);font-size:var(--fs-3xs);vertical-align:middle;}
 .dvc-tbl tbody td{padding:0 var(--sp-4);height:var(--ctl-h-lg);border-bottom:1px solid var(--hair);text-align:right;white-space:nowrap;font-size:var(--fs-ui);color:var(--ink-2);}
 .dvc-tbl tbody td:first-child{text-align:left;padding-left:var(--sp-6);}
 .dvc-tbl tbody td:last-child{padding-right:var(--sp-6);}
@@ -467,7 +464,7 @@ type Sort = { key: string; dir: number };
 .dvc-row.stale{opacity:.45;}
 .dvc-stale{color:var(--ink-4);font-size:var(--fs-xs);flex:none;}
 .dvc-tw{width:var(--sp-5);height:var(--sp-5);flex:none;color:var(--ink-4);transition:transform .15s;}
-.dvc-row.open .dvc-tw{transform:rotate(90deg);color:var(--accent);}
+.dvc-row.open .dvc-tw{transform:rotate(90deg);color:var(--ui-ink);}
 .dvc-lead{display:flex;align-items:center;gap:var(--sp-4);color:var(--ink);font-weight:500;}
 .dvc-nm{overflow:hidden;text-overflow:ellipsis;}
 .dvc-id{color:var(--ink-4);font-weight:400;}
@@ -521,7 +518,7 @@ type Sort = { key: string; dir: number };
 .dvc-feed{flex:none;border-top:1px solid var(--hair-2);}
 .dvc-fh{display:flex;align-items:center;gap:var(--sp-4);width:100%;padding:var(--sp-4) var(--sp-6);background:var(--panel-2);border:none;border-bottom:1px solid var(--hair);cursor:pointer;color:var(--ink-3);font-family:var(--font-mono);text-align:left;}
 .dvc-fh:hover{color:var(--ink-2);}
-.dvc-fh .dvc-tw.open{transform:rotate(90deg);color:var(--accent);}
+.dvc-fh .dvc-tw.open{transform:rotate(90deg);color:var(--ui-ink);}
 .dvc-fh .lbl{font-size:var(--fs-2xs);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);}
 .dvc-fh .ct{font-size:var(--fs-xs);color:var(--ink-4);margin-left:auto;}
 .dvc-fl{padding:var(--sp-2) var(--sp-6) var(--sp-6);max-height:240px;overflow-y:auto;}
@@ -549,7 +546,7 @@ type Sort = { key: string; dir: number };
 .dvc-gauge .g-sub{font-size:var(--fs-2xs);color:var(--ink-4);}
 .dvc-kind{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:4px;flex:none;}
 .dvc-kind svg{width:var(--sp-5);height:var(--sp-5);}
-.dvc-kind.core{color:var(--accent);background:color-mix(in oklch,var(--accent),transparent 84%);}
+.dvc-kind.core{color:var(--ui-ink);background:var(--ui-sel);}
 .dvc-split{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);font-size:var(--fs-sm);flex-wrap:nowrap;min-width:0;}
 .dvc-split>span{white-space:nowrap;}
 /* the verbose right-side note yields (truncates) before the numbers ever wrap */
@@ -558,7 +555,7 @@ type Sort = { key: string; dir: number };
 .dvc-palert b{font-weight:600;}
 .dvc-twbtn{border:none;background:transparent;padding:0;cursor:pointer;display:inline-flex;color:var(--ink-4);flex:none;}
 .dvc-twbtn:hover{color:var(--ink-2);}
-.dvc-twbtn .dvc-tw.open{transform:rotate(90deg);color:var(--accent);}
+.dvc-twbtn .dvc-tw.open{transform:rotate(90deg);color:var(--ui-ink);}
 .dvc-pdot{width:7px;height:7px;border-radius:2px;flex:none;}
 .dvc-recdot{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--lat-r);animation:dvcblink 1.5s ease-in-out infinite;}
 .dvc-foot{flex:none;display:flex;align-items:center;gap:var(--sp-6);padding:var(--sp-4) var(--sp-6);border-top:1px solid var(--hair);background:var(--panel-2);font-size:var(--fs-xs);color:var(--ink-3);}
@@ -780,7 +777,7 @@ export class DevPanelComponent implements OnDestroy {
     return this.agents().filter((a) => a.status === st).length;
   }
   statusColor(s: AgentStatus): string {
-    const m: Record<string, string> = { running: "var(--st-running)", blocked: "var(--st-blocked)", done: "var(--st-done)", waiting: "var(--accent-2)", queued: "var(--ink-3)", idle: "var(--ink-4)" };
+    const m: Record<string, string> = { running: "var(--st-running)", blocked: "var(--st-blocked)", done: "var(--st-done)", waiting: "var(--st-waiting)", queued: "var(--ink-3)", idle: "var(--ink-4)" };
     return m[s] ?? "var(--ink-3)";
   }
   fmtDur(sec: number): string {
@@ -951,7 +948,7 @@ export class DevPanelComponent implements OnDestroy {
     if (this.notOurs(n)) return "var(--ink-4)";
     if (n.detached) return "var(--lat-a)";
     if (n.note?.includes("shim wrapper")) return "var(--lat-r)";
-    return "var(--accent)";
+    return "var(--ui-fill)";
   }
 
   // ── emits (A0.7 phase 1 aggregate) ──
@@ -997,7 +994,7 @@ export class DevPanelComponent implements OnDestroy {
   }
   clsColor(r: EmitAggRow): string {
     const c = this.suggestClass(r);
-    return c === "bypass" ? "var(--lat-g)" : c === "coalesced state" ? "var(--accent-2)" : "var(--accent)";
+    return c === "bypass" ? "var(--lat-g)" : c === "coalesced state" ? "var(--ink-2)" : "var(--ui-ink)";
   }
   /** " · 12m / 30m · 3.1 MB" detail after the recording chip. */
   traceLine(): string {

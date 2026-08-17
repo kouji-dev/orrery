@@ -9,14 +9,14 @@ import { getVersion } from "@tauri-apps/api/app";
  *    so it stays empty and the badge shows just the channel tag.
  *  - **channel** is derived from `isDevMode()`: a dev build (`ng serve` /
  *    `tauri dev`) reads as **DEV**, a production build as **BETA**. Colors match
- *    the design — amber for dev, cyan (`--accent-2`) for beta. */
+ *    the design — attention amber for dev, quiet ink for release. */
 @Injectable({ providedIn: "root" })
 export class VersionService {
   /** e.g. "0.1.1"; empty until resolved / when Tauri is unavailable. */
   readonly version = signal("");
   readonly isDev = isDevMode();
   readonly label = this.isDev ? "DEV" : "BETA";
-  readonly color = this.isDev ? "#f5c451" : "var(--accent-2)";
+  readonly color = this.isDev ? "var(--sem-attn)" : "var(--ink-2)";
 
   constructor() {
     getVersion()

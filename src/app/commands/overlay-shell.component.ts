@@ -29,7 +29,7 @@ export function fzSegments(text: string, idx: number[]): { t: string; hit: boole
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div
-      style="position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.44);backdrop-filter:blur(2px);display:flex;justify-content:center;align-items:flex-start;padding:0 var(--sp-8)"
+      style="position:fixed;inset:0;z-index:80;background:var(--scrim);backdrop-filter:blur(2px);display:flex;justify-content:center;align-items:flex-start;padding:0 var(--sp-8)"
       (mousedown)="onBackdrop($event)"
     >
       <div

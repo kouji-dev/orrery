@@ -56,11 +56,11 @@ export function logColor(t: LogKind | string): string {
     (
       {
         cmd: "var(--ink)",
-        out: "var(--ink-2)",
-        ok: "var(--st-done)",
-        warn: "#f5c451",
-        err: "var(--st-blocked)",
-        sys: "var(--accent-2)",
+        out: "var(--log-info)",
+        ok: "var(--sem-add)",
+        warn: "var(--log-warn)",
+        err: "var(--log-err)",
+        sys: "var(--log-sys)",
       } as Record<string, string>
     )[t] || "var(--ink-2)"
   );

@@ -69,7 +69,7 @@ interface SegOption {
   transition:all .12s;}
 .set-seg button:hover{color:var(--ink-2);}
 .set-seg button.on{color:var(--ink);background:var(--panel-3);box-shadow:0 0 0 1px var(--hair-2);}
-.set-seg button.on svg{color:var(--accent);}
+.set-seg button.on svg{color:var(--ui-ink);}
 .set-seg button svg{width:var(--sp-6);height:var(--sp-6);}
 .set-seg button.dgr.on{color:var(--set-danger);
   background:color-mix(in oklch,var(--set-danger),transparent 88%);
@@ -114,9 +114,9 @@ export class SetSegComponent {
     `
 .set-tgl{position:relative;width:34px;height:19px;border:none;border-radius:999px;
   background:var(--hair-2);cursor:pointer;padding:0;transition:background .16s;flex:none;}
-.set-tgl.on{background:var(--accent);box-shadow:0 0 12px -3px rgba(var(--accent-rgb),.8);}
+.set-tgl.on{background:var(--ui-fill);}
 .set-tgl i{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;
-  background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .16s;}
+  background:var(--on-solid);box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .16s;}
 .set-tgl.on i{transform:translateX(15px);}
 /* toggle dims are deliberate fixed-geometry mini-widget — 34×19 track + 15×15 thumb */
     `,
@@ -151,7 +151,7 @@ export class SetToggleComponent {
   background-image:linear-gradient(45deg,transparent 50%,var(--ink-3) 50%),linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);
   background-position:right 13px center,right 8px center;background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
 .set-sel:hover{border-color:var(--hair-2);}
-.set-sel:focus{border-color:var(--accent);}
+.set-sel:focus{border-color:var(--ui-focus);}
     `,
   ],
   template: `
@@ -185,12 +185,12 @@ export class SetSelectComponent {
   min-width:186px;justify-content:space-between;background:var(--panel-2);border:1px solid var(--hair);
   border-radius:7px;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui);cursor:pointer;transition:all .12s;}
 .set-combo-btn:hover{border-color:var(--hair-2);}
-.set-combo-btn.open{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in oklch,var(--accent),transparent 86%);}
+.set-combo-btn.open{border-color:var(--ui-focus);box-shadow:0 0 0 3px var(--ui-sel);}
 .set-combo-btn .cv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.set-combo-btn .tag{font-size:var(--fs-3xs);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
-  border:1px solid color-mix(in oklch,var(--accent),transparent 60%);border-radius:4px;padding:1px var(--sp-2);flex:none;}
+.set-combo-btn .tag{font-size:var(--fs-3xs);letter-spacing:.1em;text-transform:uppercase;color:var(--ui-ink);
+  border:1px solid var(--ui-sel-2);border-radius:4px;padding:1px var(--sp-2);flex:none;}
 .set-combo-btn svg{width:var(--sp-6);height:var(--sp-6);color:var(--ink-3);flex:none;transition:transform .15s;}
-.set-combo-btn.open svg{transform:rotate(180deg);color:var(--accent);}
+.set-combo-btn.open svg{transform:rotate(180deg);color:var(--ui-ink);}
 .set-combo-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:6;width:248px;
   background:var(--elev);border:1px solid var(--hair-2);border-radius:11px;box-shadow:var(--shadow);
   padding:var(--sp-3);animation:set-pop .14s ease;}
@@ -200,12 +200,12 @@ export class SetSelectComponent {
   color:var(--ink-2);font-size:var(--fs-ui);cursor:pointer;transition:all .1s;}
 .set-combo-opt:hover{background:var(--panel-3);color:var(--ink);}
 .set-combo-opt.on{color:var(--ink);background:var(--panel-2);}
-.set-combo-opt .ck{width:14px;flex:none;color:var(--accent);}
+.set-combo-opt .ck{width:14px;flex:none;color:var(--ui-ink);}
 .set-combo-opt .cn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .set-combo-custom{margin-top:var(--sp-2);border-top:1px solid var(--hair);padding-top:var(--sp-3);}
 .set-combo-field{display:flex;align-items:center;gap:var(--sp-3);height:var(--row-h);padding:0 var(--sp-4);background:var(--panel-2);
   border:1px solid var(--hair);border-radius:7px;}
-.set-combo-field:focus-within{border-color:var(--accent);}
+.set-combo-field:focus-within{border-color:var(--ui-focus);}
 .set-combo-field span{color:var(--ink-4);font-size:var(--fs-sm);flex:none;}
 .set-combo-field input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);
   font-family:var(--font-mono);font-size:var(--fs-ui);}
@@ -301,8 +301,8 @@ export class ModelComboComponent {
   border-radius:999px;border:1px solid var(--hair);background:var(--panel-2);color:var(--ink-3);
   font-family:var(--font-mono);font-size:var(--fs-3xs);letter-spacing:.06em;text-transform:uppercase;
   cursor:pointer;transition:all .12s;flex:none;}
-.set-reset:hover{color:var(--accent);border-color:color-mix(in oklch,var(--accent),transparent 50%);
-  background:color-mix(in oklch,var(--accent),transparent 90%);}
+.set-reset:hover{color:var(--ui-ink);border-color:var(--ui-line);
+  background:var(--ui-sel);}
 .set-reset svg{width:var(--sp-4);height:var(--sp-4);}
     `,
   ],
@@ -667,7 +667,7 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                         <button
                           class="btn ghost-hair set-kbd"
                           (click)="startCapture(cmd.id)"
-                          [style.border-color]="capturing() === cmd.id ? 'var(--accent)' : conflictOf(cmd) ? 'var(--st-blocked)' : null"
+                          [style.border-color]="capturing() === cmd.id ? 'var(--ui-focus)' : conflictOf(cmd) ? 'var(--sem-del)' : null"
                           [style.color]="cmd.kbd ? 'var(--ink)' : 'var(--ink-4)'"
                           [title]="'Click, then press the new shortcut'"
                         >{{ capturing() === cmd.id ? 'recording…' : cmd.kbd ? kbdChip(cmd.kbd) : 'unassigned' }}</button>
@@ -797,16 +797,14 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
     `
 /* ── ORCHESTRA settings — scoped by the .set- prefix (encapsulation: None) ── */
 .set-backdrop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:var(--sp-10);
-  background:rgba(4,5,9,.58);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
-[data-theme="light"] .set-backdrop{background:rgba(20,24,40,.34);}
+  background:var(--scrim);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
 
-.set-modal{--set-amber:#f5c451;--set-danger:#ff5d7a;
+.set-modal{--set-amber:var(--sem-attn);--set-danger:var(--sem-del);
   width:760px;max-width:calc(100vw - 56px);height:600px;max-height:84vh;display:flex;
   background:var(--panel);border:1px solid var(--hair-2);border-radius:15px;overflow:hidden;
-  box-shadow:var(--shadow),0 0 0 1px rgba(var(--accent-rgb),.05);
+  box-shadow:var(--shadow);
   font-family:var(--font-mono);color:var(--ink);
   transform-origin:center;animation:set-pop .22s cubic-bezier(.2,.7,.2,1);}
-[data-theme="light"] .set-modal{--set-amber:#a9700f;--set-danger:#d6304e;}
 /* transform-only entrance: if the frame is throttled and the animation freezes
    at 0%, content stays visible (just offset) instead of stuck at opacity:0 */
 @keyframes set-pop{from{transform:translateY(10px) scale(.99)}to{transform:none}}
@@ -819,8 +817,8 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   display:flex;flex-direction:column;padding:var(--sp-6) var(--sp-5);}
 .set-brand{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-2) var(--sp-4) var(--sp-6);}
 .set-brand .gi{width:var(--ctl-h);height:var(--ctl-h);border-radius:8px;display:grid;place-items:center;flex:none;
-  color:var(--accent);background:color-mix(in oklch,var(--accent),transparent 86%);
-  box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--accent),transparent 64%);}
+  color:var(--ui-ink);background:var(--ui-sel);
+  box-shadow:inset 0 0 0 1px var(--ui-sel-2);}
 .set-brand .bt{font-family:var(--font-disp);font-size:var(--fs-lg);font-weight:600;letter-spacing:-.01em;}
 .set-brand .bs{font-size:var(--fs-2xs);color:var(--ink-4);letter-spacing:.04em;}
 .set-nav-list{display:flex;flex-direction:column;gap:var(--sp-1);}
@@ -831,10 +829,10 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 .set-nav-item:hover{background:var(--panel-3);color:var(--ink-2);}
 .set-nav-item.on{background:var(--panel-3);color:var(--ink);border-color:var(--hair-2);}
 .set-nav-item svg{width:var(--sp-7);height:var(--sp-7);flex:none;color:var(--ink-4);transition:color .12s;}
-.set-nav-item:hover svg,.set-nav-item.on svg{color:var(--accent);}
+.set-nav-item:hover svg,.set-nav-item.on svg{color:var(--ui-ink);}
 .set-nav-item .lb{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .set-nav-item.on::before{content:"";position:absolute;left:-11px;top:9px;bottom:9px;width:2.5px;
-  border-radius:2px;background:linear-gradient(var(--accent),var(--accent-2));}
+  border-radius:2px;background:var(--ui-ind);}
 .set-nav-dot{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--set-amber);flex:none;
   box-shadow:0 0 7px -1px var(--set-amber);}
 
@@ -868,9 +866,8 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   padding:var(--sp-5) var(--sp-5) var(--sp-5);border-radius:11px;border:1px solid var(--hair);background:var(--panel-2);
   color:var(--ink-3);cursor:pointer;transition:all .13s;text-align:left;font-family:var(--font-mono);}
 .set-tool:hover:not(.off){border-color:var(--hair-2);color:var(--ink-2);transform:translateY(-1px);}
-.set-tool.on{color:var(--ink);border-color:color-mix(in oklch,var(--accent),transparent 42%);
-  background:color-mix(in oklch,var(--accent),transparent 88%);
-  box-shadow:0 0 18px -8px rgba(var(--accent-rgb),.7);}
+.set-tool.on{color:var(--ink);border-color:var(--ui-line);
+  background:var(--ui-sel);}
 .set-tool.off{opacity:.5;}
 .set-tool.warn{color:var(--ink);border-color:color-mix(in oklch,var(--set-amber),transparent 50%);
   background:color-mix(in oklch,var(--set-amber),transparent 90%);}
@@ -878,8 +875,7 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 .set-tool .tn{font-size:var(--fs-sm);font-weight:500;}
 .set-tool .ts{font-size:var(--fs-2xs);color:var(--ink-4);display:flex;align-items:center;gap:var(--sp-2);}
 .set-tool .pick{position:absolute;top:9px;right:9px;width:var(--sp-7);height:var(--sp-7);border-radius:50%;
-  display:grid;place-items:center;background:var(--accent);color:#06070b;}
-[data-theme="light"] .set-tool .pick{color:#fff;}
+  display:grid;place-items:center;background:var(--ui-fill);color:var(--ui-on-fill);}
 .set-tool .nf{position:absolute;top:10px;right:10px;font-size:var(--fs-3xs);letter-spacing:.08em;text-transform:uppercase;
   color:var(--ink-4);border:1px solid var(--hair);border-radius:4px;padding:1px var(--sp-2);}
 .set-tool .nf.amber{color:var(--set-amber);border-color:color-mix(in oklch,var(--set-amber),transparent 55%);}
@@ -897,12 +893,12 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 
 .set-text{display:flex;align-items:center;gap:var(--sp-4);height:var(--row-h);padding:0 var(--sp-5);background:var(--panel-2);
   border:1px solid var(--hair);border-radius:8px;min-width:0;transition:border-color .12s;}
-.set-text:focus-within{border-color:var(--accent);}
+.set-text:focus-within{border-color:var(--ui-focus);}
 .set-text input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);
   font-family:var(--font-mono);font-size:var(--fs-ui);}
 .set-text svg{width:var(--sp-6);height:var(--sp-6);color:var(--ink-4);flex:none;}
 .set-preview{display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-sm);color:var(--ink-4);margin-top:var(--sp-1);}
-.set-preview b{color:var(--accent-2);font-weight:500;}
+.set-preview b{color:var(--ink);font-weight:500;}
 .set-preview .arr{color:var(--ink-4);}
 
 .set-path{flex:1;min-width:0;display:flex;align-items:center;gap:var(--sp-4);height:var(--row-h);padding:0 var(--sp-5);
@@ -913,25 +909,25 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 
 /* ── update available card ── */
 .set-upd{display:flex;flex-direction:column;gap:var(--sp-6);padding:var(--sp-7);border-radius:12px;width:100%;
-  background:color-mix(in oklch,var(--accent),transparent 92%);
-  border:1px solid color-mix(in oklch,var(--accent),transparent 70%);}
+  background:var(--ui-sel);
+  border:1px solid var(--ui-sel-2);}
 .set-upd-top{display:flex;align-items:center;gap:var(--sp-5);}
-.set-upd-ic{width:var(--ctl-h-lg);height:var(--ctl-h-lg);border-radius:9px;flex:none;display:grid;place-items:center;color:var(--accent);
-  background:color-mix(in oklch,var(--accent),transparent 84%);
-  box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--accent),transparent 58%);}
+.set-upd-ic{width:var(--ctl-h-lg);height:var(--ctl-h-lg);border-radius:9px;flex:none;display:grid;place-items:center;color:var(--ui-ink);
+  background:var(--ui-sel);
+  box-shadow:inset 0 0 0 1px var(--ui-line);}
 .set-upd-tt{flex:1;min-width:0;}
 .set-upd-tt .u1{font-size:var(--fs-ui);color:var(--ink);font-weight:500;display:flex;align-items:center;gap:var(--sp-4);}
 .set-upd-tt .u2{font-size:var(--fs-xs);color:var(--ink-3);margin-top:var(--sp-1);font-variant-numeric:tabular-nums;}
-.set-upd-ver{font-family:var(--font-disp);font-size:var(--fs-lg);font-weight:600;color:var(--accent);letter-spacing:-.01em;}
-.set-upd-notes{display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-xs);color:var(--accent-2);
-  text-decoration:none;border-bottom:1px solid color-mix(in oklch,var(--accent-2),transparent 70%);
+.set-upd-ver{font-family:var(--font-disp);font-size:var(--fs-lg);font-weight:600;color:var(--ui-ink);letter-spacing:-.01em;}
+.set-upd-notes{display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-xs);color:var(--ui-link);
+  text-decoration:none;border-bottom:1px solid color-mix(in oklch,var(--ui-link),transparent 70%);
   padding-bottom:1px;align-self:flex-start;}
-.set-upd-notes:hover{border-color:var(--accent-2);}
+.set-upd-notes:hover{border-color:var(--ui-link);}
 .set-upd-notes svg{width:var(--sp-5);height:var(--sp-5);}
 .set-upd-act{display:flex;gap:var(--sp-4);}
 .set-upd-bar{width:100%;height:var(--sp-1);border-radius:999px;overflow:hidden;
-  background:color-mix(in oklch,var(--accent),transparent 86%);}
-.set-upd-bar i{display:block;height:100%;border-radius:999px;background:var(--accent);
+  background:var(--ui-sel);}
+.set-upd-bar i{display:block;height:100%;border-radius:999px;background:var(--ui-meter);
   transition:width .15s linear;}
 .set-upd-bar i.full{animation:set-upd-pulse 1.1s ease-in-out infinite;}
 @keyframes set-upd-pulse{0%,100%{opacity:1}50%{opacity:.55}}
@@ -947,7 +943,7 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 .set-danger-b b{color:var(--ink);font-weight:600;}
 .set-danger-act{display:flex;gap:var(--sp-4);justify-content:flex-end;}
 .set-btn-danger{display:inline-flex;align-items:center;gap:var(--sp-3);height:var(--row-h);padding:0 var(--sp-6);border-radius:7px;
-  border:none;background:var(--set-danger);color:#fff;font-family:var(--font-mono);font-size:var(--fs-sm);
+  border:none;background:var(--set-danger);color:var(--on-solid);font-family:var(--font-mono);font-size:var(--fs-sm);
   font-weight:600;cursor:pointer;transition:filter .12s;}
 .set-btn-danger:hover{filter:brightness(1.08);}
 .set-btn-danger svg{width:var(--sp-6);height:var(--sp-6);}
@@ -955,8 +951,8 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 /* ── cue preview ── */
 .set-play{width:var(--ctl-h);height:var(--ctl-h);flex:none;display:grid;place-items:center;border-radius:7px;
   border:1px solid var(--hair);background:var(--panel-2);color:var(--ink-3);cursor:pointer;transition:all .12s;}
-.set-play:hover{color:var(--accent);border-color:color-mix(in oklch,var(--accent),transparent 50%);
-  background:color-mix(in oklch,var(--accent),transparent 90%);}
+.set-play:hover{color:var(--ui-ink);border-color:var(--ui-line);
+  background:var(--ui-sel);}
 .set-play svg{width:var(--sp-5);height:var(--sp-5);}
 
 /* ── slider (volume) ── */
@@ -964,8 +960,8 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 .set-slider{appearance:none;-webkit-appearance:none;width:128px;height:4px;border-radius:999px;
   background:var(--hair-2);outline:none;cursor:pointer;}
 .set-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;
-  background:var(--accent);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--hair-2);cursor:pointer;}
-.set-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);
+  background:var(--ui-fill);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--hair-2);cursor:pointer;}
+.set-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ui-fill);
   border:2px solid var(--panel);box-shadow:0 0 0 1px var(--hair-2);cursor:pointer;}
 
 /* ── footer ── */
@@ -975,14 +971,13 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 .set-foot .fd{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--st-done);flex:none;}
 .set-foot .reset-all{display:inline-flex;align-items:center;gap:var(--sp-2);background:transparent;border:none;
   color:var(--ink-3);font-family:var(--font-mono);font-size:var(--fs-xs);cursor:pointer;padding:0;}
-.set-foot .reset-all:hover{color:var(--accent);}
+.set-foot .reset-all:hover{color:var(--ui-ink);}
 .set-foot .reset-all svg{width:var(--sp-5);height:var(--sp-5);}
 .set-foot .sp{flex:1;}
 .set-done{display:inline-flex;align-items:center;gap:var(--sp-3);height:var(--ctl-h);padding:0 var(--sp-6);border-radius:7px;
-  border:none;font-family:var(--font-mono);font-size:var(--fs-sm);font-weight:600;cursor:pointer;color:#06070b;
-  background:linear-gradient(180deg,var(--accent),color-mix(in oklch,var(--accent),#000 14%));
-  box-shadow:0 0 18px -7px rgba(var(--accent-rgb),.7);}
-[data-theme="light"] .set-done{color:#fff;}
+  border:none;font-family:var(--font-mono);font-size:var(--fs-sm);font-weight:600;cursor:pointer;color:var(--ui-on-fill);
+  background:var(--ui-fill);
+  }
 .set-done:hover{filter:brightness(1.07);}
     `,
   ],

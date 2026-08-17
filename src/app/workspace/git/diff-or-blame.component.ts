@@ -55,11 +55,11 @@ import { CodeDiffComponent } from "../code-diff.component";
           [style.padding]="'var(--sp-1) var(--sp-4)'"
           [style.font-size]="'var(--fs-xs)'"
           [style.color]="blame() ? 'var(--ink)' : 'var(--ink-3)'"
-          [style.background]="blame() ? 'color-mix(in oklch, var(--accent), transparent 86%)' : 'transparent'"
-          [style.border]="'1px solid ' + (blame() ? 'color-mix(in oklch, var(--accent), transparent 60%)' : 'var(--hair)')"
+          [style.background]="blame() ? 'var(--ui-sel)' : 'transparent'"
+          [style.border]="'1px solid ' + (blame() ? 'var(--ui-sel-2)' : 'var(--hair)')"
           style="margin-left:auto;gap:var(--sp-2);border-radius:var(--r-sm)"
         >
-          <app-icon name="git" size="sm" [px]="12" [color]="blame() ? 'var(--accent)' : null" />
+          <app-icon name="git" size="sm" [px]="12" [color]="blame() ? 'var(--ui-ink)' : null" />
           Annotate
         </button>
 

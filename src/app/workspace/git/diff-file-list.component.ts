@@ -110,7 +110,7 @@ function buildTree(files: CommitFile[]): TreeNode[] {
             [style.box-shadow]="treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
             style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
           >
-            <app-icon name="graph" size="sm" [px]="12" [color]="treeMode() ? 'var(--accent)' : null" />Tree
+            <app-icon name="graph" size="sm" [px]="12" [color]="treeMode() ? 'var(--ui-ink)' : null" />Tree
           </button>
           <button
             class="btn"
@@ -121,7 +121,7 @@ function buildTree(files: CommitFile[]): TreeNode[] {
             [style.box-shadow]="!treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
             style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
           >
-            <app-icon name="dots" size="sm" [px]="12" [color]="!treeMode() ? 'var(--accent)' : null" />Flat
+            <app-icon name="dots" size="sm" [px]="12" [color]="!treeMode() ? 'var(--ui-ink)' : null" />Flat
           </button>
         </div>
       </div>
@@ -300,7 +300,7 @@ function buildTree(files: CommitFile[]): TreeNode[] {
         outline: none;
       }
       .dfl-input:focus {
-        border-color: color-mix(in oklch, var(--accent), transparent 50%);
+        border-color: var(--ui-focus);
       }
       .dfl-row {
         display: flex;

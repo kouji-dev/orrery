@@ -51,7 +51,7 @@ const LIST_DEFAULT = 236;
               [style.color]="treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
               [style.box-shadow]="treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
               style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
-            ><app-icon name="graph" size="sm" [px]="12" [color]="treeMode() ? 'var(--accent)' : null" />Tree</button>
+            ><app-icon name="graph" size="sm" [px]="12" [color]="treeMode() ? 'var(--ui-ink)' : null" />Tree</button>
             <button
               class="btn"
               (click)="treeMode.set(false)"
@@ -60,7 +60,7 @@ const LIST_DEFAULT = 236;
               [style.color]="!treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
               [style.box-shadow]="!treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
               style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
-            ><app-icon name="dots" size="sm" [px]="12" [color]="!treeMode() ? 'var(--accent)' : null" />Flat</button>
+            ><app-icon name="dots" size="sm" [px]="12" [color]="!treeMode() ? 'var(--ui-ink)' : null" />Flat</button>
           </div>
           <button class="btn" (click)="refresh()" title="Rescan changes" style="padding:var(--sp-1);border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
         </div>
@@ -110,7 +110,7 @@ const LIST_DEFAULT = 236;
               <div style="flex:1;min-width:0">
                 <div style="font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fname(f.path) }}</div>
                 @if (f.state === 'R' && f.oldPath) {
-                  <div [title]="'renamed from ' + f.oldPath" style="font-size:var(--fs-2xs);color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">← {{ f.oldPath }}</div>
+                  <div [title]="'renamed from ' + f.oldPath" style="font-size:var(--fs-2xs);color:var(--vcs-renamed);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">← {{ f.oldPath }}</div>
                 } @else if (fdir(f.path)) {
                   <div style="font-size:var(--fs-2xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(f.path) }}</div>
                 }
@@ -164,11 +164,11 @@ const LIST_DEFAULT = 236;
               (click)="annotate.set(!annotate())"
               title="Annotate — show who last changed each line on both sides"
               [style.color]="annotate() ? 'var(--ink)' : 'var(--ink-3)'"
-              [style.background]="annotate() ? 'color-mix(in oklch, var(--accent), transparent 86%)' : 'transparent'"
-              [style.border]="'1px solid ' + (annotate() ? 'color-mix(in oklch, var(--accent), transparent 60%)' : 'var(--hair)')"
+              [style.background]="annotate() ? 'var(--ui-sel)' : 'transparent'"
+              [style.border]="'1px solid ' + (annotate() ? 'var(--ui-sel-2)' : 'var(--hair)')"
               style="align-self:flex-start;padding:var(--sp-1) var(--sp-4);gap:var(--sp-2);border-radius:var(--r-sm);font-size:var(--fs-xs)"
             >
-              <app-icon name="git" size="sm" [px]="12" [color]="annotate() ? 'var(--accent)' : null" />
+              <app-icon name="git" size="sm" [px]="12" [color]="annotate() ? 'var(--ui-ink)' : null" />
               Annotate
             </button>
           }
@@ -270,8 +270,8 @@ const LIST_DEFAULT = 236;
       }
       .diff-resizer:hover .grip,
       .diff-grid.resizing .diff-resizer .grip {
-        background: var(--accent);
-        box-shadow: 0 0 8px -1px rgba(var(--accent-rgb), 0.7);
+        background: var(--ui-fill);
+        box-shadow: 0 0 0 1px var(--ui-sel);
       }
 
       /* ----- diff header ----- */
@@ -298,9 +298,9 @@ const LIST_DEFAULT = 236;
         min-width: 0;
       }
       .hunk {
-        color: var(--accent-2);
-        background: color-mix(in oklch, var(--accent-2), transparent 88%);
-        border: 1px solid color-mix(in oklch, var(--accent-2), transparent 70%);
+        color: var(--ink-2);
+        background: var(--side-a);
+        border: 1px solid var(--hair);
         border-radius: var(--r-sm);
         padding: 1px var(--sp-3);
         white-space: nowrap;
@@ -552,21 +552,21 @@ export class DiffViewComponent {
 
   stateInk(state: string): string {
     return state === "A"
-      ? "var(--code-add-ink)"
+      ? "var(--vcs-added)"
       : state === "D"
-        ? "var(--code-del-ink)"
+        ? "var(--vcs-deleted)"
         : state === "R"
-          ? "var(--accent)"
-          : "var(--accent-2)";
+          ? "var(--vcs-renamed)"
+          : "var(--vcs-modified)";
   }
   stateBg(state: string): string {
     return state === "A"
-      ? "var(--code-add-bg)"
+      ? mix("var(--vcs-added)", 88)
       : state === "D"
-        ? "var(--code-del-bg)"
+        ? "transparent"
         : state === "R"
-          ? mix("var(--accent)", 86)
-          : mix("var(--accent-2)", 86);
+          ? mix("var(--vcs-renamed)", 88)
+          : mix("var(--vcs-modified)", 88);
   }
 }
 

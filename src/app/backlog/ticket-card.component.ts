@@ -93,7 +93,7 @@ function plainText(html: string | null | undefined): string {
         } @else {
           <div
             (click)="dispatch($event, tk)"
-            style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-radius:var(--r-md);cursor:pointer;border:1px dashed color-mix(in oklch,var(--accent),transparent 55%);color:var(--accent);font-size:var(--fs-sm)"
+            style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-radius:var(--r-md);cursor:pointer;border:1px dashed var(--ui-line);color:var(--ui-ink);font-size:var(--fs-sm)"
           >
             <app-icon name="bolt" size="sm" />No agent yet — dispatch one
           </div>
@@ -110,8 +110,8 @@ function plainText(html: string | null | undefined): string {
           <button
             (click)="dispatch($event, tk)"
             [class]="'btn ' + (hovered() ? 'primary' : 'ghost-hair')"
-            [style.color]="hovered() ? null : 'var(--accent)'"
-            [style.border-color]="hovered() ? null : 'color-mix(in oklch,var(--accent),transparent 55%)'"
+            [style.color]="hovered() ? null : 'var(--ui-ink)'"
+            [style.border-color]="hovered() ? null : 'var(--ui-line)'"
             style="margin-left:auto;flex:none;padding:var(--sp-2) var(--sp-5);font-size:var(--fs-sm)"
           >
             <app-icon name="bolt" size="sm" />Dispatch
@@ -183,7 +183,7 @@ export class TicketCardComponent {
 
   cardBorderLeft(st: string): string {
     if (st === "inprogress")
-      return "2px solid color-mix(in oklch,var(--accent),transparent 35%)";
+      return "2px solid var(--ui-line)";
     return this.cardBorder(st);
   }
 

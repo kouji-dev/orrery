@@ -84,10 +84,10 @@ import { RELEASES_URL } from "../shared/links";
         background: rgba(4, 5, 9, 0.6); backdrop-filter: blur(5px);
       }
       .wn-modal {
-        --feat: #22d3ee; --fix: #34e0a1; --perf: #c084fc; --refactor: #a855f7; --chore: #8b94a8;
+        --feat: var(--sem-change); --fix: var(--sem-add); --perf: var(--lane-1); --refactor: var(--ui-ink); --chore: var(--ink-3);
         width: 544px; max-width: calc(100vw - 48px); max-height: 86vh; display: flex; flex-direction: column;
         background: var(--panel); border: 1px solid var(--hair-2); border-radius: var(--r-lg); overflow: hidden;
-        box-shadow: var(--shadow); color: var(--ink); font-family: var(--font-mono);
+        box-shadow: var(--shadow); color: var(--ink); font-family: var(--font-ui);
       }
       .wn-hero {
         position: relative; flex: none; padding: var(--sp-7) var(--sp-7) var(--sp-6);
@@ -95,11 +95,11 @@ import { RELEASES_URL } from "../shared/links";
       }
       .wn-hero::before {
         content: ""; position: absolute; inset: 0; pointer-events: none;
-        background: radial-gradient(120% 92% at 16% -16%, color-mix(in oklch, var(--accent), transparent 80%), transparent 66%);
+        background: radial-gradient(120% 92% at 16% -16%, var(--ui-sel), transparent 66%);
       }
       .wn-hero::after {
         content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
-        background: linear-gradient(90deg, var(--accent-2), var(--accent)); opacity: 0.85;
+        background: linear-gradient(90deg, var(--brand-1), var(--brand-2), var(--brand-3)); opacity: 0.85;
       }
       .wn-x {
         position: absolute; top: var(--sp-5); right: var(--sp-5); width: 28px; height: 28px; border-radius: var(--r-sm);
@@ -110,14 +110,14 @@ import { RELEASES_URL } from "../shared/links";
         position: relative; display: inline-flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-2xs);
         letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3);
       }
-      .wn-eyebrow .d { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); }
+      .wn-eyebrow .d { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-2); }
       .wn-h1 { position: relative; font-family: var(--font-disp); font-weight: 600; font-size: var(--fs-xl); letter-spacing: -0.02em; margin-top: var(--sp-3); }
       .wn-verline { position: relative; display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-4); }
-      .wn-ver { font-family: var(--font-disp); font-weight: 600; font-size: var(--fs-md); color: var(--accent); }
+      .wn-ver { font-family: var(--font-disp); font-weight: 600; font-size: var(--fs-md); color: var(--ui-ink); }
       .wn-badge {
         font-size: var(--fs-3xs); font-weight: 700; letter-spacing: 0.12em; padding: 2px 7px; border-radius: 999px;
-        color: var(--accent-2); border: 1px solid color-mix(in oklch, var(--accent-2), transparent 56%);
-        background: color-mix(in oklch, var(--accent-2), transparent 88%);
+        color: var(--sem-attn); border: 1px solid color-mix(in oklch, var(--sem-attn), transparent 56%);
+        background: color-mix(in oklch, var(--sem-attn), transparent 88%);
       }
       .wn-from { font-size: var(--fs-xs); color: var(--ink-4); }
       .wn-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--sp-7) var(--sp-5); }
@@ -148,7 +148,7 @@ import { RELEASES_URL } from "../shared/links";
       .wn-type.refactor { color: var(--refactor); background: color-mix(in oklch, var(--refactor), transparent 84%); }
       .wn-type.chore { color: var(--chore); background: color-mix(in oklch, var(--chore), transparent 84%); }
       .wn-msg { font-size: var(--fs-sm); line-height: 1.5; color: var(--ink); }
-      .wn-msg .scope { color: var(--accent); }
+      .wn-msg .scope { color: var(--ui-ink); }
       .wn-msg .by { color: var(--ink-4); margin-left: var(--sp-3); font-size: var(--fs-xs); }
 
       .wn-foot {
@@ -159,7 +159,7 @@ import { RELEASES_URL } from "../shared/links";
         display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); color: var(--ink-3);
         background: transparent; border: none; cursor: pointer;
       }
-      .wn-link:hover { color: var(--accent-2); }
+      .wn-link:hover { color: var(--ui-link); }
       .wn-link svg { width: var(--sp-5); height: var(--sp-5); }
       .wn-sp { flex: 1; }
     `,
