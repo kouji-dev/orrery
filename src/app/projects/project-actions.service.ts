@@ -9,6 +9,12 @@ export interface AddProjectRequest {
   icon: string;
   color: string;
   gitInit: boolean;
+  /** clone source — forwarded as-is; the backend decides what happens */
+  sourceUrl?: string;
+  /** "root" → clone into path/<repo-name>; "project" → path IS the project ("." clone) */
+  sourceMode?: "root" | "project";
+  /** shallow-clone depth (only the default branch); omit for full history */
+  depth?: number;
 }
 
 /**
@@ -37,6 +43,7 @@ export class ProjectActionsService {
   }
 
   addProject(req: AddProjectRequest) {
+    if (req.sourceUrl) this.ui.flash("cloning " + req.sourceUrl + "…");
     void this.projectsStore
       .create({
         name: req.name,
@@ -44,6 +51,9 @@ export class ProjectActionsService {
         icon: req.icon,
         color: req.color,
         withGit: req.gitInit,
+        sourceUrl: req.sourceUrl,
+        sourceMode: req.sourceMode,
+        depth: req.depth,
       })
       .then((p) => this.ui.flash("added project " + p.name))
       .catch((e: { kind?: string; message?: string }) =>

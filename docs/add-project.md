@@ -2,7 +2,8 @@
 
 **Context.** The add‑project dialog registers a new git repository. It captures a working
 directory, detects whether a `.git` already exists (offering `git init` otherwise), and lets the
-user pick an icon and accent color.
+user pick an icon and accent color. A second source — "From Git URL" — clones a remote
+(e.g. a GitHub link) instead of registering a local folder.
 
 Source: `modals/add-project-modal.component.ts`, `orchestra.store.ts` (`addProject`).
 
@@ -30,6 +31,18 @@ Source: `modals/add-project-modal.component.ts`, `orchestra.store.ts` (`addProje
 - [x] Icon picker (8 presets) with selected highlight
 - [x] Color picker (7 presets) as swatches with selected ring/glow
 - [x] Selected icon tinted with the selected color
+
+## From Git URL (clone source)
+
+- [x] Source toggle at the top of the dialog: "Local folder" / "From Git URL"
+- [x] Repository URL field (https or ssh); project name derived from the repo name
+- [x] "Clone into" destination folder with Browse…
+- [x] Path mode — "Use path as root": clone lands in `<path>/<repo-name>`
+- [x] Path mode — "Use path as the project": repo content lands directly in `<path>` (the `git clone <url> .` shape); destination must be absent or empty
+- [x] Shallow clone toggle (default on): `--depth 1` fetches only the default branch at its tip
+- [x] Live "clones to →" destination preview
+- [x] Same `project_create` command carries optional `sourceUrl` / `sourceMode` / `depth` — the frontend never knows whether the backend cloned or registered locally
+- [x] Clone shells out to the git CLI so the OS credential helper can auth private remotes
 
 ## Submit
 
