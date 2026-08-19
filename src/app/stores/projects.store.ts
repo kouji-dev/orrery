@@ -43,6 +43,12 @@ export class ProjectsStore {
     icon: string;
     color: string;
     withGit: boolean;
+    /** clone source — when set the backend clones instead of registering a local folder */
+    sourceUrl?: string;
+    /** how `path` is read when cloning: "root" → path/<repo-name>, "project" → path itself */
+    sourceMode?: "root" | "project";
+    /** shallow-clone depth (only the default branch); omit for full history */
+    depth?: number;
   }): Promise<Project> {
     // backend persists + emits project://created → facade upserts. Returned for the caller's toast.
     return this.bridge.invoke<Project>(Commands.ProjectCreate, { req });

@@ -13,7 +13,7 @@ pub fn project_list(svc: State<'_, ProjectService>) -> AppResult<Vec<Project>> {
     crate::perf::timed("project_list", || svc.list())
 }
 
-/// Blocking pool: may git-init / inspect the repo on disk.
+/// Blocking pool: may clone a remote (network) / git-init / inspect the repo on disk.
 #[tauri::command]
 pub async fn project_create<R: Runtime>(
     app: AppHandle<R>,

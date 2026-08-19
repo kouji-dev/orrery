@@ -59,6 +59,29 @@ pub struct ProjectCreateRequest {
     pub color: String,
     /// init a repo at create time if the path isn't already one (request-only, never persisted)
     pub with_git: bool,
+    /// clone source: when set, the project is created by cloning this remote
+    /// instead of registering a local folder — `path` becomes the clone
+    /// destination, interpreted per `source_mode`
+    #[serde(default)]
+    pub source_url: Option<String>,
+    /// how `path` is read when cloning (absent → `Root`)
+    #[serde(default)]
+    pub source_mode: Option<ClonePathMode>,
+    /// shallow-clone depth; `Some(n)` fetches only the default branch at depth
+    /// n (`--depth` implies `--single-branch`), `None` clones full history
+    #[serde(default)]
+    pub depth: Option<u32>,
+}
+
+/// How the destination path of a clone is interpreted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ClonePathMode {
+    /// `path` is a parent folder — the clone lands in `path/<repo-name>`.
+    Root,
+    /// `path` IS the project folder — the repo content lands directly in it
+    /// (the `git clone <url> .` shape).
+    Project,
 }
 
 /// Partial update — only the provided fields are written.

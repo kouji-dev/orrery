@@ -44,6 +44,99 @@ import { mix } from "../utils";
         </div>
 
         <div style="padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-7)">
+          <!-- source: local folder vs remote clone -->
+          <div style="display:flex;gap:var(--sp-3);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:var(--sp-2)">
+            @for (s of sources; track s.key) {
+              <button
+                class="btn"
+                (click)="source.set(s.key)"
+                [style.background]="source() === s.key ? 'var(--ui-sel)' : 'transparent'"
+                [style.border]="'1px solid ' + (source() === s.key ? 'var(--ui-focus)' : 'transparent')"
+                style="flex:1;justify-content:center;border-radius:var(--r-sm);padding:var(--sp-4)"
+              >
+                <app-icon [name]="s.icon" size="sm" [color]="source() === s.key ? 'var(--ink)' : 'var(--ink-3)'" />{{ s.label }}
+              </button>
+            }
+          </div>
+
+          @if (source() === 'git') {
+            <!-- repository url -->
+            <div>
+              <label class="field-label">Repository URL</label>
+              <div style="display:flex;align-items:center;gap:var(--sp-4);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:0 var(--sp-5)">
+                <app-icon name="git" size="sm" color="var(--ink-4)" />
+                <input
+                  #urlEl
+                  [value]="url()"
+                  (input)="url.set($any($event.target).value)"
+                  placeholder="https://github.com/user/repo.git"
+                  style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:var(--sp-5) 0;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui)"
+                />
+              </div>
+            </div>
+
+            <!-- destination folder -->
+            <div>
+              <label class="field-label">Clone into</label>
+              <div style="display:flex;gap:var(--sp-4)">
+                <div style="flex:1;display:flex;align-items:center;gap:var(--sp-4);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:0 var(--sp-5)">
+                  <app-icon name="folder" size="sm" color="var(--ink-4)" />
+                  <input
+                    [value]="dir()"
+                    (input)="dir.set($any($event.target).value)"
+                    placeholder="~/code"
+                    style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:var(--sp-5) 0;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui)"
+                  />
+                </div>
+                <button class="btn ghost-hair" (click)="browse()"><app-icon name="folderOpen" size="sm" />Browse…</button>
+              </div>
+              @if (destination()) {
+                <div style="font-size:var(--fs-xs);color:var(--ink-4);margin-top:var(--sp-3)">clones to → <span style="color:var(--ink-2);font-family:var(--font-mono)">{{ destination() }}</span></div>
+              }
+            </div>
+
+            <!-- how the path is used -->
+            <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
+              @for (m of cloneModes; track m.key) {
+                <div
+                  (click)="cloneMode.set(m.key)"
+                  style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-6);border-radius:var(--r-md);cursor:pointer;background:var(--panel-2)"
+                  [style.border]="'1px solid ' + (cloneMode() === m.key ? 'var(--ui-focus)' : 'var(--hair)')"
+                >
+                  <span
+                    [style.border]="'1px solid ' + (cloneMode() === m.key ? 'var(--ui-focus)' : 'var(--hair-2)')"
+                    [style.background]="cloneMode() === m.key ? 'var(--ui-fill)' : 'transparent'"
+                    style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:50%;display:grid;place-items:center"
+                  >
+                    @if (cloneMode() === m.key) { <app-icon name="check" size="sm" [px]="11" color="var(--ui-on-fill)" /> }
+                  </span>
+                  <div style="flex:1">
+                    <div style="font-size:var(--fs-sm);color:var(--ink)">{{ m.label }}</div>
+                    <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">{{ m.hint }}</div>
+                  </div>
+                </div>
+              }
+            </div>
+
+            <!-- shallow clone -->
+            <div
+              (click)="shallow.set(!shallow())"
+              style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-6);border-radius:var(--r-md);cursor:pointer;background:var(--panel-2);border:1px solid var(--hair)"
+            >
+              <span
+                [style.border]="'1px solid ' + (shallow() ? 'var(--ui-focus)' : 'var(--hair-2)')"
+                [style.background]="shallow() ? 'var(--ui-fill)' : 'transparent'"
+                style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:4px;display:grid;place-items:center"
+              >
+                @if (shallow()) { <app-icon name="check" size="sm" [px]="11" color="var(--ui-on-fill)" /> }
+              </span>
+              <div style="flex:1">
+                <div style="font-size:var(--fs-sm);color:var(--ink)">Shallow clone (depth 1)</div>
+                <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">fetches only the default branch at its tip — fastest</div>
+              </div>
+              <app-icon name="bolt" size="sm" color="var(--ui-ink)" />
+            </div>
+          } @else {
           <!-- working directory -->
           <div>
             <label class="field-label">Working directory</label>
@@ -100,6 +193,7 @@ import { mix } from "../utils";
               <app-icon name="bolt" size="sm" color="var(--ui-ink)" />
             </div>
           }
+          }
 
           <!-- icon -->
           <div>
@@ -138,7 +232,7 @@ import { mix } from "../utils";
 
         <div style="padding:var(--sp-6) var(--sp-7);border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:var(--sp-4)">
           <button class="btn ghost-hair" (click)="ui.closeAddProject()">Cancel</button>
-          <button class="btn primary" [disabled]="!dir().trim()" (click)="submit()"><app-icon name="plus" size="sm" />Add project</button>
+          <button class="btn primary" [disabled]="!canSubmit()" (click)="submit()"><app-icon name="plus" size="sm" />Add project</button>
         </div>
       </div>
     </div>
@@ -153,15 +247,58 @@ export class AddProjectModalComponent implements AfterViewInit {
   readonly colors = PROJECT_COLORS;
   readonly mix = mix;
 
+  readonly sources = [
+    { key: "local" as const, label: "Local folder", icon: "folder" },
+    { key: "git" as const, label: "From Git URL", icon: "git" },
+  ];
+  readonly cloneModes = [
+    {
+      key: "root" as const,
+      label: "Use path as root",
+      hint: "the clone lands in a repo-named subfolder",
+    },
+    {
+      key: "project" as const,
+      label: "Use path as the project",
+      hint: 'repo content lands directly in this folder (clone into ".")',
+    },
+  ];
+
   readonly dir = signal("");
   readonly icon = signal(PROJECT_ICONS[0]);
   readonly color = signal(PROJECT_COLORS[0]);
   readonly gitInit = signal(true);
+  readonly source = signal<"local" | "git">("local");
+  readonly url = signal("");
+  readonly cloneMode = signal<"root" | "project">("root");
+  readonly shallow = signal(true);
 
-  readonly name = computed(() => {
+  /** Last URL path segment, ".git" stripped — mirrors the backend derivation. */
+  readonly repoName = computed(() => {
+    const u = this.url().trim().replace(/\/+$/, "");
+    const last = u.split(/[/:]/).pop() || "";
+    return last.replace(/\.git$/, "");
+  });
+  private readonly dirName = computed(() => {
     const d = this.dir().replace(/[/\\]+$/, "");
     return d ? d.split(/[/\\]/).pop() || "" : "";
   });
+  readonly name = computed(() =>
+    this.source() === "git" && this.cloneMode() === "root" ? this.repoName() : this.dirName(),
+  );
+  /** Where the repo content will land, previewed under the destination field. */
+  readonly destination = computed(() => {
+    const d = this.dir().trim().replace(/[/\\]+$/, "");
+    if (!d) return "";
+    if (this.cloneMode() === "project") return d;
+    const sep = d.includes("\\") ? "\\" : "/";
+    return this.repoName() ? d + sep + this.repoName() : "";
+  });
+  readonly canSubmit = computed(() =>
+    this.source() === "git"
+      ? !!this.url().trim() && !!this.destination()
+      : !!this.dir().trim(),
+  );
   readonly detectedGit = signal(false);
 
   private dirEl = viewChild<ElementRef<HTMLInputElement>>("dirEl");
@@ -169,7 +306,7 @@ export class AddProjectModalComponent implements AfterViewInit {
   constructor() {
     effect(() => {
       const d = this.dir().trim();
-      if (!d) {
+      if (!d || this.source() !== "local") {
         this.detectedGit.set(false);
         this.gitInit.set(true);
         return;
@@ -194,14 +331,18 @@ export class AddProjectModalComponent implements AfterViewInit {
   }
 
   submit() {
-    const path = this.dir().trim();
-    if (!path) return;
+    if (!this.canSubmit()) return;
+    const git = this.source() === "git";
     this.projectActions.addProject({
-      path,
+      path: this.dir().trim(),
       name: this.name(),
       icon: this.icon(),
       color: this.color(),
       gitInit: this.gitInit(),
+      // clone params ride along; the backend decides what to do with them
+      sourceUrl: git ? this.url().trim() : undefined,
+      sourceMode: git ? this.cloneMode() : undefined,
+      depth: git && this.shallow() ? 1 : undefined,
     });
   }
 }

@@ -1455,6 +1455,31 @@ impl GitService {
     /// helper handles auth — the one place we shell out instead of using git2,
     /// because libgit2 push needs manual credential callbacks). Errors carry git's
     /// stderr.
+    /// Clone `url` into `target` (git creates the folder; it must be absent or
+    /// empty). `depth: Some(n)` makes a shallow clone — git then also fetches
+    /// only the remote's default branch (`--depth` implies `--single-branch`).
+    /// CLI shell-out so the OS credential helper can authenticate private
+    /// remotes — the same pattern as `push`.
+    pub fn clone_repo(&self, url: &str, target: &Path, depth: Option<u32>) -> AppResult<()> {
+        let mut cmd = crate::core::proc::cmd("git");
+        cmd.arg("clone");
+        if let Some(d) = depth {
+            cmd.arg("--depth").arg(d.to_string());
+        }
+        cmd.arg(url).arg(target);
+        let out = cmd
+            .output()
+            .map_err(|e| AppError::Other(format!("git clone: {e}")))?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(AppError::Other(format!(
+                "git clone failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            )))
+        }
+    }
+
     pub fn push(&self, worktree: &Path, remote: &str, branch: &str) -> AppResult<()> {
         let mut cmd = crate::core::proc::cmd("git");
         cmd.current_dir(worktree)
