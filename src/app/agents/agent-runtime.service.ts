@@ -225,14 +225,20 @@ export class AgentRuntimeService {
 
   /** When settings `autoResume` is on, relaunch the agents the backend captured
    *  as running at the last shutdown (a ONE-SHOT drain — a frontend reload can't
-   *  double-launch), continuing each agent's recorded CLI session. */
+   *  double-launch), continuing each agent's recorded CLI session.
+   *
+   *  An update relaunch ("Install & relaunch") always resumes, setting or not:
+   *  the user didn't choose to stop those terminals, the updater did. Its ids
+   *  come from the drained update-resume list (UiStore), NOT from the backend —
+   *  the update path exits gracefully, so InterruptedAgents stays empty. */
   private async autoResume(): Promise<void> {
     try {
       const s = await this.settings.ready();
-      if (!s.autoResume) return;
+      const updateIds = this.ui.updateResumeIds ?? [];
+      if (!s.autoResume && !updateIds.length) return;
       await this.agentsStore.ready();
-      const ids = await this.agentsStore.interrupted();
-      for (const id of ids) {
+      const interrupted = s.autoResume ? await this.agentsStore.interrupted() : [];
+      for (const id of new Set([...interrupted, ...updateIds])) {
         const ag = this.agentsStore.all().find((a) => a.id === id);
         // Only a captured session can be CONTINUED — relaunching a session-less
         // agent would restart its task from scratch, which resume never promises.

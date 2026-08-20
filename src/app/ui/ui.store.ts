@@ -10,8 +10,10 @@ import {
   PaneNode,
   PaneView,
   setAgentView,
+  syncPaneSeq,
   treeAgentIds,
 } from "../workspace/pane-model";
+import { drainUpdateResume } from "../updater/update-restore";
 
 const TWEAK_DEFAULTS: Tweaks = {
   theme: "dark",
@@ -20,6 +22,28 @@ const TWEAK_DEFAULTS: Tweaks = {
   rightPanel: true,
   motion: true,
 };
+
+// The workspace layout (tabs + pane trees), persisted on every change and
+// restored on every launch — a quit, crash, or update relaunch all come back
+// to the same tabs. Terminal PANES reopen with this; whether their CLI
+// sessions CONTINUE is decided separately (autoResume / update resume list).
+const WORKSPACE_KEY = "orrery.workspace";
+interface WorkspaceState {
+  v: 1;
+  tabs: Tab[];
+  activeTab: string;
+  scopeAgentId: string | null;
+  paneRoots: Record<string, PaneNode>;
+}
+function loadWorkspace(): WorkspaceState | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(WORKSPACE_KEY) || "null") as WorkspaceState | null;
+    if (s?.v !== 1 || !Array.isArray(s.tabs) || !s.tabs.length || !s.paneRoots) return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
 
 const TWEAKS_KEY = "orrery.tweaks";
 function loadTweaks(): Tweaks {
@@ -68,6 +92,17 @@ export class UiStore {
     if (view) this.openAgent(agentId, "diff");
   }
 
+  // Selected file in the agent's working-tree diff, per agent. Lives here (not
+  // in DiffViewComponent) because the pane destroys the diff view on every tab
+  // switch — component-local selection would reset to the first changed file.
+  private readonly diffSelections = signal<Record<string, string | null>>({});
+  diffSelectionFor(agentId: string): string | null {
+    return this.diffSelections()[agentId] ?? null;
+  }
+  setDiffSelection(agentId: string, path: string | null): void {
+    this.diffSelections.update((m) => ({ ...m, [agentId]: path }));
+  }
+
   private tabSeq = 0;
   private newTabId(): string {
     return "tab" + ++this.tabSeq;
@@ -102,7 +137,41 @@ export class UiStore {
 
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** Agents whose terminals were live when "Install & relaunch" ran —
+   *  AgentRuntimeService continues their sessions on this launch (one-shot). */
+  readonly updateResumeIds: string[] = drainUpdateResume();
+
   constructor() {
+    // Restore the last workspace layout (persisted continuously below), so any
+    // restart — quit, crash, or update relaunch — reopens the same tabs.
+    const ws = loadWorkspace();
+    if (ws) {
+      this.tabs.set(ws.tabs);
+      this.paneRoots.set(ws.paneRoots);
+      if (ws.tabs.some((t) => t.id === ws.activeTab)) this.activeTab.set(ws.activeTab);
+      this.scopeAgentId.set(ws.scopeAgentId);
+      // fresh ids must not collide with restored "tabN"/"paneN" ids
+      for (const t of ws.tabs) {
+        const m = /^tab(\d+)$/.exec(t.id);
+        if (m) this.tabSeq = Math.max(this.tabSeq, Number(m[1]));
+      }
+      syncPaneSeq(Object.values(ws.paneRoots));
+    }
+    // persist the layout on every change (same pattern as tweaks below)
+    effect(() => {
+      const state: WorkspaceState = {
+        v: 1,
+        tabs: this.tabs(),
+        activeTab: this.activeTab(),
+        scopeAgentId: this.scopeAgentId(),
+        paneRoots: this.paneRoots(),
+      };
+      try {
+        localStorage.setItem(WORKSPACE_KEY, JSON.stringify(state));
+      } catch {
+        /* storage unavailable — ignore */
+      }
+    });
     // reflect tweaks onto <html>; the accent is fixed by the design tokens
     effect(() => {
       const t = this.tweaks();

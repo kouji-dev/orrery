@@ -2,7 +2,9 @@ import { computed, inject, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS } from "../data";
 import { BRIDGE, Commands, Events } from "../data-source/bridge";
 import { AutoApprovePolicy, Settings, SettingsEvents, UpdateInfo } from "../models";
+import { AgentsStore } from "../stores/agents.store";
 import { UiStore } from "../ui/ui.store";
+import { clearUpdateResume, saveUpdateResume } from "../updater/update-restore";
 
 export type SettingsSection = "updates" | "agent" | "keymap" | "perms" | "notif";
 
@@ -102,6 +104,7 @@ function deepEq(a: unknown, b: unknown): boolean {
 export class SettingsStore {
   private readonly bridge = inject(BRIDGE);
   private readonly ui = inject(UiStore);
+  private readonly agentsStore = inject(AgentsStore);
 
   private readonly defaults = settingsDefaults();
   readonly settings = signal<Settings>(settingsDefaults());
@@ -279,6 +282,17 @@ export class SettingsStore {
     this.installProgress.set(0);
     this.installPhase.set("downloading");
     this.flush(); // the installer may exit the process — persist edits first
+    // Tabs reopen by themselves (UiStore persists the layout continuously),
+    // but the relaunch must also CONTINUE the running terminals' CLI sessions.
+    // The graceful exit path resets running flags, so the crash-only
+    // InterruptedAgents mechanism can't cover an update restart — record the
+    // live agents here instead (drained one-shot on the next launch).
+    saveUpdateResume(
+      this.agentsStore
+        .all()
+        .filter((a) => a.status === "running")
+        .map((a) => a.id),
+    );
     const subs: (() => void)[] = [];
     try {
       subs.push(
@@ -300,6 +314,7 @@ export class SettingsStore {
       this.ui.flash("update install failed");
       this.installing.set(false);
       this.installPhase.set(null);
+      clearUpdateResume(); // no relaunch happened — don't resume on a later boot
     } finally {
       // On success the process exits before this runs; on failure it unhooks.
       subs.forEach((off) => off());
