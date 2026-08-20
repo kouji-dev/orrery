@@ -16,7 +16,7 @@ import { ProjectActionsService } from "../projects/project-actions.service";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
-import { fileDir, fileName, fileStateLabel, langId, langTag, mix } from "../utils";
+import { fileDir, fileName, fileStateLabel, isMarkdownPath, langId, langTag, mix } from "../utils";
 import { UiStore } from "../ui/ui.store";
 import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
@@ -157,6 +157,19 @@ const LIST_DEFAULT = 236;
               <span style="color:var(--ink-4);font-size:var(--fs-sm)">—</span>
             }
           </div>
+          <!-- Preview: previewable files (md) open rendered in the workspace,
+               exactly as if clicked in the right files panel -->
+          @if (canPreview()) {
+            <button
+              class="btn ghost-hair"
+              (click)="openPreview()"
+              title="Preview — open the rendered file in the workspace"
+              style="align-self:flex-start;padding:var(--sp-1) var(--sp-4);gap:var(--sp-2);border-radius:var(--r-sm);font-size:var(--fs-xs);color:var(--ink-3)"
+            >
+              <app-icon name="file" size="sm" [px]="12" />
+              Preview
+            </button>
+          }
           @if (current()) {
             <button
               class="btn"
@@ -548,6 +561,17 @@ export class DiffViewComponent {
 
   onOpenCommit(sha: string) {
     this.ui.setGitView(this.agent().id, { kind: "commit", sha });
+  }
+
+  // ----- Preview: hand the selected file to the workspace file tab -----
+  // Deleted files have no working-tree content to render, so no button for 'D'.
+  readonly canPreview = computed(() => {
+    const f = this.current();
+    return !!f && f.state !== "D" && isMarkdownPath(f.path);
+  });
+  openPreview() {
+    const f = this.current();
+    if (f) this.ui.openFileInWorkspace(this.agent().id, f.path);
   }
 
   stateInk(state: string): string {

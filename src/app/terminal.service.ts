@@ -164,6 +164,15 @@ export class TerminalService implements OnDestroy {
       //  • Paste: Ctrl/Cmd+V or Ctrl/Cmd+Shift+V.
       term.attachCustomKeyEventHandler((e) => {
         if (e.type !== "keydown") return true;
+        // Shift/Ctrl+Enter → newline, not submit. xterm would send a plain CR
+        // (the same as Enter), so the agent CLI submits the message. Backslash
+        // + CR is the sequence Claude Code's own /terminal-setup binds for
+        // "insert a line break"; plain Enter still submits.
+        if (e.key === "Enter" && (e.shiftKey || e.ctrlKey) && !e.altKey && !e.metaKey) {
+          void this.agents.input(id, "\\\r").catch(() => {});
+          e.preventDefault();
+          return false;
+        }
         const mod = e.ctrlKey || e.metaKey;
         if (!mod) return true;
         const k = e.key.toLowerCase();
