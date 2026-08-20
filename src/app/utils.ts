@@ -44,6 +44,11 @@ export function fileDir(p: string): string {
   return parts.length ? parts.join("/") + "/" : "";
 }
 
+/** Files the workspace can render as a rich preview (file-view's md pipeline). */
+export function isMarkdownPath(p: string): boolean {
+  return /\.(md|markdown)$/i.test(p);
+}
+
 /** Shell/CLI-safe rendering of a filesystem path: double-quote it when it
  *  contains whitespace (or is empty), escaping any embedded quotes. Used when a
  *  dropped file's absolute path is inserted into a terminal or prompt. */

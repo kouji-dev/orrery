@@ -17,7 +17,7 @@ import { AgentsStore } from "../stores/agents.store";
 import { EditsStore } from "../stores/edits.store";
 import { IconComponent } from "../shared/icon.component";
 import { UiStore } from "../ui/ui.store";
-import { fileDir, fileName, langId, langTag } from "../utils";
+import { fileDir, fileName, isMarkdownPath, langId, langTag } from "../utils";
 import { BRIDGE, Commands, FileHunk } from "../data-source/bridge";
 import { renderMermaidBlocks } from "./md-mermaid";
 import { MonacoFileEditorComponent } from "./monaco-file-editor.component";
@@ -207,7 +207,7 @@ export class FileViewComponent {
 
   readonly fdir = fileDir;
   readonly fname = fileName;
-  readonly isMarkdown = computed(() => /\.(md|markdown)$/i.test(this.path()));
+  readonly isMarkdown = computed(() => isMarkdownPath(this.path()));
   readonly tag = computed(() => langTag(this.path()));
   readonly mdHtml = computed(() => (this.content() ? (marked.parse(this.content()!) as string) : ""));
 
