@@ -68,6 +68,20 @@ export function setRatio(node: PaneNode, id: string, ratio: number): PaneNode {
   return { ...node, a: setRatio(node.a, id, ratio), b: setRatio(node.b, id, ratio) };
 }
 
+/** After restoring persisted trees, bump the id counter past every restored
+ *  "paneN" id so freshly created panes can't collide with them. */
+export function syncPaneSeq(roots: PaneNode[]): void {
+  const walk = (n: PaneNode) => {
+    const m = /^pane(\d+)$/.exec(n.id);
+    if (m) _pid = Math.max(_pid, Number(m[1]));
+    if (n.type === "split") {
+      walk(n.a);
+      walk(n.b);
+    }
+  };
+  roots.forEach(walk);
+}
+
 export function countLeaves(node: PaneNode): number {
   return node.type === "leaf" ? 1 : countLeaves(node.a) + countLeaves(node.b);
 }

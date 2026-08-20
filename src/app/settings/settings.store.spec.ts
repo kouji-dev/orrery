@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AGENT_TOOLS } from "../data";
 import { Bridge, BRIDGE } from "../data-source/bridge";
 import { Settings, UpdateInfo } from "../models";
+import { AgentsStore } from "../stores/agents.store";
 import { UiStore } from "../ui/ui.store";
 import { SETTINGS_SAVE_DEBOUNCE_MS, settingsDefaults, SettingsStore } from "./settings.store";
 
@@ -34,6 +35,7 @@ function make(opts: { stored?: Partial<Settings> | null; update?: UpdateInfo | s
     providers: [
       { provide: BRIDGE, useValue: bridge },
       { provide: UiStore, useValue: { flash } },
+      { provide: AgentsStore, useValue: { all: () => [] } },
     ],
   });
   const store = runInInjectionContext(injector, () => new SettingsStore());

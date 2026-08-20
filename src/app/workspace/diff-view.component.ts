@@ -80,7 +80,7 @@ const LIST_DEFAULT = 236;
               <div
                 class="diff-file"
                 [class.sel]="current()?.path === row.path"
-                (click)="selPath.set(row.path)"
+                (click)="select(row.path)"
                 [style.padding-left.px]="12 + row.depth * 13"
                 style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-5);cursor:pointer;margin:1px var(--sp-3);border-radius:var(--r-sm)"
               >
@@ -99,7 +99,7 @@ const LIST_DEFAULT = 236;
             <div
               class="diff-file"
               [class.sel]="current()?.path === f.path"
-              (click)="selPath.set(f.path)"
+              (click)="select(f.path)"
               style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);cursor:pointer;margin:1px var(--sp-3);border-radius:var(--r-sm)"
             >
               <span
@@ -376,8 +376,13 @@ export class DiffViewComponent {
     diffBytes: this.estDiffBytes(),
     model: this.agent().model,
   }));
-  // selection by PATH (works across both flat + tree views); treeMode toggles them
-  readonly selPath = signal<string | null>(null);
+  // selection by PATH (works across both flat + tree views); treeMode toggles
+  // them. Selection lives in UiStore keyed by agent — the pane destroys this
+  // component on tab switch, so a local signal would forget the opened file.
+  readonly selPath = computed(() => this.ui.diffSelectionFor(this.agentId()));
+  select(path: string): void {
+    this.ui.setDiffSelection(this.agentId(), path);
+  }
   readonly treeMode = signal(true);
 
   readonly fname = fileName;
@@ -427,7 +432,6 @@ export class DiffViewComponent {
   readonly diff = signal<FileDiff | null>(null);
   readonly loading = signal(false);
   private gen = 0;
-  private lastId: string | null = null;
 
   // ----- annotate (blame) -----
   private bridge = inject(BRIDGE);
@@ -470,14 +474,6 @@ export class DiffViewComponent {
   private dragStartW = 0;
 
   constructor() {
-    // reset selection to the first file when switching agents
-    effect(() => {
-      const id = this.agentId();
-      if (id !== this.lastId) {
-        this.lastId = id;
-        this.selPath.set(null); // current() falls back to the first changed file
-      }
-    });
     // Load the diff for the selected file (superseded on rapid changes).
     // Triggers: agent switch (id), selection change, or a refreshed changes
     // entry (push/pull → new file objects = content may differ). Reading the
