@@ -18,6 +18,7 @@ import { EditorNavService } from "../../commands/editor-nav.service";
 import { UiStore } from "../../ui/ui.store";
 import { registerEditor } from "../editor-cap";
 import { applyMonacoTheme, loadMonaco, MonacoApi, monacoLanguage } from "../monaco-loader";
+import { ScrollStateService } from "../scroll-state.service";
 import { DiffStats, lineChangeStats } from "./chunk-stats";
 import { attachReviewComments, MonacoReviewApi } from "./review-comments.monaco";
 
@@ -76,6 +77,7 @@ export class UnifiedCodeComponent implements OnDestroy {
   private readonly review = inject(ReviewStore);
   private readonly ui = inject(UiStore);
   private readonly editorNav = inject(EditorNavService);
+  private readonly scroll = inject(ScrollStateService);
 
   // Inputs: decorator @Input backed by signals (vitest JIT / NG0950 pattern).
   readonly agent = signal("");
@@ -107,6 +109,9 @@ export class UnifiedCodeComponent implements OnDestroy {
   /** Bumped when a new editor is live, so dependent effects re-push. */
   private readonly viewGen = signal(0);
   private renderToken = 0;
+  /** agent:file the LIVE diff editor was built for — inputs may already point
+   *  at the next file by teardown time, so the save key is captured at mount. */
+  private mountedKey: { agent: string; file: string } | null = null;
 
   constructor() {
     // Rebuild when content, language, or view mode changes (theme is global).
@@ -157,6 +162,10 @@ export class UnifiedCodeComponent implements OnDestroy {
   }
 
   private teardown(): void {
+    if (this.diffEditor && this.mountedKey) {
+      this.scroll.saveDiffView(this.mountedKey.agent, this.mountedKey.file, this.diffEditor.saveViewState());
+    }
+    this.mountedKey = null;
     this.unregisterCap?.();
     this.unregisterCap = null;
     this.api?.dispose();
@@ -228,6 +237,9 @@ export class UnifiedCodeComponent implements OnDestroy {
         this.models = [original, modified];
         this.diffEditor = diff;
         capTarget = diff;
+        this.mountedKey = { agent: this.agent(), file: this.file() };
+        const viewState = this.scroll.getDiffView(this.agent(), this.file());
+        if (viewState) diff.restoreViewState(viewState);
         // The diff computes async in the worker; line changes land afterwards.
         this.subs.push(
           diff.onDidUpdateDiff(() => {

@@ -16,6 +16,9 @@ export class ScrollStateService {
   private readonly plain = new Map<string, number>();
   /** Monaco view states (scroll + cursor + folding). */
   private readonly view = new Map<string, monacoApi.editor.ICodeEditorViewState>();
+  /** Monaco DIFF editor view states (the agent diff pane) — separate map
+   *  because the type differs and the same agent:path can be open in both. */
+  private readonly diff = new Map<string, monacoApi.editor.IDiffEditorViewState>();
 
   savePlain(agentId: string, path: string, scrollTop: number): void {
     this.plain.set(k(agentId, path), scrollTop);
@@ -33,15 +36,24 @@ export class ScrollStateService {
     return this.view.get(k(agentId, path));
   }
 
+  saveDiffView(agentId: string, path: string, state: monacoApi.editor.IDiffEditorViewState | null): void {
+    if (state) this.diff.set(k(agentId, path), state);
+  }
+
+  getDiffView(agentId: string, path: string): monacoApi.editor.IDiffEditorViewState | undefined {
+    return this.diff.get(k(agentId, path));
+  }
+
   clear(agentId: string, path: string): void {
     const key = k(agentId, path);
     this.plain.delete(key);
     this.view.delete(key);
+    this.diff.delete(key);
   }
 
   clearAgent(agentId: string): void {
     const prefix = `${agentId}:`;
-    for (const map of [this.plain, this.view]) {
+    for (const map of [this.plain, this.view, this.diff]) {
       for (const key of [...map.keys()]) if (key.startsWith(prefix)) map.delete(key);
     }
   }

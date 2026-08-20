@@ -107,6 +107,63 @@ test("markdown tab restores its scroll position after switching tabs and back", 
   await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(500);
 });
 
+// ---- 3. diff tab: selected file + diff scroll survive a tab switch ----
+
+const LONG_TS = Array.from({ length: 400 }, (_, i) => `const line${i} = ${i};`).join("\n");
+
+/** Stub the diff invoke + seed two changed files (a.ts short, b.ts long). */
+const seedDiffChanges = (id: string) => `(() => {
+  const bar = window.ng.getComponent(document.querySelector("app-top-bar"));
+  bar.agentActions["agentsStore"].diff = (agentId, path) => Promise.resolve(
+    path === "src/b.ts"
+      ? { old: "", new: ${JSON.stringify(LONG_TS)} }
+      : { old: "const a = 1;\\n", new: "const a = 2;\\n" },
+  );
+  const work = bar.agentActions["work"];
+  work["patch"](work["changesMap"], "${id}", {
+    status: "ready",
+    data: [
+      { path: "src/a.ts", add: 1, del: 1, state: "M" },
+      { path: "src/b.ts", add: 400, del: 0, state: "A" },
+    ],
+  });
+})()`;
+
+const diffEditor = (expr: string) =>
+  `window.ng.getComponent(document.querySelector("app-unified-code"))["diffEditor"]${expr}`;
+
+test("diff tab keeps its selected file and scroll after switching tabs and back", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForSelector("app-top-bar");
+  await page.evaluate(seedAgent("e2e-sp3", "e2e-scroll-diff"));
+  await page.evaluate(seedDiffChanges("e2e-sp3"));
+  await page.evaluate(ui(`.openAgent("e2e-sp3", "diff")`));
+
+  // default selection is the first changed file; pick the second one
+  await expect(page.locator(".diff-head-path")).toContainText("src/a.ts");
+  await page.locator(".diff-file", { hasText: "b.ts" }).click();
+  await expect(page.locator(".diff-head-path")).toContainText("src/b.ts");
+
+  // scroll the Monaco diff once it's live
+  await expect(page.locator("app-unified-code .monaco-diff-editor")).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(diffEditor(`.getModifiedEditor().getScrollHeight()`)))
+    .toBeGreaterThan(1000);
+  await page.evaluate(diffEditor(`.getModifiedEditor().setScrollTop(800)`));
+
+  // away to the orchestrator tab (destroys the pane + diff view) and back
+  await page.evaluate(ui(`.activeTab.set("orchestrator")`));
+  await expect(page.locator(".diff-head")).toHaveCount(0);
+  await page.evaluate(ui(`.openAgent("e2e-sp3", "diff")`));
+
+  // the opened file survives, and the diff restores its scroll position
+  await expect(page.locator(".diff-head-path")).toContainText("src/b.ts");
+  await expect(page.locator("app-unified-code .monaco-diff-editor")).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(diffEditor(`.getModifiedEditor().getScrollTop()`)))
+    .toBeGreaterThan(600);
+});
+
 test("closing the file tab drops the saved position — reopen starts at top", async ({ page }) => {
   await openMdTabs(page);
   const body = page.locator(".md-body");
