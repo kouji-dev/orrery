@@ -32,6 +32,7 @@ export interface WorkspaceLayout {
   gitViews?: Record<string, GitView | null>;
   diffSelections?: Record<string, string | null>;
   diffListWidth?: number | null;
+  sidebarCompact?: boolean;
 }
 
 const TWEAKS_KEY = "orrery.tweaks";
@@ -150,6 +151,7 @@ export class UiStore {
     this.gitViews.set(ws.gitViews ?? {});
     this.diffSelections.set(ws.diffSelections ?? {});
     this.diffListWidth.set(ws.diffListWidth ?? null);
+    this.sidebarCompact.set(ws.sidebarCompact ?? false);
     // fresh ids must not collide with restored "tabN"/"paneN" ids
     for (const t of ws.tabs) {
       const m = /^tab(\d+)$/.exec(t.id);
@@ -381,6 +383,7 @@ export class UiStore {
   }
 
   // ---- sidebar compact rail ----
+  // Public: the WorkspaceStore persists/hydrates it (survives restarts).
   readonly sidebarCompact = signal(false);
   toggleSidebarCompact() {
     this.sidebarCompact.update((v) => !v);

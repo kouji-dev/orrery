@@ -62,6 +62,9 @@ test("the workspace layout survives a relaunch without any explicit snapshot", a
   const before = (await page.evaluate(uiState)) as UiState;
   const agentTab = before.tabs.find((t) => t.kind === "agent");
   expect(agentTab).toBeTruthy();
+  // collapse the left sidebar to its compact rail — this must persist too
+  await page.evaluate(ui(`.toggleSidebarCompact()`));
+  await awaitPersisted(page, '"sidebarCompact":true');
   await awaitPersisted(page, "e2e-ws1");
 
   // a quit / crash / update relaunch, as seen by the webview
@@ -69,6 +72,7 @@ test("the workspace layout survives a relaunch without any explicit snapshot", a
   await page.waitForSelector("app-top-bar");
 
   const after = (await page.evaluate(uiState)) as UiState;
+  expect(await page.evaluate(ui(`.sidebarCompact()`))).toBe(true);
   expect(after.tabs.map((t) => t.id)).toEqual(before.tabs.map((t) => t.id));
   expect(after.active).toBe(agentTab!.id);
   expect(after.scope).toBe("e2e-ws1");

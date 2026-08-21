@@ -23,6 +23,7 @@ function docFixture(partial: Partial<WorkspaceDoc> = {}): Partial<WorkspaceDoc> 
     gitViews: {},
     diffSelections: { a1: "src/x.ts" },
     diffListWidth: 420,
+    sidebarCompact: true,
     scroll: { plain: { "a1:docs/x.md": 640 }, view: {}, diff: {} },
     updateResume: null,
     ...partial,
@@ -64,6 +65,7 @@ describe("WorkspaceStore", () => {
     expect(ui.scopeAgentId()).toBe("a1");
     expect(ui.diffSelections()["a1"]).toBe("src/x.ts");
     expect(ui.diffListWidth()).toBe(420);
+    expect(ui.sidebarCompact()).toBe(true);
     expect(TestBed.inject(ScrollStateService).getPlain("a1", "docs/x.md")).toBe(640);
   });
 

@@ -22,6 +22,7 @@ export interface WorkspaceDoc {
   gitViews: Record<string, GitView | null>;
   diffSelections: Record<string, string | null>;
   diffListWidth: number | null;
+  sidebarCompact: boolean;
   scroll: ScrollSnapshot;
   /** One-shot: agents with a live terminal when "Install & relaunch" ran. */
   updateResume: { at: number; resume: string[] } | null;
@@ -173,6 +174,7 @@ export class WorkspaceStore {
       gitViews: this.ui.gitViews(),
       diffSelections: this.ui.diffSelections(),
       diffListWidth: this.ui.diffListWidth(),
+      sidebarCompact: this.ui.sidebarCompact(),
       scroll: (this.scroll.rev(), this.scroll.snapshot()),
       updateResume: this.updateResume(),
     };
