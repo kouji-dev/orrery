@@ -34,7 +34,7 @@ test("right-clicking empty panel space opens the root-scoped CRUD menu", async (
   await openFilesTab(page);
   await page.locator("app-file-tree").click({ button: "right" });
 
-  const menu = page.locator(".ft-menu");
+  const menu = page.locator(".menu-panel");
   await expect(menu).toBeVisible();
   await expect(menu.getByRole("button", { name: "New File…" })).toBeVisible();
   await expect(menu.getByRole("button", { name: "New Folder…" })).toBeVisible();
@@ -82,9 +82,9 @@ test("sidebar: right-clicking empty projects space opens the panel menu", async 
 test("New File… from the empty-space menu targets the worktree root", async ({ page }) => {
   await openFilesTab(page);
   await page.locator("app-file-tree").click({ button: "right" });
-  await page.locator(".ft-menu").getByRole("button", { name: "New File…" }).click();
-  await expect(page.locator(".ft-menu")).toContainText("New file in worktree root");
-  await expect(page.locator(".ft-input")).toBeVisible();
+  await page.locator(".menu-panel").getByRole("button", { name: "New File…" }).click();
+  await expect(page.locator(".menu-panel")).toContainText("New file in worktree root");
+  await expect(page.locator(".menu-input")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.locator(".ft-menu")).toHaveCount(0);
+  await expect(page.locator(".menu-panel")).toHaveCount(0);
 });

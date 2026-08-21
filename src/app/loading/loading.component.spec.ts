@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { describe, expect, it, vi } from 'vitest';
 import { UpdateOutcome } from '../updater/updater';
 import { UpdaterService } from '../updater/updater.service';
+import { WorkspaceStore } from '../stores/workspace.store';
 import { LoadingComponent } from './loading.component';
 
 function make(outcome: UpdateOutcome | 'pending') {
@@ -15,6 +16,7 @@ function make(outcome: UpdateOutcome | 'pending') {
     providers: [
       { provide: Router, useValue: { navigateByUrl } },
       { provide: UpdaterService, useValue: { run, status: () => '', progress: () => 0 } },
+      { provide: WorkspaceStore, useValue: { ready: () => Promise.resolve() } },
     ],
   });
   const cmp = runInInjectionContext(injector, () => new LoadingComponent());

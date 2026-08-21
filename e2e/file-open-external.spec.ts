@@ -53,7 +53,7 @@ test("Open in Default App sends the file to the OS handler, worktree-relative", 
   await openTreeWithFile(page);
   await page.locator("app-file-tree").getByText("report.html").click({ button: "right" });
 
-  const menu = page.locator(".ft-menu");
+  const menu = page.locator(".menu-panel");
   await expect(menu.getByRole("button", { name: "Open in Default App" })).toBeVisible();
   await menu.getByRole("button", { name: "Open in Default App" }).click();
 
@@ -69,7 +69,7 @@ test("Reveal shows the file in the platform's own file manager", async ({ page }
   await page.locator("app-file-tree").getByText("report.html").click({ button: "right" });
 
   // the label names the actual OS file manager (Explorer / Finder / generic)
-  const reveal = page.locator(".ft-menu button", { hasText: /^Reveal in / });
+  const reveal = page.locator(".menu-panel button", { hasText: /^Reveal in / });
   await expect(reveal).toBeVisible();
   await reveal.click();
 
@@ -85,7 +85,7 @@ test("the OS actions are node-scoped — the empty-space menu does not offer the
   // right-click the panel header, not a row → root-scoped menu
   await page.locator("app-file-tree").locator("div").first().click({ button: "right" });
 
-  const menu = page.locator(".ft-menu");
+  const menu = page.locator(".menu-panel");
   await expect(menu.getByRole("button", { name: "New File…" })).toBeVisible();
   await expect(menu.getByRole("button", { name: "Open in Default App" })).toHaveCount(0);
   await expect(menu.locator("button", { hasText: /^Reveal in / })).toHaveCount(0);

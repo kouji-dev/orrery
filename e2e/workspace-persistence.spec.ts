@@ -46,6 +46,14 @@ async function boot(page: Page): Promise<void> {
   await page.waitForSelector("app-top-bar");
 }
 
+/** Persistence is debounced (500ms) — wait until the fallback doc contains
+ *  `needle` before reloading, or the write races the navigation. */
+async function awaitPersisted(page: Page, needle: string): Promise<void> {
+  await expect
+    .poll(() => page.evaluate(`localStorage.getItem("orrery.workspace") ?? ""`), { timeout: 5000 })
+    .toContain(needle);
+}
+
 test("the workspace layout survives a relaunch without any explicit snapshot", async ({ page }) => {
   await boot(page);
   await page.evaluate(seedAgent("e2e-ws1", "e2e-workspace"));
@@ -54,12 +62,17 @@ test("the workspace layout survives a relaunch without any explicit snapshot", a
   const before = (await page.evaluate(uiState)) as UiState;
   const agentTab = before.tabs.find((t) => t.kind === "agent");
   expect(agentTab).toBeTruthy();
+  // collapse the left sidebar to its compact rail — this must persist too
+  await page.evaluate(ui(`.toggleSidebarCompact()`));
+  await awaitPersisted(page, '"sidebarCompact":true');
+  await awaitPersisted(page, "e2e-ws1");
 
   // a quit / crash / update relaunch, as seen by the webview
   await page.reload();
   await page.waitForSelector("app-top-bar");
 
   const after = (await page.evaluate(uiState)) as UiState;
+  expect(await page.evaluate(ui(`.sidebarCompact()`))).toBe(true);
   expect(after.tabs.map((t) => t.id)).toEqual(before.tabs.map((t) => t.id));
   expect(after.active).toBe(agentTab!.id);
   expect(after.scope).toBe("e2e-ws1");
@@ -77,6 +90,9 @@ test("the workspace layout survives a relaunch without any explicit snapshot", a
 
   // closing the restored tab persists too — the next boot must not resurrect it
   await page.evaluate(ui(`.closeTab("${agentTab!.id}")`));
+  await expect
+    .poll(() => page.evaluate(`localStorage.getItem("orrery.workspace") ?? ""`), { timeout: 5000 })
+    .not.toContain(`"${agentTab!.id}"`);
   await page.reload();
   await page.waitForSelector("app-top-bar");
   const closed = (await page.evaluate(uiState)) as UiState;
@@ -85,7 +101,8 @@ test("the workspace layout survives a relaunch without any explicit snapshot", a
 
 test("the update-resume list is drained one-shot into updateResumeIds", async ({ page }) => {
   await boot(page);
-  // what SettingsStore.install() writes right before UpdateInstall
+  // the LEGACY pre-SQLite key — pins the migration fold; the store consumes it
+  // into the v2 doc's updateResume on the next load
   await page.evaluate(
     `localStorage.setItem("orrery:update-restore", JSON.stringify({ v: 1, at: Date.now(), resume: ["e2e-ws2"] }))`,
   );

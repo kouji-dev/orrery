@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Commands, BRIDGE } from "../data-source/bridge";
 import { SettingsStore } from "../settings/settings.store";
 import { EditsStore } from "../stores/edits.store";
+import { WorkspaceStore } from "../stores/workspace.store";
 import { UiStore } from "../ui/ui.store";
 import { AUTOSAVE_DELAY_MS, FileSaveService } from "./file-save.service";
 
@@ -30,6 +31,7 @@ describe("FileSaveService", () => {
         provideZonelessChangeDetection(),
         { provide: BRIDGE, useValue: { invoke } },
         { provide: UiStore, useValue: { flash } },
+        { provide: WorkspaceStore, useValue: { setUpdateResume: vi.fn(), flush: () => Promise.resolve(), ready: () => Promise.resolve() } },
       ],
     });
     svc = TestBed.inject(FileSaveService);

@@ -1,44 +1,28 @@
-import {
-  afterRenderEffect,
-  ChangeDetectionStrategy,
-  Component,
-  effect,
-  ElementRef,
-  HostListener,
-  inject,
-  signal,
-  viewChild,
-} from "@angular/core";
+import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { MenuItem } from "../models";
+import { MenuPanelComponent } from "./menu-panel.component";
 
+/** The store-driven context menu: renders `ui.contextMenu()` MenuItems inside
+ *  the shared MenuPanelComponent chrome (positioning, clamping, dismissal). */
 @Component({
   selector: "app-context-menu",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, MenuPanelComponent],
   template: `
     @let menu = ui.contextMenu();
     @if (menu) {
-      <div
-        #box
-        class="rise"
-        [style.left.px]="pos().x"
-        [style.top.px]="pos().y"
-        style="position:fixed;z-index:80;min-width:196px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:var(--sp-2)"
-      >
+      <app-menu-panel [x]="menu.x" [y]="menu.y" (closed)="ui.closeMenu()">
         @for (it of menu.items; track $index) {
           @if (it.sep) {
-            <div style="height:1px;background:var(--hair);margin:var(--sp-2) var(--sp-3)"></div>
+            <div class="menu-sep"></div>
           } @else {
             <button
               class="menu-item"
               [class.danger]="it.danger"
               [disabled]="it.disabled"
               (click)="run(it)"
-              [style.color]="it.disabled ? 'var(--ink-4)' : it.danger ? 'var(--st-blocked)' : 'var(--ink-2)'"
-              [style.cursor]="it.disabled ? 'default' : 'pointer'"
-              style="display:flex;align-items:center;gap:var(--sp-4);width:100%;text-align:left;padding:var(--sp-3) var(--sp-4);border-radius:6px;border:none;background:transparent;font-family:var(--font-mono);font-size:var(--fs-ui)"
             >
               @if (it.icon) {
                 <app-icon [name]="it.icon" size="sm" [color]="it.danger ? 'var(--st-blocked)' : (it.accent || 'var(--ink-3)')" style="flex:none" />
@@ -48,61 +32,16 @@ import { MenuItem } from "../models";
             </button>
           }
         }
-      </div>
+      </app-menu-panel>
     }
   `,
-  styles: [
-    `
-      .menu-item:not(:disabled):hover {
-        background: var(--panel-3);
-      }
-      .menu-item.danger:not(:disabled):hover {
-        background: color-mix(in oklch, var(--st-blocked), transparent 88%);
-      }
-    `,
-  ],
 })
 export class ContextMenuComponent {
   readonly ui = inject(UiStore);
-  readonly pos = signal<{ x: number; y: number }>({ x: 0, y: 0 });
-  private box = viewChild<ElementRef<HTMLDivElement>>("box");
-
-  constructor() {
-    // seed position from the requested click point whenever a menu opens
-    effect(() => {
-      const m = this.ui.contextMenu();
-      if (m) this.pos.set({ x: m.x, y: m.y });
-    });
-    // clamp into the viewport after the menu is laid out
-    afterRenderEffect(() => {
-      const m = this.ui.contextMenu();
-      const el = this.box()?.nativeElement;
-      if (!m || !el) return;
-      const r = el.getBoundingClientRect();
-      let nx = m.x,
-        ny = m.y;
-      if (m.x + r.width > window.innerWidth - 8) nx = window.innerWidth - r.width - 8;
-      if (m.y + r.height > window.innerHeight - 8) ny = window.innerHeight - r.height - 8;
-      const cur = this.pos();
-      if (cur.x !== nx || cur.y !== ny) this.pos.set({ x: nx, y: ny });
-    });
-  }
 
   run(it: MenuItem) {
     if (it.disabled) return;
     it.onClick?.();
-    this.ui.closeMenu();
-  }
-
-  @HostListener("document:mousedown", ["$event"])
-  onDown(e: MouseEvent) {
-    if (!this.ui.contextMenu()) return;
-    const el = this.box()?.nativeElement;
-    if (el && !el.contains(e.target as Node)) this.ui.closeMenu();
-  }
-
-  @HostListener("document:keydown.escape")
-  onEsc() {
     this.ui.closeMenu();
   }
 }

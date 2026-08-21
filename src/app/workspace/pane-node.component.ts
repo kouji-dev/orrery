@@ -197,16 +197,6 @@ import { UiStore } from "../ui/ui.store";
           </div>
         }
 
-        <!-- file-tab context menu: single + bulk close -->
-        @if (tabMenu(); as tm) {
-          <div class="ftab-menu rise" [style.left.px]="tm.x" [style.top.px]="tm.y" (mousedown)="$event.stopPropagation()" (contextmenu)="$event.preventDefault()">
-            <button class="ftab-mi" (click)="tabMenuClose(lf, 'one')"><app-icon name="x" size="sm" [px]="12" />Close</button>
-            <button class="ftab-mi" [disabled]="!tabMenuTargets(lf, 'left').length" (click)="tabMenuClose(lf, 'left')"><app-icon name="chevron" size="sm" [px]="12" style="transform:rotate(180deg)" />Close All to the Left</button>
-            <button class="ftab-mi" [disabled]="!tabMenuTargets(lf, 'right').length" (click)="tabMenuClose(lf, 'right')"><app-icon name="chevron" size="sm" [px]="12" />Close All to the Right</button>
-            <button class="ftab-mi" (click)="tabMenuClose(lf, 'all')"><app-icon name="layers" size="sm" [px]="12" />Close All</button>
-          </div>
-        }
-
         <!-- drag drop preview -->
         @if (dropSide(); as side) {
           <div style="position:absolute;inset:0;z-index:20;pointer-events:none">
@@ -418,39 +408,6 @@ import { UiStore } from "../ui/ui.store";
       .cc-danger {
         color: var(--code-del-ink);
       }
-      /* file-tab context menu */
-      .ftab-menu {
-        position: fixed;
-        z-index: 60;
-        min-width: 190px;
-        background: var(--elev);
-        border: 1px solid var(--hair-2);
-        border-radius: var(--r-md);
-        box-shadow: var(--shadow);
-        padding: var(--sp-2);
-      }
-      .ftab-mi {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-3);
-        width: 100%;
-        text-align: left;
-        padding: var(--sp-2) var(--sp-4);
-        border: none;
-        border-radius: 5px;
-        background: transparent;
-        color: var(--ink-2);
-        font-size: var(--fs-sm);
-        cursor: pointer;
-      }
-      .ftab-mi:hover:not(:disabled) {
-        background: var(--panel-3);
-        color: var(--ink);
-      }
-      .ftab-mi:disabled {
-        color: var(--ink-4);
-        cursor: default;
-      }
       .pane-divider {
         position: relative;
         background: transparent;
@@ -513,8 +470,6 @@ export class PaneNodeComponent {
    *  full close set (bulk actions include clean tabs); `dirty` the subset the
    *  dialog is really about. */
   readonly confirmClose = signal<{ leafId: string; agentId: string; paths: string[]; dirty: string[] } | null>(null);
-  /** Right-click context menu on a file tab (screen coords + anchor path). */
-  readonly tabMenu = signal<{ x: number; y: number; leafId: string; path: string } | null>(null);
   readonly fname = fileName;
   readonly views: { k: "terminal" | "diff"; icon: string }[] = [
     { k: "terminal", icon: "terminal" },
@@ -664,16 +619,30 @@ export class PaneNodeComponent {
   // ----- file-tab context menu: single + bulk close -----
 
   onFileTabContext(e: MouseEvent, lf: PaneLeaf, path: string): void {
-    e.preventDefault();
-    e.stopPropagation();
-    this.tabMenu.set({ x: e.clientX, y: e.clientY, leafId: lf.id, path });
+    const close = (mode: "one" | "left" | "right" | "all") => () =>
+      this.requestFilesClose(lf, this.tabMenuTargets(lf, path, mode));
+    this.ui.openMenu(e, [
+      { label: "Close", icon: "x", onClick: close("one") },
+      {
+        label: "Close All to the Left",
+        icon: "chevron",
+        disabled: !this.tabMenuTargets(lf, path, "left").length,
+        onClick: close("left"),
+      },
+      {
+        label: "Close All to the Right",
+        icon: "chevron",
+        disabled: !this.tabMenuTargets(lf, path, "right").length,
+        onClick: close("right"),
+      },
+      { label: "Close All", icon: "layers", onClick: close("all") },
+    ]);
   }
 
-  /** Tabs a menu action would close, in strip order. */
-  tabMenuTargets(lf: PaneLeaf, mode: "one" | "left" | "right" | "all"): string[] {
-    const tm = this.tabMenu();
+  /** Tabs a menu action would close, in strip order, anchored at `path`. */
+  tabMenuTargets(lf: PaneLeaf, path: string, mode: "one" | "left" | "right" | "all"): string[] {
     const files = lf.files ?? [];
-    const i = tm ? files.indexOf(tm.path) : -1;
+    const i = files.indexOf(path);
     if (i === -1) return [];
     switch (mode) {
       case "one":
@@ -685,12 +654,6 @@ export class PaneNodeComponent {
       case "all":
         return [...files];
     }
-  }
-
-  tabMenuClose(lf: PaneLeaf, mode: "one" | "left" | "right" | "all"): void {
-    const targets = this.tabMenuTargets(lf, mode);
-    this.tabMenu.set(null);
-    this.requestFilesClose(lf, targets);
   }
 
   private closeTab(leafId: string, agentId: string | null, path: string): void {
@@ -751,15 +714,9 @@ export class PaneNodeComponent {
 
   @HostListener("document:mousedown", ["$event"])
   onDocDown(e: MouseEvent) {
-    if (this.tabMenu()) this.tabMenu.set(null);
     if (!this.pickOpen()) return;
     const pk = this.picker()?.nativeElement;
     if (pk && !pk.contains(e.target as Node)) this.pickOpen.set(false);
-  }
-
-  @HostListener("document:keydown.escape")
-  onDocEsc(): void {
-    if (this.tabMenu()) this.tabMenu.set(null);
   }
 
   startDrag(ev: PointerEvent, sp: PaneSplit) {

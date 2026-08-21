@@ -86,14 +86,14 @@ test("file-tab right-click menu: icon-led items, Close All to the Right works", 
   await openFiles(page, "e2e-sg2", ["src/a.ts", "src/b.ts", "src/c.ts"]);
 
   await page.locator(".file-tab", { hasText: "a.ts" }).click({ button: "right" });
-  const menu = page.locator(".ftab-menu");
+  const menu = page.locator(".menu-panel");
   await expect(menu).toBeVisible();
-  const items = menu.locator(".ftab-mi");
+  const items = menu.locator(".menu-item");
   await expect(items).toHaveCount(4);
   await expect(items.nth(0)).toContainText("Close");
   await expect(items.nth(1)).toBeDisabled(); // nothing to the left of the first tab
   // every item leads with an icon
-  await expect(menu.locator(".ftab-mi app-icon")).toHaveCount(4);
+  await expect(menu.locator(".menu-item app-icon")).toHaveCount(4);
 
   await items.nth(2).click(); // Close All to the Right
   await expect(page.locator(".file-tab")).toHaveCount(1);

@@ -164,6 +164,23 @@ test("diff tab keeps its selected file and scroll after switching tabs and back"
     .toBeGreaterThan(600);
 });
 
+test("scroll positions land in the persisted workspace document", async ({ page }) => {
+  await openMdTabs(page);
+  const body = page.locator(".md-body");
+  await body.evaluate((el) => (el.scrollTop = 600));
+  await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(500);
+
+  // switching files saves a.md's position into ScrollStateService → the
+  // WorkspaceStore's debounced write folds it into the persisted doc
+  await page.evaluate(ui(`.openFileInWorkspace("e2e-sp2", "docs/b.md")`));
+  await expect
+    .poll(async () => {
+      const raw = (await page.evaluate(`localStorage.getItem("orrery.workspace") ?? "null"`)) as string;
+      return JSON.parse(raw)?.scroll?.plain?.["e2e-sp2:docs/a.md"] ?? 0;
+    }, { timeout: 5000 })
+    .toBeGreaterThan(500);
+});
+
 test("closing the file tab drops the saved position — reopen starts at top", async ({ page }) => {
   await openMdTabs(page);
   const body = page.locator(".md-body");

@@ -11,6 +11,7 @@ import { NotificationAlertService } from "../notifications/notification-alert.se
 import { SettingsStore } from "../settings/settings.store";
 import { NotificationStore } from "../stores/notifications.store";
 import { AgentsStore } from "../stores/agents.store";
+import { WorkspaceStore } from "../stores/workspace.store";
 import { AgentWorkStore } from "./agent-work.store";
 import { TerminalService } from "../terminal.service";
 import { UiStore } from "../ui/ui.store";
@@ -36,6 +37,7 @@ export class AgentRuntimeService {
   // settings-gated raise path: per-event toggles + native toast + sound cue
   private alerts = inject(NotificationAlertService);
   private settings = inject(SettingsStore);
+  private workspace = inject(WorkspaceStore);
 
   // backend agents merged with an in-memory runtime overlay (live metrics)
   private runtime = signal<Record<string, Partial<Agent>>>({});
@@ -234,6 +236,8 @@ export class AgentRuntimeService {
   private async autoResume(): Promise<void> {
     try {
       const s = await this.settings.ready();
+      // the update-resume list is drained into UiStore by the workspace load
+      await this.workspace.ready();
       const updateIds = this.ui.updateResumeIds ?? [];
       if (!s.autoResume && !updateIds.length) return;
       await this.agentsStore.ready();

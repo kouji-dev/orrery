@@ -4,6 +4,7 @@ import { AGENT_TOOLS } from "../data";
 import { Bridge, BRIDGE } from "../data-source/bridge";
 import { Settings, UpdateInfo } from "../models";
 import { AgentsStore } from "../stores/agents.store";
+import { WorkspaceStore } from "../stores/workspace.store";
 import { UiStore } from "../ui/ui.store";
 import { SETTINGS_SAVE_DEBOUNCE_MS, settingsDefaults, SettingsStore } from "./settings.store";
 
@@ -36,6 +37,10 @@ function make(opts: { stored?: Partial<Settings> | null; update?: UpdateInfo | s
       { provide: BRIDGE, useValue: bridge },
       { provide: UiStore, useValue: { flash } },
       { provide: AgentsStore, useValue: { all: () => [] } },
+      {
+        provide: WorkspaceStore,
+        useValue: { setUpdateResume: vi.fn(), flush: () => Promise.resolve(), ready: () => Promise.resolve() },
+      },
     ],
   });
   const store = runInInjectionContext(injector, () => new SettingsStore());

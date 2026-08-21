@@ -78,7 +78,21 @@ const LEAF: PaneLeaf = { type: "leaf", id: "pane1", agentId: "a1", view: "termin
 describe("PaneNodeComponent header actions", () => {
   const actions = { act: vi.fn(), toggleRun: vi.fn() };
   const diagnostics = { openWorktree: vi.fn(), openLog: vi.fn() };
-  const ui = { gitViewFor: () => null, setGitView: vi.fn(), paneRoots: () => ({}), flash: vi.fn() };
+  // openMenu/contextMenu mirror the real UiStore contract: the tab context
+  // menu posts MenuItems into the store; the shared app-context-menu renders it.
+  let menuState: { x: number; y: number; items: import("../models").MenuItem[] } | null = null;
+  const ui = {
+    gitViewFor: () => null,
+    setGitView: vi.fn(),
+    paneRoots: () => ({}),
+    flash: vi.fn(),
+    openMenu: (e: MouseEvent, items: import("../models").MenuItem[]) => {
+      e.preventDefault();
+      menuState = { x: 0, y: 0, items };
+    },
+    contextMenu: () => menuState,
+    closeMenu: () => (menuState = null),
+  };
   const bridge = { invoke: vi.fn().mockResolvedValue(undefined) };
 
   function render(agent: Agent) {
@@ -93,6 +107,7 @@ describe("PaneNodeComponent header actions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    menuState = null;
     TestBed.configureTestingModule({
       imports: [PaneNodeComponent],
       providers: [
@@ -265,37 +280,40 @@ describe("PaneNodeComponent header actions", () => {
     return f;
   }
 
-  it("right-clicking a file tab opens the close menu with left/right enablement", () => {
-    const ctx = makeCtx([makeAgent()]);
-    const f = renderMultiLeaf(ctx);
+  /** The tab menu goes through UiStore.openMenu — the items land in the shared
+   *  store-driven context menu, not in this component's DOM. */
+  function openTabMenu(f: ReturnType<typeof renderMultiLeaf>) {
     const tabs = [...f.nativeElement.querySelectorAll<HTMLElement>(".file-tab")];
     tabs[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
     f.detectChanges();
-    const items = [...f.nativeElement.querySelectorAll<HTMLButtonElement>(".ftab-mi")];
-    expect(items.map((b) => b.textContent?.trim())).toEqual([
+    return TestBed.inject(UiStore).contextMenu()!.items;
+  }
+
+  it("right-clicking a file tab opens the close menu with left/right enablement", () => {
+    const ctx = makeCtx([makeAgent()]);
+    const f = renderMultiLeaf(ctx);
+    const items = openTabMenu(f);
+    expect(items.map((i) => i.label)).toEqual([
       "Close",
       "Close All to the Left",
       "Close All to the Right",
       "Close All",
     ]);
+    // icon-then-text rule: every item leads with an icon
+    expect(items.every((i) => !!i.icon)).toBe(true);
     // first tab: nothing to its left
     expect(items[1].disabled).toBe(true);
-    expect(items[2].disabled).toBe(false);
+    expect(items[2].disabled).toBeFalsy();
   });
 
   it("Close All to the Right closes the tabs after the anchor, keeping the rest", () => {
     const ctx = makeCtx([makeAgent()]);
     const f = renderMultiLeaf(ctx);
-    const tabs = [...f.nativeElement.querySelectorAll<HTMLElement>(".file-tab")];
-    tabs[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
-    f.detectChanges();
-    const right = [...f.nativeElement.querySelectorAll<HTMLButtonElement>(".ftab-mi")]
-      .find((b) => b.textContent?.includes("Right"))!;
-    right.click();
+    const right = openTabMenu(f).find((i) => i.label?.includes("Right"))!;
+    right.onClick!();
     expect(ctx.onFileClose).toHaveBeenCalledWith("pane1", "src/b.ts");
     expect(ctx.onFileClose).toHaveBeenCalledWith("pane1", "src/c.ts");
     expect(ctx.onFileClose).not.toHaveBeenCalledWith("pane1", "src/a.ts");
-    expect(f.componentInstance.tabMenu()).toBeNull();
   });
 
   it("Close All with a dirty buffer raises ONE dialog covering the whole set", () => {
@@ -304,12 +322,9 @@ describe("PaneNodeComponent header actions", () => {
     edits.update("a1", "src/b.ts", "one!");
     const ctx = makeCtx([makeAgent()]);
     const f = renderMultiLeaf(ctx);
-    const tabs = [...f.nativeElement.querySelectorAll<HTMLElement>(".file-tab")];
-    tabs[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
-    f.detectChanges();
-    [...f.nativeElement.querySelectorAll<HTMLButtonElement>(".ftab-mi")]
-      .find((b) => b.textContent?.trim() === "Close All")!
-      .click();
+    openTabMenu(f)
+      .find((i) => i.label === "Close All")!
+      .onClick!();
     f.detectChanges();
     // nothing closed yet; the dialog names only the dirty file
     expect(ctx.onFileClose).not.toHaveBeenCalled();

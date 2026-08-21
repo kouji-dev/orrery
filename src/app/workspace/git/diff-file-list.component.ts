@@ -3,7 +3,6 @@ import {
   Component,
   computed,
   ElementRef,
-  HostListener,
   inject,
   input,
   output,
@@ -13,6 +12,7 @@ import { NgTemplateOutlet } from "@angular/common";
 import { Agent, CommitFile } from "../../models";
 import { fileDir, fileName, revealLabelFor } from "../../utils";
 import { IconComponent } from "../../shared/icon.component";
+import { MenuPanelComponent } from "../../context-menu/menu-panel.component";
 import { StateBadgeComponent } from "../../shared/git/state-badge.component";
 import { AddDelComponent } from "../../shared/git/add-del.component";
 import { BRIDGE, Commands } from "../../data-source/bridge";
@@ -89,7 +89,7 @@ function buildTree(files: CommitFile[]): TreeNode[] {
   selector: "app-diff-file-list",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, IconComponent, StateBadgeComponent, AddDelComponent],
+  imports: [NgTemplateOutlet, IconComponent, MenuPanelComponent, StateBadgeComponent, AddDelComponent],
   template: `
     <div style="display:flex;flex-direction:column;min-height:0;height:100%">
 
@@ -164,42 +164,42 @@ function buildTree(files: CommitFile[]): TreeNode[] {
       </div>
     </div>
 
-    <!-- context menu: file actions, only ever opened from a file row -->
+    <!-- context menu: file actions, only ever opened from a file row — shared menu chrome -->
     @if (menu(); as m) {
-      <div class="dfl-menu rise" [style.left.px]="m.x" [style.top.px]="m.y" (mousedown)="$event.stopPropagation()" (contextmenu)="$event.preventDefault()">
+      <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
         @switch (menuMode()) {
           @case ("actions") {
-            <button class="dfl-mi" (click)="startRename()"><app-icon name="rename" size="sm" [px]="12" />Rename…</button>
-            <div class="dfl-sep"></div>
-            <button class="dfl-mi" (click)="openExternal(m.file)"><app-icon name="ext" size="sm" [px]="12" />Open in Default App</button>
-            <button class="dfl-mi" (click)="reveal(m.file)"><app-icon name="folderOpen" size="sm" [px]="12" />{{ revealLabel }}</button>
-            <div class="dfl-sep"></div>
-            <button class="dfl-mi danger" (click)="menuMode.set('delete')"><app-icon name="trash" size="sm" [px]="12" />Delete</button>
+            <button class="menu-item" (click)="startRename()"><app-icon name="rename" size="sm" [px]="12" />Rename…</button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" (click)="openExternal(m.file)"><app-icon name="ext" size="sm" [px]="12" />Open in Default App</button>
+            <button class="menu-item" (click)="reveal(m.file)"><app-icon name="folderOpen" size="sm" [px]="12" />{{ revealLabel }}</button>
+            <div class="menu-sep"></div>
+            <button class="menu-item danger" (click)="menuMode.set('delete')"><app-icon name="trash" size="sm" [px]="12" />Delete</button>
           }
           @case ("delete") {
-            <div class="dfl-label">Delete <b>{{ name(m.file.path) }}</b>?</div>
-            <div class="dfl-row">
+            <div class="menu-label">Delete <b>{{ name(m.file.path) }}</b>?</div>
+            <div class="menu-row">
               <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
               <button class="btn ghost-hair danger" (click)="confirmDelete()">Delete</button>
             </div>
           }
           @default {
-            <div class="dfl-label">Rename {{ name(m.file.path) }}</div>
+            <div class="menu-label">Rename {{ name(m.file.path) }}</div>
             <input
-              class="dfl-input"
+              class="menu-input"
               [value]="nameInput()"
               (input)="nameInput.set($any($event.target).value)"
               (keydown.enter)="commitRename()"
               (keydown.escape)="closeMenu()"
               spellcheck="false"
             />
-            <div class="dfl-row">
+            <div class="menu-row">
               <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
               <button class="btn primary" [disabled]="!nameInput().trim()" (click)="commitRename()">OK</button>
             </div>
           }
         }
-      </div>
+      </app-menu-panel>
     }
 
     <!-- recursive tree row template -->
@@ -239,78 +239,6 @@ function buildTree(files: CommitFile[]): TreeNode[] {
         flex-direction: column;
         min-height: 0;
         height: 100%;
-      }
-      .dfl-menu {
-        position: fixed;
-        z-index: 60;
-        min-width: 190px;
-        background: var(--elev);
-        border: 1px solid var(--hair-2);
-        border-radius: var(--r-md);
-        box-shadow: var(--shadow);
-        padding: var(--sp-2);
-      }
-      .dfl-mi {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-3);
-        width: 100%;
-        text-align: left;
-        padding: var(--sp-2) var(--sp-4);
-        border: none;
-        border-radius: 5px;
-        background: transparent;
-        color: var(--ink-2);
-        font-size: var(--fs-sm);
-        cursor: pointer;
-      }
-      .dfl-mi:hover {
-        background: var(--panel-3);
-        color: var(--ink);
-      }
-      .dfl-mi.danger:hover,
-      .btn.danger {
-        color: var(--code-del-ink);
-      }
-      .dfl-sep {
-        height: 1px;
-        margin: var(--sp-2) var(--sp-1);
-        background: var(--hair);
-      }
-      .dfl-label {
-        padding: var(--sp-2) var(--sp-4);
-        font-size: var(--fs-xs);
-        color: var(--ink-3);
-        max-width: 260px;
-        overflow-wrap: anywhere;
-      }
-      .dfl-label b {
-        color: var(--ink);
-      }
-      .dfl-input {
-        width: 100%;
-        margin: var(--sp-1) 0;
-        background: var(--panel-2);
-        border: 1px solid var(--hair);
-        border-radius: var(--r-sm);
-        padding: var(--sp-2) var(--sp-3);
-        color: var(--ink);
-        font-family: var(--font-mono);
-        font-size: var(--fs-sm);
-        outline: none;
-      }
-      .dfl-input:focus {
-        border-color: var(--ui-focus);
-      }
-      .dfl-row {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--sp-3);
-        padding: var(--sp-2) var(--sp-1) var(--sp-1);
-      }
-      .dfl-row .btn {
-        padding: var(--sp-1) var(--sp-4);
-        font-size: var(--fs-xs);
       }
     `,
   ],
@@ -402,16 +330,6 @@ export class DiffFileListComponent {
     } catch (e) {
       this.ui.flash(msgOf(e));
     }
-  }
-
-  @HostListener("document:mousedown")
-  onDocDown(): void {
-    if (this.menu()) this.closeMenu();
-  }
-
-  @HostListener("document:keydown.escape")
-  onDocEsc(): void {
-    if (this.menu()) this.closeMenu();
   }
 
   readonly totalAdd = computed(() => this.files().reduce((s, f) => s + f.add, 0));
