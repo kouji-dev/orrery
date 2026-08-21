@@ -15,6 +15,7 @@
   --color-panel-2: var(--panel-2);
   --color-panel-3: var(--panel-3);
   --color-elev: var(--elev);
+  --color-elev-hover: var(--elev-hover);
   --color-hair: var(--hair);
   --color-hair-2: var(--hair-2);
   --color-ink: var(--ink);
@@ -227,6 +228,8 @@
   --panel-2: #1d1e20;   /* L 23.5%  C .0041  <- editor surface */
   --panel-3: #232427;   /* L 26.0%  C .0058 */
   --elev: #2c2d30;      /* L 29.7%  C .0056 */
+  --elev-hover: #37393d; /* L ~34%  item hover ON an elev surface (menus/popovers)
+                            — panel-3 is DARKER than elev here, so it can't serve */
   --hair: #353739;
   --hair-2: #444548;
   --bg-grid: rgba(255, 255, 255, 0.02);
@@ -258,6 +261,7 @@
   --panel-2: #f2f2f2;   /* L 96.1%  editor — the ONE bright surface */
   --panel-3: #e4e4e4;   /* L 91.9%  rows, inputs, tab strip (recessed) */
   --elev: #f7f7f7;      /* L 97.6%  popovers — capped, never #fff */
+  --elev-hover: #e9e9e9; /* L ~93%  item hover recedes, like all light elevation */
   --hair: #d1d1d1;
   --hair-2: #bababa;
   --bg-grid: rgba(0, 0, 0, 0.022);
@@ -524,6 +528,95 @@ kbd,
 .btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+.btn.danger {
+  color: var(--st-blocked);
+}
+
+/* ---------- context menus ----------
+   Shared chrome for EVERY menu surface: the store-driven app-context-menu and
+   the file menus (file tree, diff file list) all render an app-menu-panel with
+   these classes. Hover uses --elev-hover, not panel-3: on dark, elev sits
+   ABOVE panel-3, so a panel-3 hover reads as nothing. */
+.menu-panel {
+  position: fixed;
+  z-index: 80;
+  min-width: 196px;
+  background: var(--elev);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  padding: var(--sp-2);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  width: 100%;
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui);
+  cursor: pointer;
+}
+.menu-item:disabled {
+  color: var(--ink-4);
+  cursor: default;
+}
+.menu-item:not(:disabled):hover {
+  background: var(--elev-hover);
+  color: var(--ink);
+}
+.menu-item.danger {
+  color: var(--st-blocked);
+}
+.menu-item.danger:not(:disabled):hover {
+  background: color-mix(in oklch, var(--st-blocked), transparent 88%);
+  color: var(--st-blocked);
+}
+.menu-sep {
+  height: 1px;
+  margin: var(--sp-2) var(--sp-3);
+  background: var(--hair);
+}
+.menu-label {
+  padding: var(--sp-2) var(--sp-4);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  max-width: 260px;
+  overflow-wrap: anywhere;
+}
+.menu-label b {
+  color: var(--ink);
+}
+.menu-input {
+  width: 100%;
+  margin: var(--sp-1) 0;
+  background: var(--panel-2);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+.menu-input:focus {
+  border-color: var(--ui-focus);
+}
+.menu-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-1) var(--sp-1);
+}
+.menu-row .btn {
+  padding: var(--sp-1) var(--sp-4);
+  font-size: var(--fs-xs);
 }
 
 .chip {

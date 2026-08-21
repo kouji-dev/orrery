@@ -4,7 +4,6 @@ import {
   Component,
   computed,
   ElementRef,
-  HostListener,
   inject,
   input,
   signal,
@@ -17,6 +16,7 @@ import { EditsStore } from "../stores/edits.store";
 import { ScrollStateService } from "../workspace/scroll-state.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
+import { MenuPanelComponent } from "../context-menu/menu-panel.component";
 import { revealLabelFor } from "../utils";
 
 interface FlatRow {
@@ -31,7 +31,7 @@ function msgOf(e: unknown): string {
 @Component({
   selector: "app-file-tree",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ScrollingModule],
+  imports: [IconComponent, MenuPanelComponent, ScrollingModule],
   template: `
     @let ag = agent();
     <!-- root-scoped context menu anywhere in the panel — header, empty space
@@ -86,124 +86,48 @@ function msgOf(e: unknown): string {
       }
     </div>
 
-    <!-- context menu: file CRUD (B1.1) -->
+    <!-- context menu: file CRUD (B1.1) — shared menu chrome -->
     @if (menu(); as m) {
-      <div class="ft-menu rise" [style.left.px]="m.x" [style.top.px]="m.y" (mousedown)="$event.stopPropagation()" (contextmenu)="$event.preventDefault()">
+      <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
         @switch (menuMode()) {
           @case ("actions") {
-            <button class="ft-mi" (click)="startInput('create-file')"><app-icon name="file" size="sm" [px]="12" />New File…</button>
-            <button class="ft-mi" (click)="startInput('create-dir')"><app-icon name="folder" size="sm" [px]="12" />New Folder…</button>
+            <button class="menu-item" (click)="startInput('create-file')"><app-icon name="file" size="sm" [px]="12" />New File…</button>
+            <button class="menu-item" (click)="startInput('create-dir')"><app-icon name="folder" size="sm" [px]="12" />New Folder…</button>
             @if (m.node) {
-              <button class="ft-mi" (click)="startRename()"><app-icon name="rename" size="sm" [px]="12" />Rename…</button>
-              <div class="ft-sep"></div>
-              <button class="ft-mi" (click)="openExternal(m.node)"><app-icon name="ext" size="sm" [px]="12" />Open in Default App</button>
-              <button class="ft-mi" (click)="reveal(m.node)"><app-icon name="folderOpen" size="sm" [px]="12" />{{ revealLabel }}</button>
-              <div class="ft-sep"></div>
-              <button class="ft-mi danger" (click)="menuMode.set('delete')"><app-icon name="trash" size="sm" [px]="12" />Delete</button>
+              <button class="menu-item" (click)="startRename()"><app-icon name="rename" size="sm" [px]="12" />Rename…</button>
+              <div class="menu-sep"></div>
+              <button class="menu-item" (click)="openExternal(m.node)"><app-icon name="ext" size="sm" [px]="12" />Open in Default App</button>
+              <button class="menu-item" (click)="reveal(m.node)"><app-icon name="folderOpen" size="sm" [px]="12" />{{ revealLabel }}</button>
+              <div class="menu-sep"></div>
+              <button class="menu-item danger" (click)="menuMode.set('delete')"><app-icon name="trash" size="sm" [px]="12" />Delete</button>
             }
           }
           @case ("delete") {
-            <div class="ft-label">Delete <b>{{ m.node?.name }}</b>{{ m.node?.isDir ? ' and its contents' : '' }}?</div>
-            <div class="ft-row">
+            <div class="menu-label">Delete <b>{{ m.node?.name }}</b>{{ m.node?.isDir ? ' and its contents' : '' }}?</div>
+            <div class="menu-row">
               <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
               <button class="btn ghost-hair danger" (click)="confirmDelete()">Delete</button>
             </div>
           }
           @default {
-            <div class="ft-label">{{ inputLabel() }}</div>
+            <div class="menu-label">{{ inputLabel() }}</div>
             <input
-              class="ft-input"
+              class="menu-input"
               [value]="nameInput()"
               (input)="nameInput.set($any($event.target).value)"
               (keydown.enter)="commit()"
               (keydown.escape)="closeMenu()"
               spellcheck="false"
             />
-            <div class="ft-row">
+            <div class="menu-row">
               <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
               <button class="btn primary" [disabled]="!nameInput().trim()" (click)="commit()">OK</button>
             </div>
           }
         }
-      </div>
+      </app-menu-panel>
     }
   `,
-  styles: [
-    `
-      .ft-menu {
-        position: fixed;
-        z-index: 60;
-        min-width: 190px;
-        background: var(--elev);
-        border: 1px solid var(--hair-2);
-        border-radius: var(--r-md);
-        box-shadow: var(--shadow);
-        padding: var(--sp-2);
-      }
-      .ft-mi {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-3);
-        width: 100%;
-        text-align: left;
-        padding: var(--sp-2) var(--sp-4);
-        border: none;
-        border-radius: 5px;
-        background: transparent;
-        color: var(--ink-2);
-        font-size: var(--fs-sm);
-        cursor: pointer;
-      }
-      .ft-mi:hover {
-        background: var(--panel-3);
-        color: var(--ink);
-      }
-      .ft-mi.danger:hover,
-      .btn.danger {
-        color: var(--code-del-ink);
-      }
-      .ft-sep {
-        height: 1px;
-        margin: var(--sp-2) var(--sp-1);
-        background: var(--hair);
-      }
-      .ft-label {
-        padding: var(--sp-2) var(--sp-4);
-        font-size: var(--fs-xs);
-        color: var(--ink-3);
-        max-width: 260px;
-        overflow-wrap: anywhere;
-      }
-      .ft-label b {
-        color: var(--ink);
-      }
-      .ft-input {
-        width: 100%;
-        margin: var(--sp-1) 0;
-        background: var(--panel-2);
-        border: 1px solid var(--hair);
-        border-radius: var(--r-sm);
-        padding: var(--sp-2) var(--sp-3);
-        color: var(--ink);
-        font-family: var(--font-mono);
-        font-size: var(--fs-sm);
-        outline: none;
-      }
-      .ft-input:focus {
-        border-color: var(--ui-focus);
-      }
-      .ft-row {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--sp-3);
-        padding: var(--sp-2) var(--sp-1) var(--sp-1);
-      }
-      .ft-row .btn {
-        padding: var(--sp-1) var(--sp-4);
-        font-size: var(--fs-xs);
-      }
-    `,
-  ],
 })
 export class FileTreeComponent {
   private work = inject(AgentWorkStore);
@@ -340,16 +264,6 @@ export class FileTreeComponent {
     } catch (e) {
       this.ui.flash(e instanceof Error ? e.message : String(e));
     }
-  }
-
-  @HostListener("document:mousedown")
-  onDocDown(): void {
-    if (this.menu()) this.closeMenu();
-  }
-
-  @HostListener("document:keydown.escape")
-  onDocEsc(): void {
-    if (this.menu()) this.closeMenu();
   }
 
   readonly nodes = computed<FileNode[]>(() => this.work.treeFor(this.agent().id).data);

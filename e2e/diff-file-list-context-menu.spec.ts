@@ -54,7 +54,7 @@ test("right-clicking a file row opens the same 4 actions as the file tree", asyn
   await openCommitDiffWithFile(page);
   await page.locator("app-diff-file-list").getByText("report.html").click({ button: "right" });
 
-  const menu = page.locator(".dfl-menu");
+  const menu = page.locator(".menu-panel");
   await expect(menu.getByRole("button", { name: "Rename…" })).toBeVisible();
   await expect(menu.getByRole("button", { name: "Open in Default App" })).toBeVisible();
   await expect(menu.locator("button", { hasText: /^Reveal in / })).toBeVisible();
@@ -64,13 +64,13 @@ test("right-clicking a file row opens the same 4 actions as the file tree", asyn
 test("the menu is file-scoped — right-clicking the header opens nothing", async ({ page }) => {
   await openCommitDiffWithFile(page);
   await page.locator("app-diff-file-list").getByText("Files in commit", { exact: false }).click({ button: "right" });
-  await expect(page.locator(".dfl-menu")).toHaveCount(0);
+  await expect(page.locator(".menu-panel")).toHaveCount(0);
 });
 
 test("Open in Default App sends the file to the OS handler, worktree-relative", async ({ page }) => {
   await openCommitDiffWithFile(page);
   await page.locator("app-diff-file-list").getByText("report.html").click({ button: "right" });
-  const menu = page.locator(".dfl-menu");
+  const menu = page.locator(".menu-panel");
   await menu.getByRole("button", { name: "Open in Default App" }).click();
 
   await expect(menu).toHaveCount(0);
@@ -84,7 +84,7 @@ test("Open in Default App sends the file to the OS handler, worktree-relative", 
 test("Reveal shows the file in the platform's own file manager", async ({ page }) => {
   await openCommitDiffWithFile(page);
   await page.locator("app-diff-file-list").getByText("report.html").click({ button: "right" });
-  const menu = page.locator(".dfl-menu");
+  const menu = page.locator(".menu-panel");
   await menu.locator("button", { hasText: /^Reveal in / }).click();
 
   const calls = await page.evaluate("window.__calls");
@@ -97,14 +97,14 @@ test("Reveal shows the file in the platform's own file manager", async ({ page }
 test("Rename commits a new path via file_rename", async ({ page }) => {
   await openCommitDiffWithFile(page);
   await page.locator("app-diff-file-list").getByText("report.html").click({ button: "right" });
-  await page.locator(".dfl-menu").getByRole("button", { name: "Rename…" }).click();
+  await page.locator(".menu-panel").getByRole("button", { name: "Rename…" }).click();
 
-  const input = page.locator(".dfl-input");
+  const input = page.locator(".menu-input");
   await expect(input).toHaveValue("report.html");
   await input.fill("summary.html");
   await input.press("Enter");
 
-  await expect(page.locator(".dfl-menu")).toHaveCount(0);
+  await expect(page.locator(".menu-panel")).toHaveCount(0);
   const calls = await page.evaluate("window.__calls");
   expect(calls).toContainEqual({
     command: "file_rename",
@@ -115,12 +115,12 @@ test("Rename commits a new path via file_rename", async ({ page }) => {
 test("Delete asks for confirmation, then sends file_delete", async ({ page }) => {
   await openCommitDiffWithFile(page);
   await page.locator("app-diff-file-list").getByText("report.html").click({ button: "right" });
-  await page.locator(".dfl-menu").getByRole("button", { name: "Delete" }).click();
+  await page.locator(".menu-panel").getByRole("button", { name: "Delete" }).click();
 
-  await expect(page.locator(".dfl-menu")).toContainText("report.html");
-  await page.locator(".dfl-menu").getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator(".menu-panel")).toContainText("report.html");
+  await page.locator(".menu-panel").getByRole("button", { name: "Delete" }).click();
 
-  await expect(page.locator(".dfl-menu")).toHaveCount(0);
+  await expect(page.locator(".menu-panel")).toHaveCount(0);
   const calls = await page.evaluate("window.__calls");
   expect(calls).toContainEqual({
     command: "file_delete",
