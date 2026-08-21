@@ -83,6 +83,9 @@ export const Commands = {
   SetWindowIcon: 'set_window_icon',
   SettingsGet: 'settings_get',
   SettingsSet: 'settings_set',
+  /** Workspace layout/scroll document — JSON passthrough, frontend owns the schema. */
+  WorkspaceGet: 'workspace_get',
+  WorkspaceSet: 'workspace_set',
   /** Channel-aware update check → `{version,date,notes} | null` (legacy shape: a
    *  bare version string). */
   UpdateCheck: 'update_check',

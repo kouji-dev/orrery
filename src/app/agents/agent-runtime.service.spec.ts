@@ -7,6 +7,7 @@ import { AgentDigestEntry, AgentPtyStatusPayload } from "../data-source/bridge";
 import { settingsDefaults, SettingsStore } from "../settings/settings.store";
 import { AgentsStore } from "../stores/agents.store";
 import { NotificationStore } from "../stores/notifications.store";
+import { WorkspaceStore } from "../stores/workspace.store";
 import { UiStore } from "../ui/ui.store";
 import { TerminalService } from "../terminal.service";
 import { AgentWorkStore } from "./agent-work.store";
@@ -100,6 +101,7 @@ function setup(
       { provide: NotificationStore, useValue: notifications },
       { provide: TerminalService, useValue: terminals },
       { provide: SettingsStore, useValue: { settings: signal(settings), ready: () => Promise.resolve(settings) } },
+      { provide: WorkspaceStore, useValue: { ready: () => Promise.resolve() } },
       { provide: UiStore, useValue: { activeTab: signal("orchestrator"), paneRoots: signal({}), scopeAgentId: signal(null), flash: vi.fn(), openAgent: vi.fn() } },
       { provide: AgentWorkStore, useValue: { applyScan: vi.fn(), ensureTree: vi.fn(), ensureCommits: vi.fn(), dispose: vi.fn(), dropTotals: vi.fn() } },
     ],

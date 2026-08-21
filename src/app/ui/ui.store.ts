@@ -13,7 +13,6 @@ import {
   syncPaneSeq,
   treeAgentIds,
 } from "../workspace/pane-model";
-import { drainUpdateResume } from "../updater/update-restore";
 
 const TWEAK_DEFAULTS: Tweaks = {
   theme: "dark",
@@ -23,26 +22,16 @@ const TWEAK_DEFAULTS: Tweaks = {
   motion: true,
 };
 
-// The workspace layout (tabs + pane trees), persisted on every change and
-// restored on every launch — a quit, crash, or update relaunch all come back
-// to the same tabs. Terminal PANES reopen with this; whether their CLI
-// sessions CONTINUE is decided separately (autoResume / update resume list).
-const WORKSPACE_KEY = "orrery.workspace";
-interface WorkspaceState {
-  v: 1;
+/** The layout slice of the persisted workspace document (WorkspaceStore owns
+ *  loading/saving; this is what {@link UiStore.restoreWorkspace} applies). */
+export interface WorkspaceLayout {
   tabs: Tab[];
   activeTab: string;
   scopeAgentId: string | null;
   paneRoots: Record<string, PaneNode>;
-}
-function loadWorkspace(): WorkspaceState | null {
-  try {
-    const s = JSON.parse(localStorage.getItem(WORKSPACE_KEY) || "null") as WorkspaceState | null;
-    if (s?.v !== 1 || !Array.isArray(s.tabs) || !s.tabs.length || !s.paneRoots) return null;
-    return s;
-  } catch {
-    return null;
-  }
+  gitViews?: Record<string, GitView | null>;
+  diffSelections?: Record<string, string | null>;
+  diffListWidth?: number | null;
 }
 
 const TWEAKS_KEY = "orrery.tweaks";
@@ -77,7 +66,8 @@ export class UiStore {
   // Active git-inspection view per agent (commit / range / file-history). Set
   // when the user picks from the right-panel commit history; the agent's diff
   // pane renders it in place of the working-tree diff. null = working changes.
-  private readonly gitViews = signal<Record<string, GitView | null>>({});
+  // Public: the WorkspaceStore persists/hydrates it.
+  readonly gitViews = signal<Record<string, GitView | null>>({});
   gitViewFor(agentId: string): GitView | null {
     return this.gitViews()[agentId] ?? null;
   }
@@ -95,7 +85,13 @@ export class UiStore {
   // Selected file in the agent's working-tree diff, per agent. Lives here (not
   // in DiffViewComponent) because the pane destroys the diff view on every tab
   // switch — component-local selection would reset to the first changed file.
-  private readonly diffSelections = signal<Record<string, string | null>>({});
+  // Public: the WorkspaceStore persists/hydrates it.
+  readonly diffSelections = signal<Record<string, string | null>>({});
+
+  // Width of the diff panel's file list (px), user-resized via the separator.
+  // null = the view's default. Global (not per agent) — a width preference,
+  // not workspace content. Public: the WorkspaceStore persists/hydrates it.
+  readonly diffListWidth = signal<number | null>(null);
   diffSelectionFor(agentId: string): string | null {
     return this.diffSelections()[agentId] ?? null;
   }
@@ -137,41 +133,32 @@ export class UiStore {
 
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Agents whose terminals were live when "Install & relaunch" ran —
-   *  AgentRuntimeService continues their sessions on this launch (one-shot). */
-  readonly updateResumeIds: string[] = drainUpdateResume();
+  /** Agents whose terminals were live when "Install & relaunch" ran — set by
+   *  the WorkspaceStore's one-shot drain at boot; AgentRuntimeService continues
+   *  their sessions on this launch. */
+  updateResumeIds: string[] = [];
+
+  /** Apply a persisted workspace layout. Called by WorkspaceStore.ready()
+   *  BEFORE the shell renders (the splash route is the gate), so the first
+   *  shell paint already shows the restored workspace. */
+  restoreWorkspace(ws: WorkspaceLayout): void {
+    if (!Array.isArray(ws.tabs) || !ws.tabs.length || !ws.paneRoots) return;
+    this.tabs.set(ws.tabs);
+    this.paneRoots.set(ws.paneRoots);
+    if (ws.tabs.some((t) => t.id === ws.activeTab)) this.activeTab.set(ws.activeTab);
+    this.scopeAgentId.set(ws.scopeAgentId ?? null);
+    this.gitViews.set(ws.gitViews ?? {});
+    this.diffSelections.set(ws.diffSelections ?? {});
+    this.diffListWidth.set(ws.diffListWidth ?? null);
+    // fresh ids must not collide with restored "tabN"/"paneN" ids
+    for (const t of ws.tabs) {
+      const m = /^tab(\d+)$/.exec(t.id);
+      if (m) this.tabSeq = Math.max(this.tabSeq, Number(m[1]));
+    }
+    syncPaneSeq(Object.values(ws.paneRoots));
+  }
 
   constructor() {
-    // Restore the last workspace layout (persisted continuously below), so any
-    // restart — quit, crash, or update relaunch — reopens the same tabs.
-    const ws = loadWorkspace();
-    if (ws) {
-      this.tabs.set(ws.tabs);
-      this.paneRoots.set(ws.paneRoots);
-      if (ws.tabs.some((t) => t.id === ws.activeTab)) this.activeTab.set(ws.activeTab);
-      this.scopeAgentId.set(ws.scopeAgentId);
-      // fresh ids must not collide with restored "tabN"/"paneN" ids
-      for (const t of ws.tabs) {
-        const m = /^tab(\d+)$/.exec(t.id);
-        if (m) this.tabSeq = Math.max(this.tabSeq, Number(m[1]));
-      }
-      syncPaneSeq(Object.values(ws.paneRoots));
-    }
-    // persist the layout on every change (same pattern as tweaks below)
-    effect(() => {
-      const state: WorkspaceState = {
-        v: 1,
-        tabs: this.tabs(),
-        activeTab: this.activeTab(),
-        scopeAgentId: this.scopeAgentId(),
-        paneRoots: this.paneRoots(),
-      };
-      try {
-        localStorage.setItem(WORKSPACE_KEY, JSON.stringify(state));
-      } catch {
-        /* storage unavailable — ignore */
-      }
-    });
     // reflect tweaks onto <html>; the accent is fixed by the design tokens
     effect(() => {
       const t = this.tweaks();

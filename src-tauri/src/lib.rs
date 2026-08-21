@@ -21,6 +21,7 @@ mod search;
 mod settings;
 mod update;
 mod watch;
+mod workspace;
 
 use core::database::Database;
 use runtime::jobobj::JobGuard;
@@ -77,6 +78,8 @@ pub fn run() {
             // settings live in the same DB; the agent service consults them at
             // spawn time (branch template + worktree root)
             let settings_service = settings::SettingsService::new(pool.clone());
+            // Workspace layout/scroll document — same DB, frontend-owned schema.
+            app.manage(workspace::WorkspaceService::new(pool.clone()));
             let worktree_root = app
                 .path()
                 .app_data_dir()
@@ -336,6 +339,8 @@ pub fn run() {
             search::commands::search_replace_apply,
             settings::commands::settings_get,
             settings::commands::settings_set,
+            workspace::commands::workspace_get,
+            workspace::commands::workspace_set,
             metrics::commands::system_metrics,
             metrics::commands::process_tree,
             core::emit::telemetry_emits,

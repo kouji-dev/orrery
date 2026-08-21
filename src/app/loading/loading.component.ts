@@ -11,6 +11,7 @@ import {
 import { Router } from '@angular/router';
 import { UpdaterService } from '../updater/updater.service';
 import { UpdateOutcome } from '../updater/updater';
+import { WorkspaceStore } from '../stores/workspace.store';
 
 @Component({
   selector: 'app-loading',
@@ -150,6 +151,7 @@ import { UpdateOutcome } from '../updater/updater';
 })
 export class LoadingComponent implements AfterViewInit {
   readonly updater = inject(UpdaterService);
+  private readonly workspace = inject(WorkspaceStore);
   private readonly router = inject(Router);
 
   /** Cosmetic minimum the splash stays up (ms). */
@@ -191,7 +193,13 @@ export class LoadingComponent implements AfterViewInit {
   }
 
   private async runWithFloor(): Promise<UpdateOutcome> {
-    const [outcome] = await Promise.all([this.updater.run(), this.delay(this.minMs)]);
+    // workspace.ready() hydrates the persisted layout/scroll BEFORE we route
+    // into the shell, so its first paint already shows the restored workspace.
+    const [outcome] = await Promise.all([
+      this.updater.run(),
+      this.workspace.ready(),
+      this.delay(this.minMs),
+    ]);
     return outcome;
   }
 

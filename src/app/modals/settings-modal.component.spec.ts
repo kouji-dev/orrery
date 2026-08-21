@@ -4,6 +4,7 @@ import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { CommandRegistryService } from "../commands/command-registry.service";
+import { WorkspaceStore } from "../stores/workspace.store";
 import { Bridge, BRIDGE } from "../data-source/bridge";
 import { Settings, ToolDetection } from "../models";
 import { RuntimeRowComponent } from "./runtime-row.component";
@@ -65,6 +66,7 @@ async function setup(stored: Partial<Settings> = {}): Promise<Setup> {
       provideZonelessChangeDetection(),
       { provide: BRIDGE, useValue: bridge },
       { provide: UiStore, useValue: { flash: vi.fn() } },
+      { provide: WorkspaceStore, useValue: { setUpdateResume: vi.fn(), flush: () => Promise.resolve(), ready: () => Promise.resolve() } },
       {
         provide: AgentRuntimeService,
         useValue: {
