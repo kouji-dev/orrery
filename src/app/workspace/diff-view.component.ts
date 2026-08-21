@@ -25,7 +25,7 @@ import { DiffStats } from "./review/chunk-stats";
 
 const LIST_MIN = 160; // px — narrowest the file-list panel may get
 const LIST_MAX = 520; // px — widest before the diff body is too cramped
-const LIST_DEFAULT = 236;
+const LIST_DEFAULT = 300;
 
 @Component({
   selector: "app-diff-view",
@@ -71,7 +71,7 @@ const LIST_DEFAULT = 236;
           <!-- tree view: folders + indented file leaves -->
           @for (row of treeRows(); track row.path) {
             @if (row.dir) {
-              <div (click)="toggleDir(row.path)" style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);cursor:pointer" [style.padding-left.px]="8 + row.depth * 13">
+              <div class="diff-dir" (click)="toggleDir(row.path)" [style.padding-left.px]="8 + row.depth * 13">
                 <app-icon [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" size="sm" [px]="11" color="var(--ink-4)" />
                 <app-icon [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" size="sm" [px]="13" color="var(--ink-4)" />
                 <span style="font-size:var(--fs-sm);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
@@ -82,11 +82,10 @@ const LIST_DEFAULT = 236;
                 [class.sel]="current()?.path === row.path"
                 (click)="select(row.path)"
                 [style.padding-left.px]="12 + row.depth * 13"
-                style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-5);cursor:pointer;margin:1px var(--sp-3);border-radius:var(--r-sm)"
               >
-                <span [style.color]="stateInk(row.file!.state)" [style.background]="stateBg(row.file!.state)" style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:3px;display:grid;place-items:center;font-size:var(--fs-2xs);font-weight:700">{{ row.file!.state }}</span>
-                <span [title]="row.file!.state === 'R' && row.file!.oldPath ? ('renamed from ' + row.file!.oldPath) : row.name" style="flex:1;min-width:0;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
-                <span class="tnum" style="font-size:var(--fs-2xs);display:flex;gap:var(--sp-2);flex:none">
+                <span [style.color]="stateInk(row.file!.state)" [style.background]="stateBg(row.file!.state)" class="state-chip">{{ row.file!.state }}</span>
+                <span [title]="row.file!.state === 'R' && row.file!.oldPath ? ('renamed from ' + row.file!.oldPath) : row.name" class="fname">{{ row.name }}</span>
+                <span class="tnum counts-chip">
                   <span style="color:var(--code-add-ink)">+{{ row.file!.add }}</span>
                   @if (row.file!.del > 0) { <span style="color:var(--code-del-ink)">−{{ row.file!.del }}</span> }
                 </span>
@@ -94,28 +93,26 @@ const LIST_DEFAULT = 236;
             }
           }
         } @else {
-          <!-- flat view -->
+          <!-- flat view: SAME single-line row as the tree — the directory (or
+               rename origin) rides inline, muted, so both modes share --row-h -->
           @for (f of changes(); track f.path) {
             <div
               class="diff-file"
               [class.sel]="current()?.path === f.path"
               (click)="select(f.path)"
-              style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);cursor:pointer;margin:1px var(--sp-3);border-radius:var(--r-sm)"
             >
               <span
                 [style.color]="stateInk(f.state)"
                 [style.background]="stateBg(f.state)"
-                style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:3px;display:grid;place-items:center;font-size:var(--fs-2xs);font-weight:700"
+                class="state-chip"
               >{{ f.state }}</span>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fname(f.path) }}</div>
-                @if (f.state === 'R' && f.oldPath) {
-                  <div [title]="'renamed from ' + f.oldPath" style="font-size:var(--fs-2xs);color:var(--vcs-renamed);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">← {{ f.oldPath }}</div>
-                } @else if (fdir(f.path)) {
-                  <div style="font-size:var(--fs-2xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(f.path) }}</div>
-                }
-              </div>
-              <span class="tnum" style="font-size:var(--fs-2xs);display:flex;gap:var(--sp-2);flex:none">
+              <span [title]="f.state === 'R' && f.oldPath ? ('renamed from ' + f.oldPath) : f.path" class="fname">{{ fname(f.path) }}</span>
+              @if (f.state === 'R' && f.oldPath) {
+                <span class="fdir" style="color:var(--vcs-renamed)">← {{ f.oldPath }}</span>
+              } @else if (fdir(f.path)) {
+                <span class="fdir">{{ fdir(f.path) }}</span>
+              }
+              <span class="tnum counts-chip">
                 <span style="color:var(--code-add-ink)">+{{ f.add }}</span>
                 @if (f.del > 0) { <span style="color:var(--code-del-ink)">−{{ f.del }}</span> }
               </span>
@@ -256,6 +253,58 @@ const LIST_DEFAULT = 236;
       .diff-grid.resizing {
         user-select: none;
         cursor: col-resize;
+      }
+      /* ONE row recipe for both view modes — same height (density-scaled via
+         --row-h), so Tree and Flat read as the same list, compact to comfy. */
+      .diff-file,
+      .diff-dir {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-3);
+        height: var(--row-h);
+        cursor: pointer;
+      }
+      .diff-file {
+        padding: 0 var(--sp-5);
+        margin: 1px var(--sp-3);
+        border-radius: var(--r-sm);
+      }
+      .diff-dir {
+        padding: 0 var(--sp-4);
+      }
+      .diff-file .state-chip {
+        flex: none;
+        width: var(--sp-6);
+        height: var(--sp-6);
+        border-radius: 3px;
+        display: grid;
+        place-items: center;
+        font-size: var(--fs-2xs);
+        font-weight: 700;
+      }
+      .diff-file .fname {
+        flex: 0 1 auto;
+        min-width: 0;
+        font-size: var(--fs-sm);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .diff-file .fdir {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: var(--fs-2xs);
+        color: var(--ink-4);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .diff-file .counts-chip {
+        font-size: var(--fs-2xs);
+        display: flex;
+        gap: var(--sp-2);
+        flex: none;
+        margin-left: auto;
       }
       .diff-file:hover:not(.sel) {
         background: var(--panel-2);
@@ -467,8 +516,13 @@ export class DiffViewComponent {
   readonly addCount = computed(() => this.stats()?.add ?? this.current()?.add ?? 0);
   readonly delCount = computed(() => this.stats()?.del ?? this.current()?.del ?? 0);
 
-  // ----- resizable separator (signal-backed width, pointer drag) -----
-  readonly listW = signal(LIST_DEFAULT);
+  // ----- resizable separator (store-backed width, pointer drag) -----
+  // The width preference lives in UiStore (persisted with the workspace), so
+  // it survives tab switches AND restarts. null = the default; always clamped.
+  readonly listW = computed(() => {
+    const w = this.ui.diffListWidth();
+    return w == null ? LIST_DEFAULT : Math.min(LIST_MAX, Math.max(LIST_MIN, w));
+  });
   readonly dragging = signal(false);
   private dragStartX = 0;
   private dragStartW = 0;
@@ -540,7 +594,7 @@ export class DiffViewComponent {
     target.setPointerCapture?.(ev.pointerId);
     const move = (e: PointerEvent) => {
       const next = this.dragStartW + (e.clientX - this.dragStartX);
-      this.listW.set(Math.min(LIST_MAX, Math.max(LIST_MIN, next)));
+      this.ui.diffListWidth.set(Math.min(LIST_MAX, Math.max(LIST_MIN, next)));
     };
     const up = (e: PointerEvent) => {
       this.dragging.set(false);
@@ -552,7 +606,7 @@ export class DiffViewComponent {
     window.addEventListener("pointerup", up);
   }
   resetWidth() {
-    this.listW.set(LIST_DEFAULT);
+    this.ui.diffListWidth.set(null); // back to the default
   }
 
   onOpenCommit(sha: string) {
