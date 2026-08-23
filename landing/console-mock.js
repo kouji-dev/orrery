@@ -206,6 +206,9 @@
     </aside>`;
   }
 
+  // NB: the "Orchestrator" title below is a div, not a heading. This view is a
+  // picture of the app's UI, not a section of this document — a second h1
+  // here would flatten the page's heading tree for crawlers that run JS.
   function overview() {
     const count = (s) => AGENTS.filter((a) => a.status === s).length;
     const stat = (n, label, color, pulse) => `<div style="display:flex;flex-direction:column;gap:2px;padding-right:20px"><div style="display:flex;align-items:baseline;gap:6px"><span class="disp tnum" style="font-size:24px;font-weight:600;color:${color};line-height:1">${n}</span>${pulse ? `<span class="dot running" style="background:${color}"></span>` : ""}</div><span class="up" style="font-size:9px;color:var(--ink-3)">${label}</span></div>`;
@@ -213,7 +216,7 @@
     const vizBtn = (v) => `<button class="btn" style="padding:4px 9px;border-radius:var(--r-sm);background:${v[2] ? "var(--panel-3)" : "transparent"};color:${v[2] ? "var(--ink)" : "var(--ink-3)"};box-shadow:${v[2] ? "0 0 0 1px var(--hair-2)" : "none"}">${icon(v[0], 13, v[2] ? "color:var(--accent)" : "")}${v[1]}</button>`;
     return `<div style="display:flex;flex-direction:column;min-height:0;background:var(--panel-2);flex:1">
       <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--hair);background:var(--panel)">
-        <div style="margin-right:24px"><h1 class="disp" style="font-size:16px;font-weight:600;letter-spacing:-.02em;margin:0">Orchestrator</h1><span style="font-size:10.5px;color:var(--ink-3)">${AGENTS.length} agents across ${PROJECTS.length} projects · ${ORG}</span></div>
+        <div style="margin-right:24px"><div class="disp" style="font-size:16px;font-weight:600;letter-spacing:-.02em;margin:0">Orchestrator</div><span style="font-size:10.5px;color:var(--ink-3)">${AGENTS.length} agents across ${PROJECTS.length} projects · ${ORG}</span></div>
         ${stat(count("running"), "Running", "var(--st-running)", true)}${stat(count("blocked"), "Need you", "var(--st-blocked)")}${stat(count("waiting") + count("queued"), "Waiting", "var(--st-waiting)")}${stat(count("done"), "Done", "var(--st-done)")}
         <div style="margin-left:auto;display:flex;align-items:center;gap:8px"><div style="display:flex;gap:2px;padding:3px;background:var(--panel-2);border-radius:var(--r-md);border:1px solid var(--hair)">${VIZ.map(vizBtn).join("")}</div><button class="btn primary">${icon("bolt", 13)}Spawn</button></div>
       </div>
