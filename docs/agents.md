@@ -40,7 +40,9 @@ Source: `models.ts` (`Agent`), `data.ts` (`AGENTS`, `AGENT_TOOLS`), `orchestra.s
 - [x] Merge → project default branch (marks done, appends a merge commit)
 - [x] Discard working changes
 - [x] Rename branch / duplicate agent
-- [x] Delete worktree (removes the agent, closes its tab)
+- [x] Delete worktree (removes the agent, closes its tab; the confirm dialog's
+      **Hard delete** checkbox also erases the worktree folder — off by default,
+      so uncommitted work survives a plain delete)
 - [x] Answer a blocked agent’s decision in chat → agent resumes live
 
 ## Spawning

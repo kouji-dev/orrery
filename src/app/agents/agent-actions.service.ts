@@ -262,26 +262,37 @@ export class AgentActionsService {
     });
   }
 
-  /** Confirmed worktree delete: stop the agent, close its tabs, remove the
-   *  worktree on disk, then tear down local state. Called by the delete-worktree
-   *  confirm modal — never directly from a menu item. */
-  async confirmRemoveAgent(id: string) {
+  /** Confirmed worktree delete: stop the agent, close its tabs, drop the
+   *  worktree, then tear down local state. Called by the delete-worktree
+   *  confirm modal — never directly from a menu item.
+   *
+   *  `hard` is that modal's checkbox: it additionally erases the worktree
+   *  folder. Without it the branch and the files stay on disk and only the
+   *  agent goes away, so a mis-click never costs uncommitted work. */
+  async confirmRemoveAgent(id: string, hard = false) {
     const ag = this.agents().find((a) => a.id === id);
+    const label = ag ? ag.name : id;
     this.ui.closeDeleteWorktree();
     // stoppingByUser keeps the exit from being recorded as "finished"; the
     // backend kills the PTY again inside agent_remove as the hard guarantee.
     if (ag?.status === "running") this.runtime.stopProcess(id);
     this.ui.closeTabsForAgent(id);
     try {
-      await this.agentsStore.remove(id);
+      await this.agentsStore.remove(id, hard);
     } catch {
-      this.ui.flash("delete failed — worktree kept for " + (ag ? ag.name : id));
+      // A hard delete fails as a unit — the backend aborts before touching git
+      // or the database — so the agent really is still there in both cases.
+      this.ui.flash(
+        hard
+          ? "delete failed — folder locked, worktree kept for " + label
+          : "delete failed — worktree kept for " + label,
+      );
       return;
     }
     this.runtime.dispose(id);
     this.conflicts.dispose(id);
     this.notifications.clearAgent(id);
-    this.ui.flash("removed worktree " + (ag ? ag.name : id));
+    this.ui.flash(hard ? `deleted worktree ${label} and its folder` : `removed worktree ${label} — folder kept`);
   }
 
   // ---- context menu ----
