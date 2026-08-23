@@ -9,6 +9,63 @@
 <meta property="og:title" content="Orrery — Command a fleet of coding agents" />
 <meta property="og:description" content="Every agent in orbit. One core to command them. Multi-agent git orchestration for Windows." />
 <meta property="og:type" content="website" />
+<meta property="og:url" content="https://orrery.kouji.dev/" />
+<meta property="og:site_name" content="Orrery" />
+<meta property="og:image" content="https://orrery.kouji.dev/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Orrery — every agent in orbit. One core to command them." />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="canonical" href="https://orrery.kouji.dev/" />
+<!-- Machine-readable identity for AI agents / search. Keep in sync with the
+     copy above and with llms.txt; regenerate og.png via scripts/landing/gen-og.mjs.
+     No softwareVersion here on purpose — version.js resolves the live version at
+     runtime, and a hardcoded one would go stale on every release. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Orrery",
+  "description": "Orrery orchestrates Claude Code, Codex, Cursor and Gemini in one native console — each agent on its own git worktree and branch. Dispatch, observe, merge.",
+  "url": "https://orrery.kouji.dev/",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Windows, macOS",
+  "downloadUrl": "https://github.com/kouji-dev/orrery-releases/releases",
+  "releaseNotes": "https://orrery.kouji.dev/changelog.html",
+  "image": "https://orrery.kouji.dev/og.png",
+  "screenshot": "https://orrery.kouji.dev/og.png",
+  "isAccessibleForFree": true,
+  "featureList": [
+    "Dispatch many coding agents in parallel across repositories",
+    "One git worktree and branch per agent, so edits never collide",
+    "Live console of every branch: running, blocked, waiting, done",
+    "Per-agent diffs and commits, merge only what passes"
+  ],
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "availability": "https://schema.org/InStock",
+    "url": "https://orrery.kouji.dev/"
+  },
+  "sameAs": [
+    "https://github.com/kouji-dev/orrery",
+    "https://github.com/kouji-dev/orrery-releases/releases"
+  ],
+  "author": {
+    "@type": "Organization",
+    "name": "Kouji.dev",
+    "url": "https://kouji.dev"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Kouji.dev",
+    "url": "https://kouji.dev",
+    "logo": "https://orrery.kouji.dev/og.png",
+    "sameAs": ["https://github.com/kouji-dev"]
+  }
+}
+</script>
 <link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg/%3E" />
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-XJLNTCMR4P"></script>
@@ -141,7 +198,9 @@
   .dl-badge b{font-weight:600;color:var(--ink);}
 
   /* ===== shared section bits ===== */
-  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-4);
+  /* font-weight is pinned because "How it works" is an h2 element for document structure;
+     without it the UA bold would change the look of that one kicker. */
+  .kicker{font-family:var(--mono);font-weight:400;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-4);
     display:flex;align-items:center;gap:14px;margin-bottom:18px;}
   .kicker::after{content:'';flex:1;height:1px;background:var(--hair);}
   .kicker.center{justify-content:center;} .kicker.center::after{display:none;}
@@ -361,24 +420,24 @@
 
   <!-- features -->
   <section class="features-sec" id="how">
-    <div class="kicker reveal">How it works</div>
+    <h2 class="kicker reveal">How it works</h2>
     <div class="feat-grid">
       <div class="feat reveal">
         <div class="feat-bar" style="background:#22d3ee"></div>
         <div class="feat-n" style="color:#22d3ee">01</div>
-        <div class="feat-t">Dispatch a fleet</div>
+        <h3 class="feat-t">Dispatch a fleet</h3>
         <div class="feat-d">Spin up many agents at once and assign the right tool and model to each task — Claude Code, Codex, Cursor or Gemini, running in parallel across every repo.</div>
       </div>
       <div class="feat reveal" style="animation-delay:.09s">
         <div class="feat-bar" style="background:#a855f7"></div>
         <div class="feat-n" style="color:#a855f7">02</div>
-        <div class="feat-t">A worktree per agent</div>
+        <h3 class="feat-t">A worktree per agent</h3>
         <div class="feat-d">Every agent gets its own git worktree and branch. No collisions, no half-finished edits in your tree — you merge only what passes.</div>
       </div>
       <div class="feat reveal" style="animation-delay:.18s">
         <div class="feat-bar" style="background:#ff5d9e"></div>
         <div class="feat-n" style="color:#ff5d9e">03</div>
-        <div class="feat-t">Watch every branch live</div>
+        <h3 class="feat-t">Watch every branch live</h3>
         <div class="feat-d">One console for the whole fleet: running, blocked, waiting, done — with diffs, commits, and the exact moment an agent needs a decision.</div>
       </div>
     </div>

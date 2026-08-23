@@ -1,0 +1,38 @@
+# Orrery — https://orrery.kouji.dev
+# Everything here is public marketing + release information; crawl it all.
+# Agent-oriented guidance (what Orrery is for, when to reach for it) lives in
+# /llms.txt — robots.txt has no directive for that file, so it is noted here.
+
+User-agent: *
+Allow: /
+
+# AI crawlers and answer engines, allowed explicitly so the permission is
+# unambiguous rather than merely implied by the wildcard group above.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+Sitemap: https://orrery.kouji.dev/sitemap.xml

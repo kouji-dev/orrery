@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Orrery — Page not found</title>
+<meta name="description" content="That path does not exist on orrery.kouji.dev. Start from the home page, the changelog, /llms.txt or /sitemap.xml." />
+<meta name="theme-color" content="#07080d" />
+<meta name="robots" content="noindex" />
+<link rel="icon" id="favicon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg/%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#07080d; --ink:#e8ebf2; --ink-2:#aab2c5; --ink-3:#6b7488; --ink-4:#444b5e;
+    --hair:rgba(255,255,255,.07); --panel:#0e1018;
+    --accent:#a855f7; --grad:linear-gradient(100deg,#ff5d9e,#a855f7,#22d3ee);
+    --mono:'JetBrains Mono',ui-monospace,monospace; --disp:'Space Grotesk',var(--mono);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--disp);
+    -webkit-font-smoothing:antialiased;display:flex;align-items:center;justify-content:center;padding:40px 22px;
+    background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);
+    background-size:38px 38px;background-attachment:fixed;}
+  body::before{content:'';position:fixed;top:0;left:0;right:0;height:620px;pointer-events:none;
+    background:radial-gradient(46% 70% at 50% -10%,rgba(168,85,247,.16),transparent 66%);}
+  main{position:relative;width:100%;max-width:620px;}
+  .code{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-4);
+    display:flex;align-items:center;gap:14px;margin-bottom:16px;}
+  .code::after{content:'';flex:1;height:1px;background:var(--hair);}
+  h1{font-weight:600;font-size:clamp(28px,6vw,42px);line-height:1.06;letter-spacing:-.022em;}
+  .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  p{margin-top:16px;color:var(--ink-2);line-height:1.6;font-size:15.5px;}
+  ul{margin:26px 0 0;list-style:none;display:grid;gap:2px;}
+  li a{display:flex;align-items:baseline;gap:12px;padding:11px 14px;border:1px solid transparent;border-radius:8px;
+    color:var(--ink);text-decoration:none;transition:background .15s,border-color .15s;}
+  li a:hover{background:var(--panel);border-color:var(--hair);}
+  li a .k{font-family:var(--mono);font-size:12.5px;color:var(--accent);min-width:132px;}
+  li a .d{color:var(--ink-3);font-size:14px;}
+  pre{margin-top:28px;padding:16px;background:var(--panel);border:1px solid var(--hair);border-radius:8px;
+    font-family:var(--mono);font-size:12.5px;line-height:1.75;color:var(--ink-3);overflow-x:auto;}
+  @media(max-width:520px){ li a{flex-direction:column;gap:3px} li a .k{min-width:0} }
+</style>
+</head>
+<body>
+<main>
+  <div class="code">HTTP 404 · Not found</div>
+  <h1>This orbit is <span class="grad">empty</span>.</h1>
+  <p>
+    There is no page at that path on <strong>orrery.kouji.dev</strong>. The site is small —
+    everything it publishes is listed below, including the machine-readable files an agent
+    should start from.
+  </p>
+
+  <ul>
+    <li><a href="/"><span class="k">/</span><span class="d">Home — what Orrery is, the agents it orchestrates, downloads</span></a></li>
+    <li><a href="/changelog.html"><span class="k">/changelog.html</span><span class="d">Release history, grouped by version</span></a></li>
+    <li><a href="/llms.txt"><span class="k">/llms.txt</span><span class="d">Agent guidance — what Orrery is for and when to use it</span></a></li>
+    <li><a href="/sitemap.xml"><span class="k">/sitemap.xml</span><span class="d">Every indexable URL, with last-modified dates</span></a></li>
+    <li><a href="/robots.txt"><span class="k">/robots.txt</span><span class="d">Crawl permissions</span></a></li>
+    <li><a href="https://github.com/kouji-dev/orrery-releases/releases" rel="noopener"><span class="k">Releases ↗</span><span class="d">Installers and per-version notes on GitHub</span></a></li>
+  </ul>
+
+<pre># 404 — https://orrery.kouji.dev
+
+No page exists at the requested path. Start here instead:
+
+- [Home](https://orrery.kouji.dev/)
+- [Changelog](https://orrery.kouji.dev/changelog.html)
+- [llms.txt](https://orrery.kouji.dev/llms.txt) — when to use Orrery
+- [sitemap.xml](https://orrery.kouji.dev/sitemap.xml) — every indexable URL
+</pre>
+</main>
+</body>
+</html>
