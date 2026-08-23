@@ -80,6 +80,78 @@ test("confirming delete closes the agent's tab and runs the remove", async ({ pa
   expect(await agentCount(page)).toBe(1);
 });
 
+/**
+ * Record every agent_remove payload the store sends. The browser build has no
+ * backend, so the flag itself is what we assert on — the invoke still rejects
+ * afterwards, which keeps the agent listed.
+ */
+const spyRemove = `(() => {
+  const store = window.ng.getComponent(document.querySelector("app-top-bar")).agentActions["agentsStore"];
+  const bridge = store["bridge"];
+  window.__removeCalls = [];
+  const orig = bridge.invoke.bind(bridge);
+  bridge.invoke = (cmd, args) => {
+    if (cmd === "agent_remove") window.__removeCalls.push(args);
+    return orig(cmd, args);
+  };
+})()`;
+
+const removeCalls = (page: Page): Promise<{ id: string; hard: boolean }[]> =>
+  page.evaluate(`window.__removeCalls`) as Promise<{ id: string; hard: boolean }[]>;
+
+test("hard delete is off by default and the copy says the folder is kept", async ({ page }) => {
+  await ready(page);
+  await page.evaluate(seedAgent("e2e-a3", "e2e-soft"));
+  await page.evaluate(spyRemove);
+  await page.evaluate(ui(`.openDeleteWorktree("e2e-a3")`));
+
+  const modal = page.locator("app-delete-worktree-modal");
+  const hard = modal.locator('input[type="checkbox"]');
+  await expect(hard).not.toBeChecked();
+  await expect(modal).toContainText("Its folder stays on disk");
+  await expect(modal).not.toContainText("uncommitted changes");
+
+  await modal.getByRole("button", { name: "Delete worktree", exact: true }).click();
+  expect(await removeCalls(page)).toEqual([{ id: "e2e-a3", hard: false }]);
+  await expect(page.getByText("delete failed — worktree kept")).toBeVisible();
+});
+
+test("checking hard delete arms the folder delete and sends hard: true", async ({ page }) => {
+  await ready(page);
+  await page.evaluate(seedAgent("e2e-a4", "e2e-hard"));
+  await page.evaluate(spyRemove);
+  await page.evaluate(ui(`.openDeleteWorktree("e2e-a4")`));
+
+  const modal = page.locator("app-delete-worktree-modal");
+  await modal.locator('input[type="checkbox"]').check();
+
+  // the warning and the button both restate the bigger blast radius
+  await expect(modal).toContainText("deleted from disk");
+  await expect(modal).toContainText("uncommitted changes");
+  await expect(modal).not.toContainText("Its folder stays on disk");
+
+  await modal.getByRole("button", { name: "Delete worktree + folder" }).click();
+  await expect(modal).toHaveCount(0);
+  expect(await removeCalls(page)).toEqual([{ id: "e2e-a4", hard: true }]);
+  // the failure path names the folder, so a locked directory is diagnosable
+  await expect(page.getByText("delete failed — folder locked")).toBeVisible();
+});
+
+test("the checkbox resets between two delete dialogs", async ({ page }) => {
+  await ready(page);
+  await page.evaluate(seedAgent("e2e-a5", "e2e-first"));
+  await page.evaluate(seedAgent("e2e-a6", "e2e-second"));
+
+  await page.evaluate(ui(`.openDeleteWorktree("e2e-a5")`));
+  const modal = page.locator("app-delete-worktree-modal");
+  await modal.locator('input[type="checkbox"]').check();
+  await modal.getByRole("button", { name: "Cancel" }).click();
+
+  // a fresh dialog must not inherit the previous one's armed checkbox
+  await page.evaluate(ui(`.openDeleteWorktree("e2e-a6")`));
+  await expect(modal.locator('input[type="checkbox"]')).not.toBeChecked();
+});
+
 test("confirm modal for an unknown agent closes itself", async ({ page }) => {
   await ready(page);
   await page.evaluate(ui(`.openDeleteWorktree("no-such-agent")`));

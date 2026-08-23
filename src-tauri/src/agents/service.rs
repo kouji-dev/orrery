@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::core::database::DB;
 use crate::core::errors::{AgentError, AppError, AppResult, DbError};
-use crate::git::service::{FileChange, GitService};
+use crate::git::service::{remove_dir_all_retry, FileChange, GitService, WorktreeDisposal};
 use crate::projects::model::CommitView;
 use crate::settings::SettingsService;
 
@@ -366,16 +366,41 @@ impl AgentService {
         Ok(self.git.file_diff(Path::new(&rec.worktree), path, old_path))
     }
 
-    pub fn remove(&self, id: Uuid, project_path: Option<&Path>) -> AppResult<()> {
-        // best-effort: tear down the worktree before dropping the row
-        if let Some(pp) = project_path {
-            if let Ok(rec) = self.record(id) {
-                if let Some(wt_name) = Path::new(&rec.worktree)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                {
-                    let _ = self.git.remove_worktree(pp, wt_name);
-                }
+    /// Drop an agent. `disposal` decides the fate of its worktree directory:
+    /// [`KeepFolder`](WorktreeDisposal::KeepFolder) deregisters the worktree and
+    /// leaves the files, [`DeleteFolder`](WorktreeDisposal::DeleteFolder) erases
+    /// them.
+    ///
+    /// A failed folder delete aborts the whole removal — the row survives, so
+    /// the agent is still there to retry from — which is why the directory goes
+    /// first, before any git or database state has moved.
+    pub fn remove(
+        &self,
+        id: Uuid,
+        project_path: Option<&Path>,
+        disposal: WorktreeDisposal,
+    ) -> AppResult<()> {
+        let rec = self.record(id).ok();
+
+        if disposal == WorktreeDisposal::DeleteFolder {
+            if let Some(wt) = rec.as_ref().map(|r| r.worktree.as_str()).filter(|w| !w.is_empty()) {
+                // Deliberately keyed off the RECORDED path rather than git's
+                // registration: spawn suffixes the directory on a name clash
+                // without suffixing the worktree name, so find_worktree() can
+                // miss a folder that really exists. Hard delete must not depend
+                // on the two agreeing.
+                remove_dir_all_retry(Path::new(wt))
+                    .map_err(|e| AppError::Other(format!("delete worktree folder '{wt}': {e}")))?;
+            }
+        }
+
+        // best-effort: git metadata cleanup, once the folder question is settled
+        if let (Some(pp), Some(rec)) = (project_path, rec.as_ref()) {
+            if let Some(wt_name) = Path::new(&rec.worktree)
+                .file_name()
+                .and_then(|n| n.to_str())
+            {
+                let _ = self.git.remove_worktree(pp, wt_name, disposal);
             }
         }
         let c = self.db.lock().unwrap();
@@ -921,7 +946,71 @@ mod tests {
     fn remove_deletes() {
         let s = svc();
         let a = s.spawn(req(Uuid::new_v4(), "rm"), &nogit()).unwrap();
-        s.remove(a.id, None).unwrap();
+        s.remove(a.id, None, WorktreeDisposal::KeepFolder).unwrap();
+        assert_eq!(s.list().unwrap().len(), 0);
+    }
+
+    /// Soft delete (the default) drops the agent but never the files.
+    #[test]
+    fn remove_keeps_the_worktree_folder_by_default() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "keepme"), &nogit()).unwrap();
+        let wt = PathBuf::from(&a.worktree);
+        std::fs::create_dir_all(&wt).unwrap();
+        std::fs::write(wt.join("uncommitted.txt"), "work").unwrap();
+
+        s.remove(a.id, None, WorktreeDisposal::KeepFolder).unwrap();
+
+        assert_eq!(s.list().unwrap().len(), 0, "agent gone");
+        assert!(wt.join("uncommitted.txt").exists(), "folder left on disk");
+        std::fs::remove_dir_all(&wt).ok();
+    }
+
+    /// Hard delete is the checkbox: the folder goes with the agent.
+    #[test]
+    fn remove_hard_deletes_the_worktree_folder() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "nukeme"), &nogit()).unwrap();
+        let wt = PathBuf::from(&a.worktree);
+        std::fs::create_dir_all(wt.join("nested")).unwrap();
+        std::fs::write(wt.join("nested/deep.txt"), "work").unwrap();
+
+        s.remove(a.id, None, WorktreeDisposal::DeleteFolder).unwrap();
+
+        assert_eq!(s.list().unwrap().len(), 0, "agent gone");
+        assert!(!wt.exists(), "folder deleted with it");
+    }
+
+    /// Regression guard: spawn suffixes the DIRECTORY on a clash without
+    /// suffixing the git worktree name, so the two can disagree. A hard delete
+    /// keys off the recorded path, and must erase the folder anyway.
+    #[test]
+    fn remove_hard_deletes_a_folder_git_does_not_know_about() {
+        let s = svc();
+        let pid = Uuid::new_v4();
+        let first = s.spawn(req(pid, "clash"), &nogit()).unwrap();
+        std::fs::create_dir_all(&first.worktree).unwrap();
+        let second = s.spawn(req(pid, "clash"), &nogit()).unwrap();
+
+        let wt = PathBuf::from(&second.worktree);
+        std::fs::create_dir_all(&wt).unwrap();
+        std::fs::write(wt.join("f.txt"), "work").unwrap();
+        assert_ne!(first.worktree, second.worktree, "paths disambiguated");
+
+        s.remove(second.id, None, WorktreeDisposal::DeleteFolder)
+            .unwrap();
+        assert!(!wt.exists(), "folder deleted despite the name mismatch");
+
+        std::fs::remove_dir_all(&first.worktree).ok();
+    }
+
+    /// A worktree that was never created on disk is not an error to hard-delete.
+    #[test]
+    fn remove_hard_tolerates_a_missing_folder() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "ghost"), &nogit()).unwrap();
+        assert!(!PathBuf::from(&a.worktree).exists());
+        s.remove(a.id, None, WorktreeDisposal::DeleteFolder).unwrap();
         assert_eq!(s.list().unwrap().len(), 0);
     }
 
