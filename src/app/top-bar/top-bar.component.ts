@@ -1,9 +1,9 @@
 import {
-  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
-  OnDestroy,
+  afterNextRender,
   inject,
   signal,
   viewChild,
@@ -26,11 +26,12 @@ import { NotificationCenterComponent } from "./notification-center.component";
 import { WindowControlsComponent } from "./window-controls.component";
 import { VersionBadgeComponent } from "../shared/version-badge.component";
 import { TicketsStore } from "../stores/tickets.store";
+import { KjButtonComponent, KjKbdComponent } from "@kouji-ui/components";
 
 @Component({
   selector: "app-top-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LogoComponent, IconComponent, StatusDotComponent, NotificationCenterComponent, WindowControlsComponent, VersionBadgeComponent],
+  imports: [LogoComponent, IconComponent, StatusDotComponent, NotificationCenterComponent, WindowControlsComponent, VersionBadgeComponent, KjButtonComponent, KjKbdComponent],
   template: `
     <header
       data-tauri-drag-region
@@ -39,17 +40,22 @@ import { TicketsStore } from "../stores/tickets.store";
       <!-- brand (also a window drag handle). Pinned to the OPEN sidebar width
            (--sidebar-w) so it lines up with the sidebar column and keeps that
            width even when the sidebar is collapsed to the compact rail. -->
-      <div data-tauri-drag-region style="display:flex;align-items:center;gap:var(--sp-5);padding:0 var(--sp-6);flex:none;width:var(--sidebar-w, 252px);box-sizing:border-box">
+      <div data-tauri-drag-region style="display:flex;align-items:center;gap:var(--sp-5);padding:0 var(--sp-6);flex:none;width:var(--sidebar-w);box-sizing:border-box">
         <app-logo style="pointer-events:none" />
         <div style="display:flex;flex-direction:column;line-height:1.12;pointer-events:none">
-          <span class="disp" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-lg);font-weight:600;letter-spacing:0.005em">
+          <span class="disp" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-lg);font-weight:var(--fw-medium);letter-spacing:0.005em">
             <span><span style="color:var(--ui-ink)">O</span>rrery</span>
-            <button type="button" (click)="settings.openWhatsNew()" title="View release changelog"
-              style="pointer-events:auto;border:none;background:transparent;cursor:pointer;padding:0;display:inline-flex;align-items:center;font:inherit;color:inherit">
-              <app-version-badge />
-            </button>
+            <!-- the version pill is a tag, not a button (design/app.html:4228
+                 renders a clickable <span>): a kj-button host dragged in the
+                 whole button recipe — primary ground, control height, hover
+                 lift — for what is a label that happens to open the changelog. -->
+            <app-version-badge
+              style="pointer-events:auto;cursor:pointer"
+              (click)="settings.openWhatsNew()"
+            />
           </span>
-          <span style="font-size:var(--fs-2xs);color:var(--ink-3);letter-spacing:0.04em">
+          <!-- design/app.html:4354 — 9.5px, the quietest line in the chrome -->
+          <span class="trunc" style="font-size:var(--fs-micro);color:var(--ink-3);letter-spacing:0.04em">
             {{ projects.all().length }} projects · {{ runtime.agents().length }} agents
           </span>
         </div>
@@ -59,7 +65,7 @@ import { TicketsStore } from "../stores/tickets.store";
 
       <!-- tabs (empty area drags the window). Overflowing tabs scroll sideways —
            the scrollbar is hidden (this is the titlebar) and the wheel pans. -->
-      <div class="tab-strip" data-tauri-drag-region (wheel)="onTabWheel($event)" style="display:flex;align-items:stretch;flex:1;min-width:0;overflow-x:auto">
+      <div class="scroll-hide" data-tauri-drag-region (wheel)="onTabWheel($event)" style="display:flex;align-items:stretch;flex:1;min-width:0;overflow-x:auto">
         @for (tab of ui.tabs(); track tab.id) {
           @let isOrch = tab.kind === 'orchestrator';
           @let active = ui.activeTab() === tab.id;
@@ -87,7 +93,8 @@ import { TicketsStore } from "../stores/tickets.store";
             style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);cursor:pointer;white-space:nowrap;flex:none;border-right:1px solid var(--hair)"
           >
             @if (active) {
-              <span style="position:absolute;left:0;right:0;top:0;height:var(--sp-1);background:var(--ui-ind)"></span>
+              <!-- design/app.html: 2px --ui-ind indicator pinned to the tab's top edge -->
+              <span style="position:absolute;left:0;right:0;top:0;height:2px;background:var(--ui-ind)"></span>
             }
             @if (dz === 'before') {
               <span style="position:absolute;left:-1px;top:4px;bottom:4px;width:3px;border-radius:2px;background:var(--ui-fill)"></span>
@@ -101,41 +108,43 @@ import { TicketsStore } from "../stores/tickets.store";
 
             @if (isOrch) {
               <app-icon name="layers" size="sm" [color]="active ? 'var(--ui-ink)' : null" />
-              <span style="font-size:var(--fs-ui)">Orchestrator</span>
+              <span>Orchestrator</span>
             } @else if (tab.kind === 'backlog') {
               <app-icon name="layers" size="sm" [color]="active ? 'var(--ui-ink)' : null" />
-              <span style="font-size:var(--fs-ui)">Backlog</span>
+              <span>Backlog</span>
             } @else if (tab.kind === 'ticket') {
               <app-icon name="file" size="sm" [color]="active ? 'var(--ui-ink)' : null" />
-              <span style="font-size:var(--fs-ui);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ticketTabLabel(tab) }}</span>
+              <span class="trunc" style="max-width: round(calc(140px * var(--density)), 1px)">{{ ticketTabLabel(tab) }}</span>
             } @else if (isGroup) {
               <app-icon name="columns" size="sm" [color]="active ? 'var(--ui-ink)' : 'var(--ink-3)'" />
               <span style="display:flex;gap:var(--sp-1)">
                 @for (a of tas.slice(0, 3); track a.id) { <app-status-dot [status]="a.status" /> }
               </span>
-              <span style="font-size:var(--fs-ui)">{{ tas[0]?.name }} <span style="color:var(--ink-4)">+{{ ids.length - 1 }}</span></span>
+              <span>{{ tas[0]?.name }} <span style="color:var(--ink-4)">+{{ ids.length - 1 }}</span></span>
             } @else {
               <app-status-dot [status]="tas[0] ? tas[0].status : 'idle'" />
               @if (proj) {
                 <span [style.background]="proj.color" [title]="proj.name" style="width:var(--sp-3);height:var(--sp-3);border-radius:2px;flex:none"></span>
               }
-              <span style="font-size:var(--fs-ui)">{{ tas[0] ? tas[0].name : tab.id }}</span>
+              <span>{{ tas[0] ? tas[0].name : tab.id }}</span>
             }
 
             @if (!isOrch && tab.kind !== 'backlog') {
-              <button
+              <kj-button kjSize="icon"
+                kjVariant="ghost"
                 (click)="closeTab($event, tab.id)"
                 class="tab-x"
-                style="background:transparent;border:none;color:var(--ink-4);cursor:pointer;display:flex;padding:1px;border-radius:3px;margin-left:var(--sp-1)"
+                kjAriaLabel="Close tab"
+                style="display:flex;margin-left:var(--sp-1);--kj-button-padding-x:1px;--kj-button-padding-y:1px;--kj-button-height:auto;--kj-button-radius:3px"
               >
                 <app-icon name="x" size="sm" />
-              </button>
+              </kj-button>
             }
           </div>
         }
         @if (agentTabCount() >= 2) {
-          <div style="display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-6);color:var(--ink-4);font-size:var(--fs-xs);white-space:nowrap">
-            <app-icon name="columns" size="sm" [px]="12" />drag a tab onto another to tile them
+          <div style="display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-6);color:var(--ink-4);white-space:nowrap">
+            <app-icon size="md" name="columns" />drag a tab onto another to tile them
           </div>
         }
       </div>
@@ -143,18 +152,13 @@ import { TicketsStore } from "../stores/tickets.store";
       <!-- Search Everywhere entry point (design: topbar.jsx "nav stack + search
            everywhere"). Sits at the right end of the tab area, pinned outside the
            scrolling strip so overflowing tabs never push it away. -->
-      <div style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);flex:none">
-        <button
-          class="btn ghost-hair tb-search"
-          (click)="commands.open('search')"
-          [title]="'Search Everywhere · ' + searchKbd"
-          aria-label="Search Everywhere"
-          style="gap:var(--sp-3);padding:var(--sp-1) var(--sp-3);font-size:var(--fs-xs);color:var(--ink-3)"
-        >
-          <app-icon name="search" size="sm" />
-          <span class="kbd">{{ searchKbd }}</span>
-        </button>
-      </div>
+      <kj-button class="tb-search" kjVariant="outline" (click)="commands.open('search')" [title]="'Search Everywhere · ' + searchKbd" kjAriaLabel="Search Everywhere"
+        style="display:flex;align-items:center;padding:0 var(--sp-6);flex:none">
+        <app-icon name="search" size="sm" />
+        @for (k of searchKeys; track $index) {
+          <kj-kbd>{{ k }}</kj-kbd>
+        }
+      </kj-button>
 
       <div class="vdiv"></div>
 
@@ -166,24 +170,30 @@ import { TicketsStore } from "../stores/tickets.store";
         <div style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);flex:none">
           @let running = agentActions.anyRunning();
           <app-notification-center />
+          <!-- Plain div, not <kj-button-group>: the group pulls every button
+               after the first by -1px (its own segmented seam), which slides
+               the segment ON TOP of the design's <span class="pill-div">
+               hairline. The design (app.html:4423) is a role="group" div, and
+               .action-pill in styles.css already draws the shared border. -->
           <div class="action-pill" role="group" aria-label="Workspace controls">
-            <button
+            <kj-button kjSize="icon"
+              kjVariant="ghost"
               [class]="'pill-seg run' + (running ? ' running' : '')"
               (click)="agentActions.toggleRunAll()"
               [title]="running ? 'Pause all agents' : 'Run all agents'"
-              [attr.aria-label]="running ? 'Pause all' : 'Run all'"
+              [kjAriaLabel]="running ? 'Pause all' : 'Run all'"
             >
               <app-icon [name]="running ? 'pause' : 'play'" size="sm" />
-            </button>
+            </kj-button>
             <span class="pill-div"></span>
-            <button class="pill-seg" (click)="ui.toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
+            <kj-button kjSize="icon" kjVariant="ghost" class="pill-seg" (click)="ui.toggleTheme()" title="Toggle theme" kjAriaLabel="Toggle theme">
               <app-icon [name]="ui.tweaks().theme === 'dark' ? 'sun' : 'moon'" size="sm" />
-            </button>
+            </kj-button>
             <span class="pill-div"></span>
-            <button class="pill-seg tb-settings" (click)="settings.openModal()" title="Settings" aria-label="Settings">
+            <kj-button kjVariant="ghost" class="pill-seg tb-settings" (click)="settings.openModal()" title="Settings" kjAriaLabel="Settings">
               <app-icon name="settings" size="sm" />
               @if (settings.updateKnown()) { <span class="tb-upd-dot" title="Update available"></span> }
-            </button>
+            </kj-button>
           </div>
         </div>
 
@@ -195,8 +205,8 @@ import { TicketsStore } from "../stores/tickets.store";
 
     <!-- unsaved-changes guard for closing a whole workspace tab -->
     @if (closeGuard.pending(); as p) {
-      <div class="tcg-scrim" (mousedown)="closeGuard.cancel()">
-        <div class="tcg-card rise" (mousedown)="$event.stopPropagation()">
+      <div class="scrim tcg-scrim" (mousedown)="closeGuard.cancel()">
+        <div class="popover tcg-card rise" (mousedown)="$event.stopPropagation()">
           <div class="tcg-title">Unsaved changes</div>
           @for (f of p.files.slice(0, 6); track f.agentId + ':' + f.path) {
             <div class="tcg-path">{{ f.path }}</div>
@@ -204,12 +214,11 @@ import { TicketsStore } from "../stores/tickets.store";
           @if (p.files.length > 6) {
             <div class="tcg-path">…and {{ p.files.length - 6 }} more</div>
           }
-          <div class="tcg-note">Closing this tab discards edits that were never saved.</div>
+          <small class="tcg-note">Closing this tab discards edits that were never saved.</small>
           <div class="tcg-actions">
-            <button class="btn ghost-hair" (click)="closeGuard.cancel()">Cancel</button>
-            <span style="margin-left:auto"></span>
-            <button class="btn ghost-hair tcg-danger" (click)="closeGuard.discardAndClose()">Discard all</button>
-            <button class="btn primary" (click)="closeGuard.saveAndClose()">Save all & close</button>
+            <kj-button kjVariant="outline" (click)="closeGuard.cancel()">Cancel</kj-button>
+            <kj-button kjVariant="danger" style="display:flex;margin-left:auto" (click)="closeGuard.discardAndClose()">Discard all</kj-button>
+            <kj-button kjVariant="default" (click)="closeGuard.saveAndClose()">Save all & close</kj-button>
           </div>
         </div>
       </div>
@@ -217,57 +226,44 @@ import { TicketsStore } from "../stores/tickets.store";
   `,
   styles: [
     `
-      .tab-x:hover { color: var(--ink) !important; }
+      /* NOTE there is no .tab-x ink rule, and there cannot be one: --kj-button-fg
+         is declared by the variant ON kouji's inner .kj-button, so a value set on
+         the <kj-button> host (inline or by class) only INHERITS and loses. This
+         component's styles are emulated-scoped and cannot reach that inner node
+         either. kjVariant=ghost is what supplies the muted rest ink and the full-ink
+         hover the design (app.html:4387) asks for — the old inline
+         --kj-button-fg:var(--ink-4) was dead for exactly this reason, which is
+         why the close × was painting kouji's default accent square. */
+      /* box + backdrop come from the shared .scrim / .popover recipes; only
+         the stacking level and this card's metrics are local. */
       .tcg-scrim {
-        position: fixed;
-        inset: 0;
         z-index: 80;
-        display: grid;
-        place-items: center;
-        background: color-mix(in oklch, var(--bg), transparent 40%);
       }
       .tcg-card {
-        background: var(--elev);
-        border: 1px solid var(--hair-2);
-        border-radius: var(--r-md);
-        box-shadow: var(--shadow);
         padding: var(--sp-6);
-        min-width: 320px;
-        max-width: 460px;
+        min-width: round(calc(320px * var(--density)), 1px);
+        max-width: round(calc(460px * var(--density)), 1px);
       }
       .tcg-title {
         color: var(--ink);
-        font-size: var(--fs-ui);
-        font-weight: 600;
+        font-weight: var(--fw-medium);
       }
       .tcg-path {
         margin-top: var(--sp-2);
         font-family: var(--font-mono);
-        font-size: var(--fs-xs);
         color: var(--ink-2);
         overflow-wrap: anywhere;
       }
+      /* ink + size + line-height come from the global <small> rule */
       .tcg-note {
         margin-top: var(--sp-3);
-        font-size: var(--fs-xs);
-        color: var(--ink-3);
       }
       .tcg-actions {
         display: flex;
         gap: var(--sp-3);
         margin-top: var(--sp-5);
       }
-      .tcg-actions .btn {
-        padding: var(--sp-1) var(--sp-4);
-        font-size: var(--fs-xs);
-      }
-      .tcg-danger {
-        color: var(--code-del-ink);
-      }
-      .tab-strip { scrollbar-width: none; }
-      .tab-strip::-webkit-scrollbar { display: none; }
       /* pending-update dot on the settings gear (mirrors the in-modal nav dot) */
-      .tb-settings { position: relative; }
       .tb-upd-dot {
         position: absolute; top: 3px; right: 3px; width: var(--sp-3); height: var(--sp-3);
         border-radius: 50%; background: var(--set-amber, var(--sem-attn));
@@ -276,7 +272,7 @@ import { TicketsStore } from "../stores/tickets.store";
     `,
   ],
 })
-export class TopBarComponent implements AfterViewInit, OnDestroy {
+export class TopBarComponent {
   readonly ui = inject(UiStore);
   readonly settings = inject(SettingsStore);
   readonly runtime = inject(AgentRuntimeService);
@@ -289,6 +285,9 @@ export class TopBarComponent implements AfterViewInit, OnDestroy {
 
   /** Platform-aware chip label for the Search Everywhere button ("Shift Shift" / ⇧⇧). */
   readonly searchKbd = kbdLabel("Shift Shift");
+  /** One <kj-kbd> per key — kouji renders each key as its own chip and puts
+   *  any separator between them, rather than one chip holding "Shift Shift". */
+  readonly searchKeys = this.searchKbd.split(/\s+/).filter(Boolean);
 
   // tab drag state: which tab is being dragged + the live drop zone on a target.
   readonly dragId = signal<string | null>(null);
@@ -299,22 +298,21 @@ export class TopBarComponent implements AfterViewInit, OnDestroy {
   // panel column is always exactly as wide as this cluster — they read as one
   // column. A ResizeObserver keeps it correct across font swaps / label changes.
   private readonly rightGroup = viewChild<ElementRef<HTMLElement>>("rightGroup");
-  private ro?: ResizeObserver;
 
-  ngAfterViewInit() {
-    const el = this.rightGroup()?.nativeElement;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const apply = () => {
-      const w = Math.round(el.getBoundingClientRect().width);
-      if (w > 0) document.documentElement.style.setProperty("--right-w", `${w}px`);
-    };
-    apply();
-    this.ro = new ResizeObserver(apply);
-    this.ro.observe(el);
-  }
-
-  ngOnDestroy() {
-    this.ro?.disconnect();
+  constructor() {
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      const el = this.rightGroup()?.nativeElement;
+      if (!el || typeof ResizeObserver === "undefined") return;
+      const apply = () => {
+        const w = Math.round(el.getBoundingClientRect().width);
+        if (w > 0) document.documentElement.style.setProperty("--right-w", `${w}px`);
+      };
+      apply();
+      const ro = new ResizeObserver(apply);
+      ro.observe(el);
+      destroyRef.onDestroy(() => ro.disconnect());
+    });
   }
 
   /** Vertical wheel pans the tab strip sideways (trackpad deltaX already works natively). */

@@ -17,8 +17,37 @@ describe("scanText", () => {
     expect(scanText("margin:0;width:100%")).toEqual([]);
   });
 
-  it("ignores out-of-scope properties (max-height, width, line-height, border)", () => {
-    expect(scanText("max-height:320px;width:252px;line-height:20px;border:1px solid")).toEqual([]);
+  it("covers width properties — a text container must grow with its text", () => {
+    // These were deliberately out of scope until the type ramp was rebased, at
+    // which point fixed-width panels began clipping their own contents.
+    expect(scanText("max-height:320px;width:252px")).toEqual([
+      "max-height: 320px",
+      "width: 252px",
+    ]);
+  });
+
+  it("still ignores line-height and border", () => {
+    expect(scanText("line-height:20px;border:1px solid")).toEqual([]);
+  });
+
+  it("accepts the density-derived and responsive forms", () => {
+    // A px literal multiplied by the density scalar IS the tokenized form.
+    expect(scanText("width:round(calc(196px * var(--density)), 1px)")).toEqual([]);
+    expect(scanText("max-width:calc(100vw - 32px)")).toEqual([]);
+    expect(scanText("width:min(340px, 86%)")).toEqual([]);
+  });
+
+  it("exempts allowlisted px TOKENS, not whole declarations", () => {
+    // Matching used to be a substring test on the raw declaration, so an entry
+    // for "4px" silently permitted 24px/104px, and one matched token exempted
+    // every other px beside it.
+    expect(scanText("gap:4px", "conflict-view.component.ts")).toEqual([]);
+    expect(scanText("padding:104px", "conflict-view.component.ts")).toEqual([
+      "padding: 104px",
+    ]);
+    expect(scanText("padding:3px 33px", "conflict-view.component.ts")).toEqual([
+      "padding: 3px 33px",
+    ]);
   });
 
   it("does not match custom-property definitions", () => {

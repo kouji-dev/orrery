@@ -10,7 +10,6 @@ import {
  */
 @Component({
   selector: "app-add-del",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <span
@@ -18,9 +17,8 @@ import {
       style="
         display: flex;
         gap: var(--sp-2);
-        font-size: var(--fs-2xs);
-        flex: none;
-      "
+        font-size: var(--fs-meta);
+        flex: none"
     >
       @if (add() > 0) {
         <span style="color: var(--code-add-ink)">+{{ add() }}</span>

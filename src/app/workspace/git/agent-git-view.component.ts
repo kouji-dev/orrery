@@ -5,6 +5,7 @@ import { CommitDiffViewComponent } from "./commit-diff-view.component";
 import { RangeDiffViewComponent } from "./range-diff-view.component";
 import { FileHistoryViewComponent } from "./file-history-view.component";
 import { ConflictViewComponent } from "./conflict-view.component";
+import { KjButtonComponent } from "@kouji-ui/components";
 
 /**
  * Center "Diff tab" dispatcher: when a {@link GitView} is active for an agent
@@ -15,19 +16,17 @@ import { ConflictViewComponent } from "./conflict-view.component";
 @Component({
   selector: "app-agent-git-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, CommitDiffViewComponent, RangeDiffViewComponent, FileHistoryViewComponent, ConflictViewComponent],
+  imports: [IconComponent, CommitDiffViewComponent, RangeDiffViewComponent, FileHistoryViewComponent, ConflictViewComponent, KjButtonComponent],
   template: `
     @let ag = agent();
     @let gv = gitView();
     <div style="flex:1;display:flex;flex-direction:column;min-height:0">
-      <div
-        style="flex:none;display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);border-bottom:1px solid var(--hair);background:var(--panel)"
-      >
-        <button class="btn ghost-hair" (click)="close.emit()" title="Back to working changes" style="padding:var(--sp-1) var(--sp-3)">
-          <app-icon name="chevron" size="sm" [px]="12" />Working changes
-        </button>
-        <app-icon name="branch" size="sm" color="var(--ink-3)" [px]="12" />
-        <span style="font-size:var(--fs-xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch }}</span>
+      <div class="pane-head" style="gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);background:var(--panel)">
+        <kj-button kjVariant="outline" (click)="close.emit()" title="Back to working changes">
+          <app-icon size="md" name="chevron" />Working changes
+        </kj-button>
+        <app-icon size="md" name="branch" color="var(--ink-3)" />
+        <span class="trunc" style="color:var(--ink-4)">{{ ag.branch }}</span>
       </div>
       @switch (gv.kind) {
         @case ('commit') {
@@ -45,20 +44,6 @@ import { ConflictViewComponent } from "./conflict-view.component";
       }
     </div>
   `,
-  styles: [
-    `
-      /* Fill the pane body (a flex column). Without an explicit :host flex rule
-         the host collapses to content height, so the view only looked full when
-         a file's content was tall enough to stretch it. */
-      :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-        min-width: 0;
-      }
-    `,
-  ],
 })
 export class AgentGitViewComponent {
   readonly agent = input.required<Agent>();

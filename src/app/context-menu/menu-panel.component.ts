@@ -2,33 +2,53 @@ import {
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
-  effect,
   ElementRef,
-  HostListener,
   input,
+  linkedSignal,
   output,
-  signal,
   viewChild,
 } from "@angular/core";
+import { KjDropdownMenu, KjListNavigator, KjTypeAhead } from "@kouji-ui/core";
+import { DismissDirective } from "../shared/dismiss.directive";
 
 /**
  * Shared chrome for every context-menu surface: the fixed elevated box at a
  * screen point, viewport clamping after layout, and dismissal (outside
- * mousedown / Escape → `closed`). Content is projected — the store-driven
- * ContextMenuComponent renders MenuItems; the file menus (file tree, diff
- * file list) project their own action/rename/delete flows. Styling comes from
- * the global .menu-panel / .menu-item / .menu-sep / .menu-label / .menu-input
- * / .menu-row classes (styles.css).
+ * mousedown / Escape → `closed`, via the shared DismissDirective). Content is
+ * projected — the store-driven ContextMenuComponent renders MenuItems; the
+ * file menus (file tree, diff file list) project their own
+ * action/rename/delete flows. Styling comes from the global .menu-panel /
+ * .menu-item / .menu-sep / .menu-label / .menu-input / .menu-row classes
+ * (styles.css).
+ *
+ * The kouji a11y half lives HERE as host directives so every consumer that
+ * projects `[kjDropdownMenuItem]` rows gets the WAI-ARIA APG menu keyboard
+ * contract (Up/Down/Home/End/type-ahead, Enter/Space, roving tabindex) —
+ * projected content resolves DI against this host, which a directive inside
+ * this template could never provide. `kjFocusMode` / `kjOrientation` /
+ * `kjActivateOnHover` are re-exposed, so a menu consumer opts into roving
+ * focus with `kjFocusMode="roving"` (plus `role="menu"` + a label on the
+ * element); consumers that project non-menu content (rename fields, custom
+ * rows) register no items and the directives stay inert.
  */
 @Component({
   selector: "app-menu-panel",
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DismissDirective],
+  hostDirectives: [
+    { directive: KjDropdownMenu },
+    { directive: KjListNavigator, inputs: ["kjOrientation", "kjFocusMode", "kjActivateOnHover", "kjWrap"] },
+  ],
+  // KjListNavigator only does type-ahead when a KjTypeAhead is reachable; kj's
+  // own KjDropdownMenuContent provides it, and we are not using that panel.
+  providers: [KjTypeAhead],
   template: `
     <div
       #box
       class="menu-panel rise"
       [style.left.px]="pos().x"
       [style.top.px]="pos().y"
+      (appDismiss)="closed.emit()"
       (mousedown)="$event.stopPropagation()"
       (contextmenu)="$event.preventDefault()"
     >
@@ -42,12 +62,12 @@ export class MenuPanelComponent {
   /** Outside mousedown or Escape — the OWNER closes (it holds the open state). */
   readonly closed = output<void>();
 
-  readonly pos = signal<{ x: number; y: number }>({ x: 0, y: 0 });
+  /** Panel position — re-seeds from the requested click point whenever the
+   *  menu re-anchors, then the clamp below nudges it into the viewport. */
+  readonly pos = linkedSignal<{ x: number; y: number }>(() => ({ x: this.x(), y: this.y() }));
   private box = viewChild.required<ElementRef<HTMLDivElement>>("box");
 
   constructor() {
-    // seed from the requested click point (re-seeds when the menu re-anchors)
-    effect(() => this.pos.set({ x: this.x(), y: this.y() }));
     // clamp into the viewport after the menu is laid out
     afterRenderEffect(() => {
       const el = this.box().nativeElement;
@@ -59,17 +79,5 @@ export class MenuPanelComponent {
       const cur = this.pos();
       if (cur.x !== nx || cur.y !== ny) this.pos.set({ x: nx, y: ny });
     });
-  }
-
-  // Inside clicks never reach the document — the panel stops mousedown
-  // propagation — so any that does is an outside click.
-  @HostListener("document:mousedown")
-  onDocDown() {
-    this.closed.emit();
-  }
-
-  @HostListener("document:keydown.escape")
-  onEsc() {
-    this.closed.emit();
   }
 }

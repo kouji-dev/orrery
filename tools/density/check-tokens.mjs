@@ -11,6 +11,11 @@ const TARGET = [
   "margin-inline","margin-inline-start","margin-inline-end",
   "margin-block","margin-block-start","margin-block-end",
   "gap","row-gap","column-gap","height","min-height","font-size",
+  // Widths were out of scope until the type ramp was rebased, at which point
+  // fixed-width containers started clipping their own contents (the tweaks
+  // panel lost its third density option behind `width:288px;overflow:hidden`).
+  // A container that holds text has to be free to grow with it.
+  "width","min-width","max-width","max-height",
 ];
 const PROPS = TARGET.slice().sort((a, b) => b.length - a.length).join("|");
 const RE = new RegExp(`(?<![\\w-])(${PROPS})\\s*:\\s*([^;"'\`}]*)`, "g");
@@ -234,17 +239,51 @@ export const ALLOWLIST = [
   // .cf-edit inline-resolution textarea: 70px min-height is a structural
   // constraint (~3 monospace lines) so the editor never collapses.
   { file: "conflict-view.component.ts", value: "70px" },
-  // Commit-graph rows are exactly 30px tall — locked to the lane-SVG cell
-  // geometry (the svg is 30 high so lane lines join seamlessly row-to-row,
-  // design git-panels.jsx ROW_H). Like code surfaces, the graph rendering is a
-  // fixed-metric surface and intentionally NOT density-scaled (--row-h scales).
-  { file: "commit-graph-panel.component.ts", value: "30px" },
   // The boot/loading splash is a pre-theme screen with fixed, design-exact metrics
   // (hardcoded colors + px). The "Orrery × Kouji.dev" credit footer's gap + font
   // sizes are bespoke visual constants, not spacing/font tokens.
   { file: "loading.component.ts", value: "8px" },
   { file: "loading.component.ts", value: "13px" },
   { file: "loading.component.ts", value: "12px" },
+  // ── Fixed glyph geometry (width/min-width/max-width sweep) ──
+  // Added when the linter's scope widened to cover width properties. Each of
+  // these is a shape, not a container: accent bars and pips (2-3px), Monaco's
+  // own scrollbar rails (3px/7px, !important), checkbox and toggle squares
+  // (12-14px, 30px, 34px), badge minimums (16px), gutter and glyph columns
+  // (24px, 44px), the collapsed icon rail (54px) and fixed label columns
+  // (56px). These must NOT scale: a square that scales on one axis stops being
+  // square, and a Monaco rail that scales stops matching Monaco's own layout.
+  { file: "agent-row.component.ts", value: "2.5px" },
+  { file: "annotate-blame.component.ts", value: "3px" },
+  { file: "annotate-blame.component.ts", value: "44px" },
+  { file: "commit-graph-panel.component.ts", value: "56px" },
+  { file: "compact-rail.component.ts", value: "24px" },
+  { file: "compact-rail.component.ts", value: "54px" },
+  { file: "conflict-view.component.ts", value: "14px" },
+  { file: "dev-panel.component.ts", value: "16px" },
+  { file: "dev-panel.component.ts", value: "9px" },
+  { file: "file-blame.component.ts", value: "3px" },
+  { file: "file-blame.component.ts", value: "44px" },
+  { file: "find-in-files.component.ts", value: "34px" },
+  { file: "git-tab.component.ts", value: "12px" },
+  { file: "monaco-file-editor.component.ts", value: "3px" },
+  { file: "monaco-file-editor.component.ts", value: "7px" },
+  { file: "question-stepper.component.ts", value: "13px" },
+  { file: "review-comments.monaco.ts", value: "24px" },
+  { file: "rich-editor.component.ts", value: "56px" },
+  { file: "send-review.component.ts", value: "54px" },
+  { file: "settings-modal.component.ts", value: "2.5px" },
+  { file: "settings-modal.component.ts", value: "30px" },
+  { file: "settings-modal.component.ts", value: "34px" },
+  { file: "settings-modal.component.ts", value: "9px" },
+  { file: "sidebar.component.ts", value: "16px" },
+  { file: "status-bar.component.ts", value: "30px" },
+  { file: "styles.css", value: "32px" },
+  { file: "styles.css", value: "44px" },
+  { file: "styles.css", value: "9px" },
+  { file: "top-bar.component.ts", value: "3px" },
+  { file: "tweaks-panel.component.ts", value: "34px" },
+  { file: "whats-new-modal.component.ts", value: "7px" },
 ];
 
 export function scanText(text, file = "") {
@@ -252,10 +291,36 @@ export function scanText(text, file = "") {
   for (const m of text.matchAll(RE)) {
     const [, prop, rawVal] = m;
     const val = rawVal.trim();
+
+    // A px literal multiplied by the density scalar IS density-aware — that is
+    // the tokenized form, not a violation. Same for a viewport-relative clamp
+    // (`calc(100vw - 32px)`): the literal is a gutter, and the value tracks the
+    // window rather than being frozen.
+    if (/var\(--(density|fs-scale)\)/.test(val)) continue;
+    if (/\d+(?:\.\d+)?v[wh]/.test(val)) continue;
+    // min()/max()/clamp() already bound the literal against a relative term.
+    if (/(?:min|max|clamp)\(/.test(val)) continue;
+
     const pxs = (val.match(PX) || []).map((s) => s.replace("-", ""));
-    const bad = pxs.filter((p) => !ALLOW_PX.has(p));
+    let bad = pxs.filter((p) => !ALLOW_PX.has(p));
     if (!bad.length) continue;
-    if (ALLOWLIST.some((a) => file.includes(a.file) && val.includes(a.value))) continue;
+
+    // Allowlist entries exempt the px TOKENS they name, not the declaration.
+    //
+    // This used to be `val.includes(a.value)`, a substring test on the raw
+    // declaration, which had two compounding failure modes:
+    //   1. suffix collision — an entry for "4px" also matched 14px, 24px,
+    //      34px, 104px, so most of the numeric space was silently allowed;
+    //   2. declaration-wide amnesty — one matched token exempted EVERY px in
+    //      that declaration, so `padding: 3px 33px` passed on the "3px" entry.
+    // Both are now closed: a token is exempt only if an entry names it exactly,
+    // and any token left unexempted still reports.
+    const exempt = new Set(
+      ALLOWLIST.filter((a) => file.includes(a.file)).map((a) => a.value),
+    );
+    bad = bad.filter((p) => !exempt.has(p));
+    if (!bad.length) continue;
+
     out.push(`${prop}: ${val}`);
   }
   return out;

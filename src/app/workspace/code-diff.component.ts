@@ -3,9 +3,9 @@ import {
   Component,
   effect,
   ElementRef,
+  DestroyRef,
   inject,
   input,
-  OnDestroy,
   viewChild,
 } from "@angular/core";
 import type * as monacoApi from "monaco-editor";
@@ -13,7 +13,14 @@ import type * as monacoApi from "monaco-editor";
 import { BlameLine } from "../models";
 import { UiStore } from "../ui/ui.store";
 import { registerEditor } from "./editor-cap";
-import { applyMonacoTheme, loadMonaco, MonacoApi, monacoLanguage } from "./monaco-loader";
+import {
+  applyMonacoDensity,
+  applyMonacoTheme,
+  loadMonaco,
+  MonacoApi,
+  monacoDensityOptions,
+  monacoLanguage,
+} from "./monaco-loader";
 
 /** Stable per-author hue (mirrors AuthorAvatarComponent / file-blame). */
 function authorColor(author: string): string {
@@ -102,41 +109,12 @@ export function blameDecorations(
 @Component({
   selector: "app-code-diff",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
-  template: `<div #host class="diff-host"></div>`,
-  styles: [
-    `
-      :host {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        min-height: 0;
-      }
-      .diff-host {
-        flex: 1;
-        min-height: 0;
-        overflow: hidden;
-        font-size: var(--fs-ui);
-      }
-      :host ::ng-deep .monaco-editor,
-      :host ::ng-deep .monaco-editor .margin,
-      :host ::ng-deep .monaco-editor-background,
-      :host ::ng-deep .monaco-diff-editor {
-        background-color: var(--bg) !important;
-      }
-      /* flat change layer matching the app's diff palette */
-      :host ::ng-deep .monaco-editor .line-insert,
-      :host ::ng-deep .monaco-editor .char-insert {
-        background-color: var(--code-add-bg) !important;
-      }
-      :host ::ng-deep .monaco-editor .line-delete,
-      :host ::ng-deep .monaco-editor .char-delete {
-        background-color: var(--code-del-bg) !important;
-      }
-    `,
-  ],
+  // .code-host and the Monaco surface/diff-tint recolour are the shared
+  // recipes in styles.css; the host fill comes from the app-code-diff rule
+  // there, so this component ships no styles of its own.
+  template: `<div #host class="code-host"></div>`,
 })
-export class CodeDiffComponent implements OnDestroy {
+export class CodeDiffComponent {
   readonly oldText = input<string>("");
   readonly newText = input<string>("");
   readonly lang = input<string>("");
@@ -162,6 +140,11 @@ export class CodeDiffComponent implements OnDestroy {
       void this.render(this.oldText(), this.newText(), this.lang());
     });
     // Theme switch restyles every live Monaco editor in place.
+    // Density switch → push the new code metrics into the live diff editor.
+    effect(() => {
+      void this.ui.tweaks().density;
+      applyMonacoDensity(this.diff);
+    });
     effect(() => {
       const theme = this.ui.tweaks().theme;
       if (this.monaco) applyMonacoTheme(this.monaco, theme);
@@ -173,10 +156,7 @@ export class CodeDiffComponent implements OnDestroy {
       const newB = this.newBlame();
       this.applyBlame(show, oldB, newB);
     });
-  }
-
-  ngOnDestroy(): void {
-    this.teardown();
+    inject(DestroyRef).onDestroy(() => this.teardown());
   }
 
   private teardown(): void {
@@ -247,7 +227,7 @@ export class CodeDiffComponent implements OnDestroy {
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         automaticLayout: true,
-        fontSize: parseFloat(getComputedStyle(el).fontSize) || 12,
+        ...monacoDensityOptions(),
         fixedOverflowWidgets: true,
         renderLineHighlight: "none",
         stickyScroll: { enabled: false },

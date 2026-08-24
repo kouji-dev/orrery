@@ -1,8 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  HostListener,
   computed,
   inject,
   input,
@@ -10,6 +8,8 @@ import {
   signal,
 } from "@angular/core";
 import { IconComponent } from "../shared/icon.component";
+import { KjButtonComponent, KjCheckboxComponent, KjDividerComponent } from "@kouji-ui/components";
+import { DismissDirective } from "../shared/dismiss.directive";
 
 /**
  * Header filter dropdown: multi-select tags (matches ANY of the selected) with
@@ -18,51 +18,46 @@ import { IconComponent } from "../shared/icon.component";
 @Component({
   selector: "app-tag-filter",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  hostDirectives: [DismissDirective],
+  imports: [IconComponent, KjButtonComponent, KjCheckboxComponent, KjDividerComponent],
   template: `
     @let n = selected().length;
     <div style="position:relative">
-      <button
-        type="button"
-        class="btn ghost-hair"
-        (click)="open.set(!open())"
-        [style.font-size]="'11.5px'"
-        [style.color]="n ? 'var(--ui-ink)' : 'var(--ink-2)'"
-        [style.border-color]="n ? 'var(--ui-line)' : 'var(--hair)'"
-      >
+      <kj-button kjVariant="outline" (click)="open.set(!open())" style="--kj-button-font-size: var(--fs-label)" [style.--kj-button-fg]="n ? 'var(--ui-ink)' : 'var(--ink-2)'" [style.--kj-button-border-color]="n ? 'var(--ui-line)' : 'var(--hair)'">
         <app-icon name="tag" size="sm" [color]="n ? 'var(--ui-ink)' : 'var(--ink-3)'" />
         {{ n ? n + ' tag' + (n > 1 ? 's' : '') : 'Tags' }}
         <app-icon name="chevronD" size="sm" color="var(--ink-4)" />
-      </button>
+      </kj-button>
       @if (open()) {
         <div
           class="surface"
           (click)="$event.stopPropagation()"
-          style="position:absolute;top:100%;right:0;margin-top:var(--sp-3);z-index:20;padding:var(--sp-3);min-width:214px;box-shadow:var(--shadow)"
+          style="position:absolute;top:100%;right:0;margin-top:var(--sp-3);z-index:20;padding:var(--sp-3);min-width: round(calc(214px * var(--density)), 1px);box-shadow:var(--shadow)"
         >
           @if (!allTags().length) {
-            <div style="padding:var(--sp-4) var(--sp-5);font-size:var(--fs-sm);color:var(--ink-4)">No tags yet</div>
+            <div style="padding:var(--sp-4) var(--sp-5);font-size:var(--fs-meta);color:var(--ink-4)">No tags yet</div>
           }
           @if (n > 0) {
-            <button type="button" class="tag-row" (click)="clear()" style="color:var(--ink-3)">
+            <button kjButton type="button" class="tag-row" (click)="clear()" style="color:var(--ink-3)">
               <app-icon name="x" size="sm" style="flex:none" />Clear filter<span class="tag-count">{{ n }} on</span>
             </button>
           }
           @if (n > 0 && allTags().length > 0) {
-            <div style="height:1px;background:var(--hair);margin:var(--sp-2) var(--sp-1)"></div>
+            <kj-divider style="--kj-divider-color:var(--hair);--kj-divider-spacing:var(--sp-2)" />
           }
-          <div class="scroll-y" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:var(--sp-1)">
+          <div class="scroll-y" style="max-height: round(calc(280px * var(--density)), 1px);overflow-y:auto;display:flex;flex-direction:column;gap:var(--sp-1)">
             @for (t of allTags(); track t) {
               @let isOn = selected().includes(t);
-              <button
+              <button kjButton
                 type="button"
                 class="tag-row"
                 (click)="toggle(t)"
                 [style.color]="isOn ? 'var(--ink)' : null"
               >
-                <span class="tag-check" [class.on]="isOn">
-                  @if (isOn) { <app-icon name="check" size="sm" [px]="10" /> }
-                </span>
+                <!-- presentational: the row button owns the interaction, the
+                     checkbox just mirrors state (pointer-events off avoids a
+                     nested control) -->
+                <kj-checkbox size="sm" [checked]="isOn" style="pointer-events:none;flex:none" />
                 <span class="tnum">{{ t }}</span>
                 <span class="tag-count">{{ countOf(t) }}</span>
               </button>
@@ -80,19 +75,13 @@ export class TagFilterComponent {
 
   readonly selectedChange = output<string[]>();
 
-  private readonly host = inject(ElementRef<HTMLElement>);
   readonly open = signal(false);
 
-  @HostListener("document:mousedown", ["$event"])
-  onDocMouseDown(e: MouseEvent) {
-    if (this.open() && !this.host.nativeElement.contains(e.target as Node)) {
-      this.open.set(false);
-    }
-  }
-
-  @HostListener("document:keydown.escape")
-  onEscape() {
-    if (this.open()) this.open.set(false);
+  constructor() {
+    // outside mousedown / Escape → close (shared DismissDirective on the host)
+    inject(DismissDirective).appDismiss.subscribe(() => {
+      if (this.open()) this.open.set(false);
+    });
   }
 
   readonly countMap = computed(() => this.counts());

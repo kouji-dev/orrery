@@ -3,7 +3,6 @@ import {
   Component,
   ElementRef,
   EventEmitter,
-  HostListener,
   Input,
   Output,
   computed,
@@ -13,6 +12,8 @@ import {
 } from "@angular/core";
 import { BlameLine } from "../../models";
 import { IconComponent } from "../../shared/icon.component";
+import { ShaChipComponent } from "../../shared/git/sha-chip.component";
+import { KjBadgeComponent, KjButtonComponent } from "@kouji-ui/components";
 
 // ---------------------------------------------------------------------------
 // Pure data helpers
@@ -124,15 +125,19 @@ interface Popup {
  */
 @Component({
   selector: "app-annotate-blame",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  host: {
+    "(mouseenter)": "onHostEnter()",
+    "(mouseleave)": "onHostLeave()",
+    "(document:keydown)": "onDocKey($event)",
+  },
+  imports: [IconComponent, ShaChipComponent, KjButtonComponent, KjBadgeComponent],
   template: `
     <div class="scroll-y" style="flex:1;position:relative;background:var(--bg)">
       <!-- scoped find (B3.3): Ctrl+F while the pointer is over the blame view -->
       @if (findOpen()) {
         <div class="bf-bar" (mousedown)="$event.stopPropagation()">
-          <app-icon name="search" size="sm" [px]="11" color="var(--ink-4)" />
+          <app-icon size="md" name="search" color="var(--ink-4)" />
           <input
             class="bf-input"
             [value]="query()"
@@ -144,12 +149,12 @@ interface Popup {
             spellcheck="false"
           />
           <span class="tnum bf-count">{{ matches().length ? activeIdx() + 1 : 0 }}/{{ matches().length }}</span>
-          <button class="btn" (click)="prev()" title="Previous match (Shift+Enter)"><app-icon name="chevronD" size="sm" [px]="10" style="display:inline-flex;transform:rotate(180deg)" /></button>
-          <button class="btn" (click)="next()" title="Next match (Enter)"><app-icon name="chevronD" size="sm" [px]="10" /></button>
-          <button class="btn" (click)="closeFind()" title="Close (Esc)"><app-icon name="x" size="sm" [px]="10" /></button>
+          <kj-button kjSize="icon" kjVariant="ghost" (click)="prev()" title="Previous match (Shift+Enter)"><app-icon size="sm" name="chevronD" style="display:inline-flex;transform:rotate(180deg)" /></kj-button>
+          <kj-button kjSize="icon" kjVariant="ghost" (click)="next()" title="Next match (Enter)"><app-icon size="sm" name="chevronD" /></kj-button>
+          <kj-button kjSize="icon" kjVariant="ghost" (click)="closeFind()" title="Close (Esc)"><app-icon size="sm" name="x" /></kj-button>
         </div>
       }
-      <pre style="margin:0;font-family:var(--font-mono);font-size:12px;line-height:1.7">
+      <pre style="font-size:var(--fs-badge);line-height:1.7">
         @for (row of rows(); track row.n; let i = $index) {
           <div style="display:flex" [class.bf-hit]="isHit(i)" [class.bf-on]="isActiveHit(i)" [attr.data-bn]="row.n">
             <!-- author column -->
@@ -158,7 +163,7 @@ interface Popup {
               (mouseleave)="popup.set(null)"
               (click)="onClickRow(row)"
               [style.background]="ageBg(row.age)"
-              style="flex:none;width:196px;display:flex;align-items:center;gap:7px;padding:0 9px 0 0;border-right:1px solid var(--hair);cursor:pointer;user-select:none"
+              style="flex:none;width: round(calc(196px * var(--density)), 1px);display:flex;align-items:center;gap:7px;padding:0 9px 0 0;border-right:1px solid var(--hair);cursor:pointer;user-select:none"
             >
               <!-- age stripe -->
               <span [style.background]="colorOf(row.author)"
@@ -166,15 +171,13 @@ interface Popup {
                     style="flex:none;width:3px;align-self:stretch"></span>
               @if (row.first) {
                 <!-- initials chip -->
-                <span class="chip" [style.background]="colorOf(row.author)"
-                      style="flex:none;font-size:9px;padding:0 4px;color:#000;font-weight:600;border-radius:3px">
+                <kj-badge fg="#000" [bg]="colorOf(row.author)"
+           style="font-weight:var(--fw-medium)">
                   {{ initialsOf(row.author) }}
-                </span>
-                <span style="font-size:10px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">{{ row.author }}</span>
-                <span class="tnum" style="font-size:9px;color:var(--ink-4)">{{ row.rel }}</span>
-                <span class="tnum chip" style="font-size:8px;padding:0 4px">{{ row.sha.slice(0,7) }}</span>
-              } @else {
-                <span style="flex:1"></span>
+                </kj-badge>
+                <span class="trunc" style="font-size:var(--fs-micro);color:var(--ink-2);flex:1">{{ row.author }}</span>
+                <span class="tnum" style="font-size:var(--fs-micro);color:var(--ink-4)">{{ row.rel }}</span>
+                <app-sha-chip [sha]="row.sha" [dim]="true" />
               }
             </div>
             <!-- line number -->
@@ -189,19 +192,20 @@ interface Popup {
       @if (popup(); as p) {
         <div [style.left.px]="popupLeft()"
              [style.top.px]="p.y"
-             style="position:fixed;z-index:80;width:280px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:11px;pointer-events:none">
+             class="popover"
+             style="position:fixed;z-index:80;width: round(calc(280px * var(--density)), 1px);padding:11px;pointer-events:none">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
             <!-- initials chip in popup -->
-            <span class="chip" [style.background]="colorOf(p.row.author)"
-                  style="flex:none;font-size:10px;padding:0 5px;color:#000;font-weight:600;border-radius:3px">
+            <kj-badge fg="#000" [bg]="colorOf(p.row.author)"
+         style="font-weight:var(--fw-medium)">
               {{ initialsOf(p.row.author) }}
-            </span>
-            <span style="font-size:11px;font-weight:600;color:var(--ink);flex:1">{{ p.row.author }}</span>
-            <span class="chip tnum" style="font-size:9.5px;padding:0 6px">{{ p.row.sha.slice(0,7) }}</span>
+            </kj-badge>
+            <span style="font-size:var(--fs-badge);font-weight:var(--fw-medium);color:var(--ink);flex:1">{{ p.row.author }}</span>
+            <kj-badge class="tnum" style="font-size:var(--fs-micro);padding:0 6px">{{ p.row.sha.slice(0,7) }}</kj-badge>
           </div>
-          <div style="font-size:10.5px;color:var(--ink-2);line-height:1.45">{{ p.row.summary }}</div>
-          <div style="font-size:9px;color:var(--ink-2);margin-top:7px;display:flex;align-items:center;gap:5px">
-            <app-icon name="enter" [px]="11"></app-icon>
+          <div style="font-size:var(--fs-micro);color:var(--ink-2);line-height:1.45">{{ p.row.summary }}</div>
+          <div style="font-size:var(--fs-micro);color:var(--ink-2);margin-top:7px;display:flex;align-items:center;gap:5px">
+            <app-icon name="enter" size="md"></app-icon>
             click → open commit diff
           </div>
         </div>
@@ -225,25 +229,18 @@ interface Popup {
       .bf-input {
         flex: 1;
         min-width: 0;
-        max-width: 240px;
+        max-width: round(calc(240px * var(--density)), 1px);
         background: var(--panel-2);
         border: 1px solid var(--hair);
         border-radius: var(--r-sm);
         padding: var(--sp-1) var(--sp-3);
         color: var(--ink);
         font-family: var(--font-mono);
-        font-size: var(--fs-xs);
         outline: none;
       }
       .bf-count {
-        font-size: var(--fs-2xs);
+        font-size: var(--fs-meta);
         color: var(--ink-4);
-      }
-      .bf-bar .btn {
-        display: flex;
-        padding: var(--sp-1);
-        border-radius: 4px;
-        color: var(--ink-3);
       }
       .bf-hit {
         background: var(--ui-sel);
@@ -270,7 +267,7 @@ export class AnnotateBlameComponent {
   readonly findOpen = signal(false);
   readonly query = signal("");
   readonly activeIdx = signal(0);
-  private hovered = false;
+  private readonly hovered = signal(false);
 
   /** Row indices whose code line contains the query (case-insensitive). */
   readonly matches = computed<number[]>(() => {
@@ -319,13 +316,12 @@ export class AnnotateBlameComponent {
     this.activeIdx.set(0);
   }
 
-  @HostListener("mouseenter") onHostEnter(): void { this.hovered = true; }
-  @HostListener("mouseleave") onHostLeave(): void { this.hovered = false; }
+  onHostEnter(): void { this.hovered.set(true); }
+  onHostLeave(): void { this.hovered.set(false); }
 
   /** Ctrl+F opens the scoped find while the pointer is over this surface. */
-  @HostListener("document:keydown", ["$event"])
   onDocKey(e: KeyboardEvent): void {
-    if (!this.hovered) return;
+    if (!this.hovered()) return;
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "f") {
       e.preventDefault();
       e.stopPropagation();

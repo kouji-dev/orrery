@@ -28,13 +28,13 @@ describe("renderMermaidBlocks", () => {
     await renderMermaidBlocks(el, "dark");
 
     expect(render).toHaveBeenCalledTimes(1);
-    expect(render.mock.calls[0][1]).toBe("graph TD; A-->B;");
+    expect(render.mock.calls[0][1]).toBe("graph TD; A-->B");
     expect(initialize).toHaveBeenCalledWith(expect.objectContaining({ theme: "dark", securityLevel: "strict" }));
 
     const box = el.querySelector<HTMLElement>(".mmd")!;
     expect(box).not.toBeNull();
     expect(box.querySelector("svg.mmd-out")).not.toBeNull();
-    expect(box.dataset["mmdSrc"]).toBe("graph TD; A-->B;");
+    expect(box.dataset["mmdSrc"]).toBe("graph TD; A-->B");
     expect(box.dataset["mmdTheme"]).toBe("dark");
     expect(el.querySelector("code.language-mermaid")).toBeNull();
     expect(el.querySelector("h1")).not.toBeNull(); // rest of the doc untouched
@@ -68,7 +68,7 @@ describe("renderMermaidBlocks", () => {
     // theme toggle → re-render from the stored source
     await renderMermaidBlocks(el, "light");
     expect(render).toHaveBeenCalledTimes(2);
-    expect(render.mock.calls[1][1]).toBe("graph TD; A-->B;");
+    expect(render.mock.calls[1][1]).toBe("graph TD; A-->B");
     expect(initialize).toHaveBeenLastCalledWith(expect.objectContaining({ theme: "neutral" }));
     const box = el.querySelector<HTMLElement>(".mmd")!;
     expect(box.dataset["mmdTheme"]).toBe("light");

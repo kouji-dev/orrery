@@ -18,6 +18,16 @@ import { AddDelComponent } from "../../shared/git/add-del.component";
 import { BRIDGE, Commands } from "../../data-source/bridge";
 import { EditsStore } from "../../stores/edits.store";
 import { UiStore } from "../../ui/ui.store";
+import {
+  KjButtonComponent,
+  KjConfirmPopupActionComponent,
+  KjConfirmPopupActionsComponent,
+  KjConfirmPopupCancelComponent,
+  KjConfirmPopupComponent,
+  KjConfirmPopupContentComponent,
+  KjConfirmPopupMessageComponent,
+  KjDividerComponent, KjTabComponent, KjTabListComponent, KjTabsComponent} from "@kouji-ui/components";
+import { KjConfirmPopupTrigger } from "@kouji-ui/core";
 
 function msgOf(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -87,43 +97,47 @@ function buildTree(files: CommitFile[]): TreeNode[] {
  */
 @Component({
   selector: "app-diff-file-list",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, IconComponent, MenuPanelComponent, StateBadgeComponent, AddDelComponent],
+  imports: [
+    NgTemplateOutlet,
+    IconComponent,
+    MenuPanelComponent,
+    StateBadgeComponent,
+    AddDelComponent,
+    KjButtonComponent,
+    KjDividerComponent,
+    KjConfirmPopupComponent,
+    KjConfirmPopupTrigger,
+    KjConfirmPopupContentComponent,
+    KjConfirmPopupMessageComponent,
+    KjConfirmPopupActionsComponent,
+    KjConfirmPopupActionComponent,
+    KjConfirmPopupCancelComponent,
+    KjTabsComponent,
+    KjTabListComponent,
+    KjTabComponent,
+  ],
   template: `
     <div style="display:flex;flex-direction:column;min-height:0;height:100%">
 
       <!-- header: label · count, ±total, tree/flat toggle -->
-      <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-5);border-bottom:1px solid var(--hair);flex:none">
-        <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">
+      <div class="pane-head" style="gap:var(--sp-3);padding:var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-5)">
+        <span class="up" style="color:var(--ink-3)">
           {{ title() || 'Changed' }} · {{ files().length }}
         </span>
         <app-add-del [add]="totalAdd()" [del]="totalDel()" />
         <!-- tree / flat toggle -->
-        <div style="margin-left:auto;display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
-          <button
-            class="btn"
-            (click)="treeMode.set(true)"
-            title="Tree view"
-            [style.background]="treeMode() ? 'var(--panel-3)' : 'transparent'"
-            [style.color]="treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
-            [style.box-shadow]="treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
-            style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
-          >
-            <app-icon name="graph" size="sm" [px]="12" [color]="treeMode() ? 'var(--ui-ink)' : null" />Tree
-          </button>
-          <button
-            class="btn"
-            (click)="treeMode.set(false)"
-            title="Flat view"
-            [style.background]="!treeMode() ? 'var(--panel-3)' : 'transparent'"
-            [style.color]="!treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
-            [style.box-shadow]="!treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
-            style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
-          >
-            <app-icon name="dots" size="sm" [px]="12" [color]="!treeMode() ? 'var(--ui-ink)' : null" />Flat
-          </button>
-        </div>
+        <kj-tabs variant="pills" class="tabs-xs" style="margin-left:auto"
+                 [value]="treeMode() ? 'tree' : 'flat'" (valueChange)="treeMode.set($event === 'tree')">
+          <kj-tab-list aria-label="File list layout">
+            <kj-tab value="tree" title="Tree view">
+              <app-icon size="md" name="graph" [color]="treeMode() ? 'var(--ui-ink)' : null" />Tree
+            </kj-tab>
+            <kj-tab value="flat" title="Flat view">
+              <app-icon size="md" name="dots" [color]="!treeMode() ? 'var(--ui-ink)' : null" />Flat
+            </kj-tab>
+          </kj-tab-list>
+        </kj-tabs>
       </div>
 
       <!-- scrollable file list -->
@@ -142,11 +156,11 @@ function buildTree(files: CommitFile[]): TreeNode[] {
             >
               <app-state-badge [state]="f.state" />
               <div style="flex:1;min-width:0">
-                <div style="font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)">
+                <div class="trunc" style="color:var(--ink)">
                   {{ name(f.path) }}
                 </div>
                 @if (dir(f.path)) {
-                  <div style="font-size:var(--fs-2xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                  <div class="trunc" style="font-size:var(--fs-meta);color:var(--ink-4)">
                     {{ dir(f.path) }}
                   </div>
                 }
@@ -158,7 +172,7 @@ function buildTree(files: CommitFile[]): TreeNode[] {
 
         <!-- tree mode -->
         @if (treeMode()) {
-          <ng-container *ngTemplateOutlet="treeRows; context: { nodes: tree(), depth: 0 }" />
+          <ng-template [ngTemplateOutlet]="treeRows" [ngTemplateOutletContext]="{ nodes: tree(), depth: 0 }" />
         }
 
       </div>
@@ -169,19 +183,21 @@ function buildTree(files: CommitFile[]): TreeNode[] {
       <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
         @switch (menuMode()) {
           @case ("actions") {
-            <button class="menu-item" (click)="startRename()"><app-icon name="rename" size="sm" [px]="12" />Rename…</button>
-            <div class="menu-sep"></div>
-            <button class="menu-item" (click)="openExternal(m.file)"><app-icon name="ext" size="sm" [px]="12" />Open in Default App</button>
-            <button class="menu-item" (click)="reveal(m.file)"><app-icon name="folderOpen" size="sm" [px]="12" />{{ revealLabel }}</button>
-            <div class="menu-sep"></div>
-            <button class="menu-item danger" (click)="menuMode.set('delete')"><app-icon name="trash" size="sm" [px]="12" />Delete</button>
-          }
-          @case ("delete") {
-            <div class="menu-label">Delete <b>{{ name(m.file.path) }}</b>?</div>
-            <div class="menu-row">
-              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
-              <button class="btn ghost-hair danger" (click)="confirmDelete()">Delete</button>
-            </div>
+            <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startRename()"><app-icon size="md" name="rename" />Rename…</kj-button>
+            <kj-divider />
+            <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="openExternal(m.file)"><app-icon size="md" name="ext" />Open in Default App</kj-button>
+            <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="reveal(m.file)"><app-icon size="md" name="folderOpen" />{{ revealLabel }}</kj-button>
+            <kj-divider />
+            <kj-confirm-popup [kjDestructive]="true" (kjConfirmed)="confirmDelete()">
+              <kj-button kjConfirmPopupTrigger #delTrig="kjConfirmPopupTrigger" kjVariant="danger" [kjFullWidth]="true" class="menu-item"><app-icon size="md" name="trash" />Delete</kj-button>
+              <kj-confirm-popup-content [kjFor]="delTrig">
+                <kj-confirm-popup-message>Delete <b>{{ name(m.file.path) }}</b>?</kj-confirm-popup-message>
+                <kj-confirm-popup-actions>
+                  <kj-confirm-popup-cancel><kj-button kjVariant="outline">Cancel</kj-button></kj-confirm-popup-cancel>
+                  <kj-confirm-popup-action><kj-button kjVariant="danger">Delete</kj-button></kj-confirm-popup-action>
+                </kj-confirm-popup-actions>
+              </kj-confirm-popup-content>
+            </kj-confirm-popup>
           }
           @default {
             <div class="menu-label">Rename {{ name(m.file.path) }}</div>
@@ -194,8 +210,8 @@ function buildTree(files: CommitFile[]): TreeNode[] {
               spellcheck="false"
             />
             <div class="menu-row">
-              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
-              <button class="btn primary" [disabled]="!nameInput().trim()" (click)="commitRename()">OK</button>
+              <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
+              <kj-button kjVariant="default" [kjDisabled]="!nameInput().trim()" (click)="commitRename()">OK</kj-button>
             </div>
           }
         }
@@ -207,10 +223,10 @@ function buildTree(files: CommitFile[]): TreeNode[] {
       @for (node of nodes; track node.path) {
         @if (node.kind === 'dir') {
           <div [style.padding-left.px]="8 + depth * 13" style="display:flex;align-items:center;gap:var(--sp-2);padding-top:var(--sp-1);padding-bottom:var(--sp-1);padding-right:var(--sp-2)">
-            <app-icon name="folderOpen" size="sm" [px]="13" style="color:var(--ink-4);flex:none" />
-            <span style="font-size:var(--fs-xs);color:var(--ink-3)">{{ node.name }}</span>
+            <app-icon size="lg" name="folderOpen" style="color:var(--ink-4);flex:none" />
+            <span style="font-size:var(--fs-meta);color:var(--ink-3)">{{ node.name }}</span>
           </div>
-          <ng-container *ngTemplateOutlet="treeRows; context: { nodes: node.children, depth: depth + 1 }" />
+          <ng-template [ngTemplateOutlet]="treeRows" [ngTemplateOutletContext]="{ nodes: node.children, depth: depth + 1 }" />
         } @else {
           <div
             (click)="select.emit(node.path)"
@@ -223,7 +239,8 @@ function buildTree(files: CommitFile[]): TreeNode[] {
           >
             <app-state-badge [state]="node.file.state" />
             <span
-              style="flex:1;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              class="trunc"
+              style="flex:1"
               [style.color]="selPath() === node.path ? 'var(--ink)' : 'var(--ink-2)'"
             >{{ node.name }}</span>
             <app-add-del [add]="node.file.add" [del]="node.file.del" />
@@ -232,16 +249,6 @@ function buildTree(files: CommitFile[]): TreeNode[] {
       }
     </ng-template>
   `,
-  styles: [
-    `
-      :host {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        height: 100%;
-      }
-    `,
-  ],
 })
 export class DiffFileListComponent {
   private readonly bridge = inject(BRIDGE);
@@ -260,7 +267,7 @@ export class DiffFileListComponent {
 
   // ----- context-menu file actions (rename / open / reveal / delete) -----
   readonly menu = signal<{ x: number; y: number; file: CommitFile } | null>(null);
-  readonly menuMode = signal<"actions" | "rename" | "delete">("actions");
+  readonly menuMode = signal<"actions" | "rename">("actions");
   readonly nameInput = signal("");
   readonly revealLabel = revealLabelFor(navigator.userAgent);
 

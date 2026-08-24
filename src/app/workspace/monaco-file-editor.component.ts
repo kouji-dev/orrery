@@ -1,12 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   effect,
   ElementRef,
   EventEmitter,
   inject,
   Input,
-  OnDestroy,
   Output,
   signal,
   untracked,
@@ -20,9 +20,17 @@ import { EditorNavService } from "../commands/editor-nav.service";
 import { EditsStore } from "../stores/edits.store";
 import { UiStore } from "../ui/ui.store";
 import { registerEditor } from "./editor-cap";
-import { applyMonacoTheme, loadMonaco, MonacoApi, monacoLanguage } from "./monaco-loader";
+import {
+  applyMonacoDensity,
+  applyMonacoTheme,
+  loadMonaco,
+  MonacoApi,
+  monacoDensityOptions,
+  monacoLanguage,
+} from "./monaco-loader";
 import { ScrollStateService } from "./scroll-state.service";
 import { attachReviewComments, MonacoReviewApi } from "./review/review-comments.monaco";
+import { KjButtonComponent } from "@kouji-ui/components";
 
 /**
  * WRITABLE single-file editor (B1.1) — the Monaco replacement for the
@@ -38,38 +46,27 @@ import { attachReviewComments, MonacoReviewApi } from "./review/review-comments.
 @Component({
   selector: "app-monaco-file-editor",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
+  imports: [KjButtonComponent],
   template: `
     <div #host class="code-host"></div>
-    <!-- B4.3: revert-hunk popover, anchored at the marker click -->
+    <!-- B4.3: revert-hunk popover, anchored at the marker click. Hand-rolled on
+         purpose: kj-popover / kj-confirm-popup only anchor to a trigger element
+         (KjOverlayTriggerLike) and Monaco's gutter markers aren't Angular DOM,
+         so there is nothing to hand the library — it has no manual-coords API. -->
     @if (revertAsk(); as ra) {
-      <div class="gm-pop rise" [style.left.px]="ra.x" [style.top.px]="ra.y" (mousedown)="$event.stopPropagation()">
+      <div class="popover gm-pop rise" [style.left.px]="ra.x" [style.top.px]="ra.y" (mousedown)="$event.stopPropagation()">
         <span class="gm-pop-label">{{ ra.hunk.newLines === 0 ? 'Restore deleted lines?' : 'Revert this hunk to HEAD?' }}</span>
-        <button class="btn ghost-hair gm-danger" (click)="confirmRevert(ra.hunk)">Revert</button>
-        <button class="btn ghost-hair" (click)="revertAsk.set(null)">Cancel</button>
+        <kj-button kjVariant="danger" (click)="confirmRevert(ra.hunk)">Revert</kj-button>
+        <kj-button kjVariant="outline" (click)="revertAsk.set(null)">Cancel</kj-button>
       </div>
     }
   `,
   styles: [
     `
+      /* fill + .code-host + the Monaco surface recolour are shared recipes in
+         styles.css; only the positioning context for .gm-pop is local */
       :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        height: 100%;
-        min-height: 0;
         position: relative;
-      }
-      .code-host {
-        flex: 1;
-        min-height: 0;
-        overflow: hidden;
-        font-size: var(--fs-ui);
-      }
-      :host ::ng-deep .monaco-editor,
-      :host ::ng-deep .monaco-editor .margin,
-      :host ::ng-deep .monaco-editor-background {
-        background-color: var(--bg) !important;
       }
       /* B4.3 change markers in the line-decorations column */
       :host ::ng-deep .gm-added {
@@ -87,33 +84,22 @@ import { attachReviewComments, MonacoReviewApi } from "./review/review-comments.
         width: 7px !important;
         cursor: pointer;
       }
+      /* surface comes from .popover */
       .gm-pop {
         position: fixed;
         z-index: 70;
         display: flex;
         align-items: center;
         gap: var(--sp-3);
-        background: var(--elev);
-        border: 1px solid var(--hair-2);
-        border-radius: var(--r-md);
-        box-shadow: var(--shadow);
         padding: var(--sp-2) var(--sp-4);
       }
       .gm-pop-label {
-        font-size: var(--fs-xs);
         color: var(--ink-2);
-      }
-      .gm-pop .btn {
-        padding: var(--sp-1) var(--sp-3);
-        font-size: var(--fs-xs);
-      }
-      .gm-danger {
-        color: var(--code-del-ink);
       }
     `,
   ],
 })
-export class MonacoFileEditorComponent implements OnDestroy {
+export class MonacoFileEditorComponent {
   private readonly review = inject(ReviewStore);
   private readonly ui = inject(UiStore);
   private readonly editorNav = inject(EditorNavService);
@@ -167,6 +153,13 @@ export class MonacoFileEditorComponent implements OnDestroy {
       void this.render(this.agent(), this.file(), this.lang());
     });
     // Theme switch restyles every live Monaco editor in place.
+    // Density switch → push the new code metrics into the live editor. Monaco
+    // reads fontSize/lineHeight once at create(), so without this the open file
+    // keeps the old density's glyph size until the tab is closed and reopened.
+    effect(() => {
+      void this.ui.tweaks().density;
+      applyMonacoDensity(this.editor);
+    });
     effect(() => {
       const theme = this.ui.tweaks().theme;
       if (this.monaco) applyMonacoTheme(this.monaco, theme);
@@ -224,10 +217,7 @@ export class MonacoFileEditorComponent implements OnDestroy {
       editor.focus();
       this.editorNav.consume(t);
     });
-  }
-
-  ngOnDestroy(): void {
-    this.teardown();
+    inject(DestroyRef).onDestroy(() => this.teardown());
   }
 
   private teardown(): void {
@@ -323,7 +313,6 @@ export class MonacoFileEditorComponent implements OnDestroy {
 
     try {
       const buf = this.edits.open(agent, file, this.newText());
-      const fontSize = parseFloat(getComputedStyle(el).fontSize) || 12;
       const model = monaco.editor.createModel(buf.text, langId);
       const editor = monaco.editor.create(el, {
         model,
@@ -333,7 +322,7 @@ export class MonacoFileEditorComponent implements OnDestroy {
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         automaticLayout: true,
-        fontSize,
+        ...monacoDensityOptions(),
         fixedOverflowWidgets: true,
         renderLineHighlight: "line",
         stickyScroll: { enabled: false },

@@ -165,7 +165,10 @@ export class UiStore {
     effect(() => {
       const t = this.tweaks();
       const r = document.documentElement;
-      r.setAttribute("data-theme", t.theme);
+      // kouji's own `dark`/`light` themes key on those same attribute
+      // values, so Orrery names its themes explicitly to avoid selecting
+      // them by accident.
+      r.setAttribute("data-theme", t.theme === "light" ? "orrery-light" : "orrery");
       r.setAttribute("data-density", t.density);
       r.setAttribute("data-motion", t.motion ? "on" : "off");
     });

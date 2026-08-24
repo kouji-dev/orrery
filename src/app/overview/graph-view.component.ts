@@ -19,7 +19,7 @@ interface Laid {
   template: `
     @let g = layout();
     <div style="padding:var(--sp-7);display:grid;place-items:center;min-height:0;overflow:auto">
-      <svg [attr.viewBox]="'0 0 ' + W + ' ' + g.H" style="width:100%;max-width:920px;height:auto">
+      <svg [attr.viewBox]="'0 0 ' + W + ' ' + g.H" style="width:100%;max-width: round(calc(920px * var(--density)), 1px);height:auto">
         <defs>
           <radialGradient id="orch-core" cx="50%" cy="50%">
             <stop offset="0" stop-color="var(--ui-ink)" stop-opacity="0.4" />

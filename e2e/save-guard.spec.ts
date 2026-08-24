@@ -75,7 +75,8 @@ test("Autosave is an opt-in setting under Agent defaults", async ({ page }) => {
   await expect(row).toBeVisible();
   await expect(row).toContainText("Ctrl+S still saves on demand");
 
-  await row.locator("app-set-tgl").click();
+  // the row control is kouji's <kj-toggle> (a button with aria-pressed) now
+  await row.getByRole("button", { name: "Autosave edits" }).click();
   const on = await page.evaluate(
     `window.ng.getComponent(document.querySelector("app-top-bar")).settings.settings().autosave`,
   );

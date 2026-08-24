@@ -4,13 +4,12 @@ import {
   computed,
   effect,
   ElementRef,
-  HostListener,
   inject,
   Input,
   signal,
   viewChild,
 } from "@angular/core";
-import { Agent, Project } from "../models";
+import { Agent } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { EditsStore } from "../stores/edits.store";
 import { ScrollStateService } from "./scroll-state.service";
@@ -26,6 +25,7 @@ import { DropSide, PaneCtx, PaneLeaf, PaneNode, PaneSplit } from "./pane-model";
 import { TerminalComponent } from "./terminal.component";
 import { AgentGitViewComponent } from "./git/agent-git-view.component";
 import { UiStore } from "../ui/ui.store";
+import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
 
 /**
  * One node of a workspace pane tree, rendered recursively. A `leaf` is a single
@@ -36,7 +36,8 @@ import { UiStore } from "../ui/ui.store";
 @Component({
   selector: "app-pane-node",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ToolBadgeComponent, TerminalComponent, DiffViewComponent, FileViewComponent, AgentGitViewComponent],
+  host: { "(document:mousedown)": "onDocDown($event)" },
+  imports: [IconComponent, ToolBadgeComponent, TerminalComponent, DiffViewComponent, FileViewComponent, AgentGitViewComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     @if (asLeaf(); as lf) {
       @let ag = agent();
@@ -51,39 +52,31 @@ import { UiStore } from "../ui/ui.store";
       >
         <!-- pane header -->
         <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);background:var(--panel);border-bottom:1px solid var(--hair);position:relative;flex:none">
-          @if (proj(); as p) { <span [style.background]="p.color" [title]="p.name" style="width:var(--sp-3);height:var(--sp-3);border-radius:2px;flex:none"></span> }
-          <button
-            (click)="$event.stopPropagation(); pickOpen.set(!pickOpen())"
-            style="display:flex;align-items:center;gap:var(--sp-3);background:transparent;border:none;cursor:pointer;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);padding:var(--sp-1) var(--sp-2);border-radius:5px;min-width:0"
-          >
+          <kj-button kjVariant="ghost" kjSize="xs" style="--kj-button-fg: var(--ink)" (click)="$event.stopPropagation(); pickOpen.set(!pickOpen())">
             @if (ag) {
               <span [style.background]="dot(ag.status)" style="width:var(--sp-3);height:var(--sp-3);border-radius:50%;flex:none"></span>
             } @else {
               <app-icon name="agent" size="sm" color="var(--ink-4)" />
             }
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">{{ ag ? ag.name : 'Assign agent' }}</span>
-            <app-icon name="chevronD" size="sm" [px]="11" color="var(--ink-4)" />
-          </button>
+            <span class="trunc" style="max-width: round(calc(130px * var(--density)), 1px)">{{ ag ? ag.name : 'Assign agent' }}</span>
+            <app-icon size="md" name="chevronD" color="var(--ink-4)" />
+          </kj-button>
 
           @if (pickOpen()) {
-            <div #picker class="rise" style="position:absolute;top:calc(100% + 4px);left:6px;z-index:40;width:230px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:var(--sp-2);max-height:320px;overflow-y:auto">
+            <div #picker class="popover rise" style="position:absolute;top:calc(100% + 4px);left:6px;z-index:40;width: round(calc(230px * var(--density)), 1px);padding:var(--sp-2);max-height: round(calc(320px * var(--density)), 1px);overflow-y:auto">
               @for (p of ctx().projects(); track p.id) {
                 @let pa = agentsOf(p.id);
                 @if (pa.length) {
                   <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4) var(--sp-1)">
                     <span [style.background]="p.color" style="width:var(--sp-3);height:var(--sp-3);border-radius:2px"></span>
-                    <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-3)">{{ p.name }}</span>
+                    <span class="up" style="color:var(--ink-3)">{{ p.name }}</span>
                   </div>
                   @for (a of pa; track a.id) {
-                    <button
-                      (click)="ctx().onAgent(lf.id, a.id); pickOpen.set(false)"
-                      [style.background]="lf.agentId === a.id ? 'var(--panel-3)' : 'transparent'"
-                      style="display:flex;align-items:center;gap:var(--sp-4);width:100%;text-align:left;padding:var(--sp-2) var(--sp-4);border-radius:6px;border:none;cursor:pointer;font-family:var(--font-mono);font-size:var(--fs-sm);color:var(--ink)"
-                    >
+                    <kj-button kjVariant="ghost" kjSize="xs" style="--kj-button-fg: var(--ink)" (click)="ctx().onAgent(lf.id, a.id); pickOpen.set(false)" [style.--kj-button-bg]="lf.agentId === a.id ? 'var(--panel-3)' : 'transparent'">
                       <span [style.background]="dot(a.status)" style="width:var(--sp-3);height:var(--sp-3);border-radius:50%;flex:none"></span>
-                      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.name }}</span>
+                      <span class="trunc" style="flex:1">{{ a.name }}</span>
                       <app-tool-badge [tool]="a.tool" [size]="13" />
-                    </button>
+                    </kj-button>
                   }
                 }
               }
@@ -91,23 +84,20 @@ import { UiStore } from "../ui/ui.store";
           }
 
           @if (ag) {
-            <div style="display:flex;gap:1px;margin-left:var(--sp-2);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:5px">
-              @for (v of views; track v.k) {
-                <button
-                  (click)="$event.stopPropagation(); ctx().onView(lf.id, v.k)"
-                  [title]="v.k"
-                  [style.background]="lf.view === v.k ? 'var(--panel-3)' : 'transparent'"
-                  [style.color]="lf.view === v.k ? 'var(--ui-ink)' : 'var(--ink-3)'"
-                  style="display:flex;padding:var(--sp-1) var(--sp-2);border-radius:3px;border:none;cursor:pointer"
-                ><app-icon [name]="v.icon" size="sm" [px]="12" /></button>
-              }
-            </div>
+            <kj-tabs variant="pills" class="tabs-xs" style="margin-left:var(--sp-2)"
+                     [value]="lf.view" (valueChange)="ctx().onView(lf.id, $any($event))" (click)="$event.stopPropagation()">
+              <kj-tab-list aria-label="Pane view">
+                @for (v of views; track v.k) {
+                  <kj-tab [value]="v.k" [title]="v.k"><app-icon size="md" [name]="v.icon" [color]="lf.view === v.k ? 'var(--ui-ink)' : null" /></kj-tab>
+                }
+              </kj-tab-list>
+            </kj-tabs>
           }
 
           <!-- open-file tabs, inline beside the view toggle; scrolls with an
                edge-fade when there are more than fit. Doubles as the flex spacer. -->
           @if (ag) {
-            <div #fileStrip class="file-strip" (wheel)="onStripWheel($event)">
+            <div #fileStrip class="file-strip scroll-hide" (wheel)="onStripWheel($event)">
               @for (f of lf.files ?? []; track f) {
                 @let onf = lf.view === 'file' && lf.activeFile === f;
                 @let dirty = isDirty(lf, f);
@@ -120,52 +110,37 @@ import { UiStore } from "../ui/ui.store";
                   (click)="$event.stopPropagation(); ctx().onFileSelect(lf.id, f)"
                   (contextmenu)="onFileTabContext($event, lf, f)"
                 >
-                  <app-icon name="file" size="sm" [px]="11" [color]="onf ? 'var(--ui-ink)' : 'var(--ink-4)'" />
-                  <span class="fn">{{ fname(f) }}</span>
+                  <app-icon size="md" name="file" [color]="onf ? 'var(--ui-ink)' : 'var(--ink-4)'" />
+                  <span class="fn trunc">{{ fname(f) }}</span>
                   <span class="fdot" aria-label="unsaved changes"></span>
-                  <button class="fx" title="Close file" (click)="$event.stopPropagation(); requestFileClose(lf, f)">
-                    <app-icon name="x" size="sm" [px]="10" />
-                  </button>
+                  <kj-button kjSize="icon" class="fx" kjVariant="ghost" title="Close file" (click)="$event.stopPropagation(); requestFileClose(lf, f)">
+                    <app-icon size="sm" name="x" />
+                  </kj-button>
                 </div>
               }
             </div>
-          } @else {
-            <div style="flex:1"></div>
           }
           @if (ag) {
             @if (ag.worktree) {
-              <button
-                class="pane-btn"
-                (click)="$event.stopPropagation(); diagnostics.openWorktree(ag.worktree)"
-                title="Open worktree folder"
-              ><app-icon name="folderOpen" size="sm" [px]="13" /></button>
+              <kj-button kjSize="xs" kjVariant="ghost" (click)="$event.stopPropagation(); diagnostics.openWorktree(ag.worktree)" title="Open worktree folder"><app-icon size="lg" name="folderOpen" /></kj-button>
             }
             @if (ag.sessionId && ag.status !== 'running') {
-              <button
-                class="pane-btn"
-                (click)="$event.stopPropagation(); continueSession(ag.id)"
-                [title]="'Continue last session · ' + ag.tool + ' (' + ag.sessionId + ')'"
-              ><app-icon name="refresh" size="sm" [px]="13" /></button>
+              <kj-button kjSize="xs" kjVariant="ghost" (click)="$event.stopPropagation(); continueSession(ag.id)" [title]="'Continue last session · ' + ag.tool + ' (' + ag.sessionId + ')'"><app-icon size="lg" name="refresh" /></kj-button>
             }
-            <button
-              class="pane-btn primary"
-              (click)="$event.stopPropagation(); toggleRun(ag)"
-              [disabled]="ag.status === 'done'"
-              [title]="runTitle(ag)"
-            ><app-icon [name]="ag.status === 'running' ? 'pause' : 'play'" size="sm" [px]="13" /></button>
+            <kj-button kjSize="xs" kjVariant="default" (click)="$event.stopPropagation(); toggleRun(ag)" [kjDisabled]="ag.status === 'done'" [title]="runTitle(ag)"><app-icon size="lg" [name]="ag.status === 'running' ? 'pause' : 'play'" /></kj-button>
           }
-          <button class="pane-btn" (click)="$event.stopPropagation(); ctx().onSplit(lf.id, 'v')" title="Split right"><app-icon name="splitCol" size="sm" [px]="13" /></button>
-          <button class="pane-btn" (click)="$event.stopPropagation(); ctx().onSplit(lf.id, 'h')" title="Split down"><app-icon name="splitRow" size="sm" [px]="13" /></button>
+          <kj-button kjSize="xs" kjVariant="ghost" style="margin-left:auto" (click)="$event.stopPropagation(); ctx().onSplit(lf.id, 'v')" title="Split right"><app-icon size="lg" name="splitCol" /></kj-button>
+          <kj-button kjSize="xs" kjVariant="ghost" (click)="$event.stopPropagation(); ctx().onSplit(lf.id, 'h')" title="Split down"><app-icon size="lg" name="splitRow" /></kj-button>
           @if (ctx().canClose()) {
-            <button class="pane-btn" (click)="$event.stopPropagation(); ctx().onClose(lf.id)" title="Close pane"><app-icon name="x" size="sm" [px]="13" /></button>
+            <kj-button kjSize="xs" kjVariant="ghost" (click)="$event.stopPropagation(); ctx().onClose(lf.id)" title="Close pane"><app-icon size="lg" name="x" /></kj-button>
           }
         </div>
 
         <!-- pane body -->
         <div style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden">
           @if (!ag) {
-            <div style="flex:1;display:grid;place-items:center;color:var(--ink-4)">
-              <button class="btn ghost-hair" (click)="$event.stopPropagation(); pickOpen.set(true)"><app-icon name="plus" size="sm" />Assign an agent</button>
+            <div class="pane-empty">
+              <kj-button kjVariant="outline" (click)="$event.stopPropagation(); pickOpen.set(true)"><app-icon name="plus" size="sm" />Assign an agent</kj-button>
             </div>
           } @else if (lf.view === 'file' && lf.activeFile) {
             <app-file-view [agent]="ag" [path]="lf.activeFile" />
@@ -180,18 +155,17 @@ import { UiStore } from "../ui/ui.store";
 
         <!-- close-confirm for a dirty file tab (B1.1) -->
         @if (confirmClose(); as cc) {
-          <div class="cc-scrim" (mousedown)="$event.stopPropagation()">
-            <div class="cc-card rise">
+          <div class="scrim cc-scrim" (mousedown)="$event.stopPropagation()">
+            <div class="popover cc-card rise">
               <div class="cc-title">Unsaved changes</div>
               @for (p of cc.dirty; track p) {
-                <div class="cc-path">{{ p }}</div>
+                <div class="cc-path trunc">{{ p }}</div>
               }
-              <div class="cc-note">Save before closing {{ cc.dirty.length === 1 ? 'this tab' : 'these tabs' }}?</div>
+              <small class="cc-note">Save before closing {{ cc.dirty.length === 1 ? 'this tab' : 'these tabs' }}?</small>
               <div class="cc-actions">
-                <button class="btn ghost-hair" (click)="confirmClose.set(null)">Cancel</button>
-                <span style="margin-left:auto"></span>
-                <button class="btn ghost-hair cc-danger" (click)="discardAndClose(cc)">Discard</button>
-                <button class="btn primary" (click)="saveAndClose(cc)">{{ cc.dirty.length === 1 ? 'Save' : 'Save all' }}</button>
+                <kj-button kjVariant="outline" (click)="confirmClose.set(null)">Cancel</kj-button>
+                <kj-button kjVariant="danger" style="margin-left:auto" (click)="discardAndClose(cc)">Discard</kj-button>
+                <kj-button kjVariant="default" (click)="saveAndClose(cc)">{{ cc.dirty.length === 1 ? 'Save' : 'Save all' }}</kj-button>
               </div>
             </div>
           </div>
@@ -199,29 +173,25 @@ import { UiStore } from "../ui/ui.store";
 
         <!-- drag drop preview -->
         @if (dropSide(); as side) {
-          <div style="position:absolute;inset:0;z-index:20;pointer-events:none">
-            <div
-              class="drop-zone"
-              [style.left]="zone()[0]"
-              [style.right]="zone()[1]"
-              [style.top]="zone()[2]"
-              [style.bottom]="zone()[3]"
-              [style.width]="zone()[4]"
-              [style.height]="zone()[5]"
-            >
-              <div class="drop-label">
-                <app-icon [name]="side === 'center' ? 'swap' : (side === 'left' || side === 'right') ? 'splitCol' : 'splitRow'" size="sm" [px]="12" color="var(--ui-on-fill)" />
-                {{ side === 'center' ? 'Replace' : 'Split ' + side }}
-              </div>
+          <div
+            class="drop-zone"
+            [style.left]="zone()[0]"
+            [style.right]="zone()[1]"
+            [style.top]="zone()[2]"
+            [style.bottom]="zone()[3]"
+            [style.width]="zone()[4]"
+            [style.height]="zone()[5]"
+          >
+            <div class="drop-label">
+              <app-icon size="md" [name]="side === 'center' ? 'swap' : (side === 'left' || side === 'right') ? 'splitCol' : 'splitRow'" color="var(--ui-on-fill)" />
+              {{ side === 'center' ? 'Replace' : 'Split ' + side }}
             </div>
           </div>
         }
       </div>
     } @else if (asSplit(); as sp) {
       <div #splitEl [style.flex-direction]="sp.dir === 'v' ? 'row' : 'column'" style="flex:1;min-width:0;min-height:0;display:flex">
-        <div [style.flex-grow]="sp.ratio" style="flex-shrink:1;flex-basis:0;min-width:0;min-height:0;display:flex">
-          <app-pane-node [node]="sp.a" [ctx]="ctx()" />
-        </div>
+        <app-pane-node [node]="sp.a" [ctx]="ctx()" [style.flex-grow]="sp.ratio" style="flex-shrink:1;flex-basis:0;min-width:0;min-height:0;display:flex" />
         <div
           class="pane-divider"
           [class.v]="sp.dir === 'v'"
@@ -235,9 +205,7 @@ import { UiStore } from "../ui/ui.store";
         >
           <span class="grip-handle" [style.width]="sp.dir === 'v' ? '6px' : '100%'" [style.height]="sp.dir === 'v' ? '100%' : '6px'"></span>
         </div>
-        <div [style.flex-grow]="1 - sp.ratio" style="flex-shrink:1;flex-basis:0;min-width:0;min-height:0;display:flex">
-          <app-pane-node [node]="sp.b" [ctx]="ctx()" />
-        </div>
+        <app-pane-node [node]="sp.b" [ctx]="ctx()" [style.flex-grow]="1 - sp.ratio" style="flex-shrink:1;flex-basis:0;min-width:0;min-height:0;display:flex" />
       </div>
     }
   `,
@@ -250,41 +218,11 @@ import { UiStore } from "../ui/ui.store";
         border-color: var(--ui-line);
         box-shadow: 0 0 0 1px var(--ui-sel-2);
       }
-      .pane-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--sp-1);
-        background: transparent;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        color: var(--ink-3);
-        flex: none;
-      }
-      .pane-btn:hover:not(:disabled) {
-        background: var(--panel-3);
-        color: var(--ink);
-      }
-      .pane-btn:disabled {
-        opacity: 0.4;
-        cursor: default;
-      }
-      /* play/pause adopts the merge button's primary look so it's more visible */
-      .pane-btn.primary {
-        background: var(--ui-fill);
-        color: var(--ui-on-fill);
-        padding: var(--sp-1) var(--sp-4);
-      }
-      .pane-btn.primary:hover:not(:disabled) {
-        filter: brightness(1.06);
-        background: var(--ui-fill);
-        color: var(--ui-on-fill);
-      }
       /* open-file tabs live inline in the pane header, right after the view
          toggle. The strip is also the flex spacer (flex:1) and scrolls
          sideways when the tabs outgrow the space; a right edge-fade hints at
-         the overflow and a vertical wheel pans it (see onStripWheel). */
+         the overflow and a vertical wheel pans it (see onStripWheel).
+         Scrollbar hiding comes from the shared .scroll-hide. */
       .file-strip {
         display: flex;
         align-items: center;
@@ -292,52 +230,38 @@ import { UiStore } from "../ui/ui.store";
         flex: 1;
         min-width: 0;
         overflow-x: auto;
-        scrollbar-width: none;
         -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
         mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
       }
-      .file-strip::-webkit-scrollbar {
-        display: none;
-      }
+      /* The inline file strip is a CHIP row, not a tab row: design/app.html
+         :5745-5750 draws each open file as a rounded 5px plate that fills with
+         --panel-3 and gains a hairline when active. The 2px underline belongs
+         to the pane/panel tab ROWS (design:5511-5518), which this is not. */
       .file-tab {
         flex: none;
         display: flex;
         align-items: center;
-        gap: var(--sp-2);
-        max-width: 150px;
-        padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-4);
+        gap: var(--sp-3);
+        max-width: round(calc(150px * var(--density)), 1px);
+        padding: 3px 5px 3px 8px;
         border: 1px solid transparent;
-        border-radius: 5px;
+        border-radius: var(--r-sm);
         font-family: var(--font-mono);
-        font-size: var(--fs-xs);
         color: var(--ink-3);
         cursor: pointer;
         position: relative;
       }
       .file-tab:hover {
         color: var(--ink-2);
-        background: var(--panel-2);
       }
       .file-tab.on {
         color: var(--ink);
         background: var(--panel-3);
         border-color: var(--hair);
       }
-      .file-tab .fn {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
+      /* close × — hidden until the tab is hovered or active */
       .file-tab .fx {
-        display: flex;
         flex: none;
-        padding: 1px;
-        border: none;
-        border-radius: 3px;
-        background: transparent;
-        color: var(--ink-4);
-        cursor: pointer;
         opacity: 0;
       }
       .file-tab:hover .fx,
@@ -359,54 +283,37 @@ import { UiStore } from "../ui/ui.store";
       .file-tab.dirty:not(:hover) .fx {
         display: none;
       }
-      .file-tab .fx:hover {
-        color: var(--ink);
-        background: var(--panel-2);
-      }
-      /* close-confirm dialog for a dirty file tab */
+      /* close-confirm dialog for a dirty file tab — the shared .scrim/.popover
+         supply the dim + the card surface; only the deltas live here. The
+         override back to position:absolute is deliberate: this scrim dims the
+         PANE it belongs to, not the whole window. */
       .cc-scrim {
         position: absolute;
-        inset: 0;
         z-index: 30;
-        display: grid;
-        place-items: center;
-        background: color-mix(in srgb, var(--bg), transparent 35%);
       }
       .cc-card {
         width: min(340px, 86%);
-        background: var(--elev);
-        border: 1px solid var(--hair-2);
-        border-radius: var(--r-md);
-        box-shadow: var(--shadow);
         padding: var(--sp-6);
       }
       .cc-title {
         color: var(--ink);
-        font-size: var(--fs-ui);
-        font-weight: 600;
+        font-weight: var(--fw-medium);
       }
       .cc-path {
         margin-top: var(--sp-2);
         color: var(--ink-3);
         font-family: var(--font-mono);
-        font-size: var(--fs-xs);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        
       }
+      /* ink + size + line-height come from the global <small> rule */
       .cc-note {
         margin-top: var(--sp-3);
-        color: var(--ink-2);
-        font-size: var(--fs-sm);
-      }
+        }
       .cc-actions {
         display: flex;
         align-items: center;
         gap: var(--sp-3);
         margin-top: var(--sp-5);
-      }
-      .cc-danger {
-        color: var(--code-del-ink);
       }
       .pane-divider {
         position: relative;
@@ -424,6 +331,8 @@ import { UiStore } from "../ui/ui.store";
       }
       .drop-zone {
         position: absolute;
+        z-index: 20;
+        pointer-events: none;
         background: var(--ui-sel);
         border: 2px solid var(--ui-focus);
         border-radius: var(--r-md);
@@ -442,8 +351,7 @@ import { UiStore } from "../ui/ui.store";
         border-radius: 999px;
         background: var(--ui-fill);
         color: var(--ui-on-fill);
-        font-size: var(--fs-xs);
-        font-weight: 600;
+        font-weight: var(--fw-medium);
         white-space: nowrap;
       }
     `,
@@ -550,11 +458,6 @@ export class PaneNodeComponent {
     const lf = this.asLeaf();
     return lf?.agentId ? this.ctx().agents().find((a) => a.id === lf.agentId) : undefined;
   });
-  readonly proj = computed<Project | undefined>(() => {
-    const a = this.agent();
-    return a ? this.ctx().projects().find((p) => p.id === a.projectId) : undefined;
-  });
-
   dot(status: string): string {
     return STATUS_META[status as keyof typeof STATUS_META]?.color ?? "var(--ink-3)";
   }
@@ -712,7 +615,6 @@ export class PaneNodeComponent {
     this.ctx().onPaneDrop(paneId);
   }
 
-  @HostListener("document:mousedown", ["$event"])
   onDocDown(e: MouseEvent) {
     if (!this.pickOpen()) return;
     const pk = this.picker()?.nativeElement;

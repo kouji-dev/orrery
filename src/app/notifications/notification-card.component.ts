@@ -3,6 +3,7 @@ import { AgentNotification } from "../models";
 import { NotificationService } from "./notification.service";
 import { QuestionStepperComponent } from "./question-stepper.component";
 import { IconComponent } from "../shared/icon.component";
+import { KjButtonComponent } from "@kouji-ui/components";
 
 // The adaptive presentation chosen for a card from its content + kind. The icon
 // and accent color are picked per-layout so each notification reads with the
@@ -31,44 +32,7 @@ interface Presentation {
 @Component({
   selector: "app-notification-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, QuestionStepperComponent],
-  styles: [
-    `
-      /* Clickable option chip (the question's ACCEPT action): label only by
-         default; lifts + outlines in accent on hover, with its description shown
-         via the native title tooltip. cursor:pointer + the accent hover/active
-         states signal it is the selection control. */
-      .opt {
-        font-family: var(--font-ui);
-        font-size: var(--fs-2xs);
-        line-height: 1.4;
-        padding: var(--sp-1) var(--sp-4);
-        border-radius: 5px;
-        border: 1px solid var(--hair);
-        background: var(--panel);
-        color: var(--ink-3);
-        cursor: pointer;
-        text-align: left;
-        transition:
-          transform 0.12s ease,
-          border-color 0.12s ease,
-          color 0.12s ease,
-          background 0.12s ease;
-      }
-      .opt:hover {
-        transform: translateY(-1px);
-        border-color: var(--ui-focus);
-        color: var(--ink-2);
-        background: var(--ui-sel);
-      }
-      .opt:active {
-        transform: translateY(0);
-        border-color: var(--ui-focus);
-        color: var(--ui-ink);
-        background: var(--ui-sel-2);
-      }
-    `,
-  ],
+  imports: [IconComponent, QuestionStepperComponent, KjButtonComponent],
   template: `
     @let n = notification();
     @let p = presentation();
@@ -79,8 +43,8 @@ interface Presentation {
         <!-- body: click anywhere on the text region to open the agent terminal -->
         <div style="cursor:pointer" title="Open agent terminal" (click)="openTerminal(n)">
           <div style="display:flex;align-items:center;gap:var(--sp-3)">
-            <span style="font-size:var(--fs-ui);font-weight:600;color:var(--ink)">{{ n.title }}</span>
-            <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ ago(n.createdAt) }}</span>
+            <span style="font-weight:var(--fw-medium);color:var(--ink)">{{ n.title }}</span>
+            <span class="tnum" style="margin-left:auto;font-size:var(--fs-meta);color:var(--ink-4)">{{ ago(n.createdAt) }}</span>
           </div>
 
           @switch (p.layout) {
@@ -96,27 +60,25 @@ interface Presentation {
                    permission mode, then suggested-rule chips (allow=accent /
                    deny=blocked). Display-only — persisting a rule is deferred. -->
               @if (n.mode) {
-                <div style="margin-top:var(--sp-3)">
-                  <span class="up" style="font-size:var(--fs-2xs);letter-spacing:0.06em;color:var(--ink-4)">{{ n.mode }}</span>
-                </div>
+                <span class="up" style="display:block;margin-top:var(--sp-3);color:var(--ink-4)">{{ n.mode }}</span>
               }
               @let body = n.command || n.description || n.filePath;
               @if (body) {
                 <pre
-                  style="margin:var(--sp-2) 0 0;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.45;color:var(--ink-3);white-space:pre-wrap;word-break:break-word;max-height:72px;overflow:hidden"
+                  style="margin:var(--sp-2) 0 0;line-height:1.45;color:var(--ink-3);white-space:pre-wrap;word-break:break-word;max-height: round(calc(72px * var(--density)), 1px);overflow:hidden"
                 >{{ body }}</pre>
               }
               @if (n.suggestions && n.suggestions.length) {
-                <div class="up" style="margin:var(--sp-4) 0 var(--sp-2);font-size:var(--fs-3xs);letter-spacing:0.07em;color:var(--ink-4)">suggested rules</div>
+                <div class="up" style="margin:var(--sp-4) 0 var(--sp-2);color:var(--ink-4)">suggested rules</div>
                 <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2)">
                   @for (s of n.suggestions; track s.rule) {
                     <span
                       [title]="s.description"
                       [style.color]="s.behavior === 'deny' ? 'var(--sem-del)' : 'var(--ui-ink)'"
                       [style.border-color]="s.behavior === 'deny' ? 'var(--sem-del)' : 'var(--ui-sel-2)'"
-                      style="display:inline-flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:var(--fs-2xs);padding:var(--sp-1) var(--sp-3);border-radius:5px;border:1px solid;background:var(--panel)"
+                      style="display:inline-flex;align-items:center;gap:var(--sp-2);font-family:var(--font-mono);font-size:var(--fs-meta);padding:var(--sp-1) var(--sp-3);border-radius:5px;border:1px solid;background:var(--panel)"
                     >
-                      <span class="up" style="font-size:var(--fs-3xs);letter-spacing:0.05em;opacity:0.8">{{ s.behavior }}</span>
+                      <span class="up" style="opacity:0.8">{{ s.behavior }}</span>
                       <span>{{ s.rule }}</span>
                     </span>
                   }
@@ -128,42 +90,40 @@ interface Presentation {
               @let body = n.summary || n.detail;
               @if (body) {
                 <pre
-                  style="margin:var(--sp-2) 0 0;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1.45;color:var(--ink-3);white-space:pre-wrap;word-break:break-word;max-height:54px;overflow:hidden"
+                  style="margin:var(--sp-2) 0 0;line-height:1.45;color:var(--ink-3);white-space:pre-wrap;word-break:break-word;max-height: round(calc(54px * var(--density)), 1px);overflow:hidden"
                 >{{ body }}</pre>
               }
             }
           }
         </div>
 
-        @if (pending) {
-          <!-- stop button clicks from bubbling to the body terminal navigation.
-               Question-bearing notifications render the stepper's OWN nav
-               (Back/Next/Submit + Terminal + Reject), so the card's button row is
-               suppressed for any notification with questions. -->
-          @if (!n.questions?.length) {
+        <!-- stop button clicks from bubbling to the body terminal navigation.
+             Question-bearing notifications render the stepper's OWN nav
+             (Back/Next/Submit + Terminal + Reject), so the card's button row is
+             suppressed for any pending notification with questions. -->
+        @if (pending && !n.questions?.length) {
           <div style="display:flex;flex-wrap:wrap;gap:var(--sp-3);margin-top:var(--sp-4)" (click)="$event.stopPropagation()">
             @switch (n.kind) {
               @case ('permission') {
-                <button class="btn primary" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.accept(n)"><app-icon name="check" size="sm" />Accept</button>
-                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.reject(n)"><app-icon name="x" size="sm" />Reject</button>
-                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="navigate.emit(); notifications.open(n)"><app-icon name="terminal" size="sm" />Terminal</button>
+                <kj-button kjVariant="default" (click)="notifications.accept(n)"><app-icon name="check" size="sm" />Accept</kj-button>
+                <kj-button kjVariant="outline" (click)="notifications.reject(n)"><app-icon name="x" size="sm" />Reject</kj-button>
+                <kj-button kjVariant="outline" (click)="navigate.emit(); notifications.open(n)"><app-icon name="terminal" size="sm" />Terminal</kj-button>
               }
               @case ('question') {
                 <!-- question with NO options to render → primary Terminal answer +
                      Dismiss. (Option-bearing questions show the stepper inline.) -->
-                <button class="btn primary" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="navigate.emit(); notifications.open(n)"><app-icon name="terminal" size="sm" />Answer in terminal</button>
-                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.dismiss(n)">Dismiss</button>
+                <kj-button kjVariant="default" (click)="navigate.emit(); notifications.open(n)"><app-icon name="terminal" size="sm" />Answer in terminal</kj-button>
+                <kj-button kjVariant="outline" (click)="notifications.dismiss(n)">Dismiss</kj-button>
               }
               @case ('done') {
-                <button class="btn primary" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.push(n)"><app-icon name="push" size="sm" />Push</button>
-                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="navigate.emit(); notifications.review(n)"><app-icon name="diff" size="sm" />Review diff</button>
-                <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="notifications.dismiss(n)">Dismiss</button>
+                <kj-button kjVariant="default" (click)="notifications.push(n)"><app-icon name="push" size="sm" />Push</kj-button>
+                <kj-button kjVariant="outline" (click)="navigate.emit(); notifications.review(n)"><app-icon name="diff" size="sm" />Review diff</kj-button>
+                <kj-button kjVariant="outline" (click)="notifications.dismiss(n)">Dismiss</kj-button>
               }
             }
           </div>
-          }
-        } @else {
-          <div class="up" style="margin-top:var(--sp-3);font-size:var(--fs-2xs);letter-spacing:0.06em;color:var(--ink-4)">
+        } @else if (!pending) {
+          <div class="up" style="margin-top:var(--sp-3);color:var(--ink-4)">
             {{ n.status === 'dismissed' ? 'dismissed' : n.decision || n.status }}
           </div>
         }

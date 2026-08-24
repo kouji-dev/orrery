@@ -5,6 +5,7 @@ import {
   effect,
   inject,
   input,
+  linkedSignal,
   signal,
 } from "@angular/core";
 import { Comment, TicketStatus } from "../models";
@@ -20,6 +21,8 @@ import { StatusDotComponent } from "../shared/status-dot.component";
 import { STATUS_META } from "../utils";
 import { TagBarComponent } from "./tag-bar.component";
 import { allTagsOf } from "./tags.util";
+import { KjBadgeComponent, KjButtonComponent } from "@kouji-ui/components";
+import { SelectComponent } from "../shared/select.component";
 
 // ── Status token map (mirrors design TICKET_COL) ─────────────────────────────
 export interface TicketStatusMeta {
@@ -86,17 +89,14 @@ export function fmtCreated(ts: number): string {
 @Component({
   selector: "app-ticket-comment",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
-  imports: [RichViewComponent, ToolBadgeComponent],
+  imports: [RichViewComponent, ToolBadgeComponent, KjBadgeComponent],
   template: `
     @let c = comment();
     @let isAgent = c.role === 'agent';
     <div style="display:flex;gap:var(--sp-5)">
       <!-- avatar / tool badge -->
       @if (isAgent && c.tool) {
-        <div style="flex:none;width:var(--ctl-h);height:var(--ctl-h);display:grid;place-items:center">
-          <app-tool-badge [tool]="$any(c.tool)" [size]="28" />
-        </div>
+        <app-tool-badge [tool]="$any(c.tool)" [size]="28" style="flex:none" />
       } @else {
         <span
           [style.width.px]="28"
@@ -104,16 +104,16 @@ export function fmtCreated(ts: number): string {
           [style.color]="avatarColor()"
           [style.background]="avatarBg()"
           [style.border]="avatarBorder()"
-          style="flex:none;border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);font-size:var(--fs-xs);font-weight:600"
+          style="flex:none;border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);font-weight:var(--fw-medium)"
         >{{ avatarInitials() }}</span>
       }
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:var(--sp-4);margin-bottom:var(--sp-2)">
-          <span class="disp" style="font-size:var(--fs-ui);font-weight:600;color:var(--ink)">{{ c.author }}</span>
+          <span class="disp" style="font-weight:var(--fw-medium);color:var(--ink)">{{ c.author }}</span>
           @if (isAgent) {
-            <span class="chip up" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--ui-ink);border-color:var(--ui-line)">AGENT</span>
+            <kj-badge class="up" fg="var(--ui-ink)" style="--kj-badge---kj-badge-border-color:var(--ui-line)">AGENT</kj-badge>
           }
-          <span class="tnum" style="font-size:var(--fs-xs);color:var(--ink-4)">{{ when() }}</span>
+          <span class="tnum" style="color:var(--ink-4)">{{ when() }}</span>
         </div>
         <div
           [style.background]="isAgent ? 'var(--ui-sel)' : 'var(--panel)'"
@@ -145,16 +145,7 @@ export class TicketCommentComponent {
 @Component({
   selector: "app-ticket-page",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
-  imports: [
-    IconComponent,
-    RichEditorComponent,
-    RichViewComponent,
-    ToolBadgeComponent,
-    StatusDotComponent,
-    TicketCommentComponent,
-    TagBarComponent,
-  ],
+  imports: [IconComponent, RichEditorComponent, RichViewComponent, ToolBadgeComponent, StatusDotComponent, TicketCommentComponent, TagBarComponent, KjButtonComponent, KjBadgeComponent, SelectComponent],
   template: `
     @let tk = ticket();
     @let isDraft = ticketId() === 'draft';
@@ -168,22 +159,21 @@ export class TicketCommentComponent {
       <div style="padding:var(--sp-6) var(--sp-8);border-bottom:1px solid var(--hair);background:var(--panel);flex:none">
 
         <!-- breadcrumb + status pill -->
-        <div style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-sm);color:var(--ink-3);margin-bottom:var(--sp-4)">
+        <div style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-meta);color:var(--ink-3);margin-bottom:var(--sp-4)">
           <app-icon name="layers" size="sm" [color]="'var(--ui-ink)'" />
           <span>Backlog</span>
           <app-icon name="chevron" size="sm" style="width:var(--sp-5);height:var(--sp-5)" [color]="'var(--ink-4)'" />
           <span class="tnum">{{ isDraft ? 'New ticket' : '#' + (tk ? shortId(tk.id) : '') }}</span>
-          <span style="margin-left:auto">
-            <span
-              class="up"
-              [style.color]="sm.color"
-              [style.border]="'1px solid color-mix(in oklch,' + sm.color + ',transparent 62%)'"
-              [style.background]="'color-mix(in oklch,' + sm.color + ',transparent 88%)'"
-              style="display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-2xs);padding:var(--sp-1) var(--sp-4);border-radius:999px;letter-spacing:0.1em"
-            >
-              <span class="dot" [style.background]="sm.color" style="animation:none"></span>
-              {{ sm.label }}
-            </span>
+          <span
+            class="up"
+            [style.color]="sm.color"
+            [style.border]="'1px solid color-mix(in oklch,' + sm.color + ',transparent 62%)'"
+            [style.background]="'color-mix(in oklch,' + sm.color + ',transparent 88%)'"
+            class="chip up kj-push"
+            style="gap:var(--sp-3);padding:var(--sp-1) var(--sp-4);"
+          >
+            <span class="dot" [style.background]="sm.color" style="animation:none"></span>
+            {{ sm.label }}
           </span>
         </div>
 
@@ -195,10 +185,10 @@ export class TicketCommentComponent {
             (input)="draftTitle.set($any($event.target).value)"
             (keydown.enter)="save()"
             placeholder="Ticket title — what needs to be done?"
-            style="width:100%;background:transparent;border:none;outline:none;color:var(--ink);font-family:var(--font-disp);font-size:var(--fs-xl);font-weight:600;letter-spacing:-0.02em;padding:0"
+            style="width:100%;background:transparent;border:none;outline:none;color:var(--ink);font-family:var(--font-disp);font-size:var(--fs-xl);font-weight:var(--fw-medium);letter-spacing:-0.02em;padding:0"
           />
         } @else if (tk) {
-          <h1 class="disp" style="font-size:var(--fs-xl);font-weight:600;letter-spacing:-0.02em;line-height:1.25;text-wrap:balance">
+          <h1 style="font-size:var(--fs-xl);line-height:1.25;text-wrap:balance">
             {{ tk.title }}
           </h1>
         }
@@ -206,48 +196,42 @@ export class TicketCommentComponent {
         <!-- actions row -->
         <div style="display:flex;align-items:center;gap:var(--sp-4);margin-top:var(--sp-6)">
           @if (isEditing) {
-            <button class="btn primary" [disabled]="!draftTitle().trim()" (click)="save()">
+            <kj-button kjVariant="default" [kjDisabled]="!draftTitle().trim()" (click)="save()">
               <app-icon [name]="isDraft ? 'plus' : 'check'" size="sm" />
               {{ isDraft ? 'Create ticket' : 'Save' }}
-            </button>
-            <button class="btn ghost-hair" (click)="cancel()">Cancel</button>
+            </kj-button>
+            <kj-button kjVariant="outline" (click)="cancel()">Cancel</kj-button>
           } @else if (tk) {
             @if (tk.status === 'todo') {
-              <button class="btn primary" (click)="dispatch()">
+              <kj-button kjVariant="default" (click)="dispatch()">
                 <app-icon name="bolt" size="sm" />Dispatch agent
-              </button>
+              </kj-button>
             }
             @if (ag) {
-              <button class="btn ghost-hair" (click)="openAgent()">
+              <kj-button kjVariant="outline" (click)="openAgent()">
                 <app-icon name="enter" size="sm" />Open agent
-              </button>
+              </kj-button>
             }
-            <button class="btn ghost-hair" (click)="editing.set(true)">
+            <kj-button kjVariant="outline" (click)="editing.set(true)">
               <app-icon name="rename" size="sm" />Edit
-            </button>
-            <button
-              class="btn ghost-hair"
-              (click)="deleteTicket()"
-              [style.color]="deleteHovered() ? 'var(--st-blocked)' : 'var(--ink-3)'"
-              (mouseenter)="deleteHovered.set(true)"
-              (mouseleave)="deleteHovered.set(false)"
-            >
+            </kj-button>
+            <kj-button kjVariant="outline" (click)="deleteTicket()" [style.--kj-button-fg]="deleteHovered() ? 'var(--st-blocked)' : 'var(--ink-3)'" (mouseenter)="deleteHovered.set(true)" (mouseleave)="deleteHovered.set(false)">
               <app-icon name="trash" size="sm" />Delete
-            </button>
+            </kj-button>
           }
         </div>
       </div>
 
       <!-- ── Body ── -->
       <div class="scroll-y" style="flex:1">
-        <div style="display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:var(--sp-10);padding:var(--sp-8) var(--sp-9);max-width:1040px;margin:0 auto;align-items:start">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:var(--sp-10);padding:var(--sp-8) var(--sp-9);max-width: round(calc(1040px * var(--density)), 1px);margin:0 auto;align-items:start">
 
           <!-- ── MAIN COLUMN ── -->
           <div style="display:flex;flex-direction:column;gap:var(--sp-9);min-width:0">
 
             <!-- Notes -->
             <div>
-              <div class="up" style="font-size:var(--fs-xs);color:var(--ink-3);margin-bottom:var(--sp-4)">What should be done</div>
+              <div class="up" style="color:var(--ink-3);margin-bottom:var(--sp-4)">What should be done</div>
               @if (isEditing) {
                 <app-rich-editor
                   [value]="draftNotes()"
@@ -259,7 +243,7 @@ export class TicketCommentComponent {
                 @if (plainTextNonEmpty(tk.notes)) {
                   <app-rich-view [html]="tk.notes" />
                 } @else {
-                  <div style="font-size:var(--fs-ui);color:var(--ink-4);font-style:italic">No description yet.</div>
+                  <div style="color:var(--ink-4);font-style:italic">No description yet.</div>
                 }
               }
             </div>
@@ -268,14 +252,14 @@ export class TicketCommentComponent {
             @if (!isDraft) {
               <div style="display:flex;flex-direction:column;gap:var(--sp-6)">
                 <!-- section header -->
-                <div class="up" style="font-size:var(--fs-xs);color:var(--ink-3);display:flex;align-items:center;gap:var(--sp-3)">
+                <div class="up" style="color:var(--ink-3);display:flex;align-items:center;gap:var(--sp-3)">
                   <app-icon name="chat" size="sm" />
                   Comments
-                  <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ comments().length }}</span>
+                  <kj-badge class="tnum">{{ comments().length }}</kj-badge>
                 </div>
 
                 @if (comments().length === 0) {
-                  <div style="font-size:var(--fs-sm);color:var(--ink-4)">No comments yet — start the thread.</div>
+                  <div style="font-size:var(--fs-meta);color:var(--ink-4)">No comments yet — start the thread.</div>
                 } @else {
                   @for (c of comments(); track c.id) {
                     <app-ticket-comment [comment]="c" />
@@ -286,7 +270,7 @@ export class TicketCommentComponent {
                 <div style="display:flex;gap:var(--sp-5);margin-top:var(--sp-1)">
                   <!-- "You" avatar -->
                   <span
-                    style="flex:none;width:var(--ctl-h);height:var(--ctl-h);border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);font-size:var(--fs-xs);font-weight:600"
+                    style="flex:none;width:var(--ctl-h);height:var(--ctl-h);border-radius:50%;display:grid;place-items:center;font-family:var(--font-disp);font-weight:var(--fw-medium)"
                     [style.color]="youAvatarColor"
                     [style.background]="youAvatarBg"
                     [style.border]="youAvatarBorder"
@@ -301,13 +285,9 @@ export class TicketCommentComponent {
                       placeholder="Leave a comment…  ⌘B bold · ⌘K link"
                     />
                     <div style="display:flex;justify-content:flex-end">
-                      <button
-                        class="btn primary"
-                        [disabled]="!composerHasContent()"
-                        (click)="postComment()"
-                      >
+                      <kj-button kjVariant="default" [kjDisabled]="!composerHasContent()" (click)="postComment()">
                         <app-icon name="chat" size="sm" />Comment
-                      </button>
+                      </kj-button>
                     </div>
                   </div>
                 </div>
@@ -321,22 +301,14 @@ export class TicketCommentComponent {
             <!-- Status segmented control -->
             <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
               <span class="field-label" style="margin:0">Status</span>
-              <div style="display:flex;gap:var(--sp-2);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md)">
+              <div role="group" aria-label="Ticket status" style="display:flex;gap:var(--sp-2)">
                 @for (s of statusOrder; track s) {
                   @let sm2 = ticketStatusMeta(s);
                   @let on = (isDraft ? 'todo' : (tk?.status ?? 'todo')) === s;
-                  <button
-                    class="btn"
-                    (click)="moveStatus(s)"
-                    [style.flex]="1"
-                    style="justify-content:center;padding:var(--sp-2) var(--sp-2);font-size:var(--fs-xs);border-radius:var(--r-sm);gap:var(--sp-2)"
-                    [style.background]="on ? 'color-mix(in oklch,' + sm2.color + ',transparent 86%)' : 'transparent'"
-                    [style.color]="on ? sm2.color : 'var(--ink-3)'"
-                    [style.box-shadow]="on ? '0 0 0 1px color-mix(in oklch,' + sm2.color + ',transparent 60%)' : 'none'"
-                  >
+                  <kj-button kjVariant="ghost" [kjFullWidth]="true" (click)="moveStatus(s)" class="kj-center" [style.--kj-button-bg]="on ? 'color-mix(in oklch,' + sm2.color + ',transparent 86%)' : 'transparent'" [style.--kj-button-fg]="on ? sm2.color : 'var(--ink-3)'" [style.box-shadow]="on ? '0 0 0 1px color-mix(in oklch,' + sm2.color + ',transparent 60%)' : 'none'">
                     <span class="dot" [style.background]="sm2.color" style="animation:none;width:var(--sp-3);height:var(--sp-3)"></span>
                     {{ sm2.label }}
-                  </button>
+                  </kj-button>
                 }
               </div>
             </div>
@@ -345,16 +317,11 @@ export class TicketCommentComponent {
             <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
               <span class="field-label" style="margin:0">Project</span>
               @if (isEditing) {
-                <select class="osel" [value]="draftProjectId()" (change)="draftProjectId.set($any($event.target).value)">
-                  <option value="">No project</option>
-                  @for (p of projects.all(); track p.id) {
-                    <option [value]="p.id">{{ p.name }}</option>
-                  }
-                </select>
+                <app-select [value]="draftProjectId()" [options]="projectOptions()" (valueChange)="draftProjectId.set($event)" />
               } @else {
                 @let proj = resolvedProject();
                 @if (proj) {
-                  <span style="display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-ui)" [style.color]="proj.color">
+                  <span style="display:inline-flex;align-items:center;gap:var(--sp-3)" [style.color]="proj.color">
                     <span
                       style="width:19px;height:19px;border-radius:5px;display:grid;place-items:center;flex:none"
                       [style.background]="'color-mix(in oklch,' + proj.color + ',transparent 82%)'"
@@ -365,7 +332,7 @@ export class TicketCommentComponent {
                     {{ proj.name }}
                   </span>
                 } @else {
-                  <span style="font-size:var(--fs-ui);color:var(--ink-4)">No project</span>
+                  <span style="color:var(--ink-4)">No project</span>
                 }
               }
             </div>
@@ -393,23 +360,19 @@ export class TicketCommentComponent {
                 >
                   <app-tool-badge [tool]="ag.tool" [size]="20" />
                   <div style="min-width:0;flex:1">
-                    <div class="disp" style="font-size:var(--fs-ui);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</div>
-                    <div style="display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-xs);margin-top:var(--sp-1)" [style.color]="agentMeta().color">
+                    <h4 class="trunc">{{ ag.name }}</h4>
+                    <div style="display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-1)" [style.color]="agentMeta().color">
                       <app-status-dot [status]="ag.status" />{{ agentMeta().label }}
                     </div>
                   </div>
                   <app-icon name="enter" size="sm" [color]="'var(--ink-4)'" style="flex:none" />
                 </div>
               } @else if (tk?.status === 'todo') {
-                <button
-                  class="btn ghost-hair"
-                  (click)="dispatch()"
-                  style="justify-content:center;color:var(--ui-ink);border-color:var(--ui-line)"
-                >
+                <kj-button kjVariant="outline" class="kj-center" style="--kj-button-fg: var(--ui-ink); --kj-button-border-color: var(--ui-line)" (click)="dispatch()">
                   <app-icon name="bolt" size="sm" />Dispatch an agent
-                </button>
+                </kj-button>
               } @else {
-                <span style="font-size:var(--fs-ui);color:var(--ink-4)">None attached</span>
+                <span style="color:var(--ink-4)">None attached</span>
               }
             </div>
 
@@ -417,7 +380,7 @@ export class TicketCommentComponent {
             @if (ag) {
               <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
                 <span class="field-label" style="margin:0">Branch</span>
-                <span style="display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-sm);color:var(--ink-2)">
+                <span style="display:inline-flex;align-items:center;gap:var(--sp-3);color:var(--ink-2)">
                   <app-icon name="branch" size="sm" style="width:var(--sp-6);height:var(--sp-6)" [color]="'var(--ink-3)'" />
                   {{ ag.branch.replace('agent/', '') }}
                 </span>
@@ -427,7 +390,7 @@ export class TicketCommentComponent {
             <!-- Created -->
             <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
               <span class="field-label" style="margin:0">Created</span>
-              <span class="tnum" style="font-size:var(--fs-sm);color:var(--ink-2)">
+              <span class="tnum" style="color:var(--ink-2)">
                 {{ isDraft ? 'just now' : (tk ? fmtCreated(tk.createdAt) : '—') }}
               </span>
             </div>
@@ -447,18 +410,39 @@ export class TicketPageComponent {
   readonly projects = inject(ProjectActionsService);
 
   // ── editing state ─────────────────────────────────────────────────────────
-  readonly editing = signal(false);
-  readonly draftTitle = signal("");
-  readonly draftNotes = signal("");
-  readonly draftProjectId = signal("");
-  readonly draftTags = signal<string[]>([]);
-  readonly deleteHovered = signal(false);
+  // Each draft field is a linkedSignal seeded from the current ticket: it
+  // re-seeds whenever the ticket id (or the stored ticket) changes, and stays
+  // locally writable while editing — replacing the old reset-everything effect.
+  readonly editing = linkedSignal({ source: this.ticketId, computation: (id) => id === "draft" });
+  readonly draftTitle = linkedSignal({
+    source: this.ticketId,
+    computation: (id) => (id === "draft" ? "" : (this.ticketsStore.byId(id)?.title ?? "")),
+  });
+  readonly draftNotes = linkedSignal({
+    source: this.ticketId,
+    computation: (id) => (id === "draft" ? "" : (this.ticketsStore.byId(id)?.notes ?? "")),
+  });
+  readonly draftProjectId = linkedSignal({
+    source: this.ticketId,
+    computation: (id) => (id === "draft" ? "" : (this.ticketsStore.byId(id)?.projectId ?? "")),
+  });
+  readonly draftTags = linkedSignal<string, string[]>({
+    source: this.ticketId,
+    computation: (id) => (id === "draft" ? [] : (this.ticketsStore.byId(id)?.tags ?? [])),
+  });
+  readonly deleteHovered = linkedSignal({ source: this.ticketId, computation: () => false });
   readonly agentHovered = signal(false);
 
   // ── comments state ────────────────────────────────────────────────────────
   readonly comments = signal<Comment[]>([]);
-  readonly composerBody = signal("");
+  readonly composerBody = linkedSignal({ source: this.ticketId, computation: () => "" });
   readonly composerResetSignal = signal(0);
+
+  /** Options for the project select (edit mode). */
+  readonly projectOptions = computed(() => [
+    { value: "", label: "No project" },
+    ...this.projects.all().map((p) => ({ value: p.id, label: p.name })),
+  ]);
 
   readonly composerHasContent = computed(() =>
     this.composerBody().replace(/<[^>]*>/g, "").trim().length > 0,
@@ -520,25 +504,12 @@ export class TicketPageComponent {
   readonly youAvatarBorder = `1px solid color-mix(in oklch,${avColor("You")},transparent 62%)`;
 
   constructor() {
-    // When ticketId changes: reset edit state + reload comments
+    // The only real side effect left on a ticket switch: (re)load its comments.
+    // Draft-field resets live on the linkedSignals above.
     effect(() => {
       const id = this.ticketId();
-      const isDraft = id === "draft";
-      const tk = isDraft ? null : this.ticketsStore.byId(id);
-
-      this.editing.set(isDraft);
-      this.draftTitle.set(tk?.title ?? "");
-      this.draftNotes.set(tk?.notes ?? "");
-      this.draftProjectId.set(tk?.projectId ?? "");
-      this.draftTags.set(isDraft ? [] : (tk?.tags ?? []));
-      this.deleteHovered.set(false);
-      this.composerBody.set("");
-
-      if (!isDraft) {
-        void this.loadComments(id);
-      } else {
-        this.comments.set([]);
-      }
+      if (id !== "draft") void this.loadComments(id);
+      else this.comments.set([]);
     });
   }
 

@@ -1,9 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject } from "@angular/core";
 import { IconComponent } from "../shared/icon.component";
 import { SettingsStore } from "../settings/settings.store";
 import { VersionService } from "../shared/version.service";
 import { ChangelogService, ChangelogCommit } from "../updater/changelog.service";
 import { RELEASES_URL } from "../shared/links";
+import { KjBadgeComponent, KjButtonComponent, KjDialogComponent, KjSkeletonComponent } from "@kouji-ui/components";
+import { KjDialog } from "@kouji-ui/core";
 
 /**
  * In-app "What's new" digest. Shows EVERY release strictly newer than the user's
@@ -17,27 +19,27 @@ import { RELEASES_URL } from "../shared/links";
  */
 @Component({
   selector: "app-whats-new-modal",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, KjBadgeComponent, KjButtonComponent, KjDialogComponent, KjSkeletonComponent],
+  host: { role: "dialog", "aria-modal": "true", "aria-label": "What's new" },
   template: `
     @if (store.whatsNewOpen()) {
-      <div class="wn-backdrop" (mousedown)="store.closeWhatsNew()">
-        <div class="wn-modal" (mousedown)="$event.stopPropagation()" role="dialog" aria-label="What's new">
+      <kj-dialog-shell>
+        <div class="wn-modal">
           <div class="wn-hero">
-            <button class="wn-x" (click)="store.closeWhatsNew()" aria-label="Close"><app-icon name="x" size="sm" /></button>
-            <div class="wn-eyebrow"><span class="d"></span>{{ store.updateKnown() ? 'Update available' : "What's new" }}</div>
+            <kj-button kjSize="icon" class="wn-x" kjAriaLabel="Close" (click)="store.closeWhatsNew()"><app-icon name="x" size="sm" /></kj-button>
+            <div class="up wn-eyebrow"><span class="d"></span>{{ store.updateKnown() ? 'Update available' : "What's new" }}</div>
             <div class="wn-h1">What's new in Orrery</div>
             <div class="wn-verline">
               <span class="wn-ver tnum">{{ headTag() }}</span>
-              <span class="wn-badge">{{ channel() }}</span>
+              <kj-badge class="wn-badge" variant="outline">{{ channel() }}</kj-badge>
               <span class="wn-from tnum">from v{{ version.version() || '—' }}{{ fromSuffix() }}</span>
             </div>
           </div>
 
           <div class="wn-body scroll-y">
             @if (changelog.loading() && !releases().length) {
-              <div class="wn-state">Loading changelog…</div>
+              <div class="wn-state" aria-label="Loading changelog"><kj-skeleton kjSkeletonShape="text-block" [kjLines]="4" /></div>
             } @else if (!releases().length) {
               <div class="wn-state">
                 Couldn't load the changelog{{ changelog.error() ? ' — check your connection' : '' }}.
@@ -47,14 +49,14 @@ import { RELEASES_URL } from "../shared/links";
               @for (rel of releases(); track rel.tag) {
                 <section class="wn-rel">
                   <div class="wn-rel-head">
-                    <span class="wn-rel-tag tnum">{{ rel.tag }}</span>
-                    @if (rel.channel) { <span class="wn-badge">{{ rel.channel === 'beta' ? 'BETA' : rel.channel === 'stable' ? 'STABLE' : 'DEV' }}</span> }
+                    <kj-badge class="wn-rel-tag tnum" size="sm" variant="outline">{{ rel.tag }}</kj-badge>
+                    @if (rel.channel) { <kj-badge class="wn-badge" variant="outline">{{ rel.channel === 'beta' ? 'BETA' : rel.channel === 'stable' ? 'STABLE' : 'DEV' }}</kj-badge> }
                     @if (rel.date) { <span class="wn-rel-date tnum">{{ rel.date }}</span> }
                   </div>
                   @if (rel.summary) { <p class="wn-rel-sum">{{ rel.summary }}</p> }
                   @for (c of sorted(rel.commits); track $index) {
                     <div class="wn-commit">
-                      <span class="wn-type" [class]="'wn-type ' + typeClass(c.type)">{{ c.type }}</span>
+                      <span class="up wn-type" [class]="'wn-type ' + typeClass(c.type)">{{ c.type }}</span>
                       <span class="wn-msg">
                         @if (c.scope) { <span class="scope">{{ c.scope }}: </span> }{{ c.msg }}
                         @if (c.by) { <span class="by">{{ c.by }}</span> }
@@ -67,25 +69,22 @@ import { RELEASES_URL } from "../shared/links";
           </div>
 
           <div class="wn-foot">
-            <button class="wn-link" (click)="openChangelog()">
+            <kj-button kjVariant="ghost" class="wn-link" kjVariant="quiet" (click)="openChangelog()">
               <app-icon name="file" size="sm" />View full changelog<app-icon name="ext" size="sm" />
-            </button>
-            <span class="wn-sp"></span>
-            <button class="btn primary" (click)="store.closeWhatsNew()"><app-icon name="check" size="sm" />Continue</button>
+            </kj-button>
+            <kj-button class="wn-continue" kjVariant="default" (click)="store.closeWhatsNew()"><app-icon name="check" size="sm" />Continue</kj-button>
           </div>
         </div>
-      </div>
+      </kj-dialog-shell>
     }
   `,
   styles: [
     `
-      .wn-backdrop {
-        position: fixed; inset: 0; z-index: 85; display: grid; place-items: center; padding: var(--sp-8);
-        background: rgba(4, 5, 9, 0.6); backdrop-filter: blur(5px);
-      }
+      /* The panel box, not a page-level surface: KjDialog centers this
+         component's host and paints the scrim behind it. */
       .wn-modal {
         --feat: var(--sem-change); --fix: var(--sem-add); --perf: var(--lane-1); --refactor: var(--ui-ink); --chore: var(--ink-3);
-        width: 544px; max-width: calc(100vw - 48px); max-height: 86vh; display: flex; flex-direction: column;
+        width: round(calc(544px * var(--density)), 1px); max-width: calc(100vw - 48px); max-height: 86vh; display: flex; flex-direction: column;
         background: var(--panel); border: 1px solid var(--hair-2); border-radius: var(--r-lg); overflow: hidden;
         box-shadow: var(--shadow); color: var(--ink); font-family: var(--font-ui);
       }
@@ -101,36 +100,37 @@ import { RELEASES_URL } from "../shared/links";
         content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
         background: linear-gradient(90deg, var(--brand-1), var(--brand-2), var(--brand-3)); opacity: 0.85;
       }
-      .wn-x {
-        position: absolute; top: var(--sp-5); right: var(--sp-5); width: 28px; height: 28px; border-radius: var(--r-sm);
-        border: 1px solid transparent; background: transparent; color: var(--ink-3); cursor: pointer; display: grid; place-items: center;
+      .wn-x ::ng-deep .kj-button {
+        position: absolute; top: var(--sp-5); right: var(--sp-5); width: 28px; height: 28px; padding: 0; border-radius: var(--r-sm);
+        border: 1px solid transparent; background: transparent; box-shadow: none; color: var(--ink-3); cursor: pointer; display: grid; place-items: center;
       }
-      .wn-x:hover { background: var(--panel-3); color: var(--ink); border-color: var(--hair); }
+      .wn-x ::ng-deep .kj-button:hover { background: var(--panel-3); color: var(--ink); border-color: var(--hair); }
       .wn-eyebrow {
-        position: relative; display: inline-flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-2xs);
-        letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3);
+        position: relative; display: inline-flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-meta);
+        color: var(--ink-3);
       }
       .wn-eyebrow .d { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-2); }
-      .wn-h1 { position: relative; font-family: var(--font-disp); font-weight: 600; font-size: var(--fs-xl); letter-spacing: -0.02em; margin-top: var(--sp-3); }
+      .wn-h1 { position: relative; font-family: var(--font-disp); font-weight: var(--fw-medium); font-size: var(--fs-xl); letter-spacing: -0.02em; margin-top: var(--sp-3); }
       .wn-verline { position: relative; display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-4); }
-      .wn-ver { font-family: var(--font-disp); font-weight: 600; font-size: var(--fs-md); color: var(--ui-ink); }
-      .wn-badge {
-        font-size: var(--fs-3xs); font-weight: 700; letter-spacing: 0.12em; padding: 2px 7px; border-radius: 999px;
+      .wn-ver { font-family: var(--font-disp); font-weight: var(--fw-medium); font-size: var(--fs-md); color: var(--ui-ink); }
+      .wn-badge ::ng-deep .kj-badge {
+        font-size: var(--fs-badge); font-weight: var(--fw-strong); letter-spacing: 0.12em; padding: 2px 7px; border-radius: 999px;
         color: var(--sem-attn); border: 1px solid color-mix(in oklch, var(--sem-attn), transparent 56%);
         background: color-mix(in oklch, var(--sem-attn), transparent 88%);
       }
-      .wn-from { font-size: var(--fs-xs); color: var(--ink-4); }
+      .wn-from {  color: var(--ink-4); }
       .wn-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--sp-7) var(--sp-5); }
-      .wn-state { font-size: var(--fs-sm); color: var(--ink-4); padding: var(--sp-7) 0; line-height: 1.6; }
+      .wn-state { font-size: var(--fs-meta); color: var(--ink-4); padding: var(--sp-7) 0; line-height: 1.6; }
 
       .wn-rel + .wn-rel { border-top: 1px solid var(--hair); }
       .wn-rel-head {
         position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
         padding: var(--sp-5) 0 var(--sp-3); background: linear-gradient(var(--panel) 78%, transparent);
       }
-      .wn-rel-tag { font-family: var(--font-disp); font-weight: 600; font-size: var(--fs-md); color: var(--ink); }
-      .wn-rel-date { font-size: var(--fs-xs); color: var(--ink-4); margin-left: auto; }
-      .wn-rel-sum { font-size: var(--fs-sm); line-height: 1.55; color: var(--ink-2); padding: 0 0 var(--sp-3); }
+      .wn-rel-tag ::ng-deep .kj-badge { font: 600 var(--fs-md) / 1.2 var(--font-disp); color: var(--ink);
+        background: transparent; border-color: transparent; padding: 0; }
+      .wn-rel-date {  color: var(--ink-4); margin-left: auto; }
+      .wn-rel-sum { line-height: 1.55; color: var(--ink-2); padding: 0 0 var(--sp-3); }
 
       .wn-commit {
         display: grid; grid-template-columns: auto 1fr; gap: var(--sp-4); align-items: baseline;
@@ -138,7 +138,7 @@ import { RELEASES_URL } from "../shared/links";
       }
       .wn-commit:last-child { border-bottom: none; }
       .wn-type {
-        font-size: var(--fs-3xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+        font-weight: var(--fw-medium);
         padding: 3px 7px; border-radius: 5px; white-space: nowrap; align-self: start; margin-top: 1px;
         color: var(--chore); background: color-mix(in oklch, var(--chore), transparent 84%);
       }
@@ -147,21 +147,22 @@ import { RELEASES_URL } from "../shared/links";
       .wn-type.perf { color: var(--perf); background: color-mix(in oklch, var(--perf), transparent 84%); }
       .wn-type.refactor { color: var(--refactor); background: color-mix(in oklch, var(--refactor), transparent 84%); }
       .wn-type.chore { color: var(--chore); background: color-mix(in oklch, var(--chore), transparent 84%); }
-      .wn-msg { font-size: var(--fs-sm); line-height: 1.5; color: var(--ink); }
+      .wn-msg { line-height: 1.5; color: var(--ink); }
       .wn-msg .scope { color: var(--ui-ink); }
-      .wn-msg .by { color: var(--ink-4); margin-left: var(--sp-3); font-size: var(--fs-xs); }
+      .wn-msg .by { color: var(--ink-4); margin-left: var(--sp-3);  }
 
       .wn-foot {
         flex: none; display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-5) var(--sp-7);
         border-top: 1px solid var(--hair); background: var(--panel-2);
       }
-      .wn-link {
-        display: inline-flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); color: var(--ink-3);
-        background: transparent; border: none; cursor: pointer;
+      /* .kj-quiet is the bare-label recipe; the link ink and the tighter icon
+         gap are all that is per-instance. */
+      .wn-link ::ng-deep .kj-button {
+        --kj-button-fg: var(--ink-3); --kj-button-gap: var(--sp-2); --kj-button-font-size: var(--fs-meta);
       }
-      .wn-link:hover { color: var(--ui-link); }
-      .wn-link svg { width: var(--sp-5); height: var(--sp-5); }
-      .wn-sp { flex: 1; }
+      .wn-link ::ng-deep .kj-button:hover:not([aria-disabled="true"]) { --kj-button-fg: var(--ui-link); }
+      .wn-link ::ng-deep .kj-button svg { width: var(--sp-5); height: var(--sp-5); }
+      .wn-continue ::ng-deep .kj-button { margin-left: auto; }
     `,
   ],
 })
@@ -189,6 +190,9 @@ export class WhatsNewModalComponent {
   });
 
   constructor() {
+    // Esc / outside-click close the overlay, not the store — clear the flag on
+    // teardown so the two can never drift.
+    inject(DestroyRef).onDestroy(() => this.store.closeWhatsNew());
     // Load the changelog the first time the dialog opens (cached afterwards).
     effect(() => {
       if (this.store.whatsNewOpen()) void this.changelog.load();
@@ -205,11 +209,6 @@ export class WhatsNewModalComponent {
   /** Known conventional types get their own chip color; anything else is neutral. */
   typeClass(type: string): string {
     return WhatsNewModalComponent.KNOWN.has(type) ? type : "";
-  }
-
-  @HostListener("document:keydown.escape")
-  onEsc(): void {
-    if (this.store.whatsNewOpen()) this.store.closeWhatsNew();
   }
 
   /** Open the full changelog in the user's browser (window.open is blocked in

@@ -11,7 +11,7 @@ import { AgentActionsService } from "../agents/agent-actions.service";
  * this service performs the side effect of a decision and records it.
  *
  * Hooks are fire-and-forget (we don't forward the decision yet — like orca), so
- * Accept/Reject send a best-effort PTY keystroke; "Open terminal" is the fully
+ * Accept/Reject send a best-effort PTY keystroke"Open terminal" is the fully
  * reliable path where the user approves in the agent's own TUI.
  */
 @Injectable({ providedIn: "root" })
@@ -47,21 +47,6 @@ export class NotificationService {
     }
     this.store.decide(n.id, "rejected", "rejected");
     this.ui.flash("rejected · " + n.agentName);
-  }
-
-  /**
-   * Select one option of an AskUserQuestion-style prompt. `optionIndex` is the
-   * 0-based index within the question's `options` array, which matches the
-   * agent's displayed 1..N order — so we send the 1-based choice as best-effort
-   * PTY keystrokes (fire-and-forget, NOT a forwarded decision; assumes a numbered
-   * select). Multi-question prompts wire each option to its 1-based index within
-   * its OWN question (the single-question case is the common one). Free-text
-   * options (e.g. "Type something") can't be answered here — use the terminal.
-   */
-  chooseOption(n: AgentNotification, optionIndex: number) {
-    void this.agentsStore.decide(n.agentId, optionIndex + 1).catch(() => {});
-    this.store.decide(n.id, "accepted", "option " + (optionIndex + 1));
-    this.ui.flash("option " + (optionIndex + 1) + " · " + n.agentName);
   }
 
   /** Open the agent's terminal for full context (and resolve a question). */

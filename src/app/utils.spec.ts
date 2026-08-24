@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   appendPtyTail,
-  detectTitleStatus,
-  isAwaitingInput,
   isPermissionPrompt,
   langId,
   langTag,
   quotePath,
-  stripAnsi,
 } from "./utils";
 
 describe("quotePath", () => {
@@ -35,26 +32,6 @@ describe("langId / langTag", () => {
     expect(langTag("src/app/foo.component.html")).toBe("angular");
     expect(langId("public/index.html")).toBe("html");
     expect(langId("src/main.ts")).toBe("javascript");
-  });
-});
-
-describe("stripAnsi", () => {
-  it("removes CSI color / SGR sequences", () => {
-    expect(stripAnsi("\x1b[31mred\x1b[0m done")).toBe("red done");
-    expect(stripAnsi("\x1b[1;32mok\x1b[0m")).toBe("ok");
-  });
-
-  it("removes cursor-movement and erase sequences", () => {
-    expect(stripAnsi("a\x1b[2K\x1b[1Gb")).toBe("ab");
-  });
-
-  it("removes OSC (window-title) sequences terminated by BEL or ST", () => {
-    expect(stripAnsi("\x1b]0;my title\x07hi")).toBe("hi");
-    expect(stripAnsi("\x1b]0;t\x1b\\hi")).toBe("hi");
-  });
-
-  it("leaves plain text untouched", () => {
-    expect(stripAnsi("just text")).toBe("just text");
   });
 });
 
@@ -196,7 +173,7 @@ function appendPtyTailReference(prev: string[], chunk: string, max = 60): string
         break;
       case "H":
       case "f": {
-        const [r, c] = params.split(";");
+        const [r, c] = params.split("");
         row = r ? Math.max(0, parseInt(r, 10) - 1) : 0;
         col = c ? Math.max(0, parseInt(c, 10) - 1) : 0;
         ensureRow();
@@ -352,48 +329,6 @@ describe("appendPtyTail — perf sanity", () => {
   });
 });
 
-describe("detectTitleStatus", () => {
-  it("reads a braille spinner as working", () => {
-    expect(detectTitleStatus("⠋ ~/proj")).toBe("working");
-    expect(detectTitleStatus("⣾ Claude")).toBe("working");
-  });
-
-  it("reads working keywords as working", () => {
-    expect(detectTitleStatus("Codex working")).toBe("working");
-    expect(detectTitleStatus("Aider thinking…")).toBe("working");
-    expect(detectTitleStatus("OpenCode running")).toBe("working");
-  });
-
-  it("does not false-positive on keywords inside words or paths", () => {
-    expect(detectTitleStatus("reworking the plan")).toBeNull();
-    expect(detectTitleStatus("~/codex/working")).toBeNull();
-    expect(detectTitleStatus("overthinking")).toBeNull();
-  });
-
-  it("reads gemini working / silent-working glyphs as working", () => {
-    expect(detectTitleStatus("✦ Gemini")).toBe("working");
-    expect(detectTitleStatus("⏲ Gemini")).toBe("working");
-  });
-
-  it("reads the permission glyph as permission", () => {
-    expect(detectTitleStatus("✋ Gemini")).toBe("permission");
-  });
-
-  it("reads known idle glyphs as idle", () => {
-    expect(detectTitleStatus("✳ ~/proj")).toBe("idle"); // claude idle prefix
-    expect(detectTitleStatus("◇ Gemini")).toBe("idle");
-  });
-
-  it("returns null for a plain title with no signal", () => {
-    expect(detectTitleStatus("~/projects/orrery")).toBeNull();
-    expect(detectTitleStatus("")).toBeNull();
-  });
-
-  it("prioritizes permission over a working spinner in the same title", () => {
-    expect(detectTitleStatus("✋ ⠋ Gemini")).toBe("permission");
-  });
-});
-
 describe("isPermissionPrompt", () => {
   it("flags yes/no permission prompts", () => {
     expect(isPermissionPrompt("Do you want to proceed? (y/n)")).toBe(true);
@@ -409,24 +344,5 @@ describe("isPermissionPrompt", () => {
   it("treats open questions as not-permission", () => {
     expect(isPermissionPrompt("Which database should I use, Redis or Postgres?")).toBe(false);
     expect(isPermissionPrompt("What should the retry cap be?")).toBe(false);
-  });
-});
-
-describe("isAwaitingInput", () => {
-  it("is true for permission prompts", () => {
-    expect(isAwaitingInput("Allow this command? (y/n)")).toBe(true);
-  });
-
-  it("is true when the last line is a question", () => {
-    expect(isAwaitingInput("Analyzing repo…\nWhich database should I use?")).toBe(true);
-  });
-
-  it("is false for ongoing work output", () => {
-    expect(isAwaitingInput("Drafting implementation plan\nWriting tests")).toBe(false);
-    expect(isAwaitingInput("")).toBe(false);
-  });
-
-  it("only considers the final line for the trailing-question heuristic", () => {
-    expect(isAwaitingInput("Is this right?\nNow committing the change")).toBe(false);
   });
 });

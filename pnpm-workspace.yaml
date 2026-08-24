@@ -8,3 +8,21 @@ allowBuilds:
   esbuild: true
   lmdb: true
   msgpackr-extract: true
+
+# These are our OWN packages, published from ~/Desktop/projects/kouji-ui minutes
+# before being consumed here, so the minimum-release-age rule (aimed at catching
+# freshly-published malicious versions of third-party deps) has nothing to
+# protect against. Excluded by name so a new patch does not re-trip it.
+minimumReleaseAgeExclude:
+  - '@kouji-ui/components'
+  - '@kouji-ui/core'
+  - '@kouji-ui/themes'
+
+# lucide-angular@1.0.0 (latest) declares a peer range of "13.x - 21.x", which
+# Angular 22 falls outside of. The library itself is version-agnostic at runtime.
+# TEMPORARY: Phase 3 replaces it with kouji-ui's provideLucideIcons(), after
+# which this block should be deleted.
+peerDependencyRules:
+  allowedVersions:
+    'lucide-angular>@angular/core': '22'
+    'lucide-angular>@angular/common': '22'

@@ -12,6 +12,7 @@ import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { STATUS_META } from "../utils";
+import { KjProgressBarComponent } from "@kouji-ui/components";
 
 /**
  * Compact in-card agent strip: shows tool badge, name, status pill+dot,
@@ -21,7 +22,7 @@ import { STATUS_META } from "../utils";
 @Component({
   selector: "app-agent-strip",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, StatusDotComponent, ToolBadgeComponent],
+  imports: [IconComponent, StatusDotComponent, ToolBadgeComponent, KjProgressBarComponent],
   template: `
     @if (agent(); as ag) {
       @let m = meta();
@@ -38,12 +39,10 @@ import { STATUS_META } from "../utils";
         <!-- row 1: badge + name + pill + enter icon -->
         <div style="display:flex;align-items:center;gap:var(--sp-3);min-width:0">
           <app-tool-badge [tool]="ag.tool" [size]="17" />
+          <h4 class="trunc" style="flex:0 1 auto">{{ ag.name }}</h4>
           <span
-            class="disp"
-            style="font-size:var(--fs-ui);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto"
-          >{{ ag.name }}</span>
-          <span
-            style="display:inline-flex;align-items:center;gap:var(--sp-2);flex:none;font-size:var(--fs-2xs);padding:var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-3);border-radius:999px;letter-spacing:.08em;text-transform:uppercase"
+            class="chip up"
+            style="flex:none;font-size:var(--fs-meta);letter-spacing:.08em"
             [style.color]="m.color"
             [style.border]="'1px solid color-mix(in oklch, ' + m.color + ', transparent 62%)'"
             [style.background]="'color-mix(in oklch, ' + m.color + ', transparent 88%)'"
@@ -59,27 +58,25 @@ import { STATUS_META } from "../utils";
         </div>
 
         <!-- progress bar -->
-        <div style="height:var(--sp-1);border-radius:3px;background:var(--hair);overflow:hidden;position:relative">
-          <div
-            [style.width]="progressPct() + '%'"
-            [style.background]="m.color"
-            [style.opacity]="ag.status === 'blocked' ? '0.5' : '1'"
-            style="height:100%;border-radius:3px;transition:width .6s ease"
-          ></div>
-        </div>
+        <kj-progress-bar
+          [kjValue]="progressPct()"
+          kjAriaLabel="Agent progress"
+          [style.--kj-progress-bar-fill]="ag.status === 'blocked' ? 'color-mix(in oklch,' + m.color + ',transparent 50%)' : m.color"
+          style="--kj-progress-bar-track:var(--hair);--kj-progress-bar-radius:3px;--kj-progress-bar-height:var(--sp-1)"
+        />
 
         <!-- row 3: branch/blockReason + commits -->
-        <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--ink-3)">
+        <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-3);color:var(--ink-3)">
           @if (ag.status === 'blocked' && ag.blockReason) {
             <span style="display:flex;align-items:center;gap:var(--sp-2);min-width:0;overflow:hidden" [style.color]="'var(--code-del-ink)'">
-              <app-icon name="flag" size="sm" [px]="11" style="flex:none" />
-              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.blockReason }}</span>
+              <app-icon size="md" name="flag" style="flex:none" />
+              <span class="trunc">{{ ag.blockReason }}</span>
             </span>
           } @else {
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
+            <span class="trunc">{{ ag.branch.replace('agent/', '') }}</span>
           }
           <span style="margin-left:auto;display:flex;gap:var(--sp-2);flex:none;color:var(--ink-4)">
-            <app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}
+            <app-icon size="md" name="commit" />{{ ag.commits }}
           </span>
         </div>
       </div>

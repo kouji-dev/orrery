@@ -15,6 +15,7 @@ import {
 import { Agent } from "../models";
 import { TerminalService } from "../terminal.service";
 import { UiStore } from "../ui/ui.store";
+import { KjButton } from "@kouji-ui/core";
 
 /**
  * Hosts the agent's persistent xterm terminal. The Terminal instance lives in
@@ -25,11 +26,12 @@ import { UiStore } from "../ui/ui.store";
  * overlaid top-right; Enter -> next, Shift+Enter -> previous, Esc -> close.
  */
 @Component({
+  imports: [KjButton],
   selector: "app-terminal",
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--bg)">
-      <div style="color:var(--ink-4);padding:var(--sp-4) var(--sp-6) var(--sp-2);font-size:var(--fs-xs)">── session: {{ agent().worktree }} · {{ agent().branch }} ──</div>
+      <div style="color:var(--ink-4);padding:var(--sp-4) var(--sp-6) var(--sp-2)">── session: {{ agent().worktree }} · {{ agent().branch }} ──</div>
       <div style="flex:1;min-height:0;position:relative">
         <div #host [attr.data-agent-id]="agent().id" style="position:absolute;inset:0;padding:var(--sp-1) var(--sp-5) var(--sp-4)"></div>
 
@@ -48,15 +50,15 @@ import { UiStore } from "../ui/ui.store";
               (input)="onQuery($event)"
               spellcheck="false"
               autocomplete="off"
-              style="width:160px;background:transparent;border:0;outline:0;color:var(--ink-2);
-                     font-size:var(--fs-ui);font-family:inherit"
+              style="width: round(calc(160px * var(--density)), 1px);background:transparent;border:0;outline:0;color:var(--ink-2);
+                     font-family:inherit"
             />
             @if (matchInfo()) {
-              <span class="tnum" style="font-size:var(--fs-xs);color:var(--ink-4);padding:0 var(--sp-1);white-space:nowrap">{{ matchInfo() }}</span>
+              <span class="tnum" style="color:var(--ink-4);padding:0 var(--sp-1);white-space:nowrap">{{ matchInfo() }}</span>
             }
-            <button type="button" title="Previous (Shift+Enter)" (click)="prev()" [style]="btn">↑</button>
-            <button type="button" title="Next (Enter)" (click)="next()" [style]="btn">↓</button>
-            <button type="button" title="Close (Esc)" (click)="close()" [style]="btn">✕</button>
+            <button kjButton type="button" title="Previous (Shift+Enter)" (click)="prev()" [style]="btn">↑</button>
+            <button kjButton type="button" title="Next (Enter)" (click)="next()" [style]="btn">↓</button>
+            <button kjButton type="button" title="Close (Esc)" (click)="close()" [style]="btn">✕</button>
           </div>
         }
       </div>
@@ -86,8 +88,8 @@ export class TerminalComponent {
 
   /** Shared style for the tiny prev/next/close affordances. */
   readonly btn =
-    "display:inline-flex;align-items:center;justify-content:center;width:var(--sp-8);height:var(--sp-8);" +
-    "background:transparent;border:0;border-radius:4px;color:var(--ink-3);cursor:pointer;font-size:var(--fs-sm);line-height:1";
+    "display:inline-flex;align-items:center;justify-content:center;width:var(--sp-8);height:var(--sp-8)" +
+    "background:transparent;border:0;border-radius:4px;color:var(--ink-3);cursor:pointer;font-size:var(--fs-meta);line-height:1";
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -99,11 +101,14 @@ export class TerminalComponent {
       this.detach?.();
       window.removeEventListener("keydown", this.onWindowKeydown, true);
     });
-    // re-theme live terminals when the app theme/palette toggles (microtask so
-    // UiStore has set [data-theme] / the --accent vars before xterm reads them)
+    // re-theme AND re-size live terminals when a tweak toggles (microtask so
+    // UiStore has set [data-theme] / [data-density] before xterm reads the vars)
     effect(() => {
       void this.ui.tweaks();
-      queueMicrotask(() => this.terminals.retheme());
+      queueMicrotask(() => {
+        this.terminals.retheme();
+        this.terminals.redensify();
+      });
     });
     // (re)attach the persistent terminal after render, whenever the agent changes
     afterRenderEffect(() => {

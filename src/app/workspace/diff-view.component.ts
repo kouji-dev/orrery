@@ -12,16 +12,19 @@ import { AgentActionsService } from "../agents/agent-actions.service";
 import { EstimateInput } from "../cost/estimate.service";
 import { IconComponent } from "../shared/icon.component";
 import { GitActionButtonComponent } from "../shared/git/git-action-button.component";
+import { StateBadgeComponent } from "../shared/git/state-badge.component";
+import { AddDelComponent } from "../shared/git/add-del.component";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
-import { fileDir, fileName, fileStateLabel, isMarkdownPath, langId, langTag, mix } from "../utils";
+import { fileDir, fileName, fileStateLabel, isMarkdownPath, langId, langTag } from "../utils";
 import { UiStore } from "../ui/ui.store";
 import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
 import { DiffStats } from "./review/chunk-stats";
+import { KjBadgeComponent, KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
 
 const LIST_MIN = 160; // px — narrowest the file-list panel may get
 const LIST_MAX = 520; // px — widest before the diff body is too cramped
@@ -30,65 +33,50 @@ const LIST_DEFAULT = 300;
 @Component({
   selector: "app-diff-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionButtonComponent],
+  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionButtonComponent, StateBadgeComponent, AddDelComponent, KjButtonComponent, KjBadgeComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     <div
       class="diff-grid"
       [class.resizing]="dragging()"
       [style.grid-template-columns]="listW() + 'px 6px 1fr'"
     >
-      <!-- file list -->
-      <div class="scroll-y" style="background:var(--panel);padding:var(--sp-3) 0">
-        <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-5) var(--sp-3) var(--sp-6)">
-          <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">Changed · {{ changes().length }}</span>
+      <!-- file list: header pinned, only the listing below scrolls -->
+      <div style="display:flex;flex-direction:column;min-height:0;background:var(--panel);padding-top:var(--sp-3)">
+        <div style="flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-5) var(--sp-3) var(--sp-6)">
+          <span class="up" style="color:var(--ink-3)">Changed · {{ changes().length }}</span>
           <!-- tree / flat toggle -->
-          <div style="margin-left:auto;display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
-            <button
-              class="btn"
-              (click)="treeMode.set(true)"
-              title="Tree view"
-              [style.background]="treeMode() ? 'var(--panel-3)' : 'transparent'"
-              [style.color]="treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
-              [style.box-shadow]="treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
-              style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
-            ><app-icon name="graph" size="sm" [px]="12" [color]="treeMode() ? 'var(--ui-ink)' : null" />Tree</button>
-            <button
-              class="btn"
-              (click)="treeMode.set(false)"
-              title="Flattened view"
-              [style.background]="!treeMode() ? 'var(--panel-3)' : 'transparent'"
-              [style.color]="!treeMode() ? 'var(--ink)' : 'var(--ink-3)'"
-              [style.box-shadow]="!treeMode() ? '0 0 0 1px var(--hair-2)' : 'none'"
-              style="padding:var(--sp-1) var(--sp-3);border-radius:4px;gap:var(--sp-2);font-size:var(--fs-xs)"
-            ><app-icon name="dots" size="sm" [px]="12" [color]="!treeMode() ? 'var(--ui-ink)' : null" />Flat</button>
-          </div>
-          <button class="btn" (click)="refresh()" title="Rescan changes" style="padding:var(--sp-1);border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
+          <kj-tabs variant="pills" class="tabs-xs" style="margin-left:auto"
+                   [value]="treeMode() ? 'tree' : 'flat'" (valueChange)="treeMode.set($event === 'tree')">
+            <kj-tab-list aria-label="File list layout">
+              <kj-tab value="tree" title="Tree view"><app-icon size="md" name="graph" [color]="treeMode() ? 'var(--ui-ink)' : null" />Tree</kj-tab>
+              <kj-tab value="flat" title="Flattened view"><app-icon size="md" name="dots" [color]="!treeMode() ? 'var(--ui-ink)' : null" />Flat</kj-tab>
+            </kj-tab-list>
+          </kj-tabs>
+          <kj-button kjSize="icon" kjVariant="ghost" (click)="refresh()" title="Rescan changes"><app-icon size="md" name="refresh" /></kj-button>
         </div>
 
+        <div class="scroll-y" style="padding-bottom:var(--sp-3)">
         @if (!changes().length) {
-          <div style="padding:var(--sp-5) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">no changes</div>
+          <div style="padding:var(--sp-5) var(--sp-6);color:var(--ink-4)">no changes</div>
         } @else if (treeMode()) {
           <!-- tree view: folders + indented file leaves -->
           @for (row of treeRows(); track row.path) {
             @if (row.dir) {
               <div class="diff-dir" (click)="toggleDir(row.path)" [style.padding-left.px]="8 + row.depth * 13">
-                <app-icon [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" size="sm" [px]="11" color="var(--ink-4)" />
-                <app-icon [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" size="sm" [px]="13" color="var(--ink-4)" />
-                <span style="font-size:var(--fs-sm);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.name }}</span>
+                <app-icon size="md" [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" color="var(--ink-4)" />
+                <app-icon size="lg" [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" color="var(--ink-4)" />
+                <span class="trunc" style="font-size:var(--fs-meta);color:var(--ink-3)">{{ row.name }}</span>
               </div>
             } @else {
               <div
-                class="diff-file"
+                class="diff-file list-row"
                 [class.sel]="current()?.path === row.path"
                 (click)="select(row.path)"
                 [style.padding-left.px]="12 + row.depth * 13"
               >
-                <span [style.color]="stateInk(row.file!.state)" [style.background]="stateBg(row.file!.state)" class="state-chip">{{ row.file!.state }}</span>
-                <span [title]="row.file!.state === 'R' && row.file!.oldPath ? ('renamed from ' + row.file!.oldPath) : row.name" class="fname">{{ row.name }}</span>
-                <span class="tnum counts-chip">
-                  <span style="color:var(--code-add-ink)">+{{ row.file!.add }}</span>
-                  @if (row.file!.del > 0) { <span style="color:var(--code-del-ink)">−{{ row.file!.del }}</span> }
-                </span>
+                <app-state-badge [state]="row.file!.state" />
+                <span [title]="row.file!.state === 'R' && row.file!.oldPath ? ('renamed from ' + row.file!.oldPath) : row.name" class="fname trunc">{{ row.name }}</span>
+                <app-add-del [add]="row.file!.add" [del]="row.file!.del" style="margin-left:auto" />
               </div>
             }
           }
@@ -97,28 +85,22 @@ const LIST_DEFAULT = 300;
                rename origin) rides inline, muted, so both modes share --row-h -->
           @for (f of changes(); track f.path) {
             <div
-              class="diff-file"
+              class="diff-file list-row"
               [class.sel]="current()?.path === f.path"
               (click)="select(f.path)"
             >
-              <span
-                [style.color]="stateInk(f.state)"
-                [style.background]="stateBg(f.state)"
-                class="state-chip"
-              >{{ f.state }}</span>
-              <span [title]="f.state === 'R' && f.oldPath ? ('renamed from ' + f.oldPath) : f.path" class="fname">{{ fname(f.path) }}</span>
+              <app-state-badge [state]="f.state" />
+              <span [title]="f.state === 'R' && f.oldPath ? ('renamed from ' + f.oldPath) : f.path" class="fname trunc">{{ fname(f.path) }}</span>
               @if (f.state === 'R' && f.oldPath) {
-                <span class="fdir" style="color:var(--vcs-renamed)">← {{ f.oldPath }}</span>
+                <span class="fdir trunc" style="color:var(--vcs-renamed)">← {{ f.oldPath }}</span>
               } @else if (fdir(f.path)) {
-                <span class="fdir">{{ fdir(f.path) }}</span>
+                <span class="fdir trunc">{{ fdir(f.path) }}</span>
               }
-              <span class="tnum counts-chip">
-                <span style="color:var(--code-add-ink)">+{{ f.add }}</span>
-                @if (f.del > 0) { <span style="color:var(--code-del-ink)">−{{ f.del }}</span> }
-              </span>
+              <app-add-del [add]="f.add" [del]="f.del" style="margin-left:auto" />
             </div>
           }
         }
+        </div>
       </div>
 
       <!-- resizable separator: drag to rebalance the file list vs the diff body -->
@@ -134,7 +116,7 @@ const LIST_DEFAULT = 300;
       <!-- diff body -->
       <div style="display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--bg)">
         <!-- diff header: LEFT = hunk header + status · RIGHT = language tag -->
-        <div class="diff-head">
+        <div class="pane-head diff-head">
           <div class="diff-head-l">
             @if (current(); as f) {
               <div class="diff-head-top tnum">
@@ -147,83 +129,66 @@ const LIST_DEFAULT = 300;
               </div>
               <div class="diff-head-path">
                 <app-icon name="file" size="sm" color="var(--ink-3)" />
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="f.path">{{ f.path }}</span>
-                @if (loading()) { <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">loading…</span> }
+                <span class="trunc" [title]="f.path">{{ f.path }}</span>
+                @if (loading()) { <kj-badge class="tnum">loading…</kj-badge> }
               </div>
             } @else {
-              <span style="color:var(--ink-4);font-size:var(--fs-sm)">—</span>
+              <span style="color:var(--ink-4);font-size:var(--fs-meta)">—</span>
             }
           </div>
           <!-- Preview: previewable files (md) open rendered in the workspace,
                exactly as if clicked in the right files panel -->
           @if (canPreview()) {
-            <button
-              class="btn ghost-hair"
-              (click)="openPreview()"
-              title="Preview — open the rendered file in the workspace"
-              style="align-self:flex-start;padding:var(--sp-1) var(--sp-4);gap:var(--sp-2);border-radius:var(--r-sm);font-size:var(--fs-xs);color:var(--ink-3)"
-            >
-              <app-icon name="file" size="sm" [px]="12" />
+            <kj-button kjVariant="outline" (click)="openPreview()" title="Preview — open the rendered file in the workspace" style="--kj-button-fg: var(--ink-3)">
+              <app-icon size="md" name="file" />
               Preview
-            </button>
+            </kj-button>
           }
-          @if (current()) {
-            <button
-              class="btn"
-              [class.ghost-hair]="!annotate()"
-              (click)="annotate.set(!annotate())"
-              title="Annotate — show who last changed each line on both sides"
-              [style.color]="annotate() ? 'var(--ink)' : 'var(--ink-3)'"
-              [style.background]="annotate() ? 'var(--ui-sel)' : 'transparent'"
-              [style.border]="'1px solid ' + (annotate() ? 'var(--ui-sel-2)' : 'var(--hair)')"
-              style="align-self:flex-start;padding:var(--sp-1) var(--sp-4);gap:var(--sp-2);border-radius:var(--r-sm);font-size:var(--fs-xs)"
-            >
-              <app-icon name="git" size="sm" [px]="12" [color]="annotate() ? 'var(--ui-ink)' : null" />
+          @if (current(); as f) {
+            <kj-button kjVariant="outline" [kjPressed]="annotate()" (click)="annotate.set(!annotate())" title="Annotate — show who last changed each line on both sides">
+              <app-icon size="md" name="git" [color]="annotate() ? 'var(--ui-ink)' : null" />
               Annotate
-            </button>
-          }
-          @if (current()) {
+            </kj-button>
             <app-send-review-button [agent]="agent().id" [agentName]="agent().name" />
-          }
-          <!-- agent-level git actions on the review surface (A4 dual-path,
-               design agent-git.jsx adapted to the split-button contract).
-               Native commit (message box) lives in the Git tab; HERE commit is
-               the AI variant — you just reviewed the diff, the model writes
-               the message. Merge's primary press is the free native path. -->
-          @if (current()) {
-            <div style="align-self:flex-start;display:flex;gap:var(--sp-3);flex:none">
-              <app-git-action-button
-                label="Commit"
-                icon="commit"
-                [small]="true"
-                [aiOnly]="true"
-                [estimateInput]="commitEstimate()"
-                [variants]="[{ id: 'commit', label: 'Commit with AI (write the message)', op: 'commit', icon: 'sparkles' }]"
-                (ai)="agentActions.aiAction(agent().id, 'commit')"
-              />
-              <app-git-action-button
-                [label]="'Rebase onto ' + baseBranch()"
-                icon="sparkles"
-                [small]="true"
-                [aiOnly]="true"
-                [estimateInput]="rebaseEstimate()"
-                [variants]="[{ id: 'rebase', label: 'Rebase with AI', icon: 'sparkles' }]"
-                (ai)="agentActions.aiAction(agent().id, 'rebase')"
-              />
-              <app-git-action-button
-                [label]="'Merge ' + baseBranch()"
-                icon="branch"
-                [small]="true"
-                [title]="'Merge ' + baseBranch() + ' into ' + agent().branch + ' · native'"
-                [estimateInput]="mergeEstimate()"
-                [variants]="[{ id: 'merge', label: 'Merge with AI (agent resolves conflicts)', icon: 'sparkles' }]"
-                (native)="agentActions.mergeAgent(agent().id, baseBranch())"
-                (ai)="agentActions.aiAction(agent().id, 'merge')"
-              />
-            </div>
-          }
-          @if (current() && langLabel()) {
-            <span class="chip tnum" style="align-self:flex-start;font-size:var(--fs-2xs)">{{ langLabel() }}</span>
+            <!-- agent-level git actions on the review surface (A4 dual-path,
+                 design agent-git.jsx adapted to the split-button contract).
+                 Native commit (message box) lives in the Git tab; HERE commit is
+                 the AI variant — you just reviewed the diff, the model writes
+                 the message. Merge's primary press is the free native path. -->
+            <app-git-action-button
+              style="align-self:flex-start"
+              label="Commit"
+              icon="commit"
+              [small]="true"
+              [aiOnly]="true"
+              [estimateInput]="commitEstimate()"
+              [variants]="[{ id: 'commit', label: 'Commit with AI (write the message)', op: 'commit', icon: 'sparkles' }]"
+              (ai)="agentActions.aiAction(agent().id, 'commit')"
+            />
+            <app-git-action-button
+              style="align-self:flex-start"
+              [label]="'Rebase onto ' + baseBranch()"
+              icon="sparkles"
+              [small]="true"
+              [aiOnly]="true"
+              [estimateInput]="rebaseEstimate()"
+              [variants]="[{ id: 'rebase', label: 'Rebase with AI', icon: 'sparkles' }]"
+              (ai)="agentActions.aiAction(agent().id, 'rebase')"
+            />
+            <app-git-action-button
+              style="align-self:flex-start"
+              [label]="'Merge ' + baseBranch()"
+              icon="branch"
+              [small]="true"
+              [title]="'Merge ' + baseBranch() + ' into ' + agent().branch + ' · native'"
+              [estimateInput]="mergeEstimate()"
+              [variants]="[{ id: 'merge', label: 'Merge with AI (agent resolves conflicts)', icon: 'sparkles' }]"
+              (native)="agentActions.mergeAgent(agent().id, baseBranch())"
+              (ai)="agentActions.aiAction(agent().id, 'merge')"
+            />
+            @if (langLabel()) {
+              <kj-badge class="tnum" style="align-self:flex-start">{{ langLabel() }}</kj-badge>
+            }
           }
         </div>
 
@@ -234,9 +199,9 @@ const LIST_DEFAULT = 300;
             <app-unified-code [agent]="agent().id" [file]="current()!.path" view="diff" [oldText]="d.old" [newText]="d.new" [lang]="langId()" (stats)="stats.set($event)" />
           }
         } @else if (!current()) {
-          <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">no changed files</div>
+          <div class="pane-empty">no changed files</div>
         } @else if (!loading()) {
-          <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">no diff</div>
+          <div class="pane-empty">no diff</div>
         }
       </div>
     </div>
@@ -264,53 +229,20 @@ const LIST_DEFAULT = 300;
         height: var(--row-h);
         cursor: pointer;
       }
+      /* margin / radius / cursor / hover / selected all come from .list-row */
       .diff-file {
         padding: 0 var(--sp-5);
-        margin: 1px var(--sp-3);
-        border-radius: var(--r-sm);
       }
       .diff-dir {
         padding: 0 var(--sp-4);
       }
-      .diff-file .state-chip {
-        flex: none;
-        width: var(--sp-6);
-        height: var(--sp-6);
-        border-radius: 3px;
-        display: grid;
-        place-items: center;
-        font-size: var(--fs-2xs);
-        font-weight: 700;
-      }
       .diff-file .fname {
         flex: 0 1 auto;
-        min-width: 0;
-        font-size: var(--fs-sm);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
+        }
       .diff-file .fdir {
         flex: 1 1 auto;
-        min-width: 0;
-        font-size: var(--fs-2xs);
+        font-size: var(--fs-meta);
         color: var(--ink-4);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .diff-file .counts-chip {
-        font-size: var(--fs-2xs);
-        display: flex;
-        gap: var(--sp-2);
-        flex: none;
-        margin-left: auto;
-      }
-      .diff-file:hover:not(.sel) {
-        background: var(--panel-2);
-      }
-      .diff-file.sel {
-        background: var(--panel-3);
       }
 
       /* ----- resizer handle ----- */
@@ -336,14 +268,13 @@ const LIST_DEFAULT = 300;
         box-shadow: 0 0 0 1px var(--ui-sel);
       }
 
-      /* ----- diff header ----- */
+      /* ----- diff header: .pane-head + the deltas this one needs (a two-line
+         left block, so the row aligns to the TOP rather than centre) ----- */
       .diff-head {
-        display: flex;
         align-items: flex-start;
         gap: var(--sp-6);
-        padding: var(--sp-3) var(--sp-6);
+        padding-block: var(--sp-3);
         background: var(--panel);
-        border-bottom: 1px solid var(--hair);
       }
       .diff-head-l {
         flex: 1;
@@ -356,7 +287,6 @@ const LIST_DEFAULT = 300;
         display: flex;
         align-items: center;
         gap: var(--sp-4);
-        font-size: var(--fs-sm);
         min-width: 0;
       }
       .hunk {
@@ -368,22 +298,19 @@ const LIST_DEFAULT = 300;
         white-space: nowrap;
       }
       .state-label {
-        font-size: var(--fs-xs);
         text-transform: uppercase;
         letter-spacing: 0.1em;
-        font-weight: 600;
+        font-weight: var(--fw-medium);
       }
       .counts {
         display: flex;
         gap: var(--sp-3);
-        font-size: var(--fs-xs);
         margin-left: auto;
       }
       .diff-head-path {
         display: flex;
         align-items: center;
         gap: var(--sp-3);
-        font-size: var(--fs-sm);
         color: var(--ink-2);
         min-width: 0;
       }
@@ -632,15 +559,6 @@ export class DiffViewComponent {
         : state === "R"
           ? "var(--vcs-renamed)"
           : "var(--vcs-modified)";
-  }
-  stateBg(state: string): string {
-    return state === "A"
-      ? mix("var(--vcs-added)", 88)
-      : state === "D"
-        ? "transparent"
-        : state === "R"
-          ? mix("var(--vcs-renamed)", 88)
-          : mix("var(--vcs-modified)", 88);
   }
 }
 

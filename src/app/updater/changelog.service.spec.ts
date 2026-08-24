@@ -1,5 +1,5 @@
 import { Injector, runInInjectionContext } from "@angular/core";
-import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { ChangelogService, cmpVer, ChangelogRelease } from "./changelog.service";
 
 describe("cmpVer", () => {

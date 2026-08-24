@@ -50,7 +50,7 @@ test("merge dropdown offers the AI variant with NO cost chrome (kill switch off)
   await expect(menu).not.toContainText("spends tokens");
 
   // the variant row still works, but carries no token/$ estimate
-  const row = menu.locator(".btn.row", { hasText: "Merge with AI" });
+  const row = menu.locator("kj-button.row", { hasText: "Merge with AI" });
   await expect(row).toBeVisible();
   await expect(row.locator(".row-est")).toHaveCount(0);
 
@@ -64,7 +64,7 @@ test("merge dropdown offers the AI variant with NO cost chrome (kill switch off)
 test("rebase is aiOnly until A3.4: usable, with no inline estimate while costs are off", async ({ page }) => {
   await openGitTab(page, "e2e-g3", "e2e-rebase");
   const rebase = page.locator("app-git-action-button", { hasText: "Rebase onto" });
-  await expect(rebase.locator(".btn.main")).toBeVisible();
+  await expect(rebase.locator("kj-button.main")).toBeVisible();
   await expect(rebase.locator(".est-inline")).toHaveCount(0);
 });
 

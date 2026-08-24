@@ -1,9 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
-  HostListener,
-  OnDestroy,
+  DestroyRef,
   ViewEncapsulation,
   computed,
   effect,
@@ -32,6 +30,17 @@ import {
   Project,
   TelemetryTraceState,
 } from "../models";
+import {
+  KjBadgeComponent,
+  KjButtonComponent,
+  KjEmptyStateComponent,
+  KjEmptyStateDescriptionComponent,
+  KjEmptyStateIconComponent,
+  KjEmptyStateTitleComponent,
+  KjOverlayBadgeComponent,
+  KjProgressBarComponent,
+} from "@kouji-ui/components";
+import { DismissDirective } from "../shared/dismiss.directive";
 
 type Sort = { key: string; dir: number };
 
@@ -49,33 +58,46 @@ type Sort = { key: string; dir: number };
   selector: "app-dev-panel",
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
-  imports: [IconComponent, StatusDotComponent, ToolBadgeComponent],
+  hostDirectives: [DismissDirective],
+  imports: [
+    IconComponent,
+    StatusDotComponent,
+    ToolBadgeComponent,
+    KjBadgeComponent,
+    KjButtonComponent,
+    KjEmptyStateComponent,
+    KjEmptyStateDescriptionComponent,
+    KjEmptyStateIconComponent,
+    KjEmptyStateTitleComponent,
+    KjOverlayBadgeComponent,
+    KjProgressBarComponent,
+  ],
   template: `
-    <button class="dvc-fab" [class.on]="open()" [title]="alertCount() ? 'Dev console · ' + alertCount() + ' perf alert' + (alertCount() > 1 ? 's' : '') : 'Dev console'" aria-label="Dev console" (click)="open.set(!open())">
-      @if (alertCount() > 0) { <span class="dvc-badge tnum">{{ alertCount() }}</span> }
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3l2.5-6 4 13 3-9 1.5 2H21" /></svg>
-    </button>
+    <kj-overlay-badge [kjValue]="alertCount()" [kjHidden]="alertCount() === 0" kjVariant="destructive" [kjDescription]="alertCount() + ' perf alert' + (alertCount() > 1 ? 's' : '')">
+      <kj-button kjVariant="ghost" class="fab dvc-fab" [class.on]="open()" [title]="alertCount() ? 'Dev console · ' + alertCount() + ' perf alert' + (alertCount() > 1 ? 's' : '') : 'Dev console'" kjAriaLabel="Dev console" (click)="open.set(!open())">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3l2.5-6 4 13 3-9 1.5 2H21" /></svg>
+      </kj-button>
+    </kj-overlay-badge>
 
     @if (open()) {
-      <section class="dvcon" aria-label="Dev console">
-        <header class="dvc-head">
+      <section class="corner-panel dvcon" aria-label="Dev console">
+        <header class="pane-head dvc-head">
           <span class="dvc-brand"><app-icon name="cpu" size="sm" /></span>
-          <div class="dvc-tabs">
-            <button class="dvc-tab" [class.on]="tab() === 'perf'" (click)="tab.set('perf')"><app-icon name="spark" size="sm" />Perf</button>
-            <button class="dvc-tab" [class.on]="tab() === 'agents'" (click)="tab.set('agents')"><app-icon name="agent" size="sm" />Agents<span class="dvc-cnt">{{ agents().length }}</span></button>
-            <button class="dvc-tab" [class.on]="tab() === 'projects'" (click)="tab.set('projects')"><app-icon name="box" size="sm" />Projects<span class="dvc-cnt">{{ projects().length }}</span></button>
-            <button class="dvc-tab" [class.on]="tab() === 'resources'" (click)="tab.set('resources')"><app-icon name="cpu" size="sm" />Resources<span class="dvc-cnt">{{ treeProcCount() }}</span></button>
-            <button class="dvc-tab" [class.on]="tab() === 'emits'" (click)="tab.set('emits')"><app-icon name="spark" size="sm" />Emits<span class="dvc-cnt">{{ emitRows().length }}</span></button>
+          <div class="dvc-tabs scroll-hide">
+            <kj-button kjVariant="ghost" class="dvc-tab" [kjPressed]="tab() === 'perf'" (click)="tab.set('perf')"><app-icon name="spark" size="sm" />Perf</kj-button>
+            <kj-button kjVariant="ghost" class="dvc-tab" [kjPressed]="tab() === 'agents'" (click)="tab.set('agents')"><app-icon name="agent" size="sm" />Agents<span class="dvc-cnt">{{ agents().length }}</span></kj-button>
+            <kj-button kjVariant="ghost" class="dvc-tab" [kjPressed]="tab() === 'projects'" (click)="tab.set('projects')"><app-icon name="box" size="sm" />Projects<span class="dvc-cnt">{{ projects().length }}</span></kj-button>
+            <kj-button kjVariant="ghost" class="dvc-tab" [kjPressed]="tab() === 'resources'" (click)="tab.set('resources')"><app-icon name="cpu" size="sm" />Resources<span class="dvc-cnt">{{ treeProcCount() }}</span></kj-button>
+            <kj-button kjVariant="ghost" class="dvc-tab" [kjPressed]="tab() === 'emits'" (click)="tab.set('emits')"><app-icon name="spark" size="sm" />Emits<span class="dvc-cnt">{{ emitRows().length }}</span></kj-button>
           </div>
           <span class="dvc-live on"><span class="dvc-ld"></span>live</span>
-          <span class="dvc-sp"></span>
           @if (tab() === 'perf') {
             @if (hasCalls()) {
-              <button class="dvc-ic" [class.ok]="copied()" (click)="copyPerf()" [title]="copied() ? 'Copied to clipboard' : 'Copy perf data as JSON'"><app-icon [name]="copied() ? 'check' : 'dup'" size="sm" />{{ copied() ? 'Copied' : 'Copy' }}</button>
+              <kj-button class="dvc-ic" [class.ok]="copied()" (click)="copyPerf()" [title]="copied() ? 'Copied to clipboard' : 'Copy perf data as JSON'"><app-icon [name]="copied() ? 'check' : 'dup'" size="sm" />{{ copied() ? 'Copied' : 'Copy' }}</kj-button>
             }
-            <button class="dvc-ic" (click)="perf.clear()" title="Clear counters"><app-icon name="refresh" size="sm" />Reset</button>
+            <kj-button class="dvc-ic" (click)="perf.clear()" title="Clear counters"><app-icon name="refresh" size="sm" />Reset</kj-button>
           }
-          <button class="dvc-x" (click)="open.set(false)" title="Close"><app-icon name="x" size="sm" /></button>
+          <kj-button kjSize="icon" class="dvc-x" (click)="open.set(false)" title="Close" kjAriaLabel="Close"><app-icon name="x" size="sm" /></kj-button>
         </header>
 
         <div class="dvc-body">
@@ -86,13 +108,13 @@ type Sort = { key: string; dir: number };
               <table class="dvc-tbl">
                 <thead><tr>
                   @for (c of PCOLS; track c[0]) {
-                    <th [class.srt]="sort().key === c[0]" (click)="clickPerfSort(c[0])">{{ c[1] }}@if (sort().key === c[0]) { <span class="dvc-arr">{{ sort().dir < 0 ? '▼' : '▲' }}</span> }</th>
+                    <th class="up" [class.srt]="sort().key === c[0]" (click)="clickPerfSort(c[0])">{{ c[1] }}@if (sort().key === c[0]) { <span class="dvc-arr">{{ sort().dir < 0 ? '▼' : '▲' }}</span> }</th>
                   }
                 </tr></thead>
                 <tbody>
                   @for (s of sortedPerf(); track s.cmd) {
-                    <tr class="dvc-row" [class.open]="openCmd() === s.cmd" [class.stale]="s.stale" (click)="openCmd.set(openCmd() === s.cmd ? null : s.cmd)">
-                      <td><span class="dvc-lead"><svg class="dvc-tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg><span class="dvc-nm">{{ s.cmd }}</span>@if (s.stale) { <span class="dvc-stale">(stale)</span> }</span></td>
+                    <tr class="dvc-row row-hover" [class.open]="openCmd() === s.cmd" [class.stale]="s.stale" (click)="openCmd.set(openCmd() === s.cmd ? null : s.cmd)">
+                      <td><span class="dvc-lead"><app-icon class="dvc-tw" name="chevron" size="sm" /><span class="dvc-nm trunc">{{ s.cmd }}</span>@if (s.stale) { <span class="dvc-stale">(stale)</span> }</span></td>
                       <td class="tnum" style="color:var(--ink-2)">{{ s.calls10s }}</td>
                       <td [class]="'dvc-lat ' + lat(s.avgRt) + ' tnum'"><span class="v">{{ ms(s.avgRt) }}</span></td>
                       <td [class]="'dvc-lat ' + lat(s.avgExec) + ' tnum'"><span class="v">{{ ms(s.avgExec) }}</span></td>
@@ -108,10 +130,10 @@ type Sort = { key: string; dir: number };
                     </tr>
                     @if (openCmd() === s.cmd) {
                       <tr class="dvc-detail"><td [attr.colspan]="PCOLS.length"><div class="dvc-din">
-                        <div class="dvc-dh"><span class="lbl">recent · {{ s.cmd }}</span><span class="dvc-ds tnum"><span>p95 <b>{{ ms(s.p95Rt) }}</b></span><span>max <b>{{ ms(s.maxRt) }}</b></span><span>overhead <b>{{ ovh(s.overhead) }}</b></span></span></div>
+                        <div class="dvc-dh"><span class="up lbl">recent · {{ s.cmd }}</span><span class="dvc-ds tnum"><span>p95 <b>{{ ms(s.p95Rt) }}</b></span><span>max <b>{{ ms(s.maxRt) }}</b></span><span>overhead <b>{{ ovh(s.overhead) }}</b></span></span></div>
                         <div class="dvc-calls">
                           @for (c of s.recent; track $index) {
-                            <div class="dvc-cr"><span class="ts tnum">{{ clock(c.ts) }}</span><span class="cm">{{ s.cmd }}</span><span [class]="'du ' + lat(c.ms) + ' tnum'">{{ ms(c.ms) }}</span><span [class]="'dvc-dot ' + (c.ok ? 'ok' : 'er')"></span></div>
+                            <div class="dvc-cr"><span class="ts tnum">{{ clock(c.ts) }}</span><span class="cm trunc">{{ s.cmd }}</span><span [class]="'du ' + lat(c.ms) + ' tnum'">{{ ms(c.ms) }}</span><span [class]="'dvc-dot ' + (c.ok ? 'ok' : 'er')"></span></div>
                           }
                         </div>
                       </div></td></tr>
@@ -121,25 +143,25 @@ type Sort = { key: string; dir: number };
               </table>
               </div>
             } @else {
-              <div class="dvc-empty">
-                <div class="dvc-ring"><app-icon name="spark" /></div>
-                <h4>No calls yet</h4>
-                <p>Invoke metrics populate as the frontend dispatches Tauri commands. Counters reset on a rolling 10-second window.</p>
+              <kj-empty-state style="flex:1">
+                <kj-empty-state-icon><span class="dvc-ring"><app-icon name="spark" /></span></kj-empty-state-icon>
+                <kj-empty-state-title>No calls yet</kj-empty-state-title>
+                <kj-empty-state-description>Invoke metrics populate as the frontend dispatches Tauri commands. Counters reset on a rolling 10-second window.</kj-empty-state-description>
                 <span class="dvc-hint"><span class="dvc-ld"></span>listening for invokes…</span>
-              </div>
+              </kj-empty-state>
             }
             @if (hasCalls()) {
               <div class="dvc-feed">
-                <button class="dvc-fh" [class.open]="feedOpen()" (click)="feedOpen.set(!feedOpen())">
-                  <svg class="dvc-tw" [class.open]="feedOpen()" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
-                  <span class="lbl">Recent calls</span>
+                <kj-button kjVariant="ghost" class="dvc-fh" [class.open]="feedOpen()" (click)="feedOpen.set(!feedOpen())">
+                  <app-icon class="dvc-tw" [class.open]="feedOpen()" name="chevron" size="sm" />
+                  <span class="up lbl">Recent calls</span>
                   <app-icon name="timeline" size="sm" [color]="'var(--ink-4)'" />
                   <span class="ct">last {{ feed().length }}</span>
-                </button>
+                </kj-button>
                 @if (feedOpen()) {
                   <div class="dvc-fl">
                     @for (f of feed(); track f.ts + f.cmd) {
-                      <div class="dvc-fr"><span class="ts tnum">{{ clock(f.ts) }}</span><span [class]="'dvc-dot ' + (f.ok ? 'ok' : 'er')" style="justify-self:start"></span><span class="cm">{{ f.cmd }}</span><span [class]="'du ' + lat(f.ms) + ' tnum'">{{ ms(f.ms) }}</span><span class="ix tnum">{{ f.ok ? 'ok' : 'err' }}</span></div>
+                      <div class="dvc-fr"><span class="ts tnum">{{ clock(f.ts) }}</span><span [class]="'dvc-dot ' + (f.ok ? 'ok' : 'er')" style="justify-self:start"></span><span class="cm trunc">{{ f.cmd }}</span><span [class]="'du ' + lat(f.ms) + ' tnum'">{{ ms(f.ms) }}</span><span class="ix tnum">{{ f.ok ? 'ok' : 'err' }}</span></div>
                     }
                   </div>
                 }
@@ -153,34 +175,34 @@ type Sort = { key: string; dir: number };
             <table class="dvc-tbl">
               <thead><tr>
                 @for (c of ACOLS; track c[0]) {
-                  <th [class.srt]="aSort().key === c[0]" (click)="clickASort(c[0])">{{ c[1] }}@if (aSort().key === c[0]) { <span class="dvc-arr">{{ aSort().dir < 0 ? '▼' : '▲' }}</span> }</th>
+                  <th class="up" [class.srt]="aSort().key === c[0]" (click)="clickASort(c[0])">{{ c[1] }}@if (aSort().key === c[0]) { <span class="dvc-arr">{{ aSort().dir < 0 ? '▼' : '▲' }}</span> }</th>
                 }
               </tr></thead>
               <tbody>
                 @for (ag of sortedAgents(); track ag.id) {
-                  <tr class="dvc-row" [class.open]="openAg() === ag.id" (click)="openAg.set(openAg() === ag.id ? null : ag.id)">
-                    <td><span class="dvc-lead"><svg class="dvc-tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg><span class="dvc-id">{{ ag.id.slice(0, 8) }}</span><span class="dvc-nm">{{ ag.name }}</span>@if (attn(ag)) { <span class="dvc-needs" title="needs you"></span> }</span></td>
+                  <tr class="dvc-row row-hover" [class.open]="openAg() === ag.id" (click)="openAg.set(openAg() === ag.id ? null : ag.id)">
+                    <td><span class="dvc-lead"><app-icon class="dvc-tw" name="chevron" size="sm" /><span class="dvc-id">{{ ag.id.slice(0, 8) }}</span><span class="dvc-nm trunc">{{ ag.name }}</span>@if (attn(ag)) { <span class="dvc-needs" title="needs you"></span> }</span></td>
                     <td><span class="dvc-stat"><span class="lb" [style.color]="statusColor(ag.status)">{{ ag.status }}</span><app-status-dot [status]="ag.status" /></span></td>
                     <td><span class="dvc-tool" style="vertical-align:middle" [title]="ag.tool + ' · ' + ag.model"><app-tool-badge [tool]="ag.tool" [size]="17" /></span></td>
-                    <td><span class="dvc-pchip"><span class="dvc-pn">{{ proj(ag.projectId).name }}</span><span class="dvc-pi" [style.background]="'color-mix(in oklch,' + proj(ag.projectId).color + ',transparent 82%)'"><app-icon [name]="proj(ag.projectId).icon" size="sm" [px]="11" [color]="proj(ag.projectId).color" /></span></span></td>
-                    <td><span class="dvc-branch">{{ ag.branch.replace('agent/', '') }}</span></td>
+                    <td><kj-badge variant="outline"><span class="dvc-pn trunc">{{ proj(ag.projectId).name }}</span><span class="dvc-pi" [style.background]="'color-mix(in oklch,' + proj(ag.projectId).color + ',transparent 82%)'"><app-icon size="md" [name]="proj(ag.projectId).icon" [color]="proj(ag.projectId).color" /></span></kj-badge></td>
+                    <td><span class="dvc-branch trunc">{{ ag.branch.replace('agent/', '') }}</span></td>
                     <td class="tnum">{{ ag.commits }}</td>
                     <td class="tnum" style="color:var(--ink-3)">{{ elapsed(ag) ? fmtDur(elapsed(ag)) : '—' }}</td>
-                    <td class="tnum"><span class="dvc-mtr"><i [style.width.%]="pct(ag.progress)" [style.background]="statusColor(ag.status)"></i></span>{{ pct(ag.progress) }}%</td>
+                    <td class="tnum"><kj-progress-bar class="dvc-mtr" [kjValue]="pct(ag.progress)" kjAriaLabel="Agent progress" [style.--kj-progress-bar-fill]="statusColor(ag.status)" style="--kj-progress-bar-track:var(--hair);--kj-progress-bar-radius:3px;--kj-progress-bar-height:var(--sp-2)" />{{ pct(ag.progress) }}%</td>
                   </tr>
                   @if (openAg() === ag.id) {
                     <tr class="dvc-detail"><td [attr.colspan]="ACOLS.length"><div class="dvc-din">
                       <div class="dvc-task">{{ ag.task }}</div>
                       @if (attn(ag) && note(ag)) { <div class="dvc-attn"><app-icon name="flag" size="sm" />{{ note(ag) }}</div> }
                       <div class="dvc-kv">
-                        <div class="r"><span class="k">id</span><span class="vv"><b>{{ ag.id }}</b></span></div>
-                        <div class="r"><span class="k">tool</span><span class="vv">{{ ag.tool }} · {{ ag.model }}{{ ag.effort ? ' · ' + ag.effort : '' }}</span></div>
-                        <div class="r"><span class="k">status</span><span class="vv">{{ ag.status }}{{ ag.pending.length ? ' · ' + ag.pending.length + ' pending' : '' }}</span></div>
-                        <div class="r"><span class="k">branch</span><span class="vv">{{ ag.branch }}</span></div>
-                        <div class="r"><span class="k">worktree</span><span class="vv">{{ ag.worktree }}</span></div>
-                        <div class="r"><span class="k">base</span><span class="vv">{{ ag.base }}</span></div>
-                        <div class="r"><span class="k">commits</span><span class="vv">{{ ag.commits }}</span></div>
-                        <div class="r"><span class="k">progress</span><span class="vv">{{ pct(ag.progress) }}%</span></div>
+                        <div class="r"><span class="k">id</span><span class="vv trunc"><b>{{ ag.id }}</b></span></div>
+                        <div class="r"><span class="k">tool</span><span class="vv trunc">{{ ag.tool }} · {{ ag.model }}{{ ag.effort ? ' · ' + ag.effort : '' }}</span></div>
+                        <div class="r"><span class="k">status</span><span class="vv trunc">{{ ag.status }}{{ ag.pending.length ? ' · ' + ag.pending.length + ' pending' : '' }}</span></div>
+                        <div class="r"><span class="k">branch</span><span class="vv trunc">{{ ag.branch }}</span></div>
+                        <div class="r"><span class="k">worktree</span><span class="vv trunc">{{ ag.worktree }}</span></div>
+                        <div class="r"><span class="k">base</span><span class="vv trunc">{{ ag.base }}</span></div>
+                        <div class="r"><span class="k">commits</span><span class="vv trunc">{{ ag.commits }}</span></div>
+                        <div class="r"><span class="k">progress</span><span class="vv trunc">{{ pct(ag.progress) }}%</span></div>
                       </div>
                     </div></td></tr>
                   }
@@ -196,34 +218,34 @@ type Sort = { key: string; dir: number };
             <table class="dvc-tbl">
               <thead><tr>
                 @for (c of PRCOLS; track c[0]) {
-                  <th [class.srt]="pSort().key === c[0]" (click)="clickPSort(c[0])">{{ c[1] }}@if (pSort().key === c[0]) { <span class="dvc-arr">{{ pSort().dir < 0 ? '▼' : '▲' }}</span> }</th>
+                  <th class="up" [class.srt]="pSort().key === c[0]" (click)="clickPSort(c[0])">{{ c[1] }}@if (pSort().key === c[0]) { <span class="dvc-arr">{{ pSort().dir < 0 ? '▼' : '▲' }}</span> }</th>
                 }
               </tr></thead>
               <tbody>
                 @for (p of sortedProjects(); track p.id) {
-                  <tr class="dvc-row" [class.open]="openPr() === p.id" (click)="openPr.set(openPr() === p.id ? null : p.id)">
-                    <td><span class="dvc-lead"><svg class="dvc-tw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg><span class="dvc-pi" style="width:var(--sp-7);height:var(--sp-7);border-radius:5px" [style.background]="'color-mix(in oklch,' + p.color + ',transparent 82%)'"><app-icon [name]="p.icon" size="sm" [px]="12" [color]="p.color" /></span><span class="dvc-nm" [style.color]="p.color">{{ p.name }}</span></span></td>
+                  <tr class="dvc-row row-hover" [class.open]="openPr() === p.id" (click)="openPr.set(openPr() === p.id ? null : p.id)">
+                    <td><span class="dvc-lead"><app-icon class="dvc-tw" name="chevron" size="sm" /><span class="dvc-pi" style="width:var(--sp-7);height:var(--sp-7);border-radius:5px" [style.background]="'color-mix(in oklch,' + p.color + ',transparent 82%)'"><app-icon size="md" [name]="p.icon" [color]="p.color" /></span><span class="dvc-nm trunc" [style.color]="p.color">{{ p.name }}</span></span></td>
                     <td class="dvc-id tnum">{{ p.id.slice(0, 8) }}</td>
                     <td class="tnum" style="color:var(--ink-3)">{{ p.head ?? '—' }}</td>
                     <td style="color:var(--ink-3)">{{ p.branch ?? '—' }}</td>
                     <td class="tnum">{{ (p.branches ?? []).length }}</td>
-                    <td class="tnum">{{ agentsIn(p.id).length }}@if (needsIn(p.id) > 0) { <span style="color:var(--st-blocked);font-weight:700"> {{ needsIn(p.id) }}!</span> }</td>
+                    <td class="tnum">{{ agentsIn(p.id).length }}@if (needsIn(p.id) > 0) { <span style="color:var(--st-blocked);font-weight:var(--fw-strong)"> {{ needsIn(p.id) }}!</span> }</td>
                     <td class="tnum">{{ (p.files ?? []).length }}</td>
                   </tr>
                   @if (openPr() === p.id) {
                     <tr class="dvc-detail"><td [attr.colspan]="PRCOLS.length"><div class="dvc-din">
                       <div class="dvc-kv">
-                        <div class="r"><span class="k">id</span><span class="vv"><b>{{ p.id }}</b></span></div>
-                        <div class="r"><span class="k">path</span><span class="vv">{{ p.path }}</span></div>
-                        <div class="r"><span class="k">repo</span><span class="vv">{{ p.repo ?? '—' }}</span></div>
-                        <div class="r"><span class="k">head</span><span class="vv">{{ p.head ?? '—' }} ({{ p.branch ?? '—' }})</span></div>
-                        <div class="r"><span class="k">hasGit</span><span class="vv">{{ p.hasGit }}</span></div>
-                        <div class="r"><span class="k">folderExists</span><span class="vv">{{ p.folderExists }}</span></div>
+                        <div class="r"><span class="k">id</span><span class="vv trunc"><b>{{ p.id }}</b></span></div>
+                        <div class="r"><span class="k">path</span><span class="vv trunc">{{ p.path }}</span></div>
+                        <div class="r"><span class="k">repo</span><span class="vv trunc">{{ p.repo ?? '—' }}</span></div>
+                        <div class="r"><span class="k">head</span><span class="vv trunc">{{ p.head ?? '—' }} ({{ p.branch ?? '—' }})</span></div>
+                        <div class="r"><span class="k">hasGit</span><span class="vv trunc">{{ p.hasGit }}</span></div>
+                        <div class="r"><span class="k">folderExists</span><span class="vv trunc">{{ p.folderExists }}</span></div>
                       </div>
                       @if ((p.branches ?? []).length) {
-                        <div><div class="dvc-sl">branches · {{ (p.branches ?? []).length }}</div><div style="display:flex;flex-wrap:wrap;gap:var(--sp-3)">@for (b of p.branches ?? []; track b) { <span class="dvc-chip"><app-icon name="branch" size="sm" [px]="11" />{{ b }}</span> }</div></div>
+                        <div><div class="up dvc-sl">branches · {{ (p.branches ?? []).length }}</div><div style="display:flex;flex-wrap:wrap;gap:var(--sp-3)">@for (b of p.branches ?? []; track b) { <span class="chip"><app-icon size="md" name="branch" />{{ b }}</span> }</div></div>
                       }
-                      <div><div class="dvc-sl">agents · {{ agentsIn(p.id).length }}</div><div class="dvc-files">@for (a of agentsIn(p.id); track a.id) { <div class="dvc-frow" style="grid-template-columns:9px 1fr auto"><app-status-dot [status]="a.status" /><span class="dvc-fp">{{ a.id.slice(0, 8) }} · {{ a.name }}</span><span class="dvc-chip"><app-tool-badge [tool]="a.tool" [size]="13" />{{ a.status }}</span></div>} @empty { <div class="dvc-dim" style="font-size:var(--fs-sm)">no agents</div> }</div></div>
+                      <div><div class="up dvc-sl">agents · {{ agentsIn(p.id).length }}</div><div class="dvc-files">@for (a of agentsIn(p.id); track a.id) { <div class="dvc-frow" style="grid-template-columns:9px 1fr auto"><app-status-dot [status]="a.status" /><span class="dvc-fp trunc">{{ a.id.slice(0, 8) }} · {{ a.name }}</span><span class="chip"><app-tool-badge [tool]="a.tool" [size]="13" />{{ a.status }}</span></div>} @empty { <div class="dvc-dim">no agents</div> }</div></div>
                     </div></td></tr>
                   }
                 }
@@ -240,18 +262,18 @@ type Sort = { key: string; dir: number };
               <div class="dvc-res-top">
                 <div class="dvc-gauge">
                   <div class="g-top">
-                    <span class="g-lab"><app-icon name="cpu" size="sm" />CPU</span>
+                    <span class="up g-lab"><app-icon name="cpu" size="sm" />CPU</span>
                     <span class="g-val tnum">{{ totalCpu().toFixed(1) }}<small>%</small></span>
                   </div>
-                  <div class="dvc-gbar"><i [style.width.%]="barClamp(totalCpu())" [style.background]="latColor(gaugeCpuC())"></i></div>
+                  <kj-progress-bar kjSize="sm" [kjValue]="barClamp(totalCpu())" kjAriaLabel="CPU usage" [style.--kj-progress-bar-fill]="latColor(gaugeCpuC())" style="--kj-progress-bar-track:var(--hair);--kj-progress-bar-radius:4px;--kj-progress-bar-height:var(--sp-3)" />
                   <span class="g-sub tnum">{{ coresUsed() }} of {{ cores() }} cores · {{ agentProcCount() }} agent {{ agentProcCount() === 1 ? 'subtree' : 'subtrees' }}</span>
                 </div>
                 <div class="dvc-gauge">
                   <div class="g-top">
-                    <span class="g-lab"><app-icon name="database" size="sm" />Memory</span>
+                    <span class="up g-lab"><app-icon name="database" size="sm" />Memory</span>
                     <span class="g-val tnum">{{ memGb() }}<small> GB</small></span>
                   </div>
-                  <div class="dvc-gbar"><i [style.width.%]="barClamp(memPct())" [style.background]="latColor(gaugeMemC())"></i></div>
+                  <kj-progress-bar kjSize="sm" [kjValue]="barClamp(memPct())" kjAriaLabel="Memory usage" [style.--kj-progress-bar-fill]="latColor(gaugeMemC())" style="--kj-progress-bar-track:var(--hair);--kj-progress-bar-radius:4px;--kj-progress-bar-height:var(--sp-3)" />
                   <span class="g-sub tnum">{{ memPct().toFixed(1) }}% of {{ sysGb() }} GB</span>
                 </div>
               </div>
@@ -261,8 +283,8 @@ type Sort = { key: string; dir: number };
                 <span class="tnum" style="color:var(--ink-2)">Orrery <b style="color:var(--ink)">{{ fmtMem(orreryPriv()) }}</b></span>
                 <span style="color:var(--ink-4)">·</span>
                 <span class="tnum" style="color:var(--ink-2)">agents <b style="color:var(--ink)">{{ fmtMem(agentsPriv()) }}</b></span>
-                <span class="dvc-chip" style="font-size:var(--fs-2xs)">private working set</span>
-                <span style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">job-object accounting · descendants rediscovered at slower cadence</span>
+                <kj-badge variant="outline" style="--kj-badge-font-size:var(--fs-meta)">private working set</kj-badge>
+                <span style="margin-left:auto;font-size:var(--fs-meta);color:var(--ink-4)">job-object accounting · descendants rediscovered at slower cadence</span>
               </div>
               @for (al of treeAlerts(); track al.id) {
                 <div class="dvc-palert">
@@ -281,21 +303,21 @@ type Sort = { key: string; dir: number };
                 </tr></thead>
                 <tbody>
                   @for (r of treeRows(); track r.key) {
-                    <tr class="dvc-row" style="cursor:default" [style.opacity]="r.n.excluded ? 0.55 : 1">
-                      <td><span class="dvc-lead" [style.padding-left.px]="r.depth * 15">
+                    <tr class="dvc-row row-hover" style="cursor:default" [style.opacity]="r.n.excluded ? 0.55 : 1">
+                      <td><span class="dvc-lead" [style.padding-left]="r.n.children.length ? (r.depth * 15) + 'px' : 'calc(' + (r.depth * 15) + 'px + var(--sp-5) + var(--sp-4))'">
                         @if (r.n.children.length) {
-                          <button type="button" class="dvc-twbtn" (click)="toggleNode(r.key)">
-                            <svg class="dvc-tw" [class.open]="expanded(r.key)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
-                          </button>
-                        } @else { <span style="width:var(--sp-5);flex:none"></span> }
+                          <kj-button kjSize="icon" kjVariant="ghost" class="dvc-twbtn" (click)="toggleNode(r.key)" kjAriaLabel="Toggle subtree">
+                            <app-icon class="dvc-tw" [class.open]="expanded(r.key)" name="chevron" size="sm" />
+                          </kj-button>
+                        }
                         @if (r.agentRoot && agentOf(r.rootId); as ag) {
                           <span class="dvc-kind" style="background:transparent"><app-tool-badge [tool]="ag.tool" [size]="15" /></span>
                         } @else {
                           <span class="dvc-pdot" [style.background]="nodeDot(r.n)"></span>
                         }
-                        <span class="dvc-nm" [style.color]="notOurs(r.n) ? 'var(--ink-3)' : 'var(--ink)'" [style.font-weight]="r.depth === 0 ? 600 : null">{{ r.n.name }}</span>
-                        @if (r.n.note) { <span style="font-size:var(--fs-2xs);color:var(--ink-4);flex:none">{{ r.n.note }}</span> }
-                        @if (r.n.detached) { <span class="dvc-chip" style="font-size:var(--fs-3xs);color:var(--lat-a)">detached · found via job object</span> }
+                        <span class="dvc-nm trunc" [style.color]="notOurs(r.n) ? 'var(--ink-3)' : 'var(--ink)'" [style.font-weight]="r.depth === 0 ? 600 : null">{{ r.n.name }}</span>
+                        @if (r.n.note) { <span style="font-size:var(--fs-meta);color:var(--ink-4);flex:none">{{ r.n.note }}</span> }
+                        @if (r.n.detached) { <kj-badge variant="outline" fg="var(--lat-a)" style="--kj-badge-font-size:var(--fs-badge)">detached · found via job object</kj-badge> }
                       </span></td>
                       <td class="tnum" style="color:var(--ink-4)">{{ r.n.pid || '—' }}</td>
                       <td class="tnum" [style.color]="r.n.cpu > 60 ? 'var(--lat-r)' : r.n.cpu > 25 ? 'var(--lat-a)' : 'var(--ink-2)'">{{ r.n.cpu.toFixed(1) }}%</td>
@@ -307,12 +329,12 @@ type Sort = { key: string; dir: number };
               </table>
               </div>
             } @else {
-              <div class="dvc-empty">
-                <div class="dvc-ring"><app-icon name="cpu" /></div>
-                <h4>No process tree yet</h4>
-                <p>The process sampler only runs while this tab is open (known pids + their discovered descendants — never a machine-wide sweep per poll).</p>
+              <kj-empty-state style="flex:1">
+                <kj-empty-state-icon><span class="dvc-ring"><app-icon name="cpu" /></span></kj-empty-state-icon>
+                <kj-empty-state-title>No process tree yet</kj-empty-state-title>
+                <kj-empty-state-description>The process sampler only runs while this tab is open (known pids + their discovered descendants — never a machine-wide sweep per poll).</kj-empty-state-description>
                 <span class="dvc-hint"><span class="dvc-ld"></span>sampling…</span>
-              </div>
+              </kj-empty-state>
             }
           }
 
@@ -320,16 +342,16 @@ type Sort = { key: string; dir: number };
           @if (tab() === 'emits') {
             <div class="dvc-split">
               <span class="tnum" style="color:var(--ink-2)">{{ emitRows().length }} event names · {{ fmtBytes(emitTotal()) }} emitted this session</span>
-              <span class="dvc-chip" style="font-size:var(--fs-2xs);color:var(--lat-g)">aggregate always on</span>
+              <kj-badge variant="outline" fg="var(--lat-g)" style="--kj-badge-font-size:var(--fs-meta)">aggregate always on</kj-badge>
               <span style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-4)">
                 @if (telemetry.traceActive()) {
-                  <span class="tnum" style="display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--lat-r)">
+                  <span class="tnum" style="display:flex;align-items:center;gap:var(--sp-3);color:var(--lat-r)">
                     <span class="dvc-recdot"></span>recording{{ traceLine() }}
                   </span>
                 }
-                <button type="button" class="dvc-ic" [style.color]="telemetry.traceActive() ? 'var(--lat-r)' : null" (click)="toggleTrace()" [title]="telemetry.traceActive() ? 'Stop the raw emit trace' : 'Raw trace: one ts·name·key·bytes line per emit — auto-off after 30min or 200MB'">
+                <kj-button kjVariant="ghost" class="dvc-ic" [style.color]="telemetry.traceActive() ? 'var(--lat-r)' : null" (click)="toggleTrace()" [title]="telemetry.traceActive() ? 'Stop the raw emit trace' : 'Raw trace: one ts·name·key·bytes line per emit — auto-off after 30min or 200MB'">
                   <app-icon [name]="telemetry.traceActive() ? 'stop' : 'play'" size="sm" />{{ telemetry.traceActive() ? 'Stop raw trace' : 'Start raw trace' }}
-                </button>
+                </kj-button>
               </span>
             </div>
             @if (emitRows().length) {
@@ -337,31 +359,31 @@ type Sort = { key: string; dir: number };
               <table class="dvc-tbl">
                 <thead><tr>
                   @for (c of ECOLS; track c[0]) {
-                    <th [class.srt]="eSort().key === c[0]" (click)="clickESort(c[0])">{{ c[1] }}@if (eSort().key === c[0]) { <span class="dvc-arr">{{ eSort().dir < 0 ? '▼' : '▲' }}</span> }</th>
+                    <th class="up" [class.srt]="eSort().key === c[0]" (click)="clickESort(c[0])">{{ c[1] }}@if (eSort().key === c[0]) { <span class="dvc-arr">{{ eSort().dir < 0 ? '▼' : '▲' }}</span> }</th>
                   }
                 </tr></thead>
                 <tbody>
                   @for (r of sortedEmits(); track r.name) {
-                    <tr class="dvc-row" style="cursor:default">
-                      <td><span class="dvc-lead"><span class="dvc-nm">{{ r.name }}</span></span></td>
+                    <tr class="dvc-row row-hover" style="cursor:default">
+                      <td><span class="dvc-lead"><span class="dvc-nm trunc">{{ r.name }}</span></span></td>
                       <td class="tnum" style="color:var(--ink-2)">{{ r.count.toLocaleString() }}</td>
                       <td class="tnum" [style.color]="r.totalBytes > 10000000 ? 'var(--lat-r)' : 'var(--ink-2)'">{{ fmtBytes(r.totalBytes) }}</td>
                       <td class="tnum" style="color:var(--ink-4)">{{ fmtBytes(r.p50Bytes) }}</td>
                       <td class="tnum" style="color:var(--ink-4)">{{ fmtBytes(r.p95Bytes) }}</td>
                       <td class="tnum" style="color:var(--ink-2)">{{ r.peakPerSec }}</td>
-                      <td><span class="dvc-chip" style="font-size:var(--fs-2xs)" [style.color]="clsColor(r)" [style.border-color]="'color-mix(in oklch,' + clsColor(r) + ',transparent 60%)'">{{ suggestClass(r) }}</span></td>
+                      <td><kj-badge variant="outline" [fg]="clsColor(r)" [style.--kj-badge-border-color]="'color-mix(in oklch,' + clsColor(r) + ',transparent 60%)'" style="--kj-badge-font-size:var(--fs-meta)">{{ suggestClass(r) }}</kj-badge></td>
                     </tr>
                   }
                 </tbody>
               </table>
               </div>
             } @else {
-              <div class="dvc-empty">
-                <div class="dvc-ring"><app-icon name="spark" /></div>
-                <h4>No emits recorded yet</h4>
-                <p>Every backend event goes through the emit_tracked funnel — rows appear as soon as anything is pushed to the UI.</p>
+              <kj-empty-state style="flex:1">
+                <kj-empty-state-icon><span class="dvc-ring"><app-icon name="spark" /></span></kj-empty-state-icon>
+                <kj-empty-state-title>No emits recorded yet</kj-empty-state-title>
+                <kj-empty-state-description>Every backend event goes through the emit_tracked funnel — rows appear as soon as anything is pushed to the UI.</kj-empty-state-description>
                 <span class="dvc-hint"><span class="dvc-ld"></span>listening…</span>
-              </div>
+              </kj-empty-state>
             }
           }
         </div>
@@ -371,8 +393,7 @@ type Sort = { key: string; dir: number };
             <span class="dvc-leg"><span class="dvc-sw g"></span>≤16ms</span>
             <span class="dvc-leg"><span class="dvc-sw a"></span>16–100ms</span>
             <span class="dvc-leg"><span class="dvc-sw r"></span>&gt;100ms · err</span>
-            <span class="dvc-sp"></span>
-            <span class="tnum">{{ perfSummary() }}</span>
+            <span class="tnum" style="margin-left:auto">{{ perfSummary() }}</span>
             <span class="tnum" title="terminal write scheduler: queued chars · peak · dropped backlogs">term {{ termStats().queuedChars }} · pk {{ termStats().peakQueuedChars }} · drop {{ termStats().droppedBacklogs }}</span>
             @if (ptyLine()) {
               <span class="tnum" title="batched PTY output: throughput · emit rate · avg batch size">{{ ptyLine() }}</span>
@@ -380,22 +401,20 @@ type Sort = { key: string; dir: number };
           }
           @if (tab() === 'agents') {
             <span class="tnum">{{ agents().length }} agents · <span style="color:var(--st-running)">{{ cnt('running') }} running</span> · <span style="color:var(--st-blocked)">{{ cnt('blocked') }} need you</span> · {{ cnt('waiting') + cnt('queued') }} waiting · {{ cnt('done') }} done</span>
-            <span class="dvc-sp"></span><span class="tnum">live state</span>
+            <span class="tnum" style="margin-left:auto">live state</span>
           }
           @if (tab() === 'projects') {
             <span class="tnum">{{ projects().length }} projects · {{ agents().length }} worktrees</span>
-            <span class="dvc-sp"></span><span class="tnum">live state</span>
+            <span class="tnum" style="margin-left:auto">live state</span>
           }
           @if (tab() === 'resources') {
             <span>subtree totals sum private working set — RSS double-counts shared pages and would overstate</span>
-            <span class="dvc-sp"></span>
-            <span class="tnum">{{ totalCpu().toFixed(1) }}% / {{ cores() }} cores · {{ memGb() }} GB · {{ treeProcCount() }} procs · refreshed {{ treeAge() }}</span>
+            <span class="tnum" style="margin-left:auto">{{ totalCpu().toFixed(1) }}% / {{ cores() }} cores · {{ memGb() }} GB · {{ treeProcCount() }} procs · refreshed {{ treeAge() }}</span>
           }
           @if (tab() === 'emits') {
             <span>app-data/telemetry/emit-summary-…json</span>
             <span style="color:var(--lat-g)">names · keys · byte counts only — payload contents are never written</span>
-            <span class="dvc-sp"></span>
-            <span class="tnum">≤50 MB / 7 days · daily rotation</span>
+            <span class="tnum" style="margin-left:auto">≤50 MB / 7 days · daily rotation</span>
           }
         </footer>
       </section>
@@ -406,166 +425,146 @@ type Sort = { key: string; dir: number };
 .dvcon,.dvc-fab{--lat-g:var(--sem-add);--lat-a:var(--sem-attn);--lat-r:var(--sem-del);
   --lat-g-bg:color-mix(in oklch,var(--sem-add),transparent 90%);--lat-a-bg:color-mix(in oklch,var(--sem-attn),transparent 86%);--lat-r-bg:color-mix(in oklch,var(--sem-del),transparent 82%);
   --lat-r-ring:rgba(255,93,122,.4);}
-.dvc-fab{position:relative;width:var(--topbar-h);height:var(--topbar-h);border-radius:13px;
-  display:grid;place-items:center;cursor:pointer;border:1px solid var(--hair-2);
-  background:linear-gradient(180deg,var(--panel-3),var(--panel));color:var(--ink-2);
-  box-shadow:var(--shadow);transition:transform .16s,color .16s,border-color .16s,box-shadow .16s;}
-.dvc-fab:hover{transform:translateY(-2px);color:var(--ink);border-color:var(--ui-line);}
-.dvc-fab.on{color:var(--ui-ink);border-color:var(--ui-line);box-shadow:var(--shadow);}
-.dvc-fab svg{width:19px;height:19px;}
-.dvc-fab .dvc-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 var(--sp-2);border-radius:999px;background:var(--lat-r);color:var(--on-solid);font-size:var(--fs-xs);font-weight:700;line-height:1;display:grid;place-items:center;border:2px solid var(--panel);font-variant-numeric:tabular-nums;animation:dvcpulse 1.8s ease-in-out infinite;}
-@keyframes dvcpulse{0%{box-shadow:0 0 0 0 color-mix(in oklch,var(--sem-del),transparent 50%);}70%{box-shadow:0 0 0 7px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
-.dvcon{position:fixed;right:18px;bottom:92px;z-index:91;width:860px;max-width:calc(100vw - 32px);
-  max-height:calc(100vh - 148px);display:flex;flex-direction:column;overflow:hidden;
-  background:var(--panel);border:1px solid var(--hair-2);border-radius:14px;
-  box-shadow:var(--shadow);font-family:var(--font-ui);
-  transform-origin:bottom right;animation:dvcin .22s cubic-bezier(.2,.7,.2,1);}
-@keyframes dvcin{from{opacity:0;transform:translateY(8px) scale(.985);}to{opacity:1;transform:none;}}
-.dvc-head{flex:none;display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-4) var(--sp-5) var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);background:linear-gradient(180deg,var(--panel-3),var(--panel));}
+/* FAB skin, the corner-panel box and its entrance are shared recipes in
+   styles.css (.fab / .corner-panel / @keyframes pop-up) — the copies here and
+   in tweaks-panel were identical down to a second keyframes block under
+   another name. Only the rail slot and the console's own size stay local. */
+.dvcon{bottom:92px;z-index:91;width: round(calc(860px * var(--density)), 1px);max-width:calc(100vw - 32px);
+  max-height:calc(100vh - 148px);display:flex;flex-direction:column;}
+.dvcon .dvc-head{gap:var(--sp-5);padding:var(--sp-4) var(--sp-5) var(--sp-4) var(--sp-6);background:linear-gradient(180deg,var(--panel-3),var(--panel));}
 .dvc-brand{display:flex;align-items:center;color:var(--ui-ink);}
-.dvc-tabs{display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;}
-.dvc-tab{display:inline-flex;align-items:center;gap:var(--sp-3);height:var(--ctl-h);font-family:var(--font-ui);font-size:var(--fs-sm);color:var(--ink-3);background:transparent;border:none;border-radius:6px;padding:0 var(--sp-5);cursor:pointer;transition:all .12s;}
-.dvc-tab:hover{color:var(--ink-2);}
-.dvc-tab.on{color:var(--ink);background:var(--panel-3);box-shadow:0 0 0 1px var(--hair-2);}
-.dvc-tab.on svg{color:var(--ui-ink);}
+.dvc-tabs{display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;min-width:0;flex:0 1 auto;overflow-x:auto;overflow-y:hidden;}
+/* look verified against design/app.html:9626 and kept. The SELECTED skin is
+   the global .kj-button[aria-pressed="true"] rule (same panel-3 + hairline
+   ring), so the tabs run on [kjPressed] now and the rest-state skin is
+   scoped to :not([aria-pressed]) — otherwise it would out-specify it. */
+.dvc-tab .kj-button{flex:none;display:inline-flex;align-items:center;gap:var(--sp-3);height:var(--ctl-h);font-family:var(--font-ui);font-weight:var(--fw-medium);border:none;border-radius:6px;padding:0 var(--sp-5);cursor:pointer;transition:all .12s;}
+.dvc-tab .kj-button:not([aria-pressed="true"]){--kj-button-bg:transparent;--kj-button-fg:var(--ink-3);box-shadow:none;}
+.dvc-tab .kj-button:not([aria-pressed="true"]):hover{--kj-button-fg:var(--ink-2);--kj-button-bg:transparent;}
+.dvc-tab [aria-pressed="true"] svg{color:var(--ui-ink);}
 .dvc-tab svg{width:var(--sp-6);height:var(--sp-6);color:var(--ink-4);}
-.dvc-cnt{display:inline-flex;align-items:center;justify-content:center;height:var(--sp-7);font-size:var(--fs-2xs);padding:0 var(--sp-2);border-radius:999px;background:var(--panel);border:1px solid var(--hair);color:var(--ink-3);min-width:16px;}
-.dvc-tab.on .dvc-cnt{color:var(--ink-2);border-color:var(--hair-2);}
-.dvc-live{display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-2xs);color:var(--ink-3);}
+.dvc-cnt{display:inline-flex;align-items:center;justify-content:center;height:var(--sp-7);font-size:var(--fs-meta);padding:0 var(--sp-2);border-radius:999px;background:var(--panel);border:1px solid var(--hair);color:var(--ink-3);min-width:16px;}
+.dvc-tab [aria-pressed="true"] .dvc-cnt{color:var(--ink-2);border-color:var(--hair-2);}
+.dvc-live{display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-meta);color:var(--ink-3);margin-right:auto;}
 .dvc-ld{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:#35e0a1;position:relative;}
 .dvc-ld::after{content:"";position:absolute;inset:-3px;border-radius:50%;background:inherit;opacity:.4;filter:blur(2px);}
 .dvc-live.on .dvc-ld{animation:dvcblink 1.5s ease-in-out infinite;}
 @keyframes dvcblink{0%,100%{opacity:1;}50%{opacity:.35;}}
-.dvc-sp{flex:1;}
-.dvc-ic{display:inline-flex;align-items:center;gap:var(--sp-3);font-family:var(--font-ui);font-size:var(--fs-sm);color:var(--ink-2);background:transparent;border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);cursor:pointer;transition:all .12s;}
-.dvc-ic:hover{color:var(--ink);background:var(--panel-3);border-color:var(--hair-2);}
-.dvc-ic.ok{color:var(--lat-g);border-color:color-mix(in oklch,var(--lat-g),transparent 55%);}
+.dvc-ic .kj-button{display:inline-flex;align-items:center;gap:var(--sp-3);height:auto;font-family:var(--font-ui);font-weight:var(--fw-medium);color:var(--ink-2);background:transparent;border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);cursor:pointer;transition:all .12s;}
+.dvc-ic .kj-button:hover{color:var(--ink);background:var(--panel-3);border-color:var(--hair-2);}
+.dvc-ic.ok .kj-button{color:var(--lat-g);border-color:color-mix(in oklch,var(--lat-g),transparent 55%);}
 .dvc-ic svg{width:var(--sp-6);height:var(--sp-6);}
-.dvc-x{border:none;padding:var(--sp-2);color:var(--ink-3);background:transparent;border-radius:var(--r-sm);cursor:pointer;display:inline-flex;}
-.dvc-x:hover{color:var(--ink);background:var(--panel-3);}
+.dvc-x .kj-button{border:none;height:auto;padding:var(--sp-2);color:var(--ink-3);background:transparent;border-radius:var(--r-sm);cursor:pointer;display:inline-flex;}
+.dvc-x .kj-button:hover{color:var(--ink);background:var(--panel-3);}
 .dvc-x svg{width:var(--sp-6);height:var(--sp-6);}
 .dvc-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
 .dvc-scroll{flex:1;min-height:0;overflow:auto;}
-.dvc-scroll::-webkit-scrollbar,.dvc-fl::-webkit-scrollbar{width:9px;}
-.dvc-scroll::-webkit-scrollbar-thumb,.dvc-fl::-webkit-scrollbar-thumb{background:var(--hair-2);border-radius:6px;border:2px solid transparent;background-clip:padding-box;}
 .dvc-tbl{min-width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
-.dvc-tbl thead th{position:sticky;top:0;z-index:2;background:var(--panel-2);border-bottom:1px solid var(--hair-2);font-weight:500;font-size:var(--fs-2xs);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:var(--sp-4) var(--sp-4);text-align:right;white-space:nowrap;cursor:pointer;user-select:none;transition:color .12s,background .12s;}
+.dvc-tbl thead th{position:sticky;top:0;z-index:2;background:var(--panel-2);border-bottom:1px solid var(--hair-2);font-weight:var(--fw-medium);color:var(--ink-3);padding:var(--sp-4) var(--sp-4);text-align:right;white-space:nowrap;cursor:pointer;user-select:none;transition:color .12s,background .12s;}
 .dvc-tbl thead th:first-child{text-align:left;padding-left:var(--sp-6);}
 .dvc-tbl thead th:last-child{padding-right:var(--sp-6);}
 .dvc-tbl thead th:hover{color:var(--ink-2);background:var(--panel-3);}
 .dvc-tbl thead th.srt{color:var(--ink);}
-.dvc-arr{display:inline-block;width:9px;margin-left:var(--sp-1);color:var(--ui-ink);font-size:var(--fs-3xs);vertical-align:middle;}
-.dvc-tbl tbody td{padding:0 var(--sp-4);height:var(--ctl-h-lg);border-bottom:1px solid var(--hair);text-align:right;white-space:nowrap;font-size:var(--fs-ui);color:var(--ink-2);}
+.dvc-arr{display:inline-block;width:9px;margin-left:var(--sp-1);color:var(--ui-ink);font-size:var(--fs-badge);vertical-align:middle;}
+.dvc-tbl tbody td{padding:0 var(--sp-4);height:var(--ctl-h-lg);border-bottom:1px solid var(--hair);text-align:right;white-space:nowrap;color:var(--ink-2);}
 .dvc-tbl tbody td:first-child{text-align:left;padding-left:var(--sp-6);}
 .dvc-tbl tbody td:last-child{padding-right:var(--sp-6);}
 .dvc-row{cursor:pointer;transition:background .1s;}
-.dvc-row:hover{background:var(--panel-2);}
 .dvc-row.open{background:var(--panel-2);}
 .dvc-row.stale{opacity:.45;}
-.dvc-stale{color:var(--ink-4);font-size:var(--fs-xs);flex:none;}
-.dvc-tw{width:var(--sp-5);height:var(--sp-5);flex:none;color:var(--ink-4);transition:transform .15s;}
+.dvc-stale{color:var(--ink-4);flex:none;}
+.dvc-tw{flex:none;color:var(--ink-4);transition:transform .15s;}
 .dvc-row.open .dvc-tw{transform:rotate(90deg);color:var(--ui-ink);}
-.dvc-lead{display:flex;align-items:center;gap:var(--sp-4);color:var(--ink);font-weight:500;}
-.dvc-nm{overflow:hidden;text-overflow:ellipsis;}
-.dvc-id{color:var(--ink-4);font-weight:400;}
-.dvc-lat .v{display:inline-block;padding:var(--sp-1) var(--sp-3);border-radius:5px;font-weight:500;}
+.dvc-lead{display:flex;align-items:center;gap:var(--sp-4);color:var(--ink);font-weight:var(--fw-medium);}
+.dvc-id{color:var(--ink-4);font-weight:var(--fw-normal);}
+.dvc-lat .v{display:inline-block;padding:var(--sp-1) var(--sp-3);border-radius:5px;font-weight:var(--fw-medium);}
 .dvc-lat.g .v{color:var(--lat-g);}
 .dvc-lat.a .v{color:var(--lat-a);background:var(--lat-a-bg);}
-.dvc-lat.r .v{color:var(--lat-r);background:var(--lat-r-bg);font-weight:600;box-shadow:inset 0 0 0 1px var(--lat-r-ring);}
+.dvc-lat.r .v{color:var(--lat-r);background:var(--lat-r-bg);font-weight:var(--fw-medium);box-shadow:inset 0 0 0 1px var(--lat-r-ring);}
 .dvc-lat.na .v{color:var(--ink-4);}
 .dvc-dim{color:var(--ink-4);}
 .dvc-err .v{display:inline-block;padding:var(--sp-1) var(--sp-3);border-radius:5px;}
 .dvc-err.zero .v{color:var(--ink-4);}
-.dvc-err.bad .v{color:var(--lat-r);background:var(--lat-r-bg);font-weight:600;box-shadow:inset 0 0 0 1px var(--lat-r-ring);}
+.dvc-err.bad .v{color:var(--lat-r);background:var(--lat-r-bg);font-weight:var(--fw-medium);box-shadow:inset 0 0 0 1px var(--lat-r-ring);}
 .dvc-spk{text-align:right;padding-right:var(--sp-6);}
 .dvc-spk svg{display:inline-block;vertical-align:middle;}
 .dvc-stat{display:inline-flex;align-items:center;gap:var(--sp-3);justify-content:flex-end;}
-.dvc-stat .lb{font-size:var(--fs-xs);letter-spacing:.06em;text-transform:uppercase;}
 .dvc-needs{width:var(--sp-2);height:var(--sp-2);border-radius:50%;background:var(--st-blocked);flex:none;}
 .dvc-tool{width:17px;height:17px;flex:none;border-radius:4px;display:inline-grid;place-items:center;}
-.dvc-pchip{display:inline-flex;align-items:center;gap:var(--sp-3);justify-content:flex-end;color:var(--ink-2);}
 .dvc-pi{width:var(--sp-7);height:var(--sp-7);border-radius:4px;display:grid;place-items:center;flex:none;}
-.dvc-pn{overflow:hidden;text-overflow:ellipsis;max-width:96px;}
-.dvc-mtr{display:inline-block;width:46px;height:var(--sp-2);border-radius:3px;background:var(--hair);overflow:hidden;vertical-align:middle;margin-right:var(--sp-3);}
-.dvc-mtr>i{display:block;height:100%;border-radius:3px;}
-.dvc-branch{color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;max-width:120px;display:inline-block;vertical-align:bottom;}
+.dvc-pn{max-width: round(calc(96px * var(--density)), 1px);}
+.dvc-mtr .kj-progress-bar{display:inline-block;width:46px;vertical-align:middle;margin-right:var(--sp-3);}
+.dvc-branch{color:var(--ink-3);max-width: round(calc(120px * var(--density)), 1px);display:inline-block;vertical-align:bottom;}
 .dvc-detail>td{padding:0;border-bottom:1px solid var(--hair);background:var(--bg);}
 .dvc-din{padding:var(--sp-6) var(--sp-6) var(--sp-6) var(--sp-11);display:flex;flex-direction:column;gap:var(--sp-5);animation:dvcexp .22s ease;}
 @keyframes dvcexp{from{opacity:0;transform:translateY(-3px);}to{opacity:1;transform:none;}}
 .dvc-kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:var(--sp-2) var(--sp-8);}
-.dvc-kv .r{display:flex;gap:var(--sp-4);font-size:var(--fs-sm);align-items:baseline;}
-.dvc-kv .k{color:var(--ink-4);min-width:74px;}
-.dvc-kv .vv{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.dvc-kv .vv b{color:var(--ink);font-weight:600;}
-.dvc-sl{font-size:var(--fs-2xs);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:var(--sp-1);}
+.dvc-kv .r{display:flex;gap:var(--sp-4);align-items:baseline;}
+.dvc-kv .k{color:var(--ink-4);min-width: round(calc(74px * var(--density)), 1px);}
+.dvc-kv .vv{color:var(--ink-2);}
+.dvc-kv .vv b{color:var(--ink);font-weight:var(--fw-medium);}
+.dvc-sl{color:var(--ink-3);margin-bottom:var(--sp-1);}
 .dvc-files{display:flex;flex-direction:column;gap:1px;}
-.dvc-frow{display:grid;grid-template-columns:16px 1fr auto;gap:var(--sp-4);align-items:center;font-size:var(--fs-sm);padding:var(--sp-1) 0;color:var(--ink-2);}
-.dvc-fp{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.dvc-task{font-size:var(--fs-sm);color:var(--ink-2);line-height:1.5;}
-.dvc-attn{display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);padding:var(--sp-2) var(--sp-4);border-radius:6px;color:var(--lat-r);background:var(--lat-r-bg);border:1px solid var(--lat-r-ring);align-self:flex-start;}
-.dvc-chip{display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-xs);padding:var(--sp-1) var(--sp-3);border-radius:999px;border:1px solid var(--hair);color:var(--ink-2);background:var(--panel-2);}
+.dvc-frow{display:grid;grid-template-columns:16px 1fr auto;gap:var(--sp-4);align-items:center;padding:var(--sp-1) 0;color:var(--ink-2);}
+.dvc-task{color:var(--ink-2);line-height:1.5;}
+.dvc-attn{display:inline-flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);border-radius:6px;color:var(--lat-r);background:var(--lat-r-bg);border:1px solid var(--lat-r-ring);align-self:flex-start;}
 .dvc-calls{display:flex;flex-direction:column;gap:1px;}
-.dvc-cr{display:grid;grid-template-columns:84px 1fr auto 14px;align-items:center;gap:var(--sp-5);font-size:var(--fs-sm);padding:var(--sp-1) 0;color:var(--ink-2);}
-.dvc-cr .ts{color:var(--ink-4);} .dvc-cr .cm{color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.dvc-cr .du{text-align:right;font-weight:500;}
+.dvc-cr{display:grid;grid-template-columns:84px 1fr auto 14px;align-items:center;gap:var(--sp-5);padding:var(--sp-1) 0;color:var(--ink-2);}
+.dvc-cr .ts{color:var(--ink-4);} .dvc-cr .cm{color:var(--ink-3);}
+.dvc-cr .du{text-align:right;font-weight:var(--fw-medium);}
 .dvc-cr .du.g{color:var(--lat-g);} .dvc-cr .du.a{color:var(--lat-a);} .dvc-cr .du.r{color:var(--lat-r);}
 .dvc-dot{width:var(--sp-3);height:var(--sp-3);border-radius:50%;justify-self:center;}
 .dvc-dot.ok{background:var(--lat-g);} .dvc-dot.er{background:var(--lat-r);box-shadow:0 0 0 2px var(--lat-r-bg);}
-.dvc-dh{display:flex;align-items:center;gap:var(--sp-5);font-size:var(--fs-xs);color:var(--ink-3);}
-.dvc-dh .lbl{text-transform:uppercase;letter-spacing:.1em;}
+.dvc-dh{display:flex;align-items:center;gap:var(--sp-5);color:var(--ink-3);}
 .dvc-ds{display:flex;gap:var(--sp-6);margin-left:auto;color:var(--ink-2);}
-.dvc-ds b{color:var(--ink);font-weight:600;}
+.dvc-ds b{color:var(--ink);font-weight:var(--fw-medium);}
 .dvc-feed{flex:none;border-top:1px solid var(--hair-2);}
-.dvc-fh{display:flex;align-items:center;gap:var(--sp-4);width:100%;padding:var(--sp-4) var(--sp-6);background:var(--panel-2);border:none;border-bottom:1px solid var(--hair);cursor:pointer;color:var(--ink-3);font-family:var(--font-mono);text-align:left;}
-.dvc-fh:hover{color:var(--ink-2);}
+.dvc-fh .kj-button{display:flex;align-items:center;gap:var(--sp-4);width:100%;height:auto;border-radius:0;padding:var(--sp-4) var(--sp-6);background:var(--panel-2);border:none;border-bottom:1px solid var(--hair);cursor:pointer;color:var(--ink-3);font-family:var(--font-mono);font-weight:var(--fw-normal);text-align:left;}
+.dvc-fh .kj-button:hover{color:var(--ink-2);}
 .dvc-fh .dvc-tw.open{transform:rotate(90deg);color:var(--ui-ink);}
-.dvc-fh .lbl{font-size:var(--fs-2xs);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);}
-.dvc-fh .ct{font-size:var(--fs-xs);color:var(--ink-4);margin-left:auto;}
-.dvc-fl{padding:var(--sp-2) var(--sp-6) var(--sp-6);max-height:240px;overflow-y:auto;}
-.dvc-fr{display:grid;grid-template-columns:90px 16px 1fr auto 22px;align-items:center;gap:var(--sp-5);font-size:var(--fs-sm);padding:var(--sp-2) 0;border-bottom:1px solid var(--hair);color:var(--ink-2);}
+.dvc-fh .lbl{color:var(--ink-3);}
+.dvc-fh .ct{color:var(--ink-4);margin-left:auto;}
+.dvc-fl{padding:var(--sp-2) var(--sp-6) var(--sp-6);max-height: round(calc(240px * var(--density)), 1px);overflow-y:auto;}
+.dvc-fr{display:grid;grid-template-columns:90px 16px 1fr auto 22px;align-items:center;gap:var(--sp-5);padding:var(--sp-2) 0;border-bottom:1px solid var(--hair);color:var(--ink-2);}
 .dvc-fr:last-child{border-bottom:none;}
-.dvc-fr .ts{color:var(--ink-4);} .dvc-fr .cm{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.dvc-fr .du{text-align:right;font-weight:500;}
+.dvc-fr .ts{color:var(--ink-4);} .dvc-fr .cm{color:var(--ink);}
+.dvc-fr .du{text-align:right;font-weight:var(--fw-medium);}
 .dvc-fr .du.g{color:var(--lat-g);} .dvc-fr .du.a{color:var(--lat-a);} .dvc-fr .du.r{color:var(--lat-r);}
-.dvc-fr .ix{color:var(--ink-4);text-align:right;font-size:var(--fs-2xs);}
-.dvc-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-6);padding:var(--sp-11) var(--sp-8) var(--sp-11);text-align:center;}
+.dvc-fr .ix{color:var(--ink-4);text-align:right;font-size:var(--fs-meta);}
 .dvc-ring{width:46px;height:46px;border-radius:50%;border:1.5px dashed var(--hair-2);display:grid;place-items:center;color:var(--ink-4);}
-.dvc-empty h4{font-family:var(--font-disp);font-weight:600;font-size:var(--fs-lg);color:var(--ink-2);}
-.dvc-empty p{font-size:var(--fs-sm);color:var(--ink-4);max-width:300px;line-height:1.55;}
-.dvc-hint{display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--ink-3);}
+.dvcon kj-empty-state{--kj-empty-state-gap:var(--sp-6);--kj-empty-state-padding-y:var(--sp-11);--kj-empty-state-padding-x:var(--sp-8);--kj-empty-state-fg:var(--ink-2);--kj-empty-state-muted-fg:var(--ink-4);--kj-empty-state-title-size:var(--fs-lg);--kj-empty-state-desc-size:var(--fs-sm);--kj-empty-state-max-width:none;}
+.dvcon .kj-empty-state-description{max-width: round(calc(300px * var(--density)), 1px);line-height:1.55;}
+.dvc-hint{display:inline-flex;align-items:center;gap:var(--sp-3);color:var(--ink-3);}
 .dvc-hint .dvc-ld{animation:dvcblink 1.5s ease-in-out infinite;}
 .dvc-res-top{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-6);padding:var(--sp-6);border-bottom:1px solid var(--hair);}
 .dvc-gauge{background:var(--panel-2);border:1px solid var(--hair);border-radius:10px;padding:var(--sp-5) var(--sp-6);display:flex;flex-direction:column;gap:var(--sp-3);}
 .dvc-gauge .g-top{display:flex;align-items:baseline;gap:var(--sp-4);}
-.dvc-gauge .g-lab{font-size:var(--fs-2xs);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);display:inline-flex;align-items:center;gap:var(--sp-3);}
+.dvc-gauge .g-lab{color:var(--ink-3);display:inline-flex;align-items:center;gap:var(--sp-3);}
 .dvc-gauge .g-lab svg{width:var(--sp-6);height:var(--sp-6);color:var(--ink-4);}
-.dvc-gauge .g-val{font-family:var(--font-disp);font-size:var(--fs-xl);font-weight:600;color:var(--ink);letter-spacing:-.02em;margin-left:auto;}
-.dvc-gauge .g-val small{font-size:var(--fs-sm);color:var(--ink-3);font-weight:500;margin-left:1px;}
-.dvc-gbar{height:var(--sp-3);border-radius:4px;background:var(--hair);overflow:hidden;}
-.dvc-gbar>i{display:block;height:100%;border-radius:4px;transition:width .5s cubic-bezier(.3,.8,.3,1);}
-.dvc-gauge .g-sub{font-size:var(--fs-2xs);color:var(--ink-4);}
+.dvc-gauge .g-val{font-family:var(--font-disp);font-size:var(--fs-xl);font-weight:var(--fw-medium);color:var(--ink);letter-spacing:-.02em;margin-left:auto;}
+.dvc-gauge .g-val small{font-size:var(--fs-meta);color:var(--ink-3);font-weight:var(--fw-medium);margin-left:1px;}
+.dvc-gauge .g-sub{font-size:var(--fs-meta);color:var(--ink-4);}
 .dvc-kind{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:4px;flex:none;}
 .dvc-kind svg{width:var(--sp-5);height:var(--sp-5);}
-.dvc-kind.core{color:var(--ui-ink);background:var(--ui-sel);}
-.dvc-split{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);font-size:var(--fs-sm);flex-wrap:nowrap;min-width:0;}
+.dvc-split{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);flex-wrap:nowrap;min-width:0;}
 .dvc-split>span{white-space:nowrap;}
 /* the verbose right-side note yields (truncates) before the numbers ever wrap */
 .dvc-split>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;}
-.dvc-palert{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);font-size:var(--fs-sm);color:var(--ink);background:color-mix(in oklch,var(--st-blocked),transparent 91%);border-bottom:1px solid color-mix(in oklch,var(--st-blocked),transparent 62%);}
-.dvc-palert b{font-weight:600;}
-.dvc-twbtn{border:none;background:transparent;padding:0;cursor:pointer;display:inline-flex;color:var(--ink-4);flex:none;}
-.dvc-twbtn:hover{color:var(--ink-2);}
+.dvc-palert{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);color:var(--ink);background:color-mix(in oklch,var(--st-blocked),transparent 91%);border-bottom:1px solid color-mix(in oklch,var(--st-blocked),transparent 62%);}
+.dvc-palert b{font-weight:var(--fw-medium);}
+.dvc-twbtn .kj-button{border:none;background:transparent;padding:0;height:auto;cursor:pointer;display:inline-flex;color:var(--ink-4);flex:none;}
+.dvc-twbtn .kj-button:hover{color:var(--ink-2);}
 .dvc-twbtn .dvc-tw.open{transform:rotate(90deg);color:var(--ui-ink);}
 .dvc-pdot{width:7px;height:7px;border-radius:2px;flex:none;}
 .dvc-recdot{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--lat-r);animation:dvcblink 1.5s ease-in-out infinite;}
-.dvc-foot{flex:none;display:flex;align-items:center;gap:var(--sp-6);padding:var(--sp-4) var(--sp-6);border-top:1px solid var(--hair);background:var(--panel-2);font-size:var(--fs-xs);color:var(--ink-3);}
+.dvc-foot{flex:none;display:flex;align-items:center;gap:var(--sp-6);padding:var(--sp-4) var(--sp-6);border-top:1px solid var(--hair);background:var(--panel-2);color:var(--ink-3);}
 .dvc-leg{display:flex;align-items:center;gap:var(--sp-3);}
 .dvc-sw{width:var(--sp-4);height:var(--sp-4);border-radius:3px;}
 .dvc-sw.g{background:var(--lat-g);} .dvc-sw.a{background:var(--lat-a);} .dvc-sw.r{background:var(--lat-r);}
 `,
   ],
 })
-export class DevPanelComponent implements OnDestroy {
+export class DevPanelComponent {
   readonly perf = inject(PerfStore);
   /** Live terminal write-scheduler counters (PTY pipeline visibility). */
   readonly termStats = terminalSchedulerStats;
@@ -583,7 +582,6 @@ export class DevPanelComponent implements OnDestroy {
   private readonly projectsStore = inject(ProjectsStore);
   private readonly metricsStore = inject(MetricsStore);
   private readonly panel = inject(DevPanelStore);
-  private readonly host = inject(ElementRef<HTMLElement>);
   private readonly bridge = inject(BRIDGE);
   /** Raw emit-trace indicator (A0.7) — the Emits tab's record chip + toggle. */
   readonly telemetry = inject(TelemetryStore);
@@ -616,6 +614,11 @@ export class DevPanelComponent implements OnDestroy {
   private copiedTo?: ReturnType<typeof setTimeout>;
 
   constructor() {
+    // close on Escape / click outside the FAB + panel (both live under this
+    // component's host, which carries the shared DismissDirective)
+    inject(DismissDirective).appDismiss.subscribe(() => {
+      if (this.open()) this.open.set(false);
+    });
     // gate the terminal write-scheduler stats collector on panel visibility
     effect(() => setSchedulerStatsEnabled(this.open()));
     // age out the 10s window while the panel is open; the same 1s heartbeat
@@ -640,20 +643,11 @@ export class DevPanelComponent implements OnDestroy {
       if (t === "resources") void this.pollTree(true);
       if (t === "emits") void this.pollEmits();
     });
-  }
-  ngOnDestroy() {
-    clearInterval(this.tickIv);
-    clearTimeout(this.copiedTo);
-    setSchedulerStatsEnabled(false);
-  }
-
-  @HostListener("document:keydown.escape") onEsc() {
-    if (this.open()) this.open.set(false);
-  }
-
-  // close on click outside the FAB + panel (both live under this host element)
-  @HostListener("document:mousedown", ["$event"]) onDocDown(e: MouseEvent) {
-    if (this.open() && !this.host.nativeElement.contains(e.target as Node)) this.open.set(false);
+    inject(DestroyRef).onDestroy(() => {
+      clearInterval(this.tickIv);
+      clearTimeout(this.copiedTo);
+      setSchedulerStatsEnabled(false);
+    });
   }
 
   // ── perf ──

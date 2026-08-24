@@ -1,4 +1,4 @@
-import { inject, Injectable, OnDestroy, signal, WritableSignal } from "@angular/core";
+import { DestroyRef, inject, Injectable, signal, WritableSignal } from "@angular/core";
 import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import { ISearchOptions, SearchAddon } from "@xterm/addon-search";
@@ -7,6 +7,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { ITheme, Terminal } from "@xterm/xterm";
 import { AgentsStore } from "./stores/agents.store";
+import { codeMetrics } from "./ui/density";
 import {
   discardTerminalQueue,
   flushTerminalQueue,
@@ -27,6 +28,9 @@ interface TermHandle {
 const MONO =
   '"JetBrains Mono", "Cascadia Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
+/** Leading ratio for the terminal, held flat across densities (see handle()). */
+const TERM_LINE_HEIGHT = 1.25;
+
 /**
  * Owns one persistent xterm `Terminal` per agent. The instance outlives any
  * single view: output is written to it as it streams (even while its pane is
@@ -34,10 +38,17 @@ const MONO =
  * and resizes are forwarded to the agent's PTY through the backend.
  */
 @Injectable({ providedIn: "root" })
-export class TerminalService implements OnDestroy {
+export class TerminalService {
   private agents = inject(AgentsStore);
   private handles = new Map<string, TermHandle>();
   private titleCb?: (id: string, title: string) => void;
+
+  constructor() {
+    // Root-service teardown (app shutdown / test env): dispose every terminal.
+    inject(DestroyRef).onDestroy(() => {
+      for (const id of [...this.handles.keys()]) this.dispose(id);
+    });
+  }
 
   /** Re-apply the current app theme to every live terminal. Called by the terminal
    *  component when the theme toggles — xterm only reads its theme at attach time,
@@ -45,6 +56,23 @@ export class TerminalService implements OnDestroy {
   retheme() {
     const theme = this.theme();
     for (const h of this.handles.values()) h.term.options.theme = theme;
+  }
+
+  /** Re-apply the current density's code metrics to every live terminal.
+   *  xterm reads fontSize once at construction, so without this a density switch
+   *  leaves already-open terminals at the old glyph size until they are disposed.
+   *  Changing the glyph size changes how many cols/rows fit, so each terminal is
+   *  refit and the new geometry pushed to its PTY — otherwise the process keeps
+   *  wrapping to the old width and TUIs render corrupt. */
+  redensify() {
+    const { fontSize } = codeMetrics();
+    for (const [id, h] of this.handles) {
+      if (h.term.options.fontSize === fontSize) continue;
+      h.term.options.fontSize = fontSize;
+      if (!h.term.element) continue; // not mounted — attach() will fit it
+      this.refit(h);
+      void this.agents.resize(id, h.term.rows, h.term.cols).catch(() => {});
+    }
   }
 
   // Per-agent revision counters, bumped AFTER xterm finishes parsing each write
@@ -59,10 +87,6 @@ export class TerminalService implements OnDestroy {
       this.revs.set(id, s);
     }
     return s;
-  }
-  /** Current revision for one agent (reactive — changes on each parsed write). */
-  revOf(id: string): number {
-    return this.revSignal(id)();
   }
   private bumpRevision(id: string) {
     this.revSignal(id).update((n) => n + 1);
@@ -118,8 +142,11 @@ export class TerminalService implements OnDestroy {
         allowProposedApi: true,
         cursorBlink: true,
         fontFamily: MONO,
-        fontSize: 12,
-        lineHeight: 1.25,
+        fontSize: codeMetrics().fontSize,
+        // xterm's lineHeight is a RATIO, not px. It stays constant across
+        // densities on purpose: density moves the glyph size, and the terminal
+        // keeps the same leading at every size.
+        lineHeight: TERM_LINE_HEIGHT,
         scrollback: 5000,
         theme: this.theme(),
       });
@@ -398,6 +425,10 @@ export class TerminalService implements OnDestroy {
     const h = this.handle(id);
     if (fresh || this.stale.has(id)) void this.recover(id);
     h.term.options.theme = this.theme(); // pick up the current light/dark theme
+    // Same for density: a terminal that streamed while hidden missed the
+    // redensify() broadcast (that fires from a MOUNTED terminal component), so
+    // re-read the code metrics on the way in. The refit below sizes it.
+    h.term.options.fontSize = codeMetrics().fontSize;
     if (!h.term.element) {
       el.replaceChildren(); // evict any terminal a prior agent left in this host
       h.term.open(el);
@@ -442,10 +473,6 @@ export class TerminalService implements OnDestroy {
     this.recovering.delete(id);
     h.term.dispose();
     this.handles.delete(id);
-  }
-
-  ngOnDestroy() {
-    for (const id of [...this.handles.keys()]) this.dispose(id);
   }
 
   private refit(h: TermHandle) {

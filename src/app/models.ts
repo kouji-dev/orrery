@@ -242,7 +242,7 @@ export interface Commit {
 
 export interface Tab {
   id: string;
-  // "orchestrator" = the fixed overview tab; "agent" = a workspace tab holding a
+  // "orchestrator" = the fixed overview tab"agent" = a workspace tab holding a
   // pane tree (one agent, or several tiled together). Defaults to "agent".
   kind?: "orchestrator" | "agent" | "backlog" | "ticket";
   ticketId?: string;
@@ -407,7 +407,7 @@ export interface Settings {
   channel: UpdateChannel;
   /** Startup update behavior: auto (install) | notify (check only) | manual (no check). */
   updatePolicy: UpdatePolicy;
-  /** Spawn-modal prefill tool id; "" = none saved (spawn keeps its hardcoded default). */
+  /** Spawn-modal prefill tool id"" = none saved (spawn keeps its hardcoded default). */
   defaultTool: string;
   /** Per-tool model prefill (tool id → model id). Absent key = the curated default. */
   toolModel: Record<string, string>;
@@ -418,9 +418,9 @@ export interface Settings {
   toolPath: Record<string, string>;
   /** Branch name template; tokens: {name} (worktree slug), {tool}, {date} (MMDD). */
   branchTemplate: string;
-  /** Absolute dir new worktrees are created under; "" = the built-in app-data root. */
+  /** Absolute dir new worktrees are created under"" = the built-in app-data root. */
   worktreeRoot: string;
-  /** Absolute dir the add-project folder picker opens in; "" = the OS default. */
+  /** Absolute dir the add-project folder picker opens in"" = the OS default. */
   projectsRoot: string;
   /** Relaunch agents that were running when the app last quit/crashed. */
   autoResume: boolean;

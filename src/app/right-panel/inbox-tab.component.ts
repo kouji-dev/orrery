@@ -4,6 +4,7 @@ import { NotificationService } from "../notifications/notification.service";
 import { NotificationCardComponent } from "../notifications/notification-card.component";
 import { IconComponent } from "../shared/icon.component";
 import { EmptyStateComponent } from "./empty-state.component";
+import { KjButtonComponent } from "@kouji-ui/components";
 
 /** Full notification feed for the active agent (or all agents) — the same real
  *  feed the top-bar bell shows, scoped to this panel. Keeps history: resolved
@@ -12,17 +13,17 @@ import { EmptyStateComponent } from "./empty-state.component";
 @Component({
   selector: "app-inbox-tab",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NotificationCardComponent, IconComponent, EmptyStateComponent],
+  imports: [NotificationCardComponent, IconComponent, EmptyStateComponent, KjButtonComponent],
   template: `
     @if (items().length) {
-      <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-6) var(--sp-3);border-bottom:1px solid var(--hair)">
-        <span class="up" style="font-size:var(--fs-2xs);letter-spacing:0.08em;color:var(--ink-3)">
+      <div class="pane-head">
+        <span class="up" style="color:var(--ink-3)">
           {{ scopeAgent() ? '' : 'All projects · ' }}{{ pendingCount() }} pending · {{ items().length }} total
         </span>
         @if (hasResolved()) {
-          <button class="btn ghost-hair" style="margin-left:auto;padding:var(--sp-1) var(--sp-3);font-size:var(--fs-xs)" (click)="notifications.clearResolved()">
+          <kj-button kjVariant="outline" (click)="notifications.clearResolved()">
             <app-icon name="x" size="sm" />Clear read
-          </button>
+          </kj-button>
         }
       </div>
       <div class="scroll-y" style="flex:1;padding-bottom:var(--sp-4)">

@@ -7,6 +7,7 @@ import {
   ElementRef,
   inject,
   input,
+  linkedSignal,
   signal,
   viewChild,
 } from "@angular/core";
@@ -21,6 +22,7 @@ import { AgentStatus } from "../models";
 import { CommandRegistryService, WorkspaceFilesService } from "./command-registry.service";
 import { fzMatch, kbdLabel } from "./fuzzy";
 import { fzSegments, OverlayFooterComponent, OverlayShellComponent } from "./overlay-shell.component";
+import { KjBadgeComponent, KjButtonComponent } from "@kouji-ui/components";
 
 /** One Search-Everywhere corpus row. Symbols are deliberately OMITTED for now
  *  (no tree-sitter layer yet — roadmap B2.4/B2.5). */
@@ -66,10 +68,10 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
 @Component({
   selector: "app-search-everywhere",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, StatusDotComponent, OverlayShellComponent, OverlayFooterComponent],
+  imports: [IconComponent, StatusDotComponent, OverlayShellComponent, OverlayFooterComponent, KjButtonComponent, KjBadgeComponent],
   template: `
     <app-overlay-shell [width]="720" top="9vh" label="Search everywhere" (closed)="registry.close()">
-      <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);flex:none">
+      <div class="pane-head" style="gap:var(--sp-5);padding:var(--sp-6) var(--sp-7)">
         <app-icon name="search" color="var(--ui-ink)" />
         <input
           #inp
@@ -84,28 +86,23 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
       </div>
 
       <!-- type tabs -->
-      <div style="display:flex;align-items:center;gap:var(--sp-1);padding:0 var(--sp-5);border-bottom:1px solid var(--hair);background:var(--panel);flex:none">
+      <div class="kj-tab-strip" style="flex:none">
         @for (t of tabs; track t.k) {
           @let on = tab() === t.k;
-          <button
-            class="btn"
-            (click)="tab.set(t.k)"
-            [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'"
-            style="padding:var(--sp-4) var(--sp-5);border-radius:0;position:relative;font-size:var(--fs-sm)"
-          >
+          <kj-button kjVariant="ghost" (click)="tab.set(t.k)" [style.--kj-button-fg]="on ? 'var(--ink)' : 'var(--ink-3)'">
             @if (on) {
-              <span style="position:absolute;left:8px;right:8px;bottom:0;height:var(--sp-1);background:var(--ui-ind)"></span>
+              <span class="tab-ind"></span>
             }
             {{ t.label }}
             <!-- lazy tabs hide their count until a query exists (design SE_LAZY) -->
-            @if (!lazy[t.k] || q()) { <span class="tnum" style="font-size:var(--fs-3xs);color:var(--ink-4)">{{ countOf(t.k) }}</span> }
-          </button>
+            @if (!lazy[t.k] || q()) { <span class="tnum" style="font-size:var(--fs-badge);color:var(--ink-4)">{{ countOf(t.k) }}</span> }
+          </kj-button>
         }
       </div>
 
       <div #list class="scroll-y" style="flex:1;padding:var(--sp-2) 0;min-height:120px">
         @if (!items().length) {
-          <div style="padding:var(--sp-8) var(--sp-7);font-size:var(--fs-sm);color:var(--ink-4)">
+          <div style="padding:var(--sp-8) var(--sp-7);font-size:var(--fs-meta);color:var(--ink-4)">
             {{ q() ? 'nothing matches "' + q() + '"' : lazy[tab()] ? 'start typing to search files' : 'start typing to filter' }}
           </div>
         }
@@ -116,12 +113,12 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
               style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-7) var(--sp-2);position:sticky;top:0;z-index:1;background:var(--panel)"
               [style.border-top]="row.first ? 'none' : '1px solid var(--hair)'"
             >
-              <app-icon [name]="row.head.icon" size="sm" [px]="11" [color]="row.head.color" />
-              <span class="up" style="font-size:var(--fs-3xs);letter-spacing:.07em;color:var(--ink-3)">{{ row.head.name }}</span>
+              <app-icon size="md" [name]="row.head.icon" [color]="row.head.color" />
+              <span class="up" style="color:var(--ink-3)">{{ row.head.name }}</span>
               @if (row.head.path) {
-                <span style="font-size:var(--fs-2xs);color:var(--ink-4);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.head.path }}</span>
+                <span class="trunc" style="font-size:var(--fs-meta);color:var(--ink-4);flex:1">{{ row.head.path }}</span>
               }
-              <span class="tnum" style="font-size:var(--fs-3xs);color:var(--ink-4);margin-left:auto;flex:none">{{ row.head.count }}</span>
+              <span class="tnum" style="font-size:var(--fs-badge);color:var(--ink-4);margin-left:auto;flex:none">{{ row.head.count }}</span>
             </div>
           }
           @let i = row.i;
@@ -136,16 +133,16 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
             style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-7);cursor:pointer"
           >
             <app-icon [name]="r.it.icon" size="sm" [color]="sel() === i ? 'var(--ui-ink)' : 'var(--ink-3)'" />
-            <span style="font-size:var(--fs-ui);flex:none;max-width:52%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            <span class="trunc" style="flex:none;max-width:52%">
               @for (s of r.segs; track $index) {
-                @if (s.hit) { <b style="color:var(--ui-ink);font-weight:600">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
+                @if (s.hit) { <b style="color:var(--ui-ink);font-weight:var(--fw-medium)">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
               }
             </span>
             @if (r.it.sub) {
-              <span style="font-size:var(--fs-xs);color:var(--ink-4);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.it.sub }}</span>
+              <span class="trunc" style="color:var(--ink-4);flex:1">{{ r.it.sub }}</span>
             }
             @if (r.it.status) { <app-status-dot [status]="r.it.status!" /> }
-            @if (r.it.meta) { <span class="chip" style="font-size:var(--fs-3xs);flex:none;padding:1px var(--sp-3)">{{ r.it.meta }}</span> }
+            @if (r.it.meta) { <kj-badge style="--kj-badge-font-size:var(--fs-badge)">{{ r.it.meta }}</kj-badge> }
           </div>
         }
       </div>
@@ -163,10 +160,14 @@ export class SearchEverywhereComponent {
 
   readonly initialTab = input<string>("commands");
   readonly tabs = TABS;
-  readonly tab = signal<TabKey>("commands");
+  /** Active tab — seeded from (and re-seeded by) the requested initial tab,
+   *  while staying locally writable for the tab strip / Tab key. */
+  readonly tab = linkedSignal<string, TabKey>({
+    source: this.initialTab,
+    computation: (t) => (TABS.some((x) => x.k === t) ? (t as TabKey) : "commands"),
+  });
   readonly lazy = LAZY;
   readonly q = signal("");
-  readonly sel = signal(0);
   /** File corpora, one per project (its scope/first agent's worktree),
    *  fetched lazily on open. */
   private readonly fileList = signal<{ agentId: string; projectId: string; paths: string[] }[]>([]);
@@ -176,11 +177,6 @@ export class SearchEverywhereComponent {
   private focused = false;
 
   constructor() {
-    // honor the requested initial tab (e.g. "files" for Go to File)
-    effect(() => {
-      const t = this.initialTab();
-      if (TABS.some((x) => x.k === t)) this.tab.set(t as TabKey);
-    });
     afterRenderEffect(() => {
       if (!this.focused) {
         this.focused = true;
@@ -190,10 +186,6 @@ export class SearchEverywhereComponent {
     effect(() => {
       const i = this.sel();
       this.list()?.nativeElement.querySelector<HTMLElement>(`[data-idx="${i}"]`)?.scrollIntoView({ block: "nearest" });
-    });
-    effect(() => {
-      this.items();
-      this.sel.set(0);
     });
     // fetch one file corpus PER WORKTREE (scope agent first) so file results
     // span — and group by — every worktree; the same path appears once per
@@ -322,6 +314,10 @@ export class SearchEverywhereComponent {
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, 80);
   });
+
+  /** Keyboard selection index — snaps back to the top whenever the result
+   *  list itself changes, while staying writable for arrow keys / hover. */
+  readonly sel = linkedSignal({ source: this.items, computation: () => 0 });
 
   /** Header data for a worktree group (design: sticky icon·name·path·count).
    *  Name = project · agent, path = the worktree's branch — enough to tell two

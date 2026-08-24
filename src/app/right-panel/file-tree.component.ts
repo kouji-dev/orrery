@@ -14,10 +14,27 @@ import { BRIDGE, Commands } from "../data-source/bridge";
 import { DragService } from "../shared/drag.service";
 import { EditsStore } from "../stores/edits.store";
 import { ScrollStateService } from "../workspace/scroll-state.service";
+import { tokenPx } from "../ui/density";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { MenuPanelComponent } from "../context-menu/menu-panel.component";
 import { revealLabelFor } from "../utils";
+import {
+  KjBadgeComponent,
+  KjButtonComponent,
+  KjConfirmPopupActionComponent,
+  KjConfirmPopupActionsComponent,
+  KjConfirmPopupCancelComponent,
+  KjConfirmPopupComponent,
+  KjConfirmPopupContentComponent,
+  KjConfirmPopupMessageComponent,
+  KjConfirmPopupTriggerComponent,
+  KjDividerComponent,
+  KjEmptyStateComponent,
+  KjEmptyStateDescriptionComponent,
+  KjEmptyStateIconComponent,
+  KjSkeletonComponent,
+} from "@kouji-ui/components";
 
 interface FlatRow {
   node: FileNode;
@@ -31,25 +48,43 @@ function msgOf(e: unknown): string {
 @Component({
   selector: "app-file-tree",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, MenuPanelComponent, ScrollingModule],
+  imports: [
+    IconComponent,
+    MenuPanelComponent,
+    ScrollingModule,
+    KjButtonComponent,
+    KjDividerComponent,
+    KjBadgeComponent,
+    KjConfirmPopupComponent,
+    KjConfirmPopupTriggerComponent,
+    KjConfirmPopupContentComponent,
+    KjConfirmPopupMessageComponent,
+    KjConfirmPopupActionsComponent,
+    KjConfirmPopupActionComponent,
+    KjConfirmPopupCancelComponent,
+    KjEmptyStateComponent,
+    KjEmptyStateIconComponent,
+    KjEmptyStateDescriptionComponent,
+    KjSkeletonComponent,
+  ],
   template: `
     @let ag = agent();
     <!-- root-scoped context menu anywhere in the panel — header, empty space
          below the rows, or the empty/loading states. Row handlers stop
          propagation, so node-scoped menus still win on the rows themselves. -->
     <div (contextmenu)="onContext($event, null)" style="display:flex;flex-direction:column;min-height:0;flex:1">
-      <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair)">
+      <div class="pane-head tight">
         <app-icon name="folder" size="sm" [color]="project() ? project()!.color : 'var(--ui-ink)'" />
-        <span style="flex:1;min-width:0;font-size:var(--fs-sm);color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="ag.worktree">{{ wtName(ag.worktree) }}</span>
-        @if (loading()) { <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4);flex:none">scanning…</span> }
-        <button class="btn" (click)="refresh()" [disabled]="loading()" title="Rescan worktree" style="padding:var(--sp-1);border-radius:4px;flex:none"><app-icon name="refresh" size="sm" [px]="12" /></button>
+        <span class="trunc" style="flex:1;color:var(--ink-2)" [title]="ag.worktree">{{ wtName(ag.worktree) }}</span>
+        @if (loading()) { <span class="tnum" style="font-size:var(--fs-meta);color:var(--ink-4);flex:none">scanning…</span> }
+        <kj-button kjSize="icon" kjVariant="ghost" (click)="refresh()" [kjDisabled]="loading()" title="Rescan worktree"><app-icon size="sm" name="refresh" /></kj-button>
       </div>
 
       @if (rows().length) {
         <!-- virtualized: only visible rows are rendered. Data wins over the
              loading flag so background watcher scans never unmount the
              viewport (which would drop its scroll offset and flicker). -->
-        <cdk-virtual-scroll-viewport itemSize="24" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y">
+        <cdk-virtual-scroll-viewport [itemSize]="rowH()" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y">
           <div
             *cdkVirtualFor="let row of rows(); trackBy: trackPath"
             (click)="onRow(row.node)"
@@ -57,32 +92,36 @@ function msgOf(e: unknown): string {
             [attr.draggable]="row.node.isDir ? null : 'true'"
             (dragstart)="onDragStart($event, row.node)"
             (dragend)="dragSvc.end()"
-            [style.padding-left.px]="8 + row.depth * 13"
+            [style.padding-left.px]="indentFor(row)"
             style="height:var(--sp-9);display:flex;align-items:center;gap:var(--sp-3);cursor:pointer;padding-right:var(--sp-4);border-radius:5px"
           >
             @if (row.node.isDir) {
-              <app-icon [name]="isOpen(row.node) ? 'chevronD' : 'chevron'" size="sm" [px]="11" color="var(--ink-4)" />
-              <app-icon [name]="isOpen(row.node) ? 'folderOpen' : 'folder'" size="sm" [px]="13" [color]="row.node.ignored ? 'var(--ink-4)' : 'var(--ui-ink)'" />
+              <app-icon size="md" [name]="isOpen(row.node) ? 'chevronD' : 'chevron'" color="var(--ink-4)" />
+              <app-icon size="lg" [name]="isOpen(row.node) ? 'folderOpen' : 'folder'" [color]="row.node.ignored ? 'var(--ink-4)' : 'var(--ui-ink)'" />
             } @else {
-              <span style="width:11px;flex:none"></span>
-              <app-icon name="file" size="sm" [px]="12" [color]="stateOf(row.node.path) ? stateInk(stateOf(row.node.path)!) : 'var(--ink-4)'" />
+              <app-icon size="md" name="file" [color]="stateOf(row.node.path) ? stateInk(stateOf(row.node.path)!) : 'var(--ink-4)'" />
             }
             <span
               [style.color]="row.node.ignored ? 'var(--ink-4)' : row.node.isDir ? 'var(--ink-2)' : 'var(--ink-3)'"
               [style.opacity]="row.node.ignored ? 0.7 : 1"
-              style="font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              class="trunc"
             >{{ row.node.name }}</span>
             @if (row.node.ignored) {
-              <span class="chip" style="margin-left:auto;font-size:var(--fs-3xs);padding:0 var(--sp-2);color:var(--ink-4)">ignored</span>
+              <kj-badge style="margin-left:auto;font-size:var(--fs-badge);padding:0 var(--sp-2);color:var(--ink-4)">ignored</kj-badge>
             } @else if (!row.node.isDir && stateOf(row.node.path); as st) {
-              <span class="tnum" [style.color]="stateInk(st)" style="margin-left:auto;flex:none;font-size:var(--fs-2xs);font-weight:700;padding-left:var(--sp-3)">{{ st }}</span>
+              <span class="tnum" [style.color]="stateInk(st)" style="margin-left:auto;flex:none;font-size:var(--fs-meta);font-weight:var(--fw-strong);padding-left:var(--sp-3)">{{ st }}</span>
             }
           </div>
         </cdk-virtual-scroll-viewport>
       } @else if (loading()) {
-        <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">scanning worktree…</div>
+        <div aria-busy="true" style="padding:var(--sp-4) var(--sp-6)">
+          <kj-skeleton kjSkeletonShape="text-block" [kjLines]="6" />
+        </div>
       } @else {
-        <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">empty worktree</div>
+        <kj-empty-state kjSize="sm">
+          <kj-empty-state-icon><app-icon name="folder" size="lg" color="var(--hair-2)" /></kj-empty-state-icon>
+          <kj-empty-state-description>empty worktree</kj-empty-state-description>
+        </kj-empty-state>
       }
     </div>
 
@@ -91,23 +130,27 @@ function msgOf(e: unknown): string {
       <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
         @switch (menuMode()) {
           @case ("actions") {
-            <button class="menu-item" (click)="startInput('create-file')"><app-icon name="file" size="sm" [px]="12" />New File…</button>
-            <button class="menu-item" (click)="startInput('create-dir')"><app-icon name="folder" size="sm" [px]="12" />New Folder…</button>
+            <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="startInput('create-file')"><app-icon size="md" name="file" />New File…</kj-button>
+            <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="startInput('create-dir')"><app-icon size="md" name="folder" />New Folder…</kj-button>
             @if (m.node) {
-              <button class="menu-item" (click)="startRename()"><app-icon name="rename" size="sm" [px]="12" />Rename…</button>
-              <div class="menu-sep"></div>
-              <button class="menu-item" (click)="openExternal(m.node)"><app-icon name="ext" size="sm" [px]="12" />Open in Default App</button>
-              <button class="menu-item" (click)="reveal(m.node)"><app-icon name="folderOpen" size="sm" [px]="12" />{{ revealLabel }}</button>
-              <div class="menu-sep"></div>
-              <button class="menu-item danger" (click)="menuMode.set('delete')"><app-icon name="trash" size="sm" [px]="12" />Delete</button>
+              <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="startRename()"><app-icon size="md" name="rename" />Rename…</kj-button>
+              <kj-divider />
+              <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="openExternal(m.node)"><app-icon size="md" name="ext" />Open in Default App</kj-button>
+              <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="reveal(m.node)"><app-icon size="md" name="folderOpen" />{{ revealLabel }}</kj-button>
+              <kj-divider />
+              <kj-confirm-popup [kjDestructive]="true" (kjConfirmed)="confirmDelete()">
+                <kj-confirm-popup-trigger #delTrig="kjConfirmPopupTrigger">
+                  <kj-button kjVariant="danger" class="menu-item" [kjFullWidth]="true"><app-icon size="md" name="trash" />Delete</kj-button>
+                </kj-confirm-popup-trigger>
+                <kj-confirm-popup-content [kjFor]="delTrig">
+                  <kj-confirm-popup-message>Delete <b>{{ m.node.name }}</b>{{ m.node.isDir ? ' and its contents' : '' }}?</kj-confirm-popup-message>
+                  <kj-confirm-popup-actions>
+                    <kj-confirm-popup-cancel><kj-button kjVariant="outline">Cancel</kj-button></kj-confirm-popup-cancel>
+                    <kj-confirm-popup-action><kj-button kjVariant="danger">Delete</kj-button></kj-confirm-popup-action>
+                  </kj-confirm-popup-actions>
+                </kj-confirm-popup-content>
+              </kj-confirm-popup>
             }
-          }
-          @case ("delete") {
-            <div class="menu-label">Delete <b>{{ m.node?.name }}</b>{{ m.node?.isDir ? ' and its contents' : '' }}?</div>
-            <div class="menu-row">
-              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
-              <button class="btn ghost-hair danger" (click)="confirmDelete()">Delete</button>
-            </div>
           }
           @default {
             <div class="menu-label">{{ inputLabel() }}</div>
@@ -120,8 +163,8 @@ function msgOf(e: unknown): string {
               spellcheck="false"
             />
             <div class="menu-row">
-              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
-              <button class="btn primary" [disabled]="!nameInput().trim()" (click)="commit()">OK</button>
+              <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
+              <kj-button kjVariant="default" [kjDisabled]="!nameInput().trim()" (click)="commit()">OK</kj-button>
             </div>
           }
         }
@@ -132,6 +175,30 @@ function msgOf(e: unknown): string {
 export class FileTreeComponent {
   private work = inject(AgentWorkStore);
   private ui = inject(UiStore);
+
+  /**
+   * Row height, read from the same `--sp-9` token the row CSS uses. The
+   * viewport previously hardcoded `itemSize="24"`, so at any density other
+   * than regular the virtual scroller's arithmetic drifted from the real row
+   * height and rows misaligned as you scrolled. Recomputed per density switch.
+   */
+  readonly rowH = computed(() => {
+    void this.ui.tweaks().density;
+    return tokenPx("--sp-9", 24);
+  });
+
+  /** Per-depth indent. Tracks the chevron+icon width, hence a spacing token. */
+  readonly indentStep = computed(() => {
+    void this.ui.tweaks().density;
+    return tokenPx("--sp-6", 12);
+  });
+
+  /** Row indent; leaf rows take one extra step to clear the missing twisty. */
+  indentFor(row: FlatRow): number {
+    const step = this.indentStep();
+    return tokenPx("--sp-4", 8) + row.depth * step + (row.node.isDir ? 0 : step);
+  }
+
   private bridge = inject(BRIDGE);
   private edits = inject(EditsStore);
   private scroll = inject(ScrollStateService);
@@ -142,7 +209,7 @@ export class FileTreeComponent {
 
   // ----- context-menu file CRUD (B1.1) -----
   readonly menu = signal<{ x: number; y: number; node: FileNode | null } | null>(null);
-  readonly menuMode = signal<"actions" | "create-file" | "create-dir" | "rename" | "delete">("actions");
+  readonly menuMode = signal<"actions" | "create-file" | "create-dir" | "rename">("actions");
   readonly nameInput = signal("");
 
   readonly inputLabel = computed(() => {

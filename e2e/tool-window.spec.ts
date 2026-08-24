@@ -58,7 +58,7 @@ test("Ctrl+Shift+G toggles the dock on Git Graph; closed by default", async ({ p
   await expect(dock.getByRole("button", { name: "Branches" })).toBeVisible();
   await expect(dock.getByRole("button", { name: "Local History" })).toBeVisible();
   // the active tab carries the accent underline
-  await expect(dock.locator("button.tab", { hasText: "Git Graph" }).locator(".tab-line")).toHaveCount(1);
+  await expect(dock.locator(".kj-tab-strip button", { hasText: "Git Graph" }).locator(".tab-ind")).toHaveCount(1);
   // no agents yet → the graph panel asks for a worktree scope (no fake rows)
   await expect(dock.locator("app-commit-graph-panel")).toContainText("select a worktree");
 
@@ -87,14 +87,16 @@ test("graph panel: real scope, filter chrome, and the B4.1 path filter disabled"
   await expect(panel).toContainText("no commits on this branch yet");
   await expect(panel).toContainText("shift-click two commits");
 
+  // the B4.1 note lives on the <kj-input>'s wrapper, not on the native input
   const path = panel.getByPlaceholder("path…");
   await expect(path).toBeDisabled();
-  await expect(path).toHaveAttribute("title", /B4\.1/);
+  await expect(panel.getByTitle(/B4\.1/)).toBeVisible();
 
-  // the scope cluster shows the seeded project + worktree
+  // the scope cluster shows the seeded project + worktree — <app-select> is a
+  // kouji <kj-select> now, so the trigger LABEL is what's assertable (not a value)
   const dock = page.locator("app-tool-window");
-  await expect(dock.locator("select").first()).toHaveValue("p-e2e");
-  await expect(dock.getByTitle("Worktree the panel reads from")).toHaveValue("e2e-tw1");
+  await expect(dock.getByTitle("Project the panels read from")).toContainText("e2e-proj");
+  await expect(dock.getByTitle("Worktree the panel reads from")).toContainText("e2e-tw");
 });
 
 test("branches panel: live A3.2 chrome with honest no-backend states", async ({ page }) => {
@@ -109,25 +111,26 @@ test("branches panel: live A3.2 chrome with honest no-backend states", async ({ 
   await expect(panel).toContainText("dev");
   await expect(panel).toContainText("agent/e2e-tw");
   // the scoped worktree's branch is HEAD
-  await expect(panel.locator(".chip", { hasText: "HEAD" })).toHaveCount(1);
+  await expect(panel.locator("kj-badge", { hasText: "HEAD" })).toHaveCount(1);
 
   // remotes column: backend rejected → honest empty state, no fake remotes
   await expect(panel).toContainText("Remotes");
   await expect(panel).toContainText("no remotes configured");
 
   // live ops: New branch stays disabled until a name is typed, then enables
-  const newBranch = panel.locator("app-git-action-button", { hasText: "New branch" }).first();
-  await expect(newBranch.locator("button").first()).toBeDisabled();
+  const newBranch = panel.getByRole("button", { name: "New branch" }).first();
+  await expect(newBranch).toBeDisabled();
   await panel.getByPlaceholder("new branch name…").fill("feat-e2e");
-  await expect(newBranch.locator("button").first()).toBeEnabled();
+  await expect(newBranch).toBeEnabled();
 
   // row ops are enabled buttons now (invokes reject backend-side — no fake ok)
-  const checkout = panel.locator("button.br-op", { hasText: "Checkout" }).first();
+  const checkout = panel.getByRole("button", { name: "Checkout" }).first();
   await expect(checkout).toBeEnabled();
-  // Delete opens an inline confirm instead of acting immediately
-  await panel.locator("button.br-op", { hasText: "Delete" }).first().click();
-  await expect(panel).toContainText(/delete .+\?/);
-  await panel.locator("button.br-op", { hasText: "Cancel" }).first().click();
+  // Delete opens a <kj-confirm-popup> — its content is portalled out of the
+  // panel, so the confirm chrome is asserted at page scope
+  await panel.getByRole("button", { name: "Delete" }).first().click();
+  await expect(page.getByText(/delete .+\?/)).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).first().click();
 });
 
 test("local history panel: live B4.4 chrome with an honest empty timeline", async ({ page }) => {

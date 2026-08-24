@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from "@angular/core";
-import { Agent, AgentFile, Commit, Project } from "../models";
+import { ChangeDetectionStrategy, Component, computed, inject, input, linkedSignal } from "@angular/core";
+import { Agent, AgentFile, Project } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { ConflictStore } from "../agents/conflict.store";
@@ -11,15 +11,40 @@ import { fileDir, fileName } from "../utils";
 import { CommitFeedComponent } from "./commit-feed.component";
 import { AgentCommitHistoryComponent } from "./agent-commit-history.component";
 import { UiStore } from "../ui/ui.store";
+import {
+  KjAlertActionsComponent,
+  KjAlertComponent,
+  KjAlertDescriptionComponent,
+  KjAlertIconComponent,
+  KjAlertTitleComponent,
+  KjBadgeComponent,
+  KjButtonComponent,
+  KjCheckboxComponent,
+  KjInputComponent,
+} from "@kouji-ui/components";
 
 @Component({
   selector: "app-git-tab",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, CommitFeedComponent, AgentCommitHistoryComponent, GitActionButtonComponent],
+  imports: [
+    IconComponent,
+    CommitFeedComponent,
+    AgentCommitHistoryComponent,
+    GitActionButtonComponent,
+    KjButtonComponent,
+    KjBadgeComponent,
+    KjAlertComponent,
+    KjAlertIconComponent,
+    KjAlertTitleComponent,
+    KjAlertDescriptionComponent,
+    KjAlertActionsComponent,
+    KjCheckboxComponent,
+    KjInputComponent,
+  ],
   template: `
     @if (!agent()) {
       <div class="scroll-y" style="flex:1;padding:var(--sp-4) 0">
-        <div class="up" style="font-size:var(--fs-2xs);color:var(--ink-3);padding:var(--sp-3) var(--sp-6)">Commit feed · all worktrees</div>
+        <div class="up" style="color:var(--ink-3);padding:var(--sp-3) var(--sp-6)">Commit feed · all worktrees</div>
         <app-commit-feed [commits]="projects.commits()" />
       </div>
     } @else {
@@ -29,9 +54,9 @@ import { UiStore } from "../ui/ui.store";
         <div style="padding:var(--sp-5) var(--sp-6);border-bottom:1px solid var(--hair)">
           <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-2);min-width:0">
             <app-icon name="branch" size="sm" color="var(--ink-3)" />
-            <span [title]="ag.branch" style="font-size:var(--fs-sm);color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch }}</span>
+            <span class="trunc" [title]="ag.branch" style="color:var(--ink)">{{ ag.branch }}</span>
           </div>
-          <div class="tnum" style="font-size:var(--fs-xs);color:var(--ink-4);display:flex;gap:var(--sp-4)">
+          <div class="tnum" style="font-size:var(--fs-meta);color:var(--ink-4);display:flex;gap:var(--sp-4)">
             <span>base {{ ag.base }}</span><span>·</span>
             <span>{{ ag.commits }} ahead</span><span>·</span>
             <span style="color:var(--code-add-ink)">+{{ totAdd() }}</span>
@@ -43,82 +68,72 @@ import { UiStore } from "../ui/ui.store";
              the session opened by a conflicted native merge — jump back into the
              3-way resolve view from here -->
         @if (conflictSession(); as sess) {
-          <div style="margin:var(--sp-5) var(--sp-6);border:1px solid color-mix(in oklch, var(--st-blocked), transparent 55%);border-radius:var(--r-md);overflow:hidden;background:color-mix(in oklch, var(--st-blocked), transparent 92%)">
-            <div style="padding:var(--sp-5)">
-              <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3)">
-                <app-icon name="merge" size="sm" color="var(--st-blocked)" />
-                <span style="font-size:var(--fs-sm);font-weight:600;color:var(--ink)">Merge conflicts</span>
-                <span class="chip tnum" style="margin-left:auto;font-size:var(--fs-3xs);padding:0 var(--sp-3);color:var(--st-blocked);border-color:color-mix(in oklch, var(--st-blocked), transparent 55%)">{{ sess.files.length }} files</span>
-              </div>
-              <div style="font-size:var(--fs-xs);color:var(--ink-3);line-height:1.5;margin-bottom:var(--sp-4);text-wrap:pretty">
-                Merge {{ sess.theirs }} → {{ sess.ours }} stopped —
-                <b style="color:var(--st-blocked)">{{ unresolvedCount() }} unresolved file{{ unresolvedCount() === 1 ? "" : "s" }}</b>
-                need resolving before this branch can land.
-              </div>
-              <button class="btn ghost-hair" (click)="openConflicts(ag.id)"
-                style="width:100%;justify-content:center;border-color:color-mix(in oklch, var(--st-blocked), transparent 65%);color:var(--st-blocked)">
+          <kj-alert kjVariant="error" [kjAlertStatic]="true" style="margin:var(--sp-5) var(--sp-6)">
+            <kj-alert-icon><app-icon name="merge" size="sm" color="var(--st-blocked)" /></kj-alert-icon>
+            <kj-alert-title>Merge conflicts <kj-badge class="tnum" style="color:var(--st-blocked);border-color:color-mix(in oklch, var(--st-blocked), transparent 55%)">{{ sess.files.length }} files</kj-badge></kj-alert-title>
+            <kj-alert-description>
+              Merge {{ sess.theirs }} → {{ sess.ours }} stopped —
+              <b style="color:var(--st-blocked)">{{ unresolvedCount() }} unresolved file{{ unresolvedCount() === 1 ? "" : "s" }}</b>
+              need resolving before this branch can land.
+            </kj-alert-description>
+            <kj-alert-actions>
+              <kj-button kjVariant="outline" (click)="openConflicts(ag.id)">
                 <app-icon name="diff" size="sm" />Resolve in the Diff tab →
-              </button>
-            </div>
-          </div>
+              </kj-button>
+            </kj-alert-actions>
+          </kj-alert>
         }
 
         <!-- changed files (selectable) -->
         <div style="padding:var(--sp-5) var(--sp-6) var(--sp-3);display:flex;align-items:center;gap:var(--sp-3)">
           @if (changes().length) {
-            <button (click)="toggleAll()" [title]="allSelected() ? 'Deselect all' : 'Select all'"
-              [style.border]="'1px solid ' + (allSelected() ? 'var(--ui-focus)' : 'var(--hair-2)')"
-              [style.background]="allSelected() ? 'var(--ui-fill)' : 'transparent'"
-              style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:4px;display:grid;place-items:center;cursor:pointer;padding:0">
-              @if (allSelected()) { <app-icon name="check" size="sm" [px]="10" color="var(--ui-on-fill)" /> }
-            </button>
+            <kj-checkbox size="sm" [checked]="allSelected()" (checkedChange)="toggleAll()" [title]="allSelected() ? 'Deselect all' : 'Select all'" style="flex:none" />
           }
-          <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">Changes</span>
-          <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4)">{{ changes().length }}</span>
-          @if (selected().size) { <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ui-ink)">{{ selected().size }} selected</span> }
-          @if (changesLoading()) { <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4)">· scanning…</span> }
+          <span class="up" style="color:var(--ink-3)">Changes</span>
+          <span class="tnum" style="font-size:var(--fs-meta);color:var(--ink-4)">{{ changes().length }}</span>
+          @if (selected().size) { <span class="tnum" style="font-size:var(--fs-meta);color:var(--ui-ink)">{{ selected().size }} selected</span> }
+          @if (changesLoading()) { <span class="tnum" style="font-size:var(--fs-meta);color:var(--ink-4)">· scanning…</span> }
         </div>
 
         <!-- capped + scrollable: however long the list, the commit input and
              the git action buttons below stay on screen -->
         <div class="scroll-y gt-changes">
         @if (changesLoading()) {
-          <div style="padding:var(--sp-2) var(--sp-6) var(--sp-4);font-size:var(--fs-xs);color:var(--ink-4)">scanning worktree…</div>
+          <div style="padding:var(--sp-2) var(--sp-6) var(--sp-4);font-size:var(--fs-meta);color:var(--ink-4)">scanning worktree…</div>
         } @else if (changes().length) {
           @for (f of changes(); track f.path) {
             <div
               (click)="toggle(f.path)"
               [style.background]="isSelected(f.path) ? 'var(--panel-2)' : 'transparent'"
-              style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-2) var(--sp-6);font-size:var(--fs-sm);cursor:pointer"
+              style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-2) var(--sp-6);cursor:pointer"
             >
               <span
                 [style.border]="'1px solid ' + (isSelected(f.path) ? 'var(--ui-focus)' : 'var(--hair-2)')"
                 [style.background]="isSelected(f.path) ? 'var(--ui-fill)' : 'transparent'"
                 style="flex:none;width:var(--sp-6);height:var(--sp-6);border-radius:3px;display:grid;place-items:center"
-              >@if (isSelected(f.path)) { <app-icon name="check" size="sm" [px]="9" color="var(--ui-on-fill)" /> }</span>
-              <span [style.color]="stateInk(f.state)" style="flex:none;width:12px;text-align:center;font-size:var(--fs-2xs);font-weight:700">{{ f.state }}</span>
-              <span [title]="f.path" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              >@if (isSelected(f.path)) { <app-icon size="xs" name="check" color="var(--ui-on-fill)" /> }</span>
+              <span [style.color]="stateInk(f.state)" style="flex:none;width:12px;text-align:center;font-size:var(--fs-meta);font-weight:var(--fw-strong)">{{ f.state }}</span>
+              <span class="trunc" [title]="f.path" style="flex:1">
                 <span style="color:var(--ink-4)">{{ fdir(f.path) }}</span>{{ fname(f.path) }}
               </span>
-              <span class="tnum" style="flex:none;font-size:var(--fs-2xs);display:flex;gap:var(--sp-2)">
+              <span class="tnum" style="flex:none;font-size:var(--fs-meta);display:flex;gap:var(--sp-2)">
                 <span style="color:var(--code-add-ink)">+{{ f.add }}</span>
                 @if (f.del > 0) { <span style="color:var(--code-del-ink)">−{{ f.del }}</span> }
               </span>
             </div>
           }
         } @else {
-          <div style="padding:var(--sp-2) var(--sp-6) var(--sp-4);font-size:var(--fs-xs);color:var(--ink-4)">clean — no working changes</div>
+          <div style="padding:var(--sp-2) var(--sp-6) var(--sp-4);font-size:var(--fs-meta);color:var(--ink-4)">clean — no working changes</div>
         }
         </div>
 
         <!-- actions -->
         <div style="padding:var(--sp-6);display:grid;gap:var(--sp-3)">
           @if (changes().length) {
-            <input
+            <kj-input
               [value]="commitMsg()"
               (input)="commitMsg.set($any($event.target).value)"
               placeholder="commit message…"
-              style="background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:var(--sp-4) var(--sp-5);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);outline:none"
             />
           }
           <!-- Commit: dual-path split button — primary = native backend commit,
@@ -171,9 +186,9 @@ import { UiStore } from "../ui/ui.store";
             (ai)="agentActions.aiAction(ag.id, 'merge')"
           />
 
-          <button class="btn ghost-hair" [disabled]="changes().length === 0" (click)="discard(ag.id)" style="justify-content:flex-start;color:var(--st-blocked)">
+          <kj-button kjVariant="danger" [kjFullWidth]="true" [kjDisabled]="changes().length === 0" (click)="discard(ag.id)">
             <app-icon name="discard" size="sm" />Discard {{ selected().size ? selected().size + ' selected' : 'all' }}
-          </button>
+          </kj-button>
         </div>
 
         <!-- this branch's commits — expandable per-commit view -->
@@ -259,33 +274,19 @@ export class GitTabComponent {
     diffBytes: this.diffBytes(),
     model: this.agent()?.model,
   }));
-  // this branch's commits, read lazily from the agent's worktree (first page on
-  // agent open, paged onward via the Load more button).
-  readonly commitsEntry = computed(() => {
-    const ag = this.agent();
-    return ag ? this.work.commitsFor(ag.id) : null;
+  // selection + commit message — reset whenever the scoped agent changes
+  readonly selected = linkedSignal<string | null, Set<string>>({
+    source: () => this.agent()?.id ?? null,
+    computation: () => new Set<string>(),
   });
-  readonly agentCommits = computed<Commit[]>(() => this.commitsEntry()?.data ?? []);
-
-  readonly selected = signal<Set<string>>(new Set());
-  readonly commitMsg = signal("");
+  readonly commitMsg = linkedSignal<string | null, string>({
+    source: () => this.agent()?.id ?? null,
+    computation: () => "",
+  });
   readonly allSelected = computed(() => {
     const ch = this.changes();
     return ch.length > 0 && ch.every((f) => this.selected().has(f.path));
   });
-
-  private lastId: string | null = null;
-  constructor() {
-    // clear the selection when switching agents
-    effect(() => {
-      const id = this.agent()?.id ?? null;
-      if (id !== this.lastId) {
-        this.lastId = id;
-        this.selected.set(new Set());
-        this.commitMsg.set("");
-      }
-    });
-  }
 
   isSelected(path: string): boolean {
     return this.selected().has(path);

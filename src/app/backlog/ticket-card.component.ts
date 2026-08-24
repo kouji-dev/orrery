@@ -15,6 +15,7 @@ import { AgentStripComponent } from "./agent-strip.component";
 import { TagChipComponent } from "./tag-chip.component";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
+import { KjButtonComponent } from "@kouji-ui/components";
 
 /** Strip HTML tags and collapse whitespace — for the notes preview. */
 function plainText(html: string | null | undefined): string {
@@ -29,7 +30,7 @@ function plainText(html: string | null | undefined): string {
 @Component({
   selector: "app-ticket-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ToolBadgeComponent, AgentStripComponent, TagChipComponent],
+  imports: [IconComponent, ToolBadgeComponent, AgentStripComponent, TagChipComponent, KjButtonComponent],
   template: `
     @let tk = ticket();
     @let st = tk.status;
@@ -54,20 +55,19 @@ function plainText(html: string | null | undefined): string {
       <div style="display:flex;align-items:flex-start;gap:var(--sp-4)">
         @if (st === 'done') {
           <span style="flex:none;width:var(--sp-7);height:var(--sp-7);margin-top:1px;border-radius:50%;display:grid;place-items:center;background:color-mix(in oklch,var(--st-done),transparent 82%);border:1px solid color-mix(in oklch,var(--st-done),transparent 55%)">
-            <app-icon name="check" size="sm" [px]="11" color="var(--st-done)" />
+            <app-icon size="md" name="check" color="var(--st-done)" />
           </span>
         }
-        <span
-          class="disp"
-          [style.color]="st === 'done' ? 'var(--ink-2)' : 'var(--ink)'"
-          style="font-size:var(--fs-md);font-weight:600;line-height:1.3;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"
-        >{{ tk.title }}</span>
-        <span class="tnum" style="flex:none;font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">#{{ shortId(tk.id) }}</span>
+        <h3
+          [style.color]="st === 'done' ? 'var(--ink-2)' : null"
+          style="line-height:1.3;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"
+        >{{ tk.title }}</h3>
+        <span class="tnum" style="flex:none;font-size:var(--fs-meta);color:var(--ink-4);margin-top:var(--sp-1)">#{{ shortId(tk.id) }}</span>
       </div>
 
       <!-- notes preview (todo + inprogress only) -->
       @if (st !== 'done') {
-        <p style="font-size:var(--fs-ui);color:var(--ink-2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
+        <p style="color:var(--ink-2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
           {{ notes() }}
         </p>
       }
@@ -93,7 +93,7 @@ function plainText(html: string | null | undefined): string {
         } @else {
           <div
             (click)="dispatch($event, tk)"
-            style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-radius:var(--r-md);cursor:pointer;border:1px dashed var(--ui-line);color:var(--ui-ink);font-size:var(--fs-sm)"
+            style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-radius:var(--r-md);cursor:pointer;border:1px dashed var(--ui-line);color:var(--ui-ink)"
           >
             <app-icon name="bolt" size="sm" />No agent yet — dispatch one
           </div>
@@ -103,44 +103,46 @@ function plainText(html: string | null | undefined): string {
       <!-- bottom row -->
       @if (st === 'todo') {
         <div style="display:flex;align-items:center;gap:var(--sp-4)">
-          <span style="display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-sm);min-width:0;overflow:hidden" [style.color]="chipColor()">
-            <app-icon [name]="chipIcon()" size="sm" [px]="12" style="flex:none" />
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ chipName() }}</span>
+          <span style="display:inline-flex;align-items:center;gap:var(--sp-2);min-width:0;overflow:hidden" [style.color]="chipColor()">
+            <app-icon size="md" [name]="chipIcon()" style="flex:none" />
+            <span class="trunc">{{ chipName() }}</span>
           </span>
-          <button
+          <!-- card actions ride the compact xs step, like the orchestrator
+               cards; the card's hover promotes it from accent-tinted outline to
+               the filled primary -->
+          <kj-button
+            [kjVariant]="hovered() ? 'default' : 'outline'"
+            class="kj-push"
             (click)="dispatch($event, tk)"
-            [class]="'btn ' + (hovered() ? 'primary' : 'ghost-hair')"
-            [style.color]="hovered() ? null : 'var(--ui-ink)'"
-            [style.border-color]="hovered() ? null : 'var(--ui-line)'"
-            style="margin-left:auto;flex:none;padding:var(--sp-2) var(--sp-5);font-size:var(--fs-sm)"
+            [style.--kj-button-fg]="hovered() ? null : 'var(--ui-ink)'"
+            [style.--kj-button-border-color]="hovered() ? null : 'var(--ui-line)'"
+            style="flex:none"
           >
             <app-icon name="bolt" size="sm" />Dispatch
-          </button>
+          </kj-button>
         </div>
       }
 
       @if (st === 'inprogress') {
-        <div style="display:flex;align-items:center">
-          <span style="display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-sm);min-width:0;overflow:hidden" [style.color]="chipColor()">
-            <app-icon [name]="chipIcon()" size="sm" [px]="12" style="flex:none" />
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ chipName() }}</span>
-          </span>
-        </div>
+        <span style="display:inline-flex;align-items:center;gap:var(--sp-2);min-width:0;overflow:hidden" [style.color]="chipColor()">
+          <app-icon size="md" [name]="chipIcon()" style="flex:none" />
+          <span class="trunc">{{ chipName() }}</span>
+        </span>
       }
 
       @if (st === 'done') {
-        <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-sm);color:var(--ink-3)">
-          <span style="display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-sm);min-width:0;overflow:hidden" [style.color]="'var(--ink-3)'">
-            <app-icon [name]="chipIcon()" size="sm" [px]="12" style="flex:none" />
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ chipName() }}</span>
+        <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-meta);color:var(--ink-3)">
+          <span style="display:inline-flex;align-items:center;gap:var(--sp-2);min-width:0;overflow:hidden" [style.color]="'var(--ink-3)'">
+            <app-icon size="md" [name]="chipIcon()" style="flex:none" />
+            <span class="trunc">{{ chipName() }}</span>
           </span>
           @if (ag) {
             <span style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3);flex:none">
               <app-tool-badge [tool]="ag.tool" [size]="14" />
-              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:92px">{{ ag.name }}</span>
+              <span class="trunc" style="max-width: round(calc(92px * var(--density)), 1px)">{{ ag.name }}</span>
               <span style="color:var(--ink-4)">·</span>
               <span style="display:flex;align-items:center;gap:var(--sp-1);color:var(--st-done)">
-                <app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}
+                <app-icon size="md" name="commit" />{{ ag.commits }}
               </span>
             </span>
           }

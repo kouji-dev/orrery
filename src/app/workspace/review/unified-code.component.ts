@@ -1,12 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   effect,
   ElementRef,
   EventEmitter,
   inject,
   Input,
-  OnDestroy,
   Output,
   signal,
   viewChild,
@@ -17,7 +17,14 @@ import { ReviewStore } from "../../agents/review.store";
 import { EditorNavService } from "../../commands/editor-nav.service";
 import { UiStore } from "../../ui/ui.store";
 import { registerEditor } from "../editor-cap";
-import { applyMonacoTheme, loadMonaco, MonacoApi, monacoLanguage } from "../monaco-loader";
+import {
+  applyMonacoDensity,
+  applyMonacoTheme,
+  loadMonaco,
+  MonacoApi,
+  monacoDensityOptions,
+  monacoLanguage,
+} from "../monaco-loader";
 import { ScrollStateService } from "../scroll-state.service";
 import { DiffStats, lineChangeStats } from "./chunk-stats";
 import { attachReviewComments, MonacoReviewApi } from "./review-comments.monaco";
@@ -38,42 +45,11 @@ import { attachReviewComments, MonacoReviewApi } from "./review-comments.monaco"
 @Component({
   selector: "app-unified-code",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: true,
+  // The pane fill (app-unified-code), .code-host and the Monaco surface +
+  // diff-tint recolour are all shared recipes in styles.css.
   template: `<div #host class="code-host"></div>`,
-  styles: [
-    `
-      /* fill the pane so the editor's own scroller gets ALL available height */
-      :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        height: 100%;
-        min-height: 0;
-      }
-      .code-host {
-        flex: 1;
-        min-height: 0;
-        overflow: hidden;
-        font-size: var(--fs-ui);
-      }
-      :host ::ng-deep .monaco-editor,
-      :host ::ng-deep .monaco-editor .margin,
-      :host ::ng-deep .monaco-editor-background {
-        background-color: var(--bg) !important;
-      }
-      /* flat row tints matching the app's diff palette */
-      :host ::ng-deep .monaco-editor .line-insert,
-      :host ::ng-deep .monaco-editor .char-insert {
-        background-color: var(--code-add-bg) !important;
-      }
-      :host ::ng-deep .monaco-editor .line-delete,
-      :host ::ng-deep .monaco-editor .char-delete {
-        background-color: var(--code-del-bg) !important;
-      }
-    `,
-  ],
 })
-export class UnifiedCodeComponent implements OnDestroy {
+export class UnifiedCodeComponent {
   private readonly review = inject(ReviewStore);
   private readonly ui = inject(UiStore);
   private readonly editorNav = inject(EditorNavService);
@@ -119,6 +95,14 @@ export class UnifiedCodeComponent implements OnDestroy {
       void this.render(this.oldText(), this.newText(), this.view(), this.lang());
     });
     // Theme switch restyles every live Monaco editor in place.
+    // Density switch → push the new code metrics into whichever editor is live.
+    // This surface swaps between a plain and a diff editor, so both are nudged;
+    // applyMonacoDensity is a no-op on the null one.
+    effect(() => {
+      void this.ui.tweaks().density;
+      applyMonacoDensity(this.editor);
+      applyMonacoDensity(this.diffEditor);
+    });
     effect(() => {
       const theme = this.ui.tweaks().theme;
       if (this.monaco) applyMonacoTheme(this.monaco, theme);
@@ -150,10 +134,7 @@ export class UnifiedCodeComponent implements OnDestroy {
       editor.focus();
       this.editorNav.consume(t);
     });
-  }
-
-  ngOnDestroy(): void {
-    this.teardown();
+    inject(DestroyRef).onDestroy(() => this.teardown());
   }
 
   /** The editor review comments + nav act on: modified side (diff) or the only one. */
@@ -218,7 +199,7 @@ export class UnifiedCodeComponent implements OnDestroy {
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         automaticLayout: true,
-        fontSize: parseFloat(getComputedStyle(el).fontSize) || 12,
+        ...monacoDensityOptions(),
         fixedOverflowWidgets: true,
         renderLineHighlight: "none",
         stickyScroll: { enabled: false },

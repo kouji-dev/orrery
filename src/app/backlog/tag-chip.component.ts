@@ -6,9 +6,12 @@ import {
   signal,
 } from "@angular/core";
 import { IconComponent } from "../shared/icon.component";
+import { KjTagComponent, KjTagRemoveComponent } from "@kouji-ui/components";
 
 /**
- * A single tag chip — snake_case label with a tag glyph. Three modes (composable):
+ * A single tag chip — snake_case label with a tag glyph, built on kouji's
+ * `<kj-tag>` (+ `<kj-tag-remove>` for the removable shape, which also brings
+ * the Delete-key remove affordance). Three modes (composable):
  *  - `clickable` → the chip toggles (emits `toggle`); used as a filter control.
  *  - `removable` → shows an × button (emits `remove`); used in editable lists.
  *  - `active`/`dim` → visual state (selected in a filter / muted).
@@ -16,12 +19,14 @@ import { IconComponent } from "../shared/icon.component";
 @Component({
   selector: "app-tag",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, KjTagComponent, KjTagRemoveComponent],
   template: `
     @let on = active();
     @let h = hovered() && clickable();
-    <span
+    <kj-tag
       [title]="name()"
+      [kjTagLabel]="name()"
+      (kjTagRemoved)="remove.emit(name())"
       (click)="onClick($event)"
       (mouseenter)="hovered.set(true)"
       (mouseleave)="hovered.set(false)"
@@ -30,22 +35,22 @@ import { IconComponent } from "../shared/icon.component";
       [style.color]="on ? 'var(--ui-ink)' : (dim() ? 'var(--ink-3)' : 'var(--ink-2)')"
       [style.border]="'1px solid ' + (on ? 'var(--ui-line)' : (h ? 'var(--hair-2)' : 'var(--hair)'))"
       [style.background]="on ? 'var(--ui-sel)' : (h ? 'var(--panel-3)' : 'var(--panel-2)')"
-      style="display:inline-flex;align-items:center;gap:var(--sp-2);flex:none;max-width:170px;font-family:var(--font-mono);font-size:var(--fs-xs);line-height:1;letter-spacing:0.01em;border-radius:999px;white-space:nowrap;user-select:none;transition:background .12s,border-color .12s,color .12s"
+      class="chip"
+      style="flex:none;max-width: round(calc(170px * var(--density)), 1px);font-family:var(--font-mono);line-height:1;letter-spacing:0.01em;user-select:none;transition:background .12s,border-color .12s,color .12s"
     >
-      <app-icon name="tag" size="sm" [px]="10" style="flex:none;opacity:0.65" />
-      <span style="overflow:hidden;text-overflow:ellipsis">{{ name() }}</span>
+      <app-icon size="sm" name="tag" style="flex:none;opacity:0.65" />
+      <span class="trunc">{{ name() }}</span>
       @if (removable()) {
-        <button
-          type="button"
+        <kj-tag-remove
           class="tag-x"
-          [attr.aria-label]="'Remove ' + name()"
-          (click)="onRemove($event)"
-          style="display:grid;place-items:center;border:none;background:transparent;cursor:pointer;color:var(--ink-4);padding:0;width:var(--sp-6);height:var(--sp-6);border-radius:4px;flex:none"
+          [kjTagRemoveLabel]="'Remove ' + name()"
+          (click)="$event.stopPropagation()"
+          style="display:grid;place-items:center;cursor:pointer;color:var(--ink-4);padding:0;width:var(--sp-6);height:var(--sp-6);border-radius:4px;flex:none"
         >
-          <app-icon name="x" size="sm" [px]="10" />
-        </button>
+          <app-icon size="sm" name="x" />
+        </kj-tag-remove>
       }
-    </span>
+    </kj-tag>
   `,
   styles: [`.tag-x:hover { color: var(--ink) !important; }`],
 })
@@ -65,10 +70,5 @@ export class TagChipComponent {
     if (!this.clickable()) return;
     e.stopPropagation();
     this.toggle.emit(this.name());
-  }
-
-  onRemove(e: MouseEvent) {
-    e.stopPropagation();
-    this.remove.emit(this.name());
   }
 }

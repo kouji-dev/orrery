@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, Type, untracked } from '@angular/core';
+import { KjDialogRef, KjDialogService } from '@kouji-ui/components';
 import { InterestService } from '../agents/interest.service';
 import { CommandRegistryService } from '../commands/command-registry.service';
 import { CommandOverlaysComponent } from '../commands/overlays.component';
@@ -42,12 +43,7 @@ declare const ngDevMode: boolean | undefined;
     TicketPageComponent,
     RightPanelComponent,
     StatusBarComponent,
-    SpawnModalComponent,
-    AddProjectModalComponent,
-    DeleteWorktreeModalComponent,
-    SettingsModalComponent,
     UpdateToastComponent,
-    WhatsNewModalComponent,
     ContextMenuComponent,
     TweaksPanelComponent,
     DevPanelComponent,
@@ -93,19 +89,8 @@ declare const ngDevMode: boolean | undefined;
       <app-status-bar />
     </div>
 
-    @if (ui.spawning()) {
-      <app-spawn-modal />
-    }
-    @if (ui.addingProject()) {
-      <app-add-project-modal />
-    }
-    @if (ui.deletingWorktree(); as deletingId) {
-      <app-delete-worktree-modal [agentId]="deletingId" />
-    }
-    @if (settings.open()) {
-      <app-settings-modal />
-    }
-    <app-whats-new-modal />
+    <!-- The five modals are service-launched (see bindModal) — they mount into
+         kj's body-level overlay root, not here. -->
     <app-update-toast />
     <app-command-overlays />
     <app-context-menu />
@@ -155,8 +140,18 @@ export class ShellComponent {
   readonly ui = inject(UiStore);
   readonly settings = inject(SettingsStore);
   readonly toolWindow = inject(ToolWindowStore);
+  private readonly dialog = inject(KjDialogService);
 
   constructor() {
+    // Modals run on kj's dialog service — it owns the scrim, the focus trap,
+    // the scroll lock, Esc and outside-click. The stores stay the single source
+    // of truth for what's open (every existing call site keeps working).
+    this.bindModal(() => this.ui.spawning(), SpawnModalComponent);
+    this.bindModal(() => this.ui.addingProject(), AddProjectModalComponent);
+    this.bindModal(() => this.ui.deletingWorktree(), DeleteWorktreeModalComponent);
+    this.bindModal(() => this.settings.open(), SettingsModalComponent);
+    this.bindModal(() => this.settings.whatsNewOpen(), WhatsNewModalComponent);
+
     // Route OS file drops (absolute paths) into the terminal / prompt under the
     // drop point. Started here — the shell is the app's root UI surface.
     inject(FileDropService).start();
@@ -171,5 +166,33 @@ export class ShellComponent {
     // check happens once on the splash screen, so without this an instance that
     // booted before a release shipped would only notice it after a restart.
     inject(UpdateWatcherService).start();
+  }
+
+  /**
+   * Mirrors a store flag onto a KjDialog. Opening is one-way from the store;
+   * closing works from either side — a store close dismisses the overlay here,
+   * and an overlay close (Esc, outside-click) destroys the modal component,
+   * whose own onDestroy clears the flag. So the two can never drift.
+   */
+  private bindModal<T>(open: () => unknown, component: Type<T>): void {
+    let ref: KjDialogRef<T> | null = null;
+    effect(() => {
+      // Read the flag INSIDE the reactive context so the effect tracks it...
+      const shouldBeOpen = !!open();
+      // ...but open/close OUTSIDE it. Constructing the dialog component runs
+      // its constructor, and every one of these modals calls effect() there —
+      // which throws NG0602 ("effect() cannot be called from within a reactive
+      // context") when it happens inside this effect. The dialog then mounted
+      // with none of its own effects wired, so it rendered as an empty shell.
+      untracked(() => {
+        if (shouldBeOpen) {
+          ref ??= this.dialog.open<T>(component);
+        } else if (ref) {
+          const closing = ref;
+          ref = null;
+          closing.close();
+        }
+      });
+    });
   }
 }

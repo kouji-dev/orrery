@@ -12,6 +12,7 @@ import { AgentsStore } from "../stores/agents.store";
 import { NotificationStore } from "../stores/notifications.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
+import { KjBadgeComponent, KjButtonComponent, KjCheckboxComponent, KjRadioComponent, KjRadioGroupComponent, KjTextareaComponent } from "@kouji-ui/components";
 
 /**
  * A multi-step question answerer for an AskUserQuestion-style permission prompt,
@@ -40,74 +41,10 @@ import { IconComponent } from "../shared/icon.component";
 @Component({
   selector: "app-question-stepper",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, KjBadgeComponent, KjButtonComponent, KjCheckboxComponent, KjRadioComponent, KjRadioGroupComponent, KjTextareaComponent],
   styles: [
     `
-      .opt {
-        display: flex;
-        align-items: flex-start;
-        gap: var(--sp-3);
-        width: 100%;
-        font-family: var(--font-ui);
-        font-size: var(--fs-xs);
-        line-height: 1.4;
-        padding: var(--sp-3) var(--sp-4);
-        border-radius: var(--r-sm, 5px);
-        border: 1px solid var(--hair);
-        background: var(--panel);
-        color: var(--ink-3);
-        cursor: pointer;
-        text-align: left;
-        transition:
-          border-color 0.12s ease,
-          color 0.12s ease,
-          background 0.12s ease;
-      }
-      .opt:hover {
-        border-color: var(--ui-focus);
-        color: var(--ink-2);
-        background: var(--ui-sel);
-      }
-      .opt.sel {
-        border-color: var(--ui-focus);
-        color: var(--ink);
-        background: var(--ui-sel);
-      }
-      /* the radio/checkbox mark — square for multi, round for single */
-      .mark {
-        flex: none;
-        width: 13px;
-        height: var(--sp-6);
-        margin-top: 1px;
-        border: 1px solid var(--ink-4);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--ui-ink);
-      }
-      .mark.box {
-        border-radius: 3px;
-      }
-      .opt.sel .mark {
-        border-color: var(--ui-focus);
-      }
-      .otherText {
-        width: 100%;
-        margin-top: var(--sp-3);
-        box-sizing: border-box;
-        resize: none;
-        overflow: hidden;
-        font-family: var(--font-ui);
-        font-size: var(--fs-xs);
-        line-height: 1.5;
-        padding: var(--sp-3) var(--sp-4);
-        border-radius: var(--r-sm, 5px);
-        border: 1px solid var(--ui-focus);
-        background: var(--panel-2, var(--panel));
-        color: var(--ink);
-        outline: none;
-      }
+      /* the option chip is the shared .opt / .opt:hover / .opt.sel recipe */
       .nav {
         display: flex;
         align-items: center;
@@ -115,22 +52,9 @@ import { IconComponent } from "../shared/icon.component";
         margin-top: var(--sp-5);
         flex-wrap: wrap;
       }
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--sp-2);
-        font-size: var(--fs-3xs);
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        padding: 1px var(--sp-3);
-        border-radius: 999px;
-        border: 1px solid var(--ui-sel-2);
-        color: var(--ui-ink);
-        background: var(--ui-sel);
-      }
       .hint {
         margin-top: var(--sp-3);
-        font-size: var(--fs-2xs);
+        font-size: var(--fs-meta);
         line-height: 1.4;
         color: var(--ink-4);
       }
@@ -144,38 +68,47 @@ import { IconComponent } from "../shared/icon.component";
       <div (click)="$event.stopPropagation()" style="margin-top:var(--sp-4)">
         <!-- progress + header -->
         <div style="display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap">
-          <span class="up tnum" style="font-size:var(--fs-3xs);letter-spacing:0.06em;color:var(--ink-4)"
+          <span class="up tnum" style="color:var(--ink-4)"
             >Question {{ i + 1 }} of {{ qs.length }}</span
           >
           @if (q.header) {
-            <span class="up" style="font-size:var(--fs-3xs);letter-spacing:0.06em;color:var(--ui-ink)">{{ q.header }}</span>
+            <span class="up" style="color:var(--ui-ink)">{{ q.header }}</span>
           }
           @if (q.multiSelect) {
-            <span class="badge" title="Multi-select is experimental: the claude TUI's space-toggle is unreliable. Use Terminal if it doesn't take."
-              >experimental</span
-            >
+            <kj-badge class="up" bg="var(--ui-sel)" fg="var(--ui-ink)"
+              style="--kj-badge-border-color:var(--ui-sel-2);--kj-badge-"
+              title="Multi-select is experimental: the claude TUI's space-toggle is unreliable. Use Terminal if it doesn't take."
+              >experimental</kj-badge>
           }
         </div>
 
         <!-- the question text -->
-        <div style="font-size:var(--fs-sm);line-height:1.45;color:var(--ink-2);margin-top:var(--sp-2)">{{ q.question }}</div>
+        <div style="line-height:1.45;color:var(--ink-2);margin-top:var(--sp-2)">{{ q.question }}</div>
 
         <!-- options (radio for single, checkbox for multi) + the synthesized
              "Other" free-text choice claude auto-appends -->
-        <div style="display:flex;flex-direction:column;gap:var(--sp-2);margin-top:var(--sp-3)">
+        <!-- the option rows own the interaction; the kj-radio / kj-checkbox
+             marks are presentational mirrors (pointer-events off), with the
+             radio group carrying the current single-select value -->
+        <kj-radio-group
+          [value]="q.multiSelect === true ? undefined : singleSel(i)"
+          orientation="vertical"
+          ariaLabel="Answer options"
+          style="display:flex;flex-direction:column;gap:var(--sp-2);margin-top:var(--sp-3)"
+        >
           @for (opt of q.options; track $index) {
-            <button
+            <button kjButton
               type="button"
               class="opt"
               [class.sel]="isSelected(i, $index)"
               [title]="opt.description || opt.label"
               (click)="toggle(i, $index, q.multiSelect === true)"
             >
-              <span class="mark" [class.box]="q.multiSelect === true">
-                @if (isSelected(i, $index)) {
-                  <app-icon name="check" [px]="9" />
-                }
-              </span>
+              @if (q.multiSelect === true) {
+                <kj-checkbox size="sm" [checked]="isSelected(i, $index)" style="pointer-events:none;flex:none;margin-top:1px" />
+              } @else {
+                <kj-radio [value]="$index" style="pointer-events:none;flex:none;margin-top:1px" />
+              }
               <span style="min-width:0">{{ opt.label }}</span>
             </button>
           }
@@ -183,31 +116,33 @@ import { IconComponent } from "../shared/icon.component";
           <!-- "Other" — always available (claude auto-appends a free-text choice
                AFTER the concrete options). Selecting it reveals the auto-growing
                textarea. -->
-          <button
+          <button kjButton
             type="button"
             class="opt"
             [class.sel]="isOther(i)"
             title="Type a custom answer (claude's auto-appended free-text choice)"
             (click)="chooseOther(i)"
           >
-            <span class="mark" [class.box]="q.multiSelect === true">
-              @if (isOther(i)) {
-                <app-icon name="check" [px]="9" />
-              }
-            </span>
+            @if (q.multiSelect === true) {
+              <kj-checkbox size="sm" [checked]="isOther(i)" style="pointer-events:none;flex:none;margin-top:1px" />
+            } @else {
+              <kj-radio value="other" style="pointer-events:none;flex:none;margin-top:1px" />
+            }
             <span>Other…</span>
           </button>
           @if (isOther(i)) {
-            <textarea
-              class="otherText"
-              rows="1"
-              placeholder="Type your answer…"
-              [value]="otherText(i)"
+            <kj-textarea
+              kjAutoresize="auto"
+              [kjMinRows]="1"
+              [kjMaxRows]="6"
+              kjPlaceholder="Type your answer…"
+              [kjValue]="otherText(i)"
               (input)="onOtherInput(i, $event)"
               (click)="$event.stopPropagation()"
-            ></textarea>
+              style="--kj-textarea-font:var(--font-ui);--kj-textarea---kj-textarea-padding-x:var(--sp-4);--kj-textarea-border-color:var(--ui-focus)"
+            />
           }
-        </div>
+        </kj-radio-group>
 
         @if (q.multiSelect) {
           <div class="hint">
@@ -218,27 +153,27 @@ import { IconComponent } from "../shared/icon.component";
         <!-- stepper nav + actions -->
         <div class="nav">
           @if (i > 0) {
-            <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="back()">
+            <kj-button kjVariant="outline" (click)="back()">
               <app-icon name="chevron" size="sm" style="transform:rotate(180deg)" />Back
-            </button>
+            </kj-button>
           }
           @if (i < qs.length - 1) {
-            <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="next()">
+            <kj-button kjVariant="outline" (click)="next()">
               Next<app-icon name="chevron" size="sm" />
-            </button>
+            </kj-button>
           } @else {
-            <button class="btn primary" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" [disabled]="sending()" (click)="submit()">
+            <kj-button kjVariant="default" [kjDisabled]="sending()" (click)="submit()">
               <app-icon name="check" size="sm" />{{ sending() ? "Sending…" : "Submit" }}
-            </button>
+            </kj-button>
           }
           <!-- Terminal: the RELIABLE fallback for every question -->
-          <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="terminal()">
+          <kj-button kjVariant="outline" (click)="terminal()">
             <app-icon name="terminal" size="sm" />Terminal
-          </button>
+          </kj-button>
           <!-- Reject: Esc cancels the numbered select -->
-          <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)" (click)="reject()">
+          <kj-button kjVariant="outline" (click)="reject()">
             <app-icon name="x" size="sm" />Reject
-          </button>
+          </kj-button>
         </div>
       </div>
     }
@@ -273,6 +208,14 @@ export class QuestionStepperComponent {
   isSelected(q: number, opt: number): boolean {
     return this.selected()[q]?.has(opt) ?? false;
   }
+  /** Single-select value for the presentational radio group: the chosen
+   *  concrete option index, `"other"` for the free-text choice, else nothing. */
+  singleSel(q: number): number | "other" | undefined {
+    if (this.isOther(q)) return "other";
+    const set = this.selected()[q];
+    if (!set?.size) return undefined;
+    return [...set][0];
+  }
   isOther(q: number): boolean {
     return this.other()[q] ?? false;
   }
@@ -306,18 +249,10 @@ export class QuestionStepperComponent {
     this.other.update((m) => ({ ...m, [q]: true }));
   }
 
-  /** Auto-grow: store the text + resize the textarea to fit content (min 1 row,
-   *  max ~6). Height tracks scrollHeight on every input. */
+  /** Store the typed text — kj-textarea's kjAutoresize handles the auto-grow
+   *  (min 1 row, max 6) that used to be hand-rolled here. */
   onOtherInput(q: number, ev: Event) {
-    const el = ev.target as HTMLTextAreaElement;
-    this.otherTexts.update((m) => ({ ...m, [q]: el.value }));
-    this.autoGrow(el);
-  }
-  private autoGrow(el: HTMLTextAreaElement) {
-    el.style.height = "auto";
-    const line = parseFloat(getComputedStyle(el).lineHeight) || 16;
-    const max = line * 6 + 14; // ~6 rows + vertical padding
-    el.style.height = Math.min(el.scrollHeight, max) + "px";
+    this.otherTexts.update((m) => ({ ...m, [q]: (ev.target as HTMLTextAreaElement).value }));
   }
 
   back() {

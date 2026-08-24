@@ -28,7 +28,6 @@ import { DiffOrBlameComponent } from "./diff-or-blame.component";
  */
 @Component({
   selector: "app-range-diff-view",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     IconComponent,
@@ -40,14 +39,14 @@ import { DiffOrBlameComponent } from "./diff-or-blame.component";
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--panel-2)">
 
       <!-- ---- header ---- -->
-      <div style="padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair);background:var(--panel);flex:none">
+      <div class="pane-head" style="display:block;padding-block:var(--sp-3);background:var(--panel)">
         <div style="display:flex;align-items:center;gap:var(--sp-3)">
           <app-icon name="diff" size="sm" style="color:var(--ui-ink)" />
-          <span style="font-size:var(--fs-md);font-weight:600;color:var(--ink)">
+          <h2>
             Range diff · {{ shas().length }} commits
-          </span>
+          </h2>
         </div>
-        <div class="tnum" style="margin-top:var(--sp-2);font-size:var(--fs-2xs);color:var(--ink-4);display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap">
+        <div class="tnum" style="margin-top:var(--sp-2);font-size:var(--fs-meta);color:var(--ink-4);display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap">
           @for (sha of shas(); track sha; let i = $index) {
             @if (i > 0) {
               <span style="color:var(--ink-4)">·</span>
@@ -61,15 +60,14 @@ import { DiffOrBlameComponent } from "./diff-or-blame.component";
       <div style="flex:1;display:grid;grid-template-columns:232px 1fr;min-height:0">
 
         <!-- left: aggregated changed-files list -->
-        <div style="min-height:0;border-right:1px solid var(--hair);background:var(--panel)">
-          <app-diff-file-list
-            [agent]="agent()"
-            [files]="rangeFiles()"
-            [selPath]="selPath()"
-            title="Range files"
-            (select)="onSelect($event)"
-          />
-        </div>
+        <app-diff-file-list
+          style="min-height:0;border-right:1px solid var(--hair);background:var(--panel)"
+          [agent]="agent()"
+          [files]="rangeFiles()"
+          [selPath]="selPath()"
+          title="Range files"
+          (select)="onSelect($event)"
+        />
 
         <!-- right: diff or blame -->
         @if (selPath(); as path) {
@@ -83,7 +81,7 @@ import { DiffOrBlameComponent } from "./diff-or-blame.component";
             [newRev]="rangeFilesResult()?.to ?? null"
           />
         } @else {
-          <div style="display:grid;place-items:center;color:var(--ink-4);background:var(--bg);font-size:var(--fs-sm)">
+          <div class="pane-empty" style="background:var(--bg)">
             @if (filesLoadable().status === 'loading') {
               loading…
             } @else {
@@ -95,16 +93,6 @@ import { DiffOrBlameComponent } from "./diff-or-blame.component";
       </div>
     </div>
   `,
-  styles: [
-    `
-      :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-      }
-    `,
-  ],
 })
 export class RangeDiffViewComponent {
   /** The owning agent. */

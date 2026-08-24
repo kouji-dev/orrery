@@ -44,7 +44,6 @@ function relTime(when: number): string {
  */
 @Component({
   selector: "app-commit-diff-view",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     IconComponent,
@@ -57,15 +56,15 @@ function relTime(when: number): string {
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--panel-2)">
 
       <!-- ---- CommitContextHeader ---- -->
-      <div style="padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair);background:var(--panel);flex:none">
+      <div class="pane-head" style="display:block;padding-block:var(--sp-3);background:var(--panel)">
         <div style="display:flex;align-items:center;gap:var(--sp-3)">
           <app-icon name="commit" size="sm" style="color:var(--ink-3)" />
-          <span style="font-size:var(--fs-md);font-weight:600;color:var(--ink);text-wrap:pretty">
+          <h2 style="text-wrap:pretty">
             {{ commit()?.msg ?? sha() }}
-          </span>
+          </h2>
         </div>
         @if (commit(); as c) {
-          <div class="tnum" style="margin-top:var(--sp-2);font-size:var(--fs-2xs);color:var(--ink-4);display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap">
+          <div class="tnum" style="margin-top:var(--sp-2);font-size:var(--fs-meta);color:var(--ink-4);display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap">
             <app-author-avatar [author]="c.agent" [size]="15" />
             <span style="color:var(--ink-2)">{{ c.agent }}</span>
             <app-sha-chip [sha]="c.sha" />
@@ -78,15 +77,14 @@ function relTime(when: number): string {
       <div style="flex:1;display:grid;grid-template-columns:232px 1fr;min-height:0">
 
         <!-- left: changed-files list -->
-        <div style="min-height:0;border-right:1px solid var(--hair);background:var(--panel)">
-          <app-diff-file-list
-            [agent]="agent()"
-            [files]="commitFiles()"
-            [selPath]="selPath()"
-            title="Files in commit"
-            (select)="onSelect($event)"
-          />
-        </div>
+        <app-diff-file-list
+          style="min-height:0;border-right:1px solid var(--hair);background:var(--panel)"
+          [agent]="agent()"
+          [files]="commitFiles()"
+          [selPath]="selPath()"
+          title="Files in commit"
+          (select)="onSelect($event)"
+        />
 
         <!-- right: diff or blame -->
         @if (selPath(); as path) {
@@ -100,7 +98,7 @@ function relTime(when: number): string {
             [newRev]="sha()"
           />
         } @else {
-          <div style="display:grid;place-items:center;color:var(--ink-4);background:var(--bg);font-size:var(--fs-sm)">
+          <div class="pane-empty" style="background:var(--bg)">
             @if (filesLoadable().status === 'loading') {
               loading…
             } @else {
@@ -112,16 +110,6 @@ function relTime(when: number): string {
       </div>
     </div>
   `,
-  styles: [
-    `
-      :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-      }
-    `,
-  ],
 })
 export class CommitDiffViewComponent {
   /** The owning agent. */

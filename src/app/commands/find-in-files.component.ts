@@ -26,6 +26,8 @@ import { UiStore } from "../ui/ui.store";
 import { fileDir, fileName } from "../utils";
 import { CommandRegistryService } from "./command-registry.service";
 import { OverlayFooterComponent, OverlayShellComponent } from "./overlay-shell.component";
+import { KjBadgeComponent, KjButtonComponent, KjCheckboxComponent, KjInputComponent, KjTabComponent, KjTabListComponent, KjTabsComponent} from "@kouji-ui/components";
+import { SelectComponent } from "../shared/select.component";
 
 type Scope = "worktree" | "project" | "all";
 const SCOPES: { k: Scope; label: string }[] = [
@@ -73,74 +75,58 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
 @Component({
   selector: "app-find-in-files",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, OverlayShellComponent, OverlayFooterComponent],
+  imports: [IconComponent, OverlayShellComponent, OverlayFooterComponent, KjButtonComponent, KjBadgeComponent, KjCheckboxComponent, KjInputComponent, SelectComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     <app-overlay-shell [width]="860" top="9vh" label="Find in files" (closed)="registry.close()">
       <!-- query row -->
-      <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);flex:none">
-        <div style="display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm);flex:none">
-          <button class="btn" (click)="mode.set('find')" style="padding:var(--sp-2) var(--sp-4);border-radius:4px;font-size:var(--fs-xs)"
-            [style.background]="mode() === 'find' ? 'var(--panel-3)' : 'transparent'"
-            [style.color]="mode() === 'find' ? 'var(--ink)' : 'var(--ink-3)'"
-            [style.box-shadow]="mode() === 'find' ? '0 0 0 1px var(--hair-2)' : 'none'">Find</button>
-          <button class="btn" (click)="mode.set('replace')" title="Replace in Files" style="padding:var(--sp-2) var(--sp-4);border-radius:4px;font-size:var(--fs-xs)"
-            [style.background]="mode() === 'replace' ? 'var(--panel-3)' : 'transparent'"
-            [style.color]="mode() === 'replace' ? 'var(--ink)' : 'var(--ink-3)'"
-            [style.box-shadow]="mode() === 'replace' ? '0 0 0 1px var(--hair-2)' : 'none'">Replace</button>
-        </div>
-        <input
+      <div class="pane-head">
+        <kj-tabs variant="pills" class="tabs-xs" style="flex:none"
+                 [value]="mode()" (valueChange)="mode.set($any($event))">
+          <kj-tab-list aria-label="Find or replace">
+            <kj-tab value="find">Find</kj-tab>
+            <kj-tab value="replace" title="Replace in Files">Replace</kj-tab>
+          </kj-tab-list>
+        </kj-tabs>
+        <kj-input
           #inp
           [value]="q()"
           (input)="onInput($event)"
           (keydown)="onKeys($event)"
           placeholder="Search in files…"
-          spellcheck="false"
           autocomplete="off"
-          [style.border-color]="focusedInput() ? 'var(--ui-focus)' : 'var(--hair)'"
-          (focus)="focusedInput.set(true)"
-          (blur)="focusedInput.set(false)"
-          style="flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-3) var(--sp-4);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui);outline:none"
+          style="flex:1;min-width:0;--kj-input-bg:var(--panel-2);--kj-input-font:var(--font-mono);--kj-input-font-size:var(--fs-ui)"
         />
         <div style="display:flex;gap:var(--sp-2);flex:none">
-          <button class="btn" (click)="toggle('caseSensitive')" title="Match case" [style]="optStyle(caseSensitive())">Aa</button>
-          <button class="btn" (click)="toggle('word')" title="Words" [style]="optStyle(word())">W</button>
-          <button class="btn" (click)="toggle('regex')" title="Regular expression" [style]="optStyle(regex())">.*</button>
+          <kj-button kjVariant="outline" [kjPressed]="caseSensitive()" (click)="toggle('caseSensitive')" title="Match case">Aa</kj-button>
+          <kj-button kjVariant="outline" [kjPressed]="word()" (click)="toggle('word')" title="Words">W</kj-button>
+          <kj-button kjVariant="outline" [kjPressed]="regex()" (click)="toggle('regex')" title="Regular expression">.*</kj-button>
         </div>
-        <select
-          class="osel"
+        <app-select
           [value]="scope()"
-          (change)="onScope($event)"
-          style="width:150px;flex:none;padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)"
-        >
-          @for (s of scopes; track s.k) {
-            <option [value]="s.k" [disabled]="s.k === 'worktree' && !scopeAgent()">{{ s.label }}</option>
-          }
-        </select>
+          [options]="scopeOptions()"
+          (valueChange)="scope.set($any($event))"
+          style="display:inline-block;width: round(calc(150px * var(--density)), 1px);flex:none"
+        />
       </div>
 
       <!-- replacement row (replace mode) -->
       @if (mode() === 'replace') {
-        <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair);flex:none">
-          <span style="flex:none;font-size:var(--fs-xs);color:var(--ink-3);width:64px;text-align:right">replace →</span>
-          <input
+        <div class="pane-head" style="padding:var(--sp-3) var(--sp-6)">
+          <span style="flex:none;color:var(--ink-3);width: round(calc(64px * var(--density)), 1px);text-align:right">replace →</span>
+          <kj-input
+            kjSize="sm"
             [value]="replacement()"
             (input)="replacement.set($any($event.target).value)"
             placeholder="Replacement ($1 for capture groups in regex mode)…"
-            spellcheck="false"
             autocomplete="off"
-            style="flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);outline:none"
+            style="flex:1;min-width:0;--kj-input-bg:var(--panel-2);--kj-input-font:var(--font-mono);--kj-input-font-size:var(--fs-body)"
           />
-          <button
-            class="btn primary"
-            style="padding:var(--sp-2) var(--sp-5);font-size:var(--fs-xs);flex:none"
-            [disabled]="applying() || busy() || !selectedCount()"
-            (click)="apply()"
-          >{{ applying() ? 'Replacing…' : 'Replace ' + selectedCount() + ' in ' + selectedFileCount() + ' file' + (selectedFileCount() === 1 ? '' : 's') }}</button>
+          <kj-button kjVariant="default" [kjDisabled]="applying() || busy() || !selectedCount()" (click)="apply()">{{ applying() ? 'Replacing…' : 'Replace ' + selectedCount() + ' in ' + selectedFileCount() + ' file' + (selectedFileCount() === 1 ? '' : 's') }}</kj-button>
         </div>
       }
 
       <!-- status row -->
-      <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair);flex:none;font-size:var(--fs-xs);color:var(--ink-3)">
+      <div class="pane-head" style="gap:var(--sp-5);padding:var(--sp-3) var(--sp-6);color:var(--ink-3)">
         @if (error(); as err) {
           <span style="color:var(--st-blocked)">{{ err }}</span>
         } @else if (busy()) {
@@ -152,35 +138,35 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
             {{ q() ? total() + ' match' + (total() === 1 ? '' : 'es') + ' in ' + groups().length + ' file' + (groups().length === 1 ? '' : 's') + (truncated() ? ' · capped' : '') : 'type to search' }}
           </span>
         }
-        <span class="chip" style="margin-left:auto;font-size:var(--fs-3xs)">grep · {{ scopeLabel() }}</span>
+        <kj-badge style="margin-left:auto;font-size:var(--fs-badge)">grep · {{ scopeLabel() }}</kj-badge>
         @if (busy()) {
-          <button class="btn ghost-hair" style="padding:var(--sp-1) var(--sp-4);font-size:var(--fs-2xs)" (click)="stop()">
-            <app-icon name="stop" size="sm" [px]="11" />Stop
-          </button>
+          <kj-button kjVariant="outline" (click)="stop()">
+            <app-icon size="md" name="stop" />Stop
+          </kj-button>
         }
       </div>
 
       <!-- results -->
       <div #list class="scroll-y" style="flex:1;min-height:180px;padding:var(--sp-2) 0">
         @if (!q()) {
-          <div style="padding:var(--sp-7);font-size:var(--fs-sm);color:var(--ink-4)">results stream in as files are scanned — click a line to open it at that position</div>
+          <div style="padding:var(--sp-7);font-size:var(--fs-meta);color:var(--ink-4)">results stream in as files are scanned — click a line to open it at that position</div>
         }
         @if (q() && !busy() && !groups().length && !error()) {
-          <div style="padding:var(--sp-7);font-size:var(--fs-sm);color:var(--ink-4)">no matches for "{{ q() }}"</div>
+          <div style="padding:var(--sp-7);font-size:var(--fs-meta);color:var(--ink-4)">no matches for "{{ q() }}"</div>
         }
         @for (g of groups(); track g.key) {
           <div style="margin-bottom:var(--sp-1)">
             <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-6);position:sticky;top:0;background:var(--panel);z-index:1;border-bottom:1px solid var(--hair)">
               @if (mode() === 'replace') {
-                <input type="checkbox" [checked]="fileIncluded(g)" (click)="$event.stopPropagation(); toggleFile(g)" title="Include / exclude this file" style="accent-color:var(--ui-fill);flex:none" />
+                <kj-checkbox size="sm" [checked]="fileIncluded(g)" (checkedChange)="toggleFile(g)" (click)="$event.stopPropagation()" title="Include / exclude this file" style="flex:none" />
               }
               <app-icon name="file" size="sm" color="var(--ink-3)" />
-              <span style="font-size:var(--fs-sm)">{{ fname(g.path) }}</span>
-              <span style="font-size:var(--fs-2xs);color:var(--ink-4);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(g.path) }}</span>
+              <span>{{ fname(g.path) }}</span>
+              <span class="trunc" style="font-size:var(--fs-meta);color:var(--ink-4);flex:1">{{ fdir(g.path) }}</span>
               @if (g.root) {
-                <span class="chip" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--ink-2)">{{ g.root }}</span>
+                <kj-badge style="font-size:var(--fs-badge);padding:1px var(--sp-3);color:var(--ink-2)">{{ g.root }}</kj-badge>
               }
-              <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4)">{{ g.count }}</span>
+              <span class="tnum" style="font-size:var(--fs-meta);color:var(--ink-4)">{{ g.count }}</span>
             </div>
             @for (h of g.items; track h.line + ':' + $index) {
               @let i = flatIndex(g, h);
@@ -189,12 +175,12 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
                 (click)="open(i)"
                 (mouseenter)="sel.set(i)"
                 [style.background]="sel() === i ? 'var(--panel-3)' : 'transparent'"
-                style="display:flex;align-items:flex-start;gap:var(--sp-4);padding:var(--sp-2) var(--sp-6) var(--sp-2) 26px;cursor:pointer;font-size:var(--fs-sm);line-height:1.55"
+                style="display:flex;align-items:flex-start;gap:var(--sp-4);padding:var(--sp-2) var(--sp-6) var(--sp-2) 26px;cursor:pointer;line-height:1.55"
               >
                 @if (mode() === 'replace') {
-                  <input type="checkbox" [checked]="included(h)" (click)="$event.stopPropagation(); toggleHit(h)" style="accent-color:var(--ui-fill);flex:none;margin-top:var(--sp-1)" />
+                  <kj-checkbox size="sm" [checked]="included(h)" (checkedChange)="toggleHit(h)" (click)="$event.stopPropagation()" style="flex:none;margin-top:var(--sp-1)" />
                 }
-                <span class="tnum" style="flex:none;width:34px;text-align:right;color:var(--ink-4);font-size:var(--fs-xs)">{{ h.line }}</span>
+                <span class="tnum" style="flex:none;width:34px;text-align:right;color:var(--ink-4)">{{ h.line }}</span>
                 <span style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-word;color:var(--ink-2)">
                   @for (s of segs(h); track $index) {
                     @if (s.hit) {
@@ -223,7 +209,6 @@ export class FindInFilesComponent {
   private projects = inject(ProjectActionsService);
   private ui = inject(UiStore);
 
-  readonly scopes = SCOPES;
   readonly fname = fileName;
   readonly fdir = fileDir;
   readonly segs = lineSegments;
@@ -232,7 +217,6 @@ export class FindInFilesComponent {
   readonly caseSensitive = signal(false);
   readonly word = signal(false);
   readonly regex = signal(false);
-  readonly focusedInput = signal(false);
   readonly sel = signal(0);
 
   // ----- replace mode (B3.2) -----
@@ -253,8 +237,13 @@ export class FindInFilesComponent {
   readonly scopeAgent = computed(() => this.runtime.activeAgent() ?? this.runtime.agents()[0] ?? null);
   readonly scope = signal<Scope>("worktree");
   readonly scopeLabel = computed(() => SCOPES.find((s) => s.k === this.scope())?.label.toLowerCase() ?? "");
+  /** Options for the scope select — the worktree scope simply drops out when
+   *  no agent is open (app-select has no per-option disabled state). */
+  readonly scopeOptions = computed(() =>
+    SCOPES.filter((s) => s.k !== "worktree" || this.scopeAgent()).map((s) => ({ value: s.k, label: s.label })),
+  );
 
-  private inp = viewChild.required<ElementRef<HTMLInputElement>>("inp");
+  private inp = viewChild.required<KjInputComponent>("inp");
   private list = viewChild<ElementRef<HTMLElement>>("list");
   private focusedOnce = false;
 
@@ -399,7 +388,7 @@ export class FindInFilesComponent {
     afterRenderEffect(() => {
       if (!this.focusedOnce) {
         this.focusedOnce = true;
-        this.inp().nativeElement.focus();
+        this.inp().focus();
       }
     });
     effect(() => {
@@ -420,14 +409,6 @@ export class FindInFilesComponent {
     });
   }
 
-  optStyle(on: boolean): string {
-    return (
-      "padding:var(--sp-1) var(--sp-3);font-size:var(--fs-xs);border-radius:4px;min-width:26px;justify-content:center;" +
-      `border:1px solid ${on ? "var(--ui-line)" : "var(--hair)"};` +
-      `color:${on ? "var(--ink)" : "var(--ink-3)"};` +
-      `background:${on ? "var(--ui-sel)" : "transparent"}`
-    );
-  }
 
   toggle(k: "caseSensitive" | "word" | "regex") {
     this[k].update((v) => !v);
@@ -435,10 +416,6 @@ export class FindInFilesComponent {
 
   onInput(e: Event) {
     this.q.set((e.target as HTMLInputElement).value);
-  }
-
-  onScope(e: Event) {
-    this.scope.set((e.target as HTMLSelectElement).value as Scope);
   }
 
   private cancelCurrent() {

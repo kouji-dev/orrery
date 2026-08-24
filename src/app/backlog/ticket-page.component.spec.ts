@@ -13,7 +13,6 @@ import {
   plainTextNonEmpty,
   shortId,
   relativeTime,
-  fmtCreated,
   avColor,
   initials,
 } from "./ticket-page.component";

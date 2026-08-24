@@ -1,52 +1,55 @@
-@import "tailwindcss";
 @import "@xterm/xterm/css/xterm.css";
+
+/* ---- DENSITY TOKEN REGISTRATION ----
+   An UNREGISTERED custom property has no computed value: getComputedStyle()
+   hands back the raw token stream ("round(calc(16px * var(--fs-scale)), .5px)"),
+   so any JS that parseFloat()s it gets NaN and silently falls back. Monaco, xterm
+   and the commit-graph lane SVG all read these tokens as numbers, so they must
+   resolve to real lengths. Registering them also type-checks the ramp: a typo
+   that yields a non-<length> is dropped at parse time instead of cascading.
+   Initial values mirror the regular-density scale. */
+@property --density   { syntax: "<number>"; inherits: true; initial-value: 1; }
+@property --fs-scale  { syntax: "<number>"; inherits: true; initial-value: 1; }
+
+@property --sp-1  { syntax: "<length>"; inherits: true; initial-value: 2px; }
+@property --sp-2  { syntax: "<length>"; inherits: true; initial-value: 4px; }
+@property --sp-3  { syntax: "<length>"; inherits: true; initial-value: 6px; }
+@property --sp-4  { syntax: "<length>"; inherits: true; initial-value: 8px; }
+@property --sp-5  { syntax: "<length>"; inherits: true; initial-value: 10px; }
+@property --sp-6  { syntax: "<length>"; inherits: true; initial-value: 12px; }
+@property --sp-7  { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --sp-8  { syntax: "<length>"; inherits: true; initial-value: 20px; }
+@property --sp-9  { syntax: "<length>"; inherits: true; initial-value: 24px; }
+@property --sp-10 { syntax: "<length>"; inherits: true; initial-value: 28px; }
+@property --sp-11 { syntax: "<length>"; inherits: true; initial-value: 32px; }
+
+@property --ctl-h-sm    { syntax: "<length>"; inherits: true; initial-value: 22px; }
+@property --ctl-h       { syntax: "<length>"; inherits: true; initial-value: 28px; }
+@property --ctl-h-lg    { syntax: "<length>"; inherits: true; initial-value: 34px; }
+@property --row-h       { syntax: "<length>"; inherits: true; initial-value: 30px; }
+@property --topbar-h    { syntax: "<length>"; inherits: true; initial-value: 44px; }
+@property --statusbar-h { syntax: "<length>"; inherits: true; initial-value: 24px; }
+
+@property --fs-3xs { syntax: "<length>"; inherits: true; initial-value: 12px; }
+@property --fs-2xs { syntax: "<length>"; inherits: true; initial-value: 13px; }
+@property --fs-xs  { syntax: "<length>"; inherits: true; initial-value: 14px; }
+@property --fs-sm  { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --fs-ui  { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --fs-tree { syntax: "<length>"; inherits: true; initial-value: 16px; }
+@property --fs-md  { syntax: "<length>"; inherits: true; initial-value: 18px; }
+@property --fs-lg  { syntax: "<length>"; inherits: true; initial-value: 20px; }
+@property --fs-xl  { syntax: "<length>"; inherits: true; initial-value: 28px; }
+@property --fs-2xl { syntax: "<length>"; inherits: true; initial-value: 32px; }
+@property --fs-display { syntax: "<length>"; inherits: true; initial-value: 48px; }
+
+@property --fs-code { syntax: "<length>"; inherits: true; initial-value: 13px; }
+@property --lh-code { syntax: "<length>"; inherits: true; initial-value: 18px; }
 
 /* =========================================================================
    Orrery — multi-agent orchestrator IDE
    Futuristic IntelliJ-inspired design tokens
    ========================================================================= */
 
-/* Map the runtime CSS variables into Tailwind's theme so utilities like
-   `bg-panel`, `text-ink-2`, `border-hair` stay dynamically themeable —
-   the [data-theme]/[data-density] selectors below override the source vars. */
-@theme {
-  --color-bg: var(--bg);
-  --color-panel: var(--panel);
-  --color-panel-2: var(--panel-2);
-  --color-panel-3: var(--panel-3);
-  --color-elev: var(--elev);
-  --color-elev-hover: var(--elev-hover);
-  --color-hair: var(--hair);
-  --color-hair-2: var(--hair-2);
-  --color-ink: var(--ink);
-  --color-ink-2: var(--ink-2);
-  --color-ink-3: var(--ink-3);
-  --color-ink-4: var(--ink-4);
-  --color-accent: var(--accent);
-  --color-accent-2: var(--accent-2);
-  --color-st-running: var(--st-running);
-  --color-st-blocked: var(--st-blocked);
-  --color-st-waiting: var(--st-waiting);
-  --color-st-done: var(--st-done);
-  --color-st-idle: var(--st-idle);
-  --color-add-bg: var(--code-add-bg);
-  --color-add-ink: var(--code-add-ink);
-  --color-del-bg: var(--code-del-bg);
-  --color-del-ink: var(--code-del-ink);
-  --color-sem-add: var(--sem-add);
-  --color-sem-del: var(--sem-del);
-  --color-sem-attn: var(--sem-attn);
-  --color-sem-change: var(--sem-change);
-  --color-sem-live: var(--sem-live);
-
-  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-disp: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-
-  --radius-sm: 5px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-}
 
 :root {
   /* ---- UI accent. The ONLY decorative hue. Allowed on: focus ring, text
@@ -63,8 +66,6 @@
   --brand-3: #22d3ee;
   --accent-2: #22d3ee;      /* legacy alias of brand-3, brand surfaces only */
   --accent-3: #ff5d9e;      /* legacy alias of brand-1 */
-  --accent-2-rgb: 34, 211, 238;
-  --accent-3-rgb: 255, 93, 158;
 
   /* ---- semantic hues. One meaning-class each. Only these hold values. ---- */
   --sem-add: #57c98a;       /* additive, succeeded */
@@ -87,8 +88,6 @@
   --vcs-renamed: var(--sem-change);   /* + arrow glyph carries the rest */
   --vcs-deleted: var(--ink-3);        /* dim + strikethrough, NOT red */
   --vcs-conflicted: var(--sem-attn);
-  --vcs-untracked: var(--ink-3);
-  --vcs-ignored: var(--ink-4);
 
   /* log levels — sys is the quietest line in the terminal, not the loudest */
   --log-err: var(--sem-del);
@@ -132,9 +131,6 @@
 
   /* brand splash + icon plate (pre-theme surfaces, deliberately fixed) */
   --brand-core: #ffffff;
-  --brand-plate: #090a0f;
-  --boot-bg: #07080d;
-  --boot-grid: rgba(255, 255, 255, 0.022);
 
   /* type — Inter for chrome, JetBrains Mono for code, paths, refs, figures */
   --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -148,81 +144,139 @@
   --r-pill: 999px;
 
   /* ---- DENSITY ENGINE ---- */
-  /* single multiplier; spacing + heights derive from it */
+  /* Two knobs. --density drives spacing + structural heights; --fs-scale drives
+     the type ramp. They are separate because type must breathe more gently than
+     boxes: a 0.85 spacing squeeze is fine, the same squeeze on 12px text is not.
+     Every derived value is round()ed to a whole pixel (0.5px for type) so no
+     token ever lands on a fraction — fractional heights blur hairlines and
+     desync rows from the SVG/canvas surfaces that mirror them. */
   --density: 1;
+  --fs-scale: 1;
 
   /* spacing scale (padding / margin / gap) */
-  --sp-1: calc(2px  * var(--density));
-  --sp-2: calc(4px  * var(--density));
-  --sp-3: calc(6px  * var(--density));
-  --sp-4: calc(8px  * var(--density));
-  --sp-5: calc(10px * var(--density));
-  --sp-6: calc(12px * var(--density));
-  --sp-7: calc(16px * var(--density));
-  --sp-8: calc(20px * var(--density));
-  --sp-9: calc(24px * var(--density));
-  --sp-10: calc(28px * var(--density));
-  --sp-11: calc(32px * var(--density));
+  --sp-1:  round(calc(2px  * var(--density)), 1px);
+  --sp-2:  round(calc(4px  * var(--density)), 1px);
+  --sp-3:  round(calc(6px  * var(--density)), 1px);
+  --sp-4:  round(calc(8px  * var(--density)), 1px);
+  --sp-5:  round(calc(10px * var(--density)), 1px);
+  --sp-6:  round(calc(12px * var(--density)), 1px);
+  --sp-7:  round(calc(16px * var(--density)), 1px);
+  --sp-8:  round(calc(20px * var(--density)), 1px);
+  --sp-9:  round(calc(24px * var(--density)), 1px);
+  --sp-10: round(calc(28px * var(--density)), 1px);
+  --sp-11: round(calc(32px * var(--density)), 1px);
 
   /* control + structural heights */
-  --ctl-h-sm: calc(22px * var(--density));
-  --ctl-h:    calc(28px * var(--density));
-  --ctl-h-lg: calc(34px * var(--density));
-  --row-h:    calc(30px * var(--density));   /* kept name; now derived */
-  --topbar-h:    calc(44px * var(--density));
-  --statusbar-h: calc(24px * var(--density));
+  --ctl-h-sm: round(calc(22px * var(--density)), 1px);
+  --ctl-h:    round(calc(28px * var(--density)), 1px);
+  --ctl-h-lg: round(calc(34px * var(--density)), 1px);
+  --row-h:    round(calc(30px * var(--density)), 1px);
+  --topbar-h:    round(calc(44px * var(--density)), 1px);
+  --statusbar-h: round(calc(24px * var(--density)), 1px);
 
-  /* back-compat alias (old --pad == 12px) */
-  --pad: var(--sp-6);
 
-  /* type scale — explicit per density (regular values here) */
-  --fs-3xs: 9px;
-  --fs-2xs: 9.5px;
-  --fs-xs:  10.5px;
-  --fs-sm:  11.5px;
-  --fs-ui:  12.5px;   /* kept */
-  --fs-tree: 12.5px;  /* kept */
-  --fs-md:  13.5px;
-  --fs-lg:  15px;
-  --fs-xl:  21px;
-  --fs-2xl: 24px;
-  --fs-display: 36px;
+  /* shell columns. These were previously only ever inline fallbacks
+     (var(--sidebar-w)) — i.e. never actually defined, so the sidebar was
+     a fixed column that density could not reach and its footer buttons clipped
+     at comfy. --right-w is overridden inline by the panel resizer; a width the
+     user dragged is theirs and must NOT be rescaled, so this is only the default. */
+  --sidebar-w: round(calc(252px * var(--density)), 1px);
+  --right-w:   round(calc(312px * var(--density)), 1px);
+
+  /* ---- TYPE RAMP ----
+     --fs-sm is THE reference size: 16px at regular, and what most of the app
+     actually uses. --fs-ui (the <body> default) and --fs-tree are aliases of it
+     — one reference, three names — so "ui" no longer sits confusingly a step
+     ABOVE the size everything is written in. The ramp compresses toward the
+     bottom on purpose: badges and chips step by ~1px, headings by much more. */
+  /* one step below the badge size, for the quietest chrome line in the app
+     (the brand subtitle under the logo — design/app.html:4354 sets it at the
+     smallest size in the whole mockup) */
+  --fs-4xs: round(calc(10.5px * var(--fs-scale)), 0.5px);
+  --fs-3xs: round(calc(12px * var(--fs-scale)), 0.5px);
+  --fs-2xs: round(calc(13px * var(--fs-scale)), 0.5px);
+  --fs-xs:  round(calc(14px * var(--fs-scale)), 0.5px);
+  --fs-sm:  round(calc(16px * var(--fs-scale)), 0.5px);   /* reference */
+  --fs-ui:   var(--fs-xs);   /* the app baseline: 14, not the 16 reference */
+  --fs-tree: var(--fs-xs);
+  --fs-md:  round(calc(18px * var(--fs-scale)), 0.5px);
+  --fs-lg:  round(calc(20px * var(--fs-scale)), 0.5px);
+  --fs-xl:  round(calc(28px * var(--fs-scale)), 0.5px);
+  --fs-2xl: round(calc(32px * var(--fs-scale)), 0.5px);
+  --fs-display: round(calc(48px * var(--fs-scale)), 0.5px);
+
+  /* ---- TYPE ROLES ----
+     The ramp above says HOW BIG; these say WHAT FOR. Call sites should use a
+     role, not a step. The rebase is what proved this necessary: --fs-sm meant
+     "small" at 11.5px and now means "primary" at 16px, so 165 call sites that
+     picked it under the old meaning silently changed intent. Roles cannot
+     drift that way — retuning the ramp moves every role with it.
+
+     `body` is general UI text. `label` is dense-list text: a file tree or git
+     status list is a different role from a paragraph and is legitimately a
+     step down, the way every IDE sets it. `meta` is counts and timestamps;
+     `badge` is pills, chips and state letters. */
+  /* `body` sits at 14, NOT 16. The call sites settled the argument: 251 of the
+     ~407 explicit font-sizes in the app asked for something SMALLER than a
+     16px default, and the two clear winners were 14 (91×) and 13 (84×). A
+     default nobody wants is a default every call site has to undo — the same
+     trap the button `xs` fell into — so the baseline moves to what this UI
+     actually is, and the ~91 redundant `var(--fs-xs)` declarations are gone.
+     16 is still available as --fs-sm for the places that genuinely want it. */
+  --fs-body:  var(--fs-xs);    /* 14 — general UI text, buttons, headers */
+  --fs-label: var(--fs-xs);    /* 14 — dense list rows: file tree, git status */
+  --fs-meta:  var(--fs-2xs);   /* 13 — counts, elapsed, secondary detail */
+  --fs-badge: var(--fs-3xs);   /* 12 — pills, chips, state letters */
+  --fs-micro: var(--fs-4xs);   /* 10.5 — the quietest chrome line there is */
+
+  /* ---- WEIGHT ROLES ----
+     Weight was picked by eye at 99 call sites, which is how headings, list
+     names and count bubbles all ended up sharing one number. Like the sizes,
+     it is a role: `medium` is the emphasis step (titles, names, the selected
+     row) and `strong` exists for one reason — micro type at 10-12px loses its
+     stems at `medium`, so badges, state letters and uppercase tags need the
+     extra weight to stay legible. Nothing in this UI is 700: at 14px+ that
+     reads as a shout, which is why <b>/<strong> are capped at `strong` too. */
+  --fw-normal: 400;   /* body copy, meta, anything a paragraph */
+  --fw-medium: 500;   /* headings, titles, names, active/selected labels */
+  --fw-strong: 600;   /* micro type that must survive being small */
+
+  /* ---- ICON SCALE ----
+     Icons are sized in `em`, NOT px, so they track whatever type they sit
+     beside. The 129 hardcoded [px] bindings this replaces were all frozen
+     snapshots of a ~1em relationship (a file-tree chevron was 11px next to
+     11.5px text = 0.96em); once the type ramp moved, the icons did not, and
+     that 1.0x-vs-1.37x gap is what made the sidebar and file list look wrong.
+     em restores the relationship and keeps it at every density, for free. */
+  --ico-xs: 0.75em;
+  --ico-sm: 0.875em;
+  --ico-md: 1em;
+  --ico-lg: 1.125em;
+  --ico-xl: 1.25em;
+
+  /* ---- CODE SURFACES ----
+     Monaco + xterm can't read the ramp directly; they take numbers via JS.
+     These are the tokens those surfaces read at mount and on every density
+     switch. Line height is snapped to a whole pixel so glyph rows stay on the
+     device grid — a fractional line height smears every line in a long file. */
+  --fs-code: round(calc(13px * var(--fs-scale)), 0.5px);
+  --lh-code: round(calc(18px * var(--fs-scale)), 1px);
 }
 
 [data-density="compact"] {
   --density: 0.85;
-  --fs-3xs: 8.5px;
-  --fs-2xs: 9px;
-  --fs-xs:  10px;
-  --fs-sm:  11px;
-  --fs-ui:  11.5px;
-  --fs-tree: 11.5px;
-  --fs-md:  12.5px;
-  --fs-lg:  14px;
-  --fs-xl:  19px;
-  --fs-2xl: 22px;
-  --fs-display: 32px;
+  --fs-scale: 0.875;
 }
 
 [data-density="comfy"] {
   --density: 1.18;
-  --fs-3xs: 9.5px;
-  --fs-2xs: 10.5px;
-  --fs-xs:  11.5px;
-  --fs-sm:  12.5px;
-  --fs-ui:  13.5px;
-  --fs-tree: 13px;
-  --fs-md:  14.5px;
-  --fs-lg:  16.5px;
-  --fs-xl:  23px;
-  --fs-2xl: 26px;
-  --fs-display: 40px;
+  --fs-scale: 1.125;
 }
 
 /* ---------- DARK (default) — GRAPHITE ramp ----------
    Chroma held flat at ~0.005 OKLCH across the whole ramp; it never rises
    with elevation. Elevation is a lightness step plus a hairline. */
-[data-theme="dark"] {
+[data-theme="orrery"] {
   --bg: #121315;        /* L 18.6%  C .0044 */
   --panel: #17181a;     /* L 20.9%  C .0042 */
   --panel-2: #1d1e20;   /* L 23.5%  C .0041  <- editor surface */
@@ -243,10 +297,7 @@
   --code-del-ink: #ef8a95;
   --glow: 0 0 0 1px color-mix(in oklch, var(--accent), transparent 45%);
   --shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.65);
-  --scan: rgba(255, 255, 255, 0.02);
   --scrim: rgba(4, 5, 9, 0.58);        /* modal backdrop */
-  --desk-1: #11131d;                   /* desktop behind the app window */
-  --desk-2: #050609;
   color-scheme: dark;
 }
 
@@ -255,7 +306,7 @@
    Pure neutral (chroma 0.0000). Elevation goes DOWN, not up: the editor is the
    single brightest surface and everything else recedes. --elev is capped short
    of white so popovers never glare. */
-[data-theme="light"] {
+[data-theme="orrery-light"] {
   --bg: #dedede;        /* L 90.1%  app shell, gutters */
   --panel: #e8e8e8;     /* L 93.1%  sidebars, rail, status bar */
   --panel-2: #f2f2f2;   /* L 96.1%  editor — the ONE bright surface */
@@ -288,10 +339,7 @@
   --code-del-ink: #a83234;
   --glow: 0 0 0 1px color-mix(in oklch, var(--accent), transparent 50%);
   --shadow: 0 6px 18px -10px rgba(0, 0, 0, 0.28);
-  --scan: rgba(0, 0, 0, 0.015);
   --scrim: rgba(30, 30, 30, 0.34);
-  --desk-1: #c4c4c4;
-  --desk-2: #a8a8a8;
   color-scheme: light;
 }
 
@@ -302,8 +350,17 @@
   transition: none !important;
 }
 
+/* Universal reset.
+   The margin/padding zeroing deliberately EXCLUDES kouji's elements. This rule
+   is unlayered, and unlayered CSS beats every @layer regardless of specificity,
+   so an unqualified `* { padding: 0 }` silently flattened the padding of every
+   kouji component (whose own padding lives in @layer kj.component) — buttons,
+   badges, kbd chips and inputs all rendered as bare content.
+   :where() keeps the selector at specificity 0, so nothing else shifts. */
 * {
   box-sizing: border-box;
+}
+*:where(:not([class*="kj-"])) {
   margin: 0;
   padding: 0;
 }
@@ -322,6 +379,15 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   letter-spacing: -0.01em;
+}
+
+/* The weight ramp sits one step below the usual web scale: this UI is denser
+   and set larger than the mockup's 11-12px chrome, and Inter at 600/700 reads
+   as a shout at 14-16px. Emphasis = 500, strong emphasis = 600; the browser's
+   default `bold` (700) on <b>/<strong> would jump two steps past that. */
+b,
+strong {
+  font-weight: var(--fw-strong);
 }
 
 app-root {
@@ -351,15 +417,15 @@ app-root {
 
 .workspace {
   display: grid;
-  grid-template-columns: var(--sidebar-w, 252px) minmax(0, 1fr) var(--right-w, 312px);
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--right-w);
   min-height: 0;
   overflow: hidden;
 }
 .workspace.no-right {
-  grid-template-columns: var(--sidebar-w, 252px) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
 }
 .workspace.compact {
-  grid-template-columns: 54px minmax(0, 1fr) var(--right-w, 312px);
+  grid-template-columns: 54px minmax(0, 1fr) var(--right-w);
 }
 .workspace.compact.no-right {
   grid-template-columns: 54px minmax(0, 1fr);
@@ -394,6 +460,34 @@ app-timeline-view {
   display: block;
 }
 
+/* The OTHER half of the height chain. These hosts are NOT display:contents —
+   they own real chrome (a header + a scroller) — so the host itself has to be
+   the column that fills its parent. Every one of them restated the same four
+   declarations in its own :host block; a host that forgot `min-height:0` grew
+   past its parent instead of letting its .scroll-y scroll. Listed as element
+   selectors because a component cannot style its own host from outside, and a
+   :host rule is scoped away from the shared recipe. */
+app-branches-panel,
+app-commit-graph-panel,
+app-local-history-panel,
+app-agent-git-view,
+app-conflict-view,
+app-diff-or-blame,
+app-commit-diff-view,
+app-range-diff-view,
+app-diff-file-list,
+app-code-diff,
+app-monaco-file-editor,
+app-unified-code,
+app-file-view,
+app-file-history-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
 /* scrollbars */
 ::-webkit-scrollbar {
   width: 9px;
@@ -413,8 +507,28 @@ app-timeline-view {
   background: transparent;
 }
 
+/* Scroller with no visible bar — tab strips and the dev-console tab rail,
+   which scroll horizontally but must not lose a row of height to a gutter.
+   Both engines need saying: `scrollbar-width` for Gecko, the pseudo-element
+   for the WebKit/Blink build Tauri actually ships. */
+.scroll-hide {
+  scrollbar-width: none;
+}
+.scroll-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* ---------- generic atoms ---------- */
 /* type split: Inter for chrome, JetBrains Mono for code + data */
+/* ORDER IS LOAD-BEARING: `.disp` comes first so that when an element carries
+   BOTH — `class="disp tnum"` on the stat numerals — the DATA face wins, which
+   is what the mockup renders (design/app.html:401 vs :589). With these two
+   swapped the stat blocks silently fell back to Inter. */
+.disp {
+  font-family: var(--font-disp);
+  letter-spacing: -0.02em;
+}
+
 .mono,
 .tnum,
 code,
@@ -427,16 +541,101 @@ kbd,
 .sha {
   font-family: var(--font-mono);
 }
-.disp {
+
+/* kouji sizes these two in rem off its own scale, which lands them between our
+   steps (15px and 11px — on no rung of the ramp). Re-home them on roles so a
+   kj component and a hand-written one read at the same size. */
+.kj-empty-state {
+  --kj-empty-state-title-size: var(--fs-sm);
+  --kj-empty-state-desc-size: var(--fs-body);
+}
+.kj-overlay-badge {
+  --kj-badge-font-size: var(--fs-badge);
+}
+
+/* ---------- headings ----------
+   A title should be a heading ELEMENT, not a span wearing `.disp` plus an
+   inline font-size and font-weight — that spelling repeated the same three
+   declarations at every title in the app and left the document with no
+   outline for assistive tech. The tag now carries the type.
+
+   h1 (20) = the title of a view or a dialog — a dialog is its own document
+   context, so its title is an h1 there. h2 (18) = a section inside one.
+   h3 (16) = a card or panel title. h4 (14) = a row/list title, the density at
+   which most of this UI is written. Sizes are roles, so retuning the ramp
+   moves the headings with it. Weight is 500 — the app's emphasis step, one
+   below the usual web bold. */
+/* Prose gets the element too — a sentence belongs in a <p>, not a styled div.
+   The UA's 1em block margins are the only reason it wasn't already: they push
+   IDE chrome apart, so they are reset here once and the few places that DO
+   want space set it themselves. */
+p,
+pre {
+  margin: 0;
+}
+
+/* ---------- help / sub-title text ----------
+   The line under a label that explains the control. HTML already has the
+   element for it — <small> is "side comments and small print" — and this app
+   had SEVEN class names doing the job (.set-row-help, .dvc-hint, .tcg-note,
+   .cc-note, .gr-note, .hint, .set-upd-notes), each re-declaring the same ink
+   and line-height. One tag, one rule.
+
+   It is a step below body: help text should never compete with the label it
+   explains. `display:block` because every use here is a line of its own, not
+   an inline aside. */
+small {
+  display: block;
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  color: var(--ink-4);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
   font-family: var(--font-disp);
+  font-weight: var(--fw-medium);
   letter-spacing: -0.02em;
+  color: var(--ink);
+}
+h1 {
+  font-size: var(--fs-lg);
+}
+h2 {
+  font-size: var(--fs-md);
+}
+h3 {
+  font-size: var(--fs-sm);
+}
+h4 {
+  font-size: var(--fs-body);
 }
 .tnum {
   font-variant-numeric: tabular-nums;
 }
 .up {
+  /* the section micro-label: SPAWN, PROJECTS, CHANGED · 3. It is one role, so
+     it owns its size here — call sites had it at 12, 13 and 14 depending on
+     who wrote them, which is why the same label read differently per panel. */
+  font-size: var(--fs-badge);
   text-transform: uppercase;
   letter-spacing: 0.12em;
+}
+
+/* Single-line ellipsis. The `min-width:0` is the load-bearing half: a flex or
+   grid child defaults to min-width:auto and so refuses to shrink below its
+   text, which is why `overflow:hidden` alone silently does nothing inside a
+   row. Written out ~68 times across the app before this. */
+.trunc,
+.orr-palette .orr-cmd-label,
+.orr-palette .orr-cmd-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dot {
@@ -490,58 +689,30 @@ kbd,
   }
 }
 
-.btn {
-  font-family: var(--font-ui);
-  font-size: var(--fs-ui);
-  color: var(--ink-2);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  padding: var(--sp-2) var(--sp-5);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  transition: all 0.13s ease;
-  white-space: nowrap;
-  user-select: none;
-}
-.btn:hover {
-  color: var(--ink);
-  background: var(--panel-3);
-}
-.btn.ghost-hair {
-  border-color: var(--hair);
-}
-.btn.ghost-hair:hover {
-  border-color: var(--hair-2);
-}
-.btn.primary {
-  color: var(--ui-on-fill);
-  background: var(--ui-fill);
-  font-weight: 600;
-}
-.btn.primary:hover {
-  filter: brightness(1.06);
-  color: var(--ui-on-fill);
-}
-.btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.btn.danger {
-  color: var(--st-blocked);
-}
+
 
 /* ---------- context menus ----------
    Shared chrome for EVERY menu surface: the store-driven app-context-menu and
    the file menus (file tree, diff file list) all render an app-menu-panel with
    these classes. Hover uses --elev-hover, not panel-3: on dark, elev sits
    ABOVE panel-3, so a panel-3 hover reads as nothing. */
+/* The elevated card box, on its own: menus, hover cards, inline dropdowns and
+   the small anchored panels all draw the same surface. Kept separate from
+   .menu-panel so a popover that is NOT a menu (no fixed positioning, no z-80)
+   can wear the surface without inheriting the menu's layout. */
+.popover {
+  background: var(--elev);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+}
+/* .menu-panel = .popover + the menu's own layout. The surface declarations are
+   repeated in the selector list above rather than required at the call site,
+   so existing `class="menu-panel"` markup keeps working unchanged. */
 .menu-panel {
   position: fixed;
   z-index: 80;
-  min-width: 196px;
+  min-width: round(calc(196px * var(--density)), 1px);
   background: var(--elev);
   border: 1px solid var(--hair-2);
   border-radius: var(--r-md);
@@ -578,6 +749,32 @@ kbd,
   background: color-mix(in oklch, var(--st-blocked), transparent 88%);
   color: var(--st-blocked);
 }
+
+/* A menu row rendered as a <kj-button> instead of a native .menu-item — the
+   file-tree and diff-file-list menus, and the git split-button's dropdown
+   rows (.row), which were three copies of one knob pack. The kj-button host
+   is display:contents, so the knobs go on the HOST and inherit down to the
+   inner button; `height:auto` is required because the size steps otherwise
+   pin a control height and a menu row must be sized by its padding alone. */
+kj-button.menu-item,
+.row kj-button,
+.row .kj-button {
+  --kj-button-justify: flex-start;
+  --kj-button-fg: var(--ink-2);
+  --kj-button-font: var(--font-mono);
+  --kj-button-font-size: var(--fs-ui);
+  --kj-button-gap: var(--sp-3);
+  --kj-button-padding-y: var(--sp-3);
+  --kj-button-padding-x: var(--sp-4);
+  --kj-button-radius: 6px;
+  --kj-button-height: auto;
+  --kj-button-hover-translate: 0;
+}
+.row .kj-button {
+  width: 100%;
+  border: none;
+  border-radius: var(--r-sm);
+}
 .menu-sep {
   height: 1px;
   margin: var(--sp-2) var(--sp-3);
@@ -587,7 +784,7 @@ kbd,
   padding: var(--sp-2) var(--sp-4);
   font-size: var(--fs-xs);
   color: var(--ink-3);
-  max-width: 260px;
+  max-width: round(calc(260px * var(--density)), 1px);
   overflow-wrap: anywhere;
 }
 .menu-label b {
@@ -614,9 +811,64 @@ kbd,
   gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-1) var(--sp-1);
 }
-.menu-row .btn {
-  padding: var(--sp-1) var(--sp-4);
-  font-size: var(--fs-xs);
+.menu-row .kj-button {
+  --kj-button-padding-y: var(--sp-1);
+  --kj-button-padding-x: var(--sp-4);
+  --kj-button-font-size: var(--fs-meta);
+}
+
+/* ---------- panel chrome ----------
+   The three boxes every pane in the app is built from: a hairline header row,
+   a centred empty state, and the master-detail split. Each was hand-rolled per
+   component (40+ headers, 30 empty states, 2 splits) and had drifted — some
+   headers forgot `flex:none` and shrank when their scroller grew. */
+
+/* Hairline header row — the strip above a pane's body. `flex:none` is not
+   decoration: the header is a flex child of a column, so without it the header
+   shares the shrink with the scroller below. */
+.pane-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-6);
+  border-bottom: 1px solid var(--hair);
+  flex: none;
+}
+/* Dense variant for nested/secondary headers (a split's side column). */
+.pane-head.tight {
+  padding: var(--sp-2) var(--sp-3);
+}
+
+/* Master-detail split: fixed side column + fluid main. The width is a var so
+   a resizable host (file-history) can drive it without restating the grid. */
+.split-pane {
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--split-w, round(calc(320px * var(--density)), 1px)) minmax(0, 1fr);
+  min-height: 0;
+  background: var(--panel-2);
+}
+.split-pane-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--hair);
+  background: var(--panel);
+}
+.split-pane-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* The accent SELECTED skin — a tinted ground plus the accent ink and ring.
+   Distinct from the neutral pressed surface on .kj-button: this one marks a
+   chosen item in a list or grid, where the accent is the whole point. */
+.accent-sel {
+  background: var(--ui-sel);
+  color: var(--ui-ink);
+  border-color: var(--ui-sel-2);
 }
 
 .chip {
@@ -643,21 +895,23 @@ kbd,
   overflow: hidden;
   flex: none;
 }
-.action-pill .pill-seg {
+.action-pill .pill-seg .kj-button {
   min-width: 32px;
   width: var(--row-h);
-  padding: 0;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  border: none;
-  color: var(--ink-2);
+  height: 100%;
+  border-radius: 0;
+  --kj-button-padding-x: 0;
+  --kj-button-padding-y: 0;
+  --kj-button-justify: center;
+  --kj-button-bg: transparent;
+  --kj-button-border-color: transparent;
+  --kj-button-fg: var(--ink-2);
   cursor: pointer;
   transition: background 0.12s, color 0.12s, filter 0.12s;
 }
-.action-pill .pill-seg:hover {
-  background: var(--panel-3);
-  color: var(--ink);
+.action-pill .pill-seg .kj-button:hover:not([aria-disabled="true"]) {
+  --kj-button-bg: var(--panel-3);
+  --kj-button-fg: var(--ink);
 }
 .action-pill .pill-div {
   width: 1px;
@@ -665,19 +919,19 @@ kbd,
   background: var(--hair);
   flex: none;
 }
-.action-pill .pill-seg.run {
+.action-pill .pill-seg.run .kj-button {
   color: var(--ui-on-fill);
   background: var(--ui-fill);
 }
-.action-pill .pill-seg.run:hover {
+.action-pill .pill-seg.run .kj-button:hover {
   filter: brightness(1.06);
 }
-.action-pill .pill-seg.run.running {
+.action-pill .pill-seg.run.running .kj-button {
   background: transparent;
   color: var(--ink-2);
   box-shadow: none;
 }
-.action-pill .pill-seg.run.running:hover {
+.action-pill .pill-seg.run.running .kj-button:hover {
   background: var(--panel-3);
   color: var(--ink);
 }
@@ -722,6 +976,37 @@ kbd,
   margin-left: auto;
   font-size: var(--fs-2xs);
   color: var(--ink-4);
+}
+
+/* Option chip — the tappable answer in a notification card / question stepper.
+   A quiet panel card that turns accent on hover and stays accent when chosen,
+   so hover and selection read as the same gesture at two strengths. */
+.opt {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hair);
+  background: var(--panel);
+  color: var(--ink-3);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.opt:hover {
+  border-color: var(--ui-focus);
+  color: var(--ink-2);
+  background: var(--ui-sel);
+}
+.opt.sel {
+  border-color: var(--ui-focus);
+  color: var(--ink);
+  background: var(--ui-sel);
 }
 
 .kbd {
@@ -774,13 +1059,19 @@ kbd,
   display: inline-block;
   vertical-align: middle;
 }
-.icon-sm {
-  width: var(--sp-6);
-  height: var(--sp-6);
-}
-.icon-lg {
-  width: var(--sp-8);
-  height: var(--sp-8);
+
+/* Accent glyph tile — the small rounded plate an icon sits on in a brand mark,
+   an update toast, a settings header. The ring is an INSET shadow, not a
+   border, so the plate's box stays exactly the size the host gives it (these
+   are laid out next to text at a fixed square). Size + radius rounding stay
+   per-instance; only the skin is shared. */
+.glyph-plate {
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: var(--ui-ink);
+  background: var(--ui-sel);
+  box-shadow: inset 0 0 0 1px var(--ui-sel-2);
 }
 
 /* card surface */
@@ -796,6 +1087,22 @@ kbd,
   min-height: 0;
 }
 
+/* Centred muted placeholder for a pane with nothing to show. `flex:1` so it
+   claims the pane's whole body — a placeholder pinned to the top of an empty
+   pane reads as a failed render rather than an empty state. */
+.pane-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--ink-4);
+  font-size: var(--fs-sm);
+}
+/* …and the variant that also needs breathing room (short one-line messages
+   inside a small box, where the grid centring alone leaves them cramped). */
+.pane-empty.pad {
+  padding: var(--sp-9);
+}
+
 /* gradient text — brand mark only */
 .grad-ink {
   background: linear-gradient(100deg, var(--brand-2), var(--brand-3));
@@ -804,28 +1111,6 @@ kbd,
   -webkit-text-fill-color: transparent;
   color: transparent;
 }
-
-/* focus ring panel */
-.focus-glow {
-  box-shadow: var(--glow);
-}
-
-/* streaming caret — DEACTIVATED (2026-08-09): the global `.caret::after`
-   blink collided with the git-action-button dropdown class of the same name,
-   putting a blinking ▋ on every split button. Re-scope it (e.g.
-   `.stream-caret`) before reactivating.
-.caret::after {
-  content: "▋";
-  color: var(--accent-2);
-  animation: blink 1s steps(2) infinite;
-  margin-left: 1px;
-}
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
-}
-*/
 
 /* subtle entrance — transform only, so content is NEVER hidden if the
    animation doesn't play (background-throttled tab / reduced motion) */
@@ -842,6 +1127,39 @@ kbd,
 }
 @media (prefers-reduced-motion: reduce) {
   .rise {
+    animation: none;
+  }
+}
+
+/* Bottom-right floating panel (dev console, tweaks). Both shipped the same box
+   with the same entrance under two different keyframe names (dvcin / tweakin);
+   one name here means one animation for both. Position, z-index and width stay
+   per-instance — the panels stack at different heights on the same rail. */
+@keyframes pop-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.corner-panel {
+  position: fixed;
+  right: 18px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--hair-2);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  font-family: var(--font-ui);
+  /* grows out of its FAB, which sits below-right of it */
+  transform-origin: bottom right;
+  animation: pop-up 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .corner-panel {
     animation: none;
   }
 }
@@ -886,12 +1204,32 @@ kbd,
   background: var(--ui-meter);
 }
 
-/* tree + project rows */
-.tree-row:hover {
-  background: var(--panel-2);
-}
+/* ---------- hoverable / selectable rows ----------
+   One hover language for every row in the app. The named row classes are kept
+   in the selector list so existing markup (and the e2e specs) keep working
+   while components migrate to .row-hover. */
+.row-hover:hover,
+.tree-row:hover,
 .proj-row:hover {
   background: var(--panel-2);
+}
+
+/* A selectable list row: inset from its scroller so the rounded hover/selected
+   ground never collides with the scrollbar gutter. The 1px vertical margin is
+   what separates adjacent rounded rows without a gap that breaks the column. */
+.list-row {
+  margin: 1px var(--sp-3);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.list-row:hover {
+  background: var(--panel-2);
+}
+/* Selected outranks hover: panel-3 sits one step above the hover ground, so a
+   hovered selected row still reads as selected. */
+.list-row.sel,
+.list-row.sel:hover {
+  background: var(--panel-3);
 }
 
 /* compact sidebar rail */
@@ -915,6 +1253,55 @@ kbd,
 }
 .rail-btn:hover {
   background: var(--panel-2);
+}
+
+/* ---------- floating action button (dev console / tweaks rail) ----------
+   Two selectors because the two call sites differ in shape: the tweaks FAB is
+   a native <button kjButton> (so .fab lands on the button itself), the dev FAB
+   is a <kj-button> host, which is display:contents and paints nothing — there
+   the skin has to reach kouji's inner button. The child selector cannot
+   double-apply: a native kjButton button has no inner .kj-button. */
+.fab,
+.fab > .kj-button {
+  position: relative;
+  /* square launcher: width tracks the top-bar height so it stays square as
+     density changes */
+  width: var(--topbar-h);
+  height: var(--topbar-h);
+  border-radius: 13px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border: 1px solid var(--hair-2);
+  background: linear-gradient(180deg, var(--panel-3), var(--panel));
+  color: var(--ink-2);
+  box-shadow: var(--shadow);
+  transition: transform 0.16s, color 0.16s, border-color 0.16s, box-shadow 0.16s;
+}
+/* The lift is set as a real transform, not the --kj-button-hover-translate
+   knob, because it must work for the native-button call site too. */
+.fab:hover,
+.fab > .kj-button:hover {
+  transform: translateY(-2px);
+  color: var(--ink);
+  border-color: var(--ui-line);
+}
+.fab.on,
+.fab.on > .kj-button {
+  color: var(--ui-ink);
+  border-color: var(--ui-line);
+  box-shadow: var(--shadow);
+}
+.fab svg {
+  width: 19px;
+  height: 19px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fab:hover,
+  .fab > .kj-button:hover {
+    transform: none;
+  }
 }
 
 /* small square icon button shared by pane headers + sidebar header/popover */
@@ -1002,7 +1389,7 @@ kbd,
 :is(.rte-content, .rte-view) :is(h1, .rte-h1),
 :is(.rte-content, .rte-view) :is(h2, .rte-h2) {
   font-family: var(--font-disp);
-  font-weight: 600;
+  font-weight: var(--fw-medium);
   letter-spacing: -0.01em;
   color: var(--ink);
   margin: var(--sp-6) 0 var(--sp-3);
@@ -1016,14 +1403,14 @@ kbd,
 :is(.rte-content, .rte-view) :is(h3, .rte-h3) {
   font-family: var(--font-disp);
   font-size: var(--fs-md);
-  font-weight: 600;
+  font-weight: var(--fw-medium);
   color: var(--ink);
   margin: var(--sp-6) 0 var(--sp-3);
 }
 :is(.rte-content, .rte-view) :is(h4, .rte-h4) {
   font-family: var(--font-disp);
   font-size: var(--fs-ui);
-  font-weight: 600;
+  font-weight: var(--fw-medium);
   color: var(--ink);
   margin: var(--sp-5) 0 var(--sp-2);
 }
@@ -1031,7 +1418,7 @@ kbd,
 :is(.rte-content, .rte-view) :is(h6, .rte-h6) {
   font-family: var(--font-disp);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: var(--fw-medium);
   color: var(--ink-2);
   margin: var(--sp-5) 0 var(--sp-2);
   text-transform: uppercase;
@@ -1100,11 +1487,880 @@ kbd,
 }
 :is(.rte-content, .rte-view) :is(strong, b, .rte-bold) {
   color: var(--ink);
-  font-weight: 700;
+  font-weight: var(--fw-strong);
 }
 :is(.rte-content, .rte-view) :is(em, i, .rte-italic) {
   font-style: italic;
 }
 :is(.rte-content, .rte-view) :is(s, del, .rte-strike) {
   text-decoration: line-through;
+}
+
+/* Icon sizing — see the --ico-* scale above. `--ico` is set per <app-icon>. */
+app-icon svg {
+  width: var(--ico, var(--ico-md));
+  height: var(--ico, var(--ico-md));
+}
+
+/* ---------- kouji button variants ----------
+   Registered in app.config.ts via provideKjButton(). kouji sets the chosen
+   variant as `data-variant` on the inner `.kj-button`, so these rules style it
+   directly — the <kj-button> host is display:contents and paints nothing.
+
+   These live unlayered, so they win over kouji's own `@layer kj.component`
+   rules without needing !important or extra specificity. */
+
+/* `danger` — a destructive ACTION. kouji's built-in `destructive` is a filled
+   red button, which is far too loud for a toolbar; Orrery's danger has always
+   been red ink on a transparent ground. */
+.kj-button[data-variant="danger"] {
+  --kj-button-bg: transparent;
+  --kj-button-fg: var(--st-blocked);
+  --kj-button-border-color: transparent;
+}
+.kj-button[data-variant="danger"]:hover:not([aria-disabled="true"]) {
+  --kj-button-bg: color-mix(in oklch, var(--sem-del), transparent 88%);
+}
+
+/* `toolbar` — the compact muted control in panel headers. Replaces the
+   per-panel .br-op / .lh-op / .follow classes, which were the same recipe
+   copied three times. */
+.kj-button[data-variant="toolbar"] {
+  --kj-button-bg: transparent;
+  --kj-button-fg: var(--ink-3);
+  --kj-button-border-color: transparent;
+  --kj-button-padding-y: var(--sp-1);
+  --kj-button-padding-x: var(--sp-3);
+  --kj-button-font-size: var(--fs-meta);
+}
+.kj-button[data-variant="toolbar"]:hover:not([aria-disabled="true"]) {
+  --kj-button-fg: var(--ink);
+  --kj-button-bg: var(--panel-3);
+}
+
+/* Ghost/outline retuned to the IDE's ink ramp — kouji defaults to its own
+   theme foreground, which reads too strong for secondary chrome. */
+.kj-button[data-variant="ghost"],
+.kj-button[data-variant="outline"] {
+  --kj-button-fg: var(--ink-2);
+  --kj-button-bg: transparent;
+}
+.kj-button[data-variant="outline"] {
+  --kj-button-border-color: var(--hair);
+}
+.kj-button[data-variant="outline"]:hover:not([aria-disabled="true"]) {
+  --kj-button-border-color: var(--hair-2);
+}
+.kj-button[data-variant="ghost"]:hover:not([aria-disabled="true"]) {
+  --kj-button-fg: var(--ink);
+  --kj-button-bg: var(--panel-3);
+}
+
+/* Primary uses the UI accent role, not the theme's raw primary. */
+.kj-button[data-variant="default"] {
+  --kj-button-bg: var(--ui-fill);
+  --kj-button-fg: var(--ui-on-fill);
+  --kj-button-border-color: transparent;
+  --kj-button-font-weight: var(--fw-medium);
+}
+.kj-button[data-variant="default"]:hover:not([aria-disabled="true"]) {
+  filter: brightness(1.06);
+  --kj-button-fg: var(--ui-on-fill);
+}
+.kj-button[data-variant="default"]:active:not([aria-disabled="true"]) {
+  filter: brightness(0.96);
+}
+/* Disabled reads the same for every variant, as .btn:disabled did. */
+.kj-button[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* NOTE the position: `.kj-quiet` must come AFTER the variant blocks above.
+   `.kj-quiet .kj-button` and `.kj-button[data-variant="default"]` have the
+   SAME specificity (0,2,0), so whichever is declared last wins — with the
+   quiet block earlier, every quiet button rendered with the primary accent
+   fill (the update toast's "Later"/"What's new"). */
+/* `quiet` — a button that is only its label: no ground, no border, no padding,
+   no shadow. Used for the inline "Clear" / "Show all" affordances five
+   components hand-rolled as an inline --kj-button-* pack.
+
+   Registered in app.config.ts alongside `danger`/`toolbar`, so call sites say
+   kjVariant="quiet" — never a class. A class would have to be re-declared on
+   the inner .kj-button anyway (the host is display:contents), which is exactly
+   the per-component override soup the variant vocabulary exists to prevent. */
+.kj-button[data-variant="quiet"] {
+  --kj-button-bg: transparent;
+  --kj-button-fg: var(--ink-3);
+  --kj-button-border-color: transparent;
+  --kj-button-padding-y: 0;
+  --kj-button-padding-x: 0;
+  /* the size steps pin a control height; a bare label must not carry one */
+  --kj-button-height: auto;
+  --kj-button-hover-translate: 0;
+}
+.kj-button[data-variant="quiet"] {
+  box-shadow: none;
+}
+.kj-button[data-variant="quiet"]:hover:not([aria-disabled="true"]) {
+  --kj-button-fg: var(--ink);
+  --kj-button-bg: transparent;
+}
+
+
+/* Base geometry. This is the old `.btn` recipe, restated as kouji knobs so
+   every migrated button keeps the exact metrics it had before the migration —
+   kouji's own defaults are sized for a marketing site, not IDE chrome. Setting
+   it here means no call site needs an inline padding/font-size override. */
+/* NOTE the selector: :root, not .kj-button. Since kouji 0.6.3 the knobs are no
+   longer declared on .kj-button, so they inherit — which means a value set on
+   an ANCESTOR reaches the button, and a closer ancestor wins. Declaring these
+   on .kj-button itself would beat every per-instance `<kj-button style="--kj-
+   button-…">` override, re-creating in Orrery the exact bug we just fixed
+   upstream. On :root they are true defaults that any call site can override. */
+:root {
+  --kj-button-padding-y: 0;
+  --kj-button-padding-x: var(--sp-4);
+  --kj-button-font-size: var(--fs-badge);
+  --kj-button-font-weight: var(--fw-normal);
+  --kj-button-gap: var(--sp-3);
+  --kj-button-radius: var(--r-sm);
+  --kj-button-height: var(--ctl-h);
+  /* The hover lift is a marketing-site flourish; IDE chrome must not move. */
+  --kj-button-hover-translate: 0;
+}
+
+/* ---------- the control ladder ----------
+   Two steps carry this UI, and each has a job:
+
+     sm (28px / 14px) — THE default control. Top-bar actions, the Spawn CTA,
+        modal footers, anything that stands on its own. Set as the provider
+        default in app.config.ts, so a bare <kj-button> lands here.
+     xs (22px / 12px) — the compact step for controls that ride inside a
+        toolbar or a pane header, where a full-size button would dominate the
+        row it sits in.
+
+   `md` is aliased to `sm` because kouji hands it to anything that bypasses the
+   provider; `lg`/`xl` keep kouji's meaning. kouji's own steps are declared ON
+   the element (not :root), so they beat inherited defaults — which is why each
+   step is restated here rather than left to the cascade. */
+/* An input and a button standing side by side must be the same box. kouji's
+   input md is 36px against our 28px button, which is what put the Browse
+   button 8px out of step with the field it belongs to. */
+.kj-input[data-size="sm"],
+.kj-input[data-size="md"],
+.kj-input:not([data-size]) {
+  --kj-input-height: var(--ctl-h);
+  --kj-input-font-size: var(--fs-body);
+  --kj-input-padding-y: 0;
+}
+
+.kj-button[data-size="sm"],
+.kj-button[data-size="md"] {
+  --kj-button-height: var(--ctl-h);
+  --kj-button-padding-y: 0;
+  --kj-button-padding-x: var(--sp-5);
+  --kj-button-font-size: var(--fs-body);
+}
+.kj-button[data-size="xs"] {
+  --kj-button-height: var(--ctl-h-sm);
+  --kj-button-padding-y: 0;
+  --kj-button-padding-x: var(--sp-4);
+  --kj-button-font-size: var(--fs-badge);
+}
+.kj-badge[data-size="md"] {
+  --kj-badge-font-size: var(--fs-badge);
+  --kj-badge-padding-x: var(--sp-2);
+  --kj-badge-padding-y: 0;
+}
+.kj-button {
+  white-space: nowrap;
+}
+
+
+/* ---------- tab strips ----------
+   These are kouji's REAL tabs now (role=tablist/tab/tabpanel, roving focus,
+   aria-controls) — not buttons impersonating them. kouji's `default` variant
+   is already the underline shape, so this only re-homes it on Orrery's tokens:
+   the design's inset indicator, the ink ramp, and a strip whose hairline IS
+   the panel divider (so no margin under it).
+
+   Every value below is a --kj-tab-* knob published by the component; nothing
+   here reaches past the component's own API. */
+.kj-tabs {
+  --kj-tab-fg: var(--ink-3);
+  --kj-tab-fg-active: var(--ink);
+  --kj-tab-font-size: var(--fs-body);
+  --kj-tab-font-weight: var(--fw-normal);
+  --kj-tab-padding-x: var(--sp-6);
+  --kj-tab-padding-y: round(calc(9px * var(--density)), 1px);
+  --kj-tab-gap: var(--sp-1);
+  --kj-tab-indicator-color: var(--ui-ind);
+  --kj-tab-indicator-size: 2px;
+  /* design/app.html:5515 holds the bar back from the tab's edges */
+  --kj-tab-indicator-inset: 8px;
+  --kj-tab-list-border-color: var(--hair);
+  --kj-tab-list-gap: 0;
+  /* pills = the recessed tray — this is the app's segmented control now;
+     the hand-rolled .kj-seg trough it replaced is gone. */
+  --kj-tab-tray-bg: var(--panel-2);
+  --kj-tab-tray-border-color: var(--hair);
+  --kj-tab-tray-radius: var(--r-md);
+  /* the chip must be tighter than the tray or the corners collide — the
+     design's 6px (app.html:10446); kouji's default derives from its own
+     radius-field, which lands at 3px here */
+  --kj-tab-chip-radius: 6px;
+  --kj-tab-chip-bg-active: var(--panel-3);
+  --kj-tab-chip-ring-active: var(--hair-2);
+}
+.kj-tab-list {
+  background: var(--panel);
+}
+
+/* ---- tab sizes ----
+   kouji's tabs ship a `variant` but no `size`, so the steps live here until
+   that lands upstream. The UNDERLINE strip keeps the design's 9px rhythm (it
+   is the panel's own header). The PILLS tray is a control that sits beside
+   buttons, so it matches the button box exactly — same height, same type —
+   and `.tabs-xs` is the tighter step for the in-pane switchers, where the
+   strip rides inside a toolbar rather than heading a panel. */
+.kj-tabs[data-variant="pills"] {
+  --kj-tab-padding-y: 0;
+  --kj-tab-padding-x: var(--sp-5);
+  /* a pills strip sits in a row with buttons and inputs — same type, same box */
+  --kj-tab-font-size: var(--fs-body);
+}
+.kj-tabs[data-variant="pills"] .kj-tab {
+  min-height: var(--ctl-h);
+}
+.kj-tabs[data-variant="pills"].tabs-xs {
+  --kj-tab-font-size: var(--fs-badge);
+  --kj-tab-padding-x: var(--sp-3);
+  --kj-tab-tray-padding: 2px;
+  --kj-tab-tray-gap: 1px;
+}
+.kj-tabs[data-variant="pills"].tabs-xs .kj-tab {
+  min-height: var(--ctl-h-sm);
+}
+/* a tab is icon + label + count, not a bare word */
+.kj-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  white-space: nowrap;
+}
+
+/* kouji's default badge is a filled primary chip; ORRERY chips are neutral
+   (design/app.html .chip): panel ground, hairline, muted ink. Explicit [bg]/
+   [fg] inputs land as inline --kj-badge-* vars and still win, as do the
+   non-default data-variants. */
+.kj-badge[data-variant="default"] {
+  --kj-badge-bg: var(--panel-2);
+  --kj-badge-fg: var(--ink-2);
+  --kj-badge-border-color: var(--hair);
+}
+
+/* Neutral active surface per design/app.html: raised --panel-3 + hairline
+   ring + full ink. The accent only appears on the active icon or a 2px
+   --ui-ind indicator — never as a tinted button surface. */
+.kj-button[aria-pressed="true"] {
+  --kj-button-fg: var(--ink);
+  --kj-button-bg: var(--panel-3);
+  --kj-button-border-color: var(--hair-2);
+  /* kouji's layered pressed rule paints `inset 0 1px 2px #0000001f` — a dark
+     inner shadow that reads as a dented segment. The design draws the pressed
+     state as a hairline RING instead (design/app.html:5094-5095, 10448:
+     `box-shadow:0 0 0 1px var(--hair-2)`), so the inset has to be replaced,
+     not merely re-tinted. */
+  box-shadow: 0 0 0 1px var(--hair-2);
+}
+
+/* ---------- split-button geometry (app-git-action-button) ----------
+   These were component-scoped `.btn.main` / `.btn.caret` / `.btn.row` rules.
+   They have to be global now: the element they style is kouji's inner
+   `.kj-button`, which lives in kouji's own view and carries no Angular scope
+   attribute, so a scoped selector cannot reach it. */
+.split .kj-button {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+  flex: 1;
+  min-width: 0;
+  --kj-button-justify: flex-start;
+}
+.split .caret .kj-button {
+  flex: none;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  border-left: 1px solid var(--hair);
+  border-right: 1px solid var(--kj-button-border-color, transparent);
+  --kj-button-padding-x: var(--sp-2);
+  --kj-button-padding-y: 0;
+  /* The caret is icon-only, so it would otherwise pick up the auto-height
+     rule for lone glyphs and end up shorter than the label half. kouji's base
+     sets align-self:center, which also has to go for the two halves to line
+     up as one control. */
+  --kj-button-height: auto;
+  align-self: stretch;
+}
+.split .main .kj-button {
+  align-self: stretch;
+}
+/* One shared height for the pair, taken from the size step. */
+.split {
+  align-items: stretch;
+}
+.split .caret .kj-button[data-variant="default"] {
+  border-left-color: rgba(0, 0, 0, 0.25);
+}
+/* The keybinding capture control in Settings keeps its monospace identity. */
+.set-kbd .kj-button {
+  font-family: var(--font-mono);
+  --kj-button-justify: center;
+  min-width: round(calc(110px * var(--density)), 1px);
+}
+
+/* Repeated inline knob packs, extracted. Same pattern as .sb-foot below: the
+   value is a kouji var, so it can only be set from CSS or an inline style —
+   and nine call sites were setting it inline. */
+.kj-center .kj-button {
+  --kj-button-justify: center;
+}
+/* Push a control to the end of its row (the last item before a right edge). */
+/* Pushes an element to the end of its flex row. The extra selectors matter:
+   kouji's element wrappers are `display:contents`, so the flex ITEM is the
+   inner .kj-button / .kj-badge — a margin on the host is inert and the control
+   silently stays put. */
+.kj-push,
+.kj-push > .kj-button,
+.kj-push > .kj-badge {
+  margin-left: auto;
+}
+
+/* ---------- kj-input-group size cascade ----------
+   `<kj-input-group kjSize="xs">` sets data-size on the GROUP only — the child
+   `<kj-input>` renders with no data-size at all, so kouji's own size steps
+   never fire and the input keeps its md metrics inside an xs group. The knobs
+   can't be inherited from the group either: kouji declares them ON .kj-input,
+   and an element-level declaration beats an inherited one. Restate the steps
+   scoped to the group so the size input means something.
+   (Same shape as the button-group cascade bug fixed upstream in core 0.5.2.) */
+.kj-input-group[data-size="xs"],
+.kj-input-group[data-size="md"] {
+  /* the addon is sized by the GROUP's own knobs — left at md it renders a tall
+     plate beside a short field. It matches the field height and drops its own
+     ground so the group reads as ONE bordered box with an inline icon, which
+     is what the design draws (design/app.html:4619). */
+  --kj-input-group-addon-size: var(--ctl-h);
+  --kj-input-group-addon-font: var(--fs-badge);
+  --kj-input-group-addon-bg: transparent;
+  --kj-input-group-padding-y: 0;
+}
+.kj-input-group[data-size="xs"] .kj-input,
+.kj-input-group[data-size="md"] .kj-input {
+  --kj-input-font-size: var(--fs-badge);
+  --kj-input-height: var(--ctl-h);
+  --kj-input-padding-y: 0;
+}
+/* kouji borders the addon and the field SEPARATELY, which draws a rule between
+   the icon and the input and leaves the icon outside the box. The design's
+   search field is one bordered box with the icon inline (app.html:4619), so the
+   box moves to the group and the children go chrome-less. */
+.kj-input-group[data-size="xs"],
+.kj-input-group[data-size="md"] {
+  background: var(--panel-2);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.kj-input-group[data-size="xs"] .kj-input-group__addon,
+.kj-input-group[data-size="md"] .kj-input-group__addon,
+.kj-input-group[data-size="xs"] .kj-input,
+.kj-input-group[data-size="md"] .kj-input {
+  border-color: transparent;
+  --kj-input-bg: transparent;
+}
+.kj-input-group[data-size="sm"] .kj-input {
+  --kj-input-font-size: var(--fs-label);
+}
+
+/* ---------- kj-input stripped of its chrome ----------
+   Used where the SURROUNDING box already draws the border, ground and focus
+   ring — the add-project field boxes and the spawn-modal name group. Without
+   this the input paints a second border inside the first. `min-width:0` again:
+   the input is a flex child and would otherwise refuse to shrink. */
+.bare-input .kj-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  padding: var(--sp-5) 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui);
+}
+.bare-input .kj-input:focus-visible {
+  outline: none;
+}
+
+/* ---------- app-select fills its slot ----------
+   <app-select> wraps <kj-select>; neither is a block by default, so a select
+   dropped into a form column collapsed to its content width and overflowed
+   its row. Four components had copied this — each behind ::ng-deep, because
+   kj-select's inner node carries no Angular scope attribute. Stated once here,
+   those four ::ng-deep escapes go away. */
+app-select,
+app-select .kj-select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+/* ---------- kj-textarea defaults ----------
+   kouji declares the --kj-textarea-* knobs ON the inner .kj-textarea, so a
+   host-level custom property never reaches them — which is why two components
+   restated the whole nine-knob pack instead of overriding a default. These are
+   the app's defaults; a call site now only declares what it changes (the
+   conflict editor's zero radius, the review note's panel ground). */
+kj-textarea .kj-textarea {
+  --kj-textarea-bg: var(--panel-2);
+  --kj-textarea-fg: var(--ink);
+  --kj-textarea-border-color: var(--hair);
+  --kj-textarea-radius: var(--r-sm);
+  --kj-textarea-font: var(--font-mono);
+  --kj-textarea-font-size: var(--fs-sm);
+  --kj-textarea-line-height: 1.5;
+  --kj-textarea-padding-x: var(--sp-5);
+  --kj-textarea-padding-y: var(--sp-3);
+  --kj-textarea-min-height: 0;
+}
+
+/* ---------- kouji badge skins (app-sha-chip) ----------
+   kouji declares its `--kj-badge-*` knobs ON `.kj-badge` itself, so a host-level
+   custom property never reaches them — they have to be re-declared on that same
+   inner span. The span lives in kouji's view with no Angular scope attribute,
+   which is why this cannot be a component style.
+
+   Unlayered, so it beats kouji's own `@layer kj.component` defaults without
+   !important. The ink is NOT set here: it is per-instance data and comes from
+   the badge's `fg` input. */
+app-sha-chip .kj-badge {
+  --kj-badge-font-size: var(--fs-2xs);
+  --kj-badge-padding-x: var(--sp-3);
+  --kj-badge-padding-y: 0;
+  /* Full pill + hairline: Orrery's `.chip` silhouette, not kouji's squarer
+     --kj-radius-selector tag. */
+  --kj-badge-radius: 999px;
+  --kj-badge-border-color: var(--hair);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* ---------- kouji badge as the square file-state badge (app-state-badge) ----
+   Same story as the sha chip: the geometry has to dress kouji's inner
+   `.kj-badge` span. Per-state colours come through the bg/fg INPUTS. */
+app-state-badge .kj-badge {
+  --kj-badge-padding-x: 0;
+  --kj-badge-padding-y: 0;
+  --kj-badge-radius: 3px;
+  --kj-badge-font-size: var(--fs-2xs);
+  width: var(--sp-6);
+  height: var(--sp-6);
+  flex: none;
+  justify-content: center;
+  font-weight: var(--fw-strong);
+  user-select: none;
+}
+
+/* ---------- kouji badge as the version pill/tag (app-version-badge) ----------
+   The channel colour is per-build data published by the host as --vb-color;
+   the hairline derives from it here because the border colour has no badge
+   input. Same inner-span story as the chips above. */
+app-version-badge .kj-badge {
+  --kj-badge-border-color: color-mix(in oklch, var(--vb-color), transparent 58%);
+  background: color-mix(in oklch, var(--vb-color), transparent 88%);
+  font-family: var(--font-mono);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.02em;
+  gap: 5px;
+  white-space: nowrap;
+}
+app-version-badge .pill .kj-badge {
+  --kj-badge-radius: 999px;
+  --kj-badge-padding-x: var(--sp-3);
+  --kj-badge-padding-y: 0;
+  height: 17px;
+  gap: var(--sp-2);
+  font-family: var(--font-mono);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.02em;
+}
+app-version-badge .tag .kj-badge {
+  --kj-badge-radius: 4px;
+  --kj-badge-padding-x: var(--sp-2);
+  --kj-badge-padding-y: 0;
+  --kj-badge-font-size: var(--fs-3xs);
+}
+
+/* ---------- command overlays on kouji's <kj-command-palette> ----------
+   kj renders its palette with ViewEncapsulation.None, so its inner nodes carry
+   no Angular scope attribute and a component-scoped rule cannot reach them —
+   the re-skin has to live here. Two things are being fixed: kj's raw --kj-*
+   defaults are swapped for Orrery tokens, and the box is put back on the
+   density ramp (a palette frozen in px keeps its width while its text grows,
+   which is how a panel ends up clipping its own contents). */
+.orr-palette .kj-command-palette__backdrop {
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.orr-palette .kj-command-palette__dialog {
+  top: 12vh;
+  width: round(calc(600px * var(--density)), 1px);
+  max-width: calc(100% - var(--sp-8) * 2);
+  max-height: 72vh;
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+}
+.orr-palette-narrow .kj-command-palette__dialog {
+  top: 16vh;
+  width: round(calc(480px * var(--density)), 1px);
+}
+.orr-palette .kj-command-palette__input-wrapper {
+  gap: var(--sp-5);
+  padding: var(--sp-6) var(--sp-7);
+  border-bottom: 1px solid var(--hair);
+}
+.orr-palette .kj-command-palette__search-icon {
+  width: var(--fs-md);
+  height: var(--fs-md);
+  color: var(--ui-ink);
+}
+.orr-palette .kj-command-palette__input {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  color: var(--ink);
+}
+.orr-palette .kj-command-palette__input::placeholder {
+  color: var(--ink-4);
+}
+.orr-palette .kj-command-palette__list {
+  flex: 1;
+  max-height: none;
+  padding: var(--sp-3) 0;
+}
+.orr-palette .kj-command-palette__empty {
+  padding: var(--sp-8) var(--sp-7);
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--ink-4);
+}
+/* kj ships no `display` on the group host, and a bare custom element is inline. */
+.orr-palette .kj-command-group {
+  display: block;
+  padding-block: 0;
+}
+.orr-palette .kj-command-group__label {
+  padding: var(--sp-4) var(--sp-7) var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-3xs);
+  font-weight: var(--fw-normal);
+  color: var(--ink-4);
+}
+.orr-palette .kj-command-item {
+  min-height: 0;
+  gap: var(--sp-5);
+  padding: var(--sp-3) var(--sp-7);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui);
+  color: var(--ink-2);
+}
+.orr-palette .kj-command-item:hover,
+.orr-palette .kj-command-item[data-active] {
+  background: var(--panel-3);
+  border-inline-start-color: var(--ui-focus);
+  color: var(--ink);
+}
+.orr-palette .kj-command-item.danger {
+  color: var(--st-blocked);
+}
+.orr-palette .kj-command-item[aria-disabled="true"] {
+  opacity: 0.42;
+}
+.orr-palette .orr-cmd-label b {
+  color: var(--ui-ink);
+  font-weight: var(--fw-medium);
+}
+/* truncation body comes from `.trunc` above; only the deltas live here */
+.orr-palette .orr-cmd-meta {
+  flex: none;
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+}
+/* the one child that eats the leftover row width (label here, path there) */
+.orr-palette .orr-cmd-grow {
+  flex: 1;
+}
+/* NOTE the extra level: `.orr-cmd-chip` sits on the <kj-badge> HOST, which is
+   display:contents and paints nothing — padding/font-size set there never
+   rendered. The knobs have to dress kouji's inner span, exactly as
+   `app-sha-chip .kj-badge` above does. */
+.orr-palette .orr-cmd-chip .kj-badge {
+  flex: none;
+  --kj-badge-padding-y: 1px;
+  --kj-badge-padding-x: var(--sp-3);
+  --kj-badge-font-size: var(--fs-3xs);
+}
+.orr-palette .orr-palette-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sp-6);
+  padding: var(--sp-3) var(--sp-7);
+  border-top: 1px solid var(--hair);
+  background: var(--panel-2);
+  font-size: var(--fs-2xs);
+  color: var(--ink-4);
+}
+.orr-palette .orr-palette-foot span {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.orr-palette .orr-palette-count {
+  margin-left: auto;
+}
+
+/* ---------- context menu: roving focus ----------
+   The store-driven menu now uses kj's list navigator in roving mode, so DOM
+   focus lands on the item itself. Without these the browser's default ring
+   would paint over the menu's own hover language. */
+.menu-item:focus {
+  outline: none;
+}
+.menu-item:not(:disabled):focus-visible {
+  background: var(--elev-hover);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ui-focus);
+}
+.menu-item.danger:not(:disabled):focus-visible {
+  color: var(--st-blocked);
+}
+
+/* Sidebar footer: "Add project" takes the free space, "Agent" stays its own
+   width. flex lives on kouji's inner button because that is the flex item. */
+.sb-foot .kj-button { --kj-button-justify: center; }
+.sb-foot kj-button:first-child .kj-button { flex: 1; min-width: 0; }
+.sb-foot kj-button:last-child .kj-button { flex: none; }
+
+/* Square icon buttons (pane chrome, tab close). kouji's `icon` size gives the
+   square; these add the tight radius and hover the old .pane-btn had. */
+/* Icon-only buttons ride the xs step like every other dense control — kouji's
+   own `icon` size is --kj-ctl-h-md (36px), a touch target, which is half again
+   too tall for a toolbar where the old .pane-btn sat at var(--sp-1) padding.
+   Colour comes from the variant; this only equalises the padding so a lone
+   glyph is not lozenge-shaped. */
+.kj-button[data-size="icon"] {
+  /* height MUST go auto. A pinned control height would sit a lone glyph in a
+     28px-tall box only ~4px + icon wide — taller than wide, which reads as too
+     much padding above and below. With auto height the padding alone defines
+     the box, so equal padding around a square icon gives a square button.
+
+     This replaces a `:has(> app-icon:only-child)` selector that ALSO matched
+     icon+label buttons: `:only-child` counts element siblings, and a text node
+     is not one, so every labelled icon button silently got the icon-only box
+     and rendered shorter than the controls beside it. */
+  --kj-button-height: auto;
+  --kj-button-padding-x: var(--sp-1);
+  --kj-button-padding-y: var(--sp-1);
+  --kj-button-font-size: var(--fs-badge);
+  /* kouji pins these as literals (2.75rem — a touch target), not knobs, so a
+     custom property cannot reach them: in IDE chrome a 44px glyph button is
+     half again too tall for the row it sits in. */
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---------- kouji overlay chrome ----------
+   @kouji-ui/core ships the overlay HEADLESS: KjDialog.open() mounts panels into
+   a body-level .kj-overlay-container and renders a bare <kj-backdrop> — no
+   class, no styles — so the scrim, stacking and hit-testing are ours.
+
+   These live here, not in a component's styles[], because they target elements
+   OUTSIDE the app's component tree: putting them in a component made them
+   depend on that component being instantiated and on its stylesheet surviving
+   an incremental rebuild, which is not a dependency body-level chrome should
+   have. */
+/* One positioned root for every overlay: transparent to the pointer so
+   the app underneath stays clickable — each panel re-enables its own
+   hit area (KjOverlayBuilder sets pointer-events:auto inline). z-80
+   matches the layer the hand-rolled modal backdrops used, so the
+   tweaks/dev rail (z-90/91) still floats above. */
+.kj-overlay-container {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+  /* Centres every panel. kouji ships no layout here, and each modal used
+     to centre itself via its own grid backdrop — without this the panel
+     lands in the top-left corner. */
+  display: grid;
+  place-items: center;
+  padding: var(--sp-9);
+}
+/* The wrapper is transparent to layout so the panel itself is the grid
+   item and gets centred; the backdrop is position:fixed and so takes no
+   part in the grid. */
+.kj-overlay-wrapper {
+  display: contents;
+}
+/* NOTE the selector level: the panel is a child of the WRAPPER, not of
+   the container — the container's only child is the wrapper itself.
+   Targeting `.kj-overlay-container > *` therefore styled the wrapper,
+   which is display:contents and so has no box for position/z-index to
+   act on. The panel stayed position:static while the backdrop is fixed,
+   and a positioned element paints above a static sibling, so the
+   backdrop covered the dialog: only controls that were themselves
+   positioned remained clickable. */
+.kj-overlay-wrapper > *:not(kj-backdrop) {
+  pointer-events: auto;
+  position: relative;
+  z-index: 1;
+  max-height: 100%;
+  min-height: 0;
+}
+/* The dialog CARD itself. kj-dialog-shell renders a bare `.kj-dialog` box with
+   kouji's own padding and surface; every modal restated the same nine
+   declarations to put it back on Orrery's panel + hairline + shadow. Only the
+   width stays per-modal (440 / 480 / 540px on the density ramp) — the frame is
+   identical, and `padding:0` is load-bearing: each modal paints its own header
+   and footer edge-to-edge inside the card. */
+.kj-overlay-wrapper .kj-dialog {
+  padding: 0;
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  max-width: calc(100vw - 48px);
+  min-width: 0;
+}
+
+kj-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: auto;
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+/* The hand-rolled backdrop, for the overlays that are NOT mounted through
+   KjDialog (they render inline in a component's own template and centre their
+   panel themselves). Same --scrim token as <kj-backdrop> above, so the two
+   kinds of overlay dim the app by exactly the same amount. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--scrim);
+}
+
+/* ---------- Monaco surfaces ----------
+   Monaco builds its DOM imperatively, outside Angular's view — its nodes carry
+   no scoping attribute, so a component style reaches them only via ::ng-deep,
+   which is exactly the escape hatch three components were using (code-diff,
+   monaco-file-editor, unified-code) with three copies of these rules. Global
+   and unlayered is the honest home for them.
+
+   `!important` is Monaco's fault, not ours: it writes its theme colours as
+   inline styles on the very same elements. */
+.monaco-editor,
+.monaco-editor .margin,
+.monaco-editor-background,
+.monaco-diff-editor {
+  background-color: var(--bg) !important;
+}
+/* Flat change layer on the app's own diff palette — Monaco's built-in diff
+   greens/reds ignore the theme entirely. Row tint and intra-line tint share a
+   colour: the char highlight sits on top of the line and would otherwise read
+   as a second, stronger change. */
+.monaco-editor .line-insert,
+.monaco-editor .char-insert {
+  background-color: var(--code-add-bg) !important;
+}
+.monaco-editor .line-delete,
+.monaco-editor .char-delete {
+  background-color: var(--code-del-bg) !important;
+}
+/* The box an editor is mounted into. `min-height:0` + `overflow:hidden` keep
+   Monaco's own layout from pushing the pane taller than its parent (Monaco
+   measures this element and would happily grow into an auto height). */
+.code-host {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  font-size: var(--fs-ui);
+}
+    
+
+/* The update dot is absolutely positioned against the settings button. Its
+   anchor has to be kouji's inner button: the <kj-button> host is
+   display:contents and generates no box, so position:relative on it does
+   nothing and the dot escaped to the nearest positioned ancestor — landing in
+   the top-right of the window. Global because a component stylesheet cannot
+   reach an element that lives in kouji's view. */
+.tb-settings .kj-button {
+  position: relative;
+}
+
+/* kouji pins every button to align-self:center so a stretch parent cannot
+   over-grow it. That also makes a kj-button ignore its row's align-items,
+   so it floated centred next to native siblings that sat at the top. Orrery's
+   old .btn set no align-self and simply obeyed the row; restore that. The
+   size steps set an explicit height, which stretch cannot override, so
+   kouji's original concern does not apply here. */
+.kj-button {
+  align-self: auto;
+}
+
+/* ---------- kouji badge, wearing Orrery's chip skin ----------
+   `.chip` IS the app's pill primitive (design/app.html:453) and stays: it is
+   rendered directly across the app and asserted by the e2e specs. <kj-badge>
+   simply wears the same skin, so a badge and a chip read identically. kouji
+   declares its knobs ON .kj-badge, so an ancestor cannot set them — these
+   rules are unlayered and therefore win over kouji's @layer kj.component
+   without needing extra specificity. Per-instance colour still comes through
+   the bg/fg INPUTS, which kouji applies inline. */
+.kj-badge {
+  --kj-badge-radius: var(--r-pill);
+  --kj-badge-padding-x: var(--sp-3);
+  --kj-badge-padding-y: var(--sp-1);
+  --kj-badge-font-size: var(--fs-meta);
+  --kj-badge-bg: var(--panel-2);
+  --kj-badge-fg: var(--ink-2);
+  --kj-badge-border-color: var(--hair);
+  gap: var(--sp-2);
+  white-space: nowrap;
+}
+/* …but the knobs above are declared ON .kj-badge, which means they also beat
+   kouji's own `[data-size]` steps (those live in @layer kj.component). Without
+   these, `size="xs"` changed nothing but the padding — every badge in the app
+   rendered at --fs-meta. Restate the steps here so the size input works. */
+.kj-badge[data-size="xs"] {
+  --kj-badge-font-size: var(--fs-badge);
+  --kj-badge-padding-x: var(--sp-2);
+  --kj-badge-padding-y: 0;
+}
+.kj-badge[data-size="sm"] {
+  --kj-badge-font-size: var(--fs-badge);
+  --kj-badge-padding-x: var(--sp-3);
 }

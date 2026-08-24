@@ -35,8 +35,8 @@ test("Ctrl+Shift+P opens the command palette; typing filters; Esc closes", async
   // the custom-element host is a 0×0 inline box (content is fixed-positioned)
   // — assert on the input, which has a real box
   await expect(palette.locator("input")).toBeVisible();
-  // registry renders FROM the command list (B2.2) — count chip present
-  await expect(palette.locator(".chip")).toContainText("commands");
+  // registry renders FROM the command list (B2.2) — footer count present
+  await expect(palette.locator(".orr-palette-count")).toContainText("commands");
 
   await page.keyboard.type("theme");
   await expect(palette).toContainText("Theme"); // "Switch to … Theme"
@@ -75,7 +75,8 @@ test("topbar Search Everywhere button opens the overlay", async ({ page }) => {
   const btn = page.locator("app-top-bar .tb-search");
   await expect(btn).toBeVisible();
   // kbd chip shows the double-shift label (Windows-first: "Shift Shift")
-  await expect(btn.locator(".kbd")).toContainText("Shift");
+  // the chip is kouji's <kj-kbd> since the shared-primitive migration
+  await expect(btn.locator("kj-kbd").first()).toContainText("Shift");
   await btn.click();
   const se = page.locator("app-search-everywhere");
   // host is a 0×0 inline box — assert the inner input, which has a real box
@@ -123,7 +124,7 @@ test("Ctrl+Shift+F opens find-in-files with scope + toggles once an agent exists
   await expect(replaceTab).toBeEnabled();
   await expect(find.getByRole("button", { name: "Aa" })).toBeVisible();
   await expect(find.getByRole("button", { name: ".*" })).toBeVisible();
-  await expect(find.locator("select")).toBeVisible();
+  await expect(find.locator("kj-select")).toBeVisible();
   await expect(find).toContainText("type to search");
 
   // switching to Replace reveals the replacement row + apply button

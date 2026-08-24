@@ -5,6 +5,7 @@ import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { STATUS_META } from "../utils";
+import { KjBadgeComponent } from "@kouji-ui/components";
 
 interface Col {
   key: AgentStatus;
@@ -15,7 +16,7 @@ interface Col {
 @Component({
   selector: "app-kanban-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusDotComponent, IconComponent],
+  imports: [StatusDotComponent, IconComponent, KjBadgeComponent],
   template: `
     <!-- columns keep a readable floor; past that the overview body scrolls sideways -->
     <div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:var(--sp-6);padding:var(--sp-7);align-items:start;min-height:0">
@@ -23,8 +24,8 @@ interface Col {
         @let items = colItems(c);
         <div style="display:flex;flex-direction:column;gap:var(--sp-4)">
           <div [style.border-bottom]="'2px solid ' + color(c.key)" style="display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-1) var(--sp-2)">
-            <span class="up" style="font-size:var(--fs-xs);color:var(--ink-2)">{{ c.label }}</span>
-            <span class="chip tnum" style="margin-left:auto;font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ items.length }}</span>
+            <span class="up" style="color:var(--ink-2)">{{ c.label }}</span>
+            <kj-badge class="tnum" style="display:inline-flex;margin-left:auto">{{ items.length }}</kj-badge>
           </div>
           @for (ag of items; track ag.id) {
             <div
@@ -34,21 +35,22 @@ interface Col {
             >
               <div style="display:flex;align-items:center;gap:var(--sp-3)">
                 <app-status-dot [status]="ag.status" />
-                <span class="disp" style="font-size:var(--fs-ui);font-weight:600">{{ ag.name }}</span>
+                <h4>{{ ag.name }}</h4>
               </div>
-              <span style="font-size:var(--fs-sm);color:var(--ink-2);line-height:1.45;text-wrap:pretty">{{ ag.task }}</span>
+              <!-- two-line clamp keeps kanban cards a uniform height -->
+              <span style="color:var(--ink-2);line-height:1.45;text-wrap:pretty;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;height:2.9em">{{ ag.task }}</span>
               @if (ag.status === 'running') {
                 <div class="activity"></div>
               }
-              <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-xs);color:var(--ink-3)">
-                <app-icon name="branch" size="sm" [px]="10" />
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
+              <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-4);color:var(--ink-3)">
+                <app-icon size="sm" name="branch" />
+                <span class="trunc">{{ ag.branch.replace('agent/', '') }}</span>
                 <span style="margin-left:auto;color:var(--code-add-ink)">+{{ add(ag) }}</span>
               </div>
             </div>
           }
           @if (!items.length) {
-            <div style="padding:var(--sp-6);text-align:center;color:var(--ink-4);font-size:var(--fs-xs);border:1px dashed var(--hair);border-radius:var(--r-md)">empty</div>
+            <div style="padding:var(--sp-6);text-align:center;color:var(--ink-4);border:1px dashed var(--hair);border-radius:var(--r-md)">empty</div>
           }
         </div>
       }

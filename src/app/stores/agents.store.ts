@@ -110,10 +110,6 @@ export class AgentsStore {
   tree(id: string): Promise<FileNode[]> {
     return this.bridge.invoke<FileNode[]>(Commands.AgentTree, { id });
   }
-  /** Immediate children of one directory — to lazily expand an unloaded folder. */
-  listDir(id: string, path: string): Promise<FileNode[]> {
-    return this.bridge.invoke<FileNode[]>(Commands.AgentDir, { id, path });
-  }
   /** Working-tree changes in the agent's worktree (git status). */
   changes(id: string): Promise<AgentFile[]> {
     return this.bridge.invoke<AgentFile[]>(Commands.AgentChanges, { id });

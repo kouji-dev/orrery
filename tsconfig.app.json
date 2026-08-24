@@ -4,6 +4,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/app",
+    // Required because tsconfig.json lists this file in "references" — without
+    // it `tsc -b` fails with TS6306 ("must have setting composite: true").
+    "composite": true,
     "types": []
   },
   "include": ["src/**/*.ts"],

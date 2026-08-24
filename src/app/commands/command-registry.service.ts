@@ -22,7 +22,7 @@ export interface AppCommand {
   label: string;
   group: string;
   icon: string;
-  /** Binding like "Ctrl+Shift+p" ("Mod" = Cmd on mac); "Shift Shift" is special. */
+  /** Binding like "Ctrl+Shift+p" ("Mod" = Cmd on mac)"Shift Shift" is special. */
   kbd?: string;
   /** Secondary binding (e.g. the IntelliJ variant of the same action). */
   kbdAlt?: string;
