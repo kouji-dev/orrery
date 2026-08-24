@@ -33,11 +33,7 @@ import { KjDialog } from "@kouji-ui/core";
     <kj-dialog-shell>
       <div class="kj-dialog rise">
         <div class="pane-head" style="padding:var(--sp-6) var(--sp-7)">
-          <span
-            [style.background]="mix(color(), 82)"
-            [style.border]="'1px solid ' + mix(color(), 55)"
-            style="flex:none;width:var(--sp-9);height:var(--sp-9);border-radius:7px;display:grid;place-items:center"
-          >
+          <span class="head-icon" [style.--head-accent]="color()">
             <app-icon [name]="icon()" [color]="color()" />
           </span>
           <h1 style="white-space:nowrap">Add project</h1>

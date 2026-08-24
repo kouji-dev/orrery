@@ -18,11 +18,10 @@ import { effectiveEffort, effectiveModel, SettingsStore } from "../settings/sett
 import { TicketsStore } from "../stores/tickets.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
-import { SelectComponent } from "../shared/select.component";
+import { SelectComponent, SelectGroup, SelectOption } from "../shared/select.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { mix } from "../utils";
 import {
-  KjBadgeComponent,
   KjButtonComponent,
   KjDialogComponent,
   KjFieldComponent,
@@ -31,6 +30,9 @@ import {
   KjInputComponent,
   KjInputGroupAddonComponent,
   KjInputGroupComponent,
+  KjTabComponent,
+  KjTabListComponent,
+  KjTabsComponent,
   KjTextareaComponent,
 } from "@kouji-ui/components";
 import { KjDialog } from "@kouji-ui/core";
@@ -50,6 +52,17 @@ function stripHtml(html: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/**
+ * The value carried by the Ticket picker's "None" row.
+ *
+ * `""` cannot be it: kouji reads an empty value as "nothing selected" and
+ * paints the placeholder over the row's own label, so the option would read
+ * "Select…" instead of "None — start from scratch". The component keeps using
+ * `""` internally for "no ticket"; this sentinel only ever exists between
+ * `ticketSelection()` and `selectTicket()`.
+ */
+const NO_TICKET = "__none__";
 
 /** Convert a title to a slug (mirrors the backend worktree slug logic). */
 function slugName(title: string): string {
@@ -72,7 +85,6 @@ function slugName(title: string): string {
     IconComponent,
     SelectComponent,
     ToolBadgeComponent,
-    KjBadgeComponent,
     KjButtonComponent,
     KjDialogComponent,
     KjFieldComponent,
@@ -81,6 +93,9 @@ function slugName(title: string): string {
     KjInputComponent,
     KjInputGroupAddonComponent,
     KjInputGroupComponent,
+    KjTabComponent,
+    KjTabListComponent,
+    KjTabsComponent,
     KjTextareaComponent,
   ],
   host: { role: "dialog", "aria-modal": "true", "aria-label": "Spawn agent" },
@@ -91,9 +106,9 @@ function slugName(title: string): string {
     <kj-dialog-shell>
       <div class="kj-dialog rise">
         <div class="pane-head" style="padding:var(--sp-6) var(--sp-7)">
-          <app-icon name="agent" color="var(--ui-ink)" />
+          <!-- the shared .head-icon square, same as Add project's -->
+          <span class="head-icon"><app-icon name="agent" color="var(--ui-ink)" /></span>
           <h1 style="white-space:nowrap">Spawn agent</h1>
-          <kj-badge style="margin-left:auto;font-size:var(--fs-meta)">new git worktree + branch</kj-badge>
         </div>
 
         <div class="scroll-y" style="padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-7);flex:1">
@@ -116,32 +131,17 @@ function slugName(title: string): string {
           </div>
 
           <!-- ticket (optional) — prefills + links Name and Initial prompt.
-               Stays a native select: it needs <optgroup> (To do / In progress),
-               which app-select / kj-select cannot express. -->
+               Same <app-select> as Project / Source branch / Model: the To do /
+               In progress split rides in as option GROUPS, which is what the
+               native <optgroup> was here for. -->
           <div>
             <label class="field-label">Ticket</label>
-            <select
-              class="osel"
-              [value]="ticketId()"
-              (change)="applyTicket($any($event.target).value)"
-              [style.border-color]="linked ? 'var(--ui-line)' : 'var(--hair)'"
-            >
-              <option value="" [selected]="!ticketId()">None — start from scratch</option>
-              @if (openTicketsTodo().length) {
-                <optgroup label="To do">
-                  @for (t of openTicketsTodo(); track t.id) {
-                    <option [value]="t.id" [selected]="t.id === ticketId()">{{ t.title }}</option>
-                  }
-                </optgroup>
-              }
-              @if (openTicketsInProgress().length) {
-                <optgroup label="In progress">
-                  @for (t of openTicketsInProgress(); track t.id) {
-                    <option [value]="t.id" [selected]="t.id === ticketId()">{{ t.title }}</option>
-                  }
-                </optgroup>
-              }
-            </select>
+            <app-select
+              [value]="ticketSelection()"
+              [options]="ticketOptions()"
+              (valueChange)="selectTicket($event)"
+              [style.--kj-border-default]="linked ? 'var(--ui-line)' : null"
+            />
             @if (linked) {
               <div style="display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-3);color:var(--ink-2)">
                 <app-icon name="link" size="sm" />Name linked · the ticket is prepended to the prompt on spawn
@@ -168,14 +168,24 @@ function slugName(title: string): string {
           <!-- agent tool -->
           <kj-field class="spawn-field">
             <kj-field-label>Agent</kj-field-label>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-3);width:100%">
+            <!-- the shared .tool-tiles / .tool-tile recipe, same control as
+                 Settings → Default agent; only the selected tile's accent tint
+                 is per-instance, since it is the TOOL's colour, not the app's -->
+            <div class="tool-tiles spawn-tools">
               @for (tl of tools; track tl.id) {
                 @let on = toolId() === tl.id;
-                <kj-button kjVariant="ghost" (click)="setTool(tl.id)" [style.--kj-button-border-color]="on ? mix(tl.accent, 45) : 'var(--hair)'" [style.--kj-button-bg]="on ? mix(tl.accent, 88) : 'var(--panel-2)'">
+                <kj-button
+                  kjVariant="ghost"
+                  class="tool-tile"
+                  (click)="setTool(tl.id)"
+                  [style.--tile-border]="on ? mix(tl.accent, 45) : null"
+                  [style.--tile-bg]="on ? mix(tl.accent, 88) : null"
+                  [style.--tile-fg]="on ? 'var(--ink)' : null"
+                >
                   <app-tool-badge [tool]="tl.id" [size]="20" />
-                  <span [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'">{{ tl.name }}</span>
+                  <span class="tn">{{ tl.name }}</span>
                   @if (!runtime.toolAvailable(tl.id)) {
-                    <span class="tnum" style="font-size:var(--fs-badge);color:var(--st-blocked)">not found</span>
+                    <span class="ts tnum" style="color:var(--st-blocked)">not found</span>
                   }
                 </kj-button>
               }
@@ -191,11 +201,26 @@ function slugName(title: string): string {
             @if (tool.effort) {
               <kj-field class="spawn-field" style="flex:1">
                 <kj-field-label>Reasoning effort</kj-field-label>
-                <div style="display:flex;gap:var(--sp-3);width:100%">
-                  @for (ef of tool.effort; track ef) {
-                    <kj-button kjVariant="outline" (click)="effort.set(ef)" [style.--kj-button-border-color]="effort() === ef ? 'var(--ui-focus)' : 'var(--hair)'" [style.--kj-button-fg]="effort() === ef ? 'var(--ink)' : 'var(--ink-3)'" [style.--kj-button-bg]="effort() === ef ? 'var(--ui-sel)' : 'transparent'" class="kj-center" style="--kj-button-font-size: var(--fs-meta)">{{ ef }}</kj-button>
-                  }
-                </div>
+                <!-- pills tabs, the same segmented control Settings uses for
+                     this very choice. As four outline kj-buttons the selection
+                     never showed: kouji declares --kj-button-bg / -fg /
+                     -border-color ON the inner .kj-button for [data-variant],
+                     and an element-level declaration beats the inherited value
+                     a host [style.--kj-button-*] sets — so every state binding
+                     was silently dropped. Tabs carry aria-selected and paint
+                     the chip themselves. -->
+                <kj-tabs
+                  class="spawn-seg"
+                  variant="pills"
+                  [value]="effort() ?? ''"
+                  (valueChange)="effort.set($any($event))"
+                >
+                  <kj-tab-list aria-label="Reasoning effort">
+                    @for (ef of tool.effort; track ef) {
+                      <kj-tab [value]="ef">{{ ef }}</kj-tab>
+                    }
+                  </kj-tab-list>
+                </kj-tabs>
               </kj-field>
             }
           </div>
@@ -254,6 +279,12 @@ function slugName(title: string): string {
         color: var(--ink-4);
       }
       .spawn-name ::ng-deep .kj-input {
+        /* kouji defaults a group to data-size="md", and the app-wide
+           kj-input-group cascade types an md group's field at --fs-badge — a
+           rule written for the compact search box. This is a full-width form
+           field, so it takes the same baseline as the Initial prompt below it;
+           without this the dialog's two text inputs disagree by two steps. */
+        --kj-input-font-size: var(--fs-body);
         background: var(--panel-2);
         border-color: var(--kj-input-group-border-color, var(--hair));
         border-left: none;
@@ -263,23 +294,30 @@ function slugName(title: string): string {
         padding: var(--sp-5) var(--sp-5) var(--sp-5) 0;
       }
       .spawn-name ::ng-deep .kj-input:focus-visible { outline: none; }
-      /* kj-textarea restyled onto the app tokens (the old .spawn-textarea box) */
-      .spawn-textarea ::ng-deep textarea {
-        width: 100%;
-        resize: none;
-        background: var(--panel-2);
-        border: 1px solid var(--hair);
-        border-radius: var(--r-md);
-        padding: var(--sp-5) var(--sp-6);
-        color: var(--ink);
-        font-family: var(--font-mono);
-        line-height: 1.5;
+      /* Only the DELTAS from the app-wide kj-textarea defaults in styles.css.
+         This used to restate the whole box on the raw <textarea>, which set
+         every property EXCEPT font-size — so the knob pack's size was the one
+         thing still in force and the prompt typed a step larger than the Name
+         field above it. Going through the knobs keeps the two on one ramp, and
+         ::placeholder rides along (kouji only recolours it). */
+      .spawn-textarea ::ng-deep .kj-textarea {
+        --kj-textarea-radius: var(--r-md);
+        --kj-textarea-padding-x: var(--sp-6);
+        --kj-textarea-padding-y: var(--sp-5);
+      }
+      .spawn-textarea ::ng-deep .kj-textarea:focus-visible {
         outline: none;
-        box-shadow: none;
+        --kj-textarea-border-color: var(--ui-focus);
       }
-      .spawn-textarea ::ng-deep textarea:focus {
-        border-color: var(--ui-focus);
-      }
+      /* The four agents stay on ONE row here — the dialog is a fixed 540px and
+         the picker reads as a single choice set, so it must not reflow into a
+         2x2 at a larger --fs-scale. minmax(0,…) lets each track shrink under
+         its label; .tn's ellipsis (shared recipe) absorbs the rest. */
+      .spawn-tools { --tile-cols: repeat(4, minmax(0, 1fr)); }
+      /* the effort tray fills its column, same size step as Settings' .set-seg */
+      .spawn-seg { --kj-tab-padding-x: var(--sp-6); --kj-tab-font-size: var(--fs-meta); }
+      .spawn-seg ::ng-deep .kj-tab-list { width: 100%; }
+      .spawn-seg ::ng-deep .kj-tab { flex: 1; justify-content: center; text-transform: capitalize; }
       /* footer: the path label ellipsizes, the first button pushes the trio right */
       .spawn-cancel ::ng-deep .kj-button { margin-left: auto; }
     `,
@@ -343,6 +381,27 @@ export class SpawnModalComponent {
     this.openTickets().filter((t) => t.status === "inprogress"),
   );
 
+  /** Tickets as app-select options: the "None" escape hatch loose at the top,
+   *  then one group per open status. An empty status contributes no group, so
+   *  the listbox never shows a heading with nothing under it. */
+  readonly ticketOptions = computed<(SelectOption | SelectGroup)[]>(() => {
+    const opts: (SelectOption | SelectGroup)[] = [
+      { value: NO_TICKET, label: "None — start from scratch" },
+    ];
+    const todo = this.openTicketsTodo();
+    if (todo.length) {
+      opts.push({ label: "To do", options: todo.map((t) => ({ value: t.id, label: t.title })) });
+    }
+    const inProgress = this.openTicketsInProgress();
+    if (inProgress.length) {
+      opts.push({
+        label: "In progress",
+        options: inProgress.map((t) => ({ value: t.id, label: t.title })),
+      });
+    }
+    return opts;
+  });
+
   // ---- settings prefill (defaultTool / toolModel / toolEffort) ----
   /** The settings defaultTool when it names a DETECTED tool; the hardcoded
    *  default ("claude") otherwise — "" means nothing was ever saved. */
@@ -405,6 +464,14 @@ export class SpawnModalComponent {
    * left untouched — the ticket's content is composed into the effective prompt
    * only at spawn time (see composePrompt). Passing "" clears the selection.
    */
+  /** The Ticket picker's bound value: the linked id, or the None sentinel. */
+  readonly ticketSelection = computed(() => this.ticketId() || NO_TICKET);
+
+  /** Ticket picker -> component: unwrap the None sentinel back to "". */
+  selectTicket(value: string) {
+    this.applyTicket(value === NO_TICKET ? "" : value);
+  }
+
   applyTicket(id: string) {
     this.ticketId.set(id);
     if (!id) return;
