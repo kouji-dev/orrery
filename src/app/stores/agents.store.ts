@@ -95,8 +95,10 @@ export class AgentsStore {
   ): Promise<Agent> {
     return this.bridge.invoke<Agent>(Commands.AgentUpdate, { id, req: patch });
   }
-  async remove(id: string): Promise<void> {
-    await this.bridge.invoke(Commands.AgentRemove, { id });
+  /** Drop an agent. `hard` also deletes its worktree folder from disk —
+   *  opt-in, because the folder holds any uncommitted work. */
+  async remove(id: string, hard = false): Promise<void> {
+    await this.bridge.invoke(Commands.AgentRemove, { id, hard });
   }
   /** Per-tool detection (resolved path + version + ok/error/missing status). */
   detectTools(): Promise<ToolDetection[]> {

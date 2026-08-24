@@ -4,6 +4,7 @@ use uuid::Uuid;
 use crate::agents::adapters::HookEnv;
 use crate::core::errors::{AppError, AppResult};
 use crate::core::events::{emit_entity, Change};
+use crate::git::service::WorktreeDisposal;
 use crate::hooks::{hook_binary, HookBridge};
 use crate::projects::service::ProjectService;
 use crate::runtime::RuntimeService;
@@ -75,7 +76,11 @@ pub fn agent_update<R: Runtime>(
     })
 }
 
-/// Blocking pool: removes the worktree directory + prunes git metadata.
+/// Blocking pool: prunes the worktree's git metadata and drops the agent.
+///
+/// `hard` is the confirm modal's "also delete the folder" checkbox. Default
+/// (false) leaves the directory on disk — deleting someone's uncommitted work
+/// is opt-in, never a side effect of removing an agent.
 #[tauri::command]
 pub async fn agent_remove<R: Runtime>(
     app: AppHandle<R>,
@@ -84,6 +89,7 @@ pub async fn agent_remove<R: Runtime>(
     watch: State<'_, WatchService>,
     rt: State<'_, RuntimeService>,
     id: Uuid,
+    hard: Option<bool>,
 ) -> AppResult<()> {
     let project_path = svc
         .get(id)
@@ -99,9 +105,18 @@ pub async fn agent_remove<R: Runtime>(
         history.purge(id);
     }
     let svc = svc.inner().clone();
+    let disposal = if hard.unwrap_or(false) {
+        WorktreeDisposal::DeleteFolder
+    } else {
+        WorktreeDisposal::KeepFolder
+    };
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_remove", || {
-            svc.remove(id, project_path.as_deref().map(std::path::Path::new))
+            svc.remove(
+                id,
+                project_path.as_deref().map(std::path::Path::new),
+                disposal,
+            )
         })
     })
     .await

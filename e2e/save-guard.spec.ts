@@ -67,7 +67,10 @@ test("Autosave is an opt-in setting under Agent defaults", async ({ page }) => {
   await page.goto("/");
   await page.waitForSelector("app-top-bar");
   await page.keyboard.press("Control+Shift+P");
-  await expect(page.locator("app-command-palette input")).toBeVisible();
+  // visible is not enough: the palette focuses its input in a microtask after
+  // render, and a keystroke that lands before that goes to the document —
+  // where the app's own shortcuts eat it and can close the palette outright
+  await expect(page.locator("app-command-palette input")).toBeFocused();
   await page.keyboard.type("settings");
   // Enter runs whatever row is HIGHLIGHTED — wait for the palette to settle on
   // one, or a loaded machine can press Enter between the query landing and the

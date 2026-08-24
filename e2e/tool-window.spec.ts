@@ -71,7 +71,10 @@ test("Ctrl+Shift+G toggles the dock on Git Graph; closed by default", async ({ p
 test("the palette lists and runs the tool-window commands", async ({ page }) => {
   await ready(page);
   await page.keyboard.press("Control+Shift+P");
-  await expect(page.locator("app-command-palette input")).toBeVisible();
+  // visible is not enough: the palette focuses its input in a microtask after
+  // render, and a keystroke that lands before that goes to the document —
+  // where the app's own shortcuts eat it and can close the palette outright
+  await expect(page.locator("app-command-palette input")).toBeFocused();
   await page.keyboard.type("commit graph");
   await expect(page.locator("app-command-palette")).toContainText("Show Commit Graph");
   // Enter runs whatever row is HIGHLIGHTED — wait for the palette to settle on
@@ -79,6 +82,9 @@ test("the palette lists and runs the tool-window commands", async ({ page }) => 
   // list re-rendering under it.
   await expect(page.locator(".kj-command-item[data-active]")).toHaveCount(1);
   await page.keyboard.press("Enter");
+  // Enter must first CLOSE the palette (the command ran); only then does the
+  // dock mount. Splitting the two makes a failure say which half broke.
+  await expect(page.locator("app-command-palette")).toHaveCount(0);
   await expect(page.locator("app-tool-window")).toHaveCount(1);
   await expect(page.locator("app-commit-graph-panel")).toHaveCount(1);
 });

@@ -4,6 +4,43 @@ use git2::Repository;
 
 use crate::core::errors::{AppError, AppResult};
 
+/// What happens to a worktree's working directory when its agent is removed.
+///
+/// The default is [`KeepFolder`](WorktreeDisposal::KeepFolder): git forgets the
+/// worktree but the files stay put, so a delete can never cost someone work
+/// they had not committed. [`DeleteFolder`](WorktreeDisposal::DeleteFolder) is
+/// the opt-in "hard delete" the confirm modal asks for explicitly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorktreeDisposal {
+    /// Deregister from git, leave the directory on disk.
+    KeepFolder,
+    /// Deregister and delete the directory, uncommitted changes included.
+    DeleteFolder,
+}
+
+/// `remove_dir_all` with a few retries.
+///
+/// On Windows a directory tree that was open a moment ago routinely refuses the
+/// first delete: antivirus, the file indexer, or a just-killed child process can
+/// still hold a handle for tens of milliseconds. One retry loop turns almost all
+/// of those into a success, and a real failure (locked file, permissions) still
+/// surfaces as an error rather than being swallowed.
+pub fn remove_dir_all_retry(path: &Path) -> std::io::Result<()> {
+    const ATTEMPTS: u32 = 5;
+    for attempt in 1..=ATTEMPTS {
+        match std::fs::remove_dir_all(path) {
+            Ok(()) => return Ok(()),
+            // already gone — that is the outcome we wanted
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) if attempt < ATTEMPTS => {
+                std::thread::sleep(std::time::Duration::from_millis(60 * attempt as u64));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
+}
+
 /// One entry from a repository's history (raw — the command layer formats it).
 #[derive(Debug, Clone)]
 pub struct LogEntry {
@@ -279,14 +316,28 @@ impl GitService {
         Ok(())
     }
 
-    /// Remove a worktree's working directory and prune its metadata. Best-effort.
-    pub fn remove_worktree(&self, repo_path: &Path, wt_name: &str) -> AppResult<()> {
+    /// Prune a worktree's git metadata, optionally deleting its working
+    /// directory too. Best-effort: an unknown worktree name is not an error,
+    /// because the folder is torn down separately by the caller.
+    pub fn remove_worktree(
+        &self,
+        repo_path: &Path,
+        wt_name: &str,
+        disposal: WorktreeDisposal,
+    ) -> AppResult<()> {
         let repo =
             Repository::open(repo_path).map_err(|e| AppError::Other(format!("open repo: {e}")))?;
         if let Ok(wt) = repo.find_worktree(wt_name) {
-            let _ = std::fs::remove_dir_all(wt.path());
+            if disposal == WorktreeDisposal::DeleteFolder {
+                let _ = remove_dir_all_retry(wt.path());
+            }
             let mut opts = git2::WorktreePruneOptions::new();
-            opts.valid(true).working_tree(true);
+            // valid(true): prune even though the worktree is healthy — the agent
+            // is going away either way. working_tree only when we're allowed to
+            // touch the folder; with it false git drops .git/worktrees/<name>
+            // and leaves the directory sitting on disk.
+            opts.valid(true)
+                .working_tree(disposal == WorktreeDisposal::DeleteFolder);
             let _ = wt.prune(Some(&mut opts));
         }
         Ok(())
@@ -1892,8 +1943,64 @@ mod tests {
             .find_branch("agent/my_task", git2::BranchType::Local)
             .is_ok());
 
-        svc.remove_worktree(dir.path(), "my_task").unwrap();
+        svc.remove_worktree(dir.path(), "my_task", WorktreeDisposal::DeleteFolder)
+            .unwrap();
         assert!(!wt_path.exists(), "worktree dir removed");
+    }
+
+    #[test]
+    fn remove_worktree_keep_folder_deregisters_but_leaves_the_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_file(dir.path(), "a.txt", "first");
+
+        let wt_root = tempfile::tempdir().unwrap();
+        let wt_path = wt_root.path().join("kept");
+        svc.create_worktree(dir.path(), "kept", "agent/kept", None, &wt_path)
+            .unwrap();
+        // an uncommitted file — exactly what a soft delete must not destroy
+        std::fs::write(wt_path.join("scratch.txt"), "unsaved work").unwrap();
+
+        svc.remove_worktree(dir.path(), "kept", WorktreeDisposal::KeepFolder)
+            .unwrap();
+
+        assert!(wt_path.exists(), "folder kept");
+        assert_eq!(
+            std::fs::read_to_string(wt_path.join("scratch.txt")).unwrap(),
+            "unsaved work",
+            "uncommitted work survives"
+        );
+        let repo = Repository::open(dir.path()).unwrap();
+        assert!(
+            repo.find_worktree("kept").is_err(),
+            "git no longer tracks the worktree"
+        );
+    }
+
+    #[test]
+    fn remove_worktree_is_a_noop_for_an_unknown_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = GitService::new();
+        svc.init(dir.path()).unwrap();
+        commit_file(dir.path(), "a.txt", "first");
+        // the agent layer deletes the folder itself; a missing registration is
+        // not an error here
+        svc.remove_worktree(dir.path(), "never-existed", WorktreeDisposal::DeleteFolder)
+            .unwrap();
+    }
+
+    #[test]
+    fn remove_dir_all_retry_is_ok_when_the_path_is_already_gone() {
+        let dir = tempfile::tempdir().unwrap();
+        let gone = dir.path().join("not-there");
+        remove_dir_all_retry(&gone).unwrap();
+
+        let real = dir.path().join("real");
+        std::fs::create_dir_all(real.join("nested")).unwrap();
+        std::fs::write(real.join("nested/f.txt"), "x").unwrap();
+        remove_dir_all_retry(&real).unwrap();
+        assert!(!real.exists());
     }
 
     #[test]

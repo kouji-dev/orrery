@@ -35,6 +35,7 @@ test("Ctrl+Shift+P opens the command palette; typing filters; Esc closes", async
   // the custom-element host is a 0×0 inline box (content is fixed-positioned)
   // — assert on the input, which has a real box
   await expect(palette.locator("input")).toBeVisible();
+  await expect(palette.locator("input")).toBeFocused();
   // registry renders FROM the command list (B2.2) — footer count present
   await expect(palette.locator(".orr-palette-count")).toContainText("commands");
 
@@ -49,6 +50,10 @@ test("Ctrl+Shift+P opens the command palette; typing filters; Esc closes", async
 test("palette runs a command: Settings opens from the keyboard alone", async ({ page }) => {
   await ready(page);
   await page.keyboard.press("Control+Shift+P");
+  // visible is not enough: the palette focuses its input in a microtask after
+  // render, and a keystroke that lands before that goes to the document —
+  // where the app's own shortcuts eat it and can close the palette outright
+  await expect(page.locator("app-command-palette input")).toBeFocused();
   await page.keyboard.type("settings");
   // Enter runs whatever row is HIGHLIGHTED — wait for the palette to settle on
   // one, or a loaded machine can press Enter between the query landing and the
