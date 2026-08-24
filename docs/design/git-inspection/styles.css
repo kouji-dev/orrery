@@ -1,3 +1,10 @@
+/* ───────────────────────────────────────────────────────────────
+   HISTORICAL PROTOTYPE — not the source of truth.
+   This is a static design study. The shipping token system lives in
+   src/styles.css; its density engine, type ramp and icon scale have moved
+   on from the [data-density] block below. Read this for layout intent
+   only, never to look up a token value.
+   ─────────────────────────────────────────────────────────────── */
 /* =========================================================================
    ORCHESTRA — multi-agent orchestrator IDE
    Futuristic IntelliJ-inspired design tokens

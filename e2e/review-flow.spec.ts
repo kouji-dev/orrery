@@ -63,13 +63,19 @@ test("clicking + opens the composer; saving renders the card and arms send-revie
   // real press-release on the glyph (the attachment listens on editor
   // mousedown in the glyph margin + window mouseup)
   await plus.hover();
+  // the glyph is hover-driven: confirm it survived the pointer move onto it
+  // before pressing, or a slow repaint swallows the mousedown
+  await expect(plus).toBeVisible();
   await page.mouse.down();
   await page.mouse.up();
 
   const composer = page.locator(".rc-composer");
   await expect(composer).toBeVisible();
   await composer.locator(".rc-composer-ta").fill("please rename this variable");
-  await composer.locator(".btn.primary").click();
+  // the composer is a Monaco view zone: native buttons wearing the kouji skin.
+  // Monaco marks the zone container aria-hidden, so getByRole cannot see them —
+  // address the button by class.
+  await composer.locator("button.rc-composer-btn", { hasText: "Save" }).click();
 
   // saved card renders inline; composer closes
   await expect(page.locator(".rc-card")).toBeVisible();
@@ -96,7 +102,8 @@ test("diff header carries agent-level actions: commit (AI), rebase (AI), native 
   // merge: primary press is native; the AI variant row renders without a price
   const merge = buttons.filter({ hasText: "Merge" }).first();
   await merge.locator(".caret").click();
-  const row = merge.locator(".menu .btn.row", { hasText: "Merge with AI" });
+  // the dropdown content is portalled out of app-git-action-button
+  const row = page.locator("kj-dropdown-menu-content.menu:visible kj-button.row", { hasText: "Merge with AI" });
   await expect(row).toBeVisible();
   await expect(row.locator(".row-est")).toHaveCount(0);
   await page.keyboard.press("Escape");

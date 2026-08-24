@@ -3,7 +3,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  effect,
   ElementRef,
   inject,
   signal,
@@ -15,76 +14,93 @@ import { fileDir, fileName } from "../utils";
 import { CommandRegistryService } from "./command-registry.service";
 import { EditorNavService } from "./editor-nav.service";
 import { fzMatch, kbdLabel } from "./fuzzy";
-import { fzSegments, OverlayFooterComponent, OverlayShellComponent } from "./overlay-shell.component";
+import { fzSegments, OverlayShellComponent } from "./overlay-shell.component";
 import { RecentFilesService } from "./recent-files.service";
 import { FindInFilesComponent } from "./find-in-files.component";
 import { SearchEverywhereComponent } from "./search-everywhere.component";
+import { KjBadgeComponent, KjCommandGroupComponent, KjCommandEmptyComponent,
+  KjCommandItemComponent, KjCommandPaletteComponent, KjCommandPaletteFooter, KjKbdComponent } from "@kouji-ui/components";
 
 // ------------------------------------------------------------ command palette
+/**
+ * The command palette on kouji's `<kj-command-palette>`.
+ *
+ * kj owns the chrome the hand-rolled OverlayShell only approximated: a real
+ * `role="dialog"` + `role="listbox"` / `role="option"` tree, the APG combobox
+ * 1.2 keyboard contract (arrows / Home / End / Enter) driven from the input
+ * with `aria-activedescendant`, `aria-posinset` / `aria-setsize`, and focus on
+ * open. Orrery keeps what kj cannot know about: `fzMatch` scoring (word-start
+ * and consecutive-run bonuses, enabled-command bias) and the highlighted
+ * segments. Hence `kjShouldFilter=false` — kj is told the visible set is
+ * consumer-controlled and never runs its own substring filter.
+ */
 @Component({
   selector: "app-command-palette",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, OverlayShellComponent, OverlayFooterComponent],
+  imports: [
+    IconComponent,
+    KjKbdComponent,
+    KjCommandPaletteComponent,
+    KjCommandGroupComponent,
+    KjCommandItemComponent,
+    KjCommandPaletteFooter,
+  ],
   template: `
-    <app-overlay-shell [width]="600" label="Command palette" (closed)="registry.close()">
-      <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);flex:none">
-        <app-icon name="bolt" color="var(--ui-ink)" />
-        <input
-          #inp
-          [value]="q()"
-          (input)="onInput($event)"
-          (keydown)="onKeys($event)"
-          placeholder="Type a command…"
-          spellcheck="false"
-          autocomplete="off"
-          style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-md)"
-        />
-        <span class="chip" style="font-size:var(--fs-3xs)">{{ registry.commands().length }} commands</span>
-      </div>
-      <div #list class="scroll-y" style="flex:1;padding:var(--sp-3) 0">
-        @if (!items().length) {
-          <div style="padding:var(--sp-8) var(--sp-7);font-size:var(--fs-sm);color:var(--ink-4)">no matching command</div>
-        }
-        @for (it of items(); track it.c.id; let i = $index) {
-          @if (!q() && it.head) {
-            <div class="up" style="font-size:var(--fs-3xs);color:var(--ink-4);padding:var(--sp-4) var(--sp-7) var(--sp-2)">{{ it.head }}</div>
+    <kj-command-palette
+      class="orr-palette"
+      kjAriaLabel="Command palette"
+      kjPlaceholder="Type a command…"
+      [kjOpen]="true"
+      (kjOpenChange)="registry.close()"
+      [kjShouldFilter]="false"
+      [(kjQuery)]="q"
+      [kjEscBadge]="false"
+      [kjAutoCloseOnActivate]="false"
+      (kjValueChange)="active.set($event)"
+      (kjActivate)="pick($event.value)"
+    >
+      @for (g of groups(); track g.label) {
+        <kj-command-group [kjLabel]="g.label">
+          @for (it of g.items; track it.c.id) {
+            <kj-command-item
+              [kjValue]="it.c.id"
+              [kjDisabled]="!it.c.enabled"
+              [kjShortcut]="it.c.kbd ?? null"
+              [class.danger]="it.c.danger"
+            >
+              <app-icon [name]="it.c.icon" size="sm" color="var(--ink-3)" />
+              <span class="orr-cmd-label orr-cmd-grow">
+                @for (s of it.segs; track $index) {
+                  @if (s.hit) { <b>{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
+                }
+              </span>
+              @if (q()) { <span class="orr-cmd-meta">{{ it.c.group }}</span> }
+              @if (it.c.kbd) { <kj-kbd>{{ kbd(it.c.kbd) }}</kj-kbd> }
+            </kj-command-item>
           }
-          <div
-            [attr.data-idx]="i"
-            (click)="pick(i)"
-            (mouseenter)="sel.set(i)"
-            [style.background]="sel() === i ? 'var(--panel-3)' : 'transparent'"
-            [style.border-left]="'2px solid ' + (sel() === i ? 'var(--ui-focus)' : 'transparent')"
-            [style.color]="it.c.danger ? 'var(--st-blocked)' : 'inherit'"
-            style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-7);cursor:pointer"
-          >
-            <app-icon [name]="it.c.icon" size="sm" [color]="sel() === i ? 'var(--ui-ink)' : 'var(--ink-3)'" />
-            <span [style.opacity]="it.c.enabled ? 1 : 0.42" style="flex:1;font-size:var(--fs-ui);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-              @for (s of it.segs; track $index) {
-                @if (s.hit) { <b style="color:var(--ui-ink);font-weight:600">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
-              }
-            </span>
-            @if (q()) { <span style="font-size:var(--fs-2xs);color:var(--ink-4);flex:none">{{ it.c.group }}</span> }
-            @if (it.c.kbd) { <span class="kbd" style="flex:none">{{ kbd(it.c.kbd) }}</span> }
-          </div>
-        }
+        </kj-command-group>
+      }
+      <div kjCommandPaletteFooter class="orr-palette-foot">
+        <span><kj-kbd>↑↓</kj-kbd>navigate</span>
+        <span><kj-kbd>⏎</kj-kbd>run</span>
+        <span><kj-kbd>esc</kj-kbd>close</span>
+        <span class="orr-palette-count tnum">{{ registry.commands().length }} commands</span>
       </div>
-      <app-overlay-footer [hints]="[['↑↓', 'navigate'], ['⏎', 'run'], ['esc', 'close']]" />
-    </app-overlay-shell>
+    </kj-command-palette>
   `,
 })
 export class CommandPaletteComponent {
   readonly registry = inject(CommandRegistryService);
   readonly q = signal("");
-  readonly sel = signal(0);
+  /** Mirror of kj's active (highlighted) value — only used to drive scrolling. */
+  readonly active = signal<unknown>(null);
   readonly kbd = kbdLabel;
-  private inp = viewChild.required<ElementRef<HTMLInputElement>>("inp");
-  private list = viewChild<ElementRef<HTMLElement>>("list");
-  private focused = false;
+  private host: ElementRef<HTMLElement> = inject(ElementRef);
 
-  readonly items = computed(() => {
+  /** Scored + highlighted commands, best first. Unchanged Orrery matching. */
+  private readonly scored = computed(() => {
     const q = this.q();
-    const scored = this.registry
+    const rows = this.registry
       .commands()
       .map((c) => {
         const direct = fzMatch(c.label, q);
@@ -93,155 +109,143 @@ export class CommandPaletteComponent {
         return { c, score: m.score + (c.enabled ? 4 : 0), segs: fzSegments(c.label, direct ? direct.idx : []) };
       })
       .filter((x): x is NonNullable<typeof x> => !!x);
-    if (q) scored.sort((a, b) => b.score - a.score);
-    // group headers only for the unfiltered list
-    let last: string | null = null;
-    return scored.slice(0, 60).map((it) => {
-      const head = !q && it.c.group !== last ? (last = it.c.group) : null;
-      return { ...it, head };
-    });
+    if (q) rows.sort((a, b) => b.score - a.score);
+    return rows.slice(0, 60);
+  });
+
+  /**
+   * Section runs for `<kj-command-group>`. Unfiltered the registry is already
+   * ordered by group, so consecutive runs give real labelled sections; once a
+   * query re-sorts by score the labels would be noise, so it collapses to one
+   * unlabelled group (kj hides an empty `kjLabel`).
+   */
+  readonly groups = computed(() => {
+    const rows = this.scored();
+    if (this.q()) return [{ label: "", items: rows }];
+    const out: { label: string; items: typeof rows }[] = [];
+    for (const it of rows) {
+      const last = out[out.length - 1];
+      if (last && last.label === it.c.group) last.items.push(it);
+      else out.push({ label: it.c.group, items: [it] });
+    }
+    return out;
   });
 
   constructor() {
+    // kj's list navigator moves `data-active` but never scrolls; keep the
+    // highlighted row in view the way the hand-rolled list did.
     afterRenderEffect(() => {
-      if (!this.focused) {
-        this.focused = true;
-        this.inp().nativeElement.focus();
-      }
-    });
-    effect(() => {
-      const i = this.sel();
-      const el = this.list()?.nativeElement.querySelector<HTMLElement>(`[data-idx="${i}"]`);
-      el?.scrollIntoView({ block: "nearest" });
-    });
-    effect(() => {
-      this.items();
-      this.sel.set(0);
+      this.active();
+      this.host.nativeElement
+        .querySelector<HTMLElement>(".kj-command-item[data-active]")
+        ?.scrollIntoView({ block: "nearest" });
     });
   }
 
-  onInput(e: Event) {
-    this.q.set((e.target as HTMLInputElement).value);
-  }
-
-  onKeys(e: KeyboardEvent) {
-    const n = this.items().length;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      this.sel.update((s) => (n ? (s + 1) % n : 0));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      this.sel.update((s) => (n ? (s - 1 + n) % n : 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (n) this.pick(this.sel());
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      this.registry.close();
-    }
-  }
-
-  pick(i: number) {
-    const it = this.items()[i];
-    if (!it || !it.c.enabled) return;
+  pick(value: unknown) {
+    const c = this.registry.commands().find((x) => x.id === value);
+    if (!c || !c.enabled) return;
     this.registry.close();
-    setTimeout(() => it.c.run(), 0);
+    setTimeout(() => c.run(), 0);
   }
 }
 
 // ------------------------------------------------------------- recent files
+/**
+ * Recent files on the same kj palette. The list is short and already ranked by
+ * recency, so the query only narrows it — same `fzMatch` scoring as the command
+ * palette, matched against the file name first and the full path as a fallback.
+ */
 @Component({
   selector: "app-recent-files-overlay",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, OverlayShellComponent, OverlayFooterComponent],
+  imports: [IconComponent, KjKbdComponent, KjCommandPaletteComponent, KjCommandItemComponent, KjCommandEmptyComponent, KjCommandPaletteFooter, KjBadgeComponent],
   template: `
-    <app-overlay-shell [width]="480" top="16vh" label="Recent files" (closed)="registry.close()">
-      <div #wrap tabindex="0" (keydown)="onKeys($event)" style="outline:none;display:flex;flex-direction:column;min-height:0">
-        <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-5) var(--sp-7);border-bottom:1px solid var(--hair)">
-          <app-icon name="clock" size="sm" color="var(--ui-ink)" />
-          <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">Recent files</span>
-          <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ items().length }}</span>
-        </div>
-        <div #list class="scroll-y" style="padding:var(--sp-2) 0;max-height:50vh">
-          @if (!items().length) {
-            <div style="padding:var(--sp-7);font-size:var(--fs-sm);color:var(--ink-4)">no files opened yet</div>
-          }
-          @for (it of items(); track it.agentId + it.path; let i = $index) {
-            <div
-              [attr.data-idx]="i"
-              (click)="pick(i)"
-              (mouseenter)="sel.set(i)"
-              [style.background]="sel() === i ? 'var(--panel-3)' : 'transparent'"
-              [style.border-left]="'2px solid ' + (sel() === i ? 'var(--ui-focus)' : 'transparent')"
-              style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-7);cursor:pointer"
-            >
-              <app-icon name="file" size="sm" [color]="sel() === i ? 'var(--ui-ink)' : 'var(--ink-3)'" />
-              <span style="font-size:var(--fs-ui)">{{ fname(it.path) }}</span>
-              <span style="font-size:var(--fs-xs);color:var(--ink-4);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(it.path) }}</span>
-              @if (it.agentName) { <span class="chip" style="font-size:var(--fs-3xs);padding:1px var(--sp-3)">{{ it.agentName }}</span> }
-            </div>
-          }
-        </div>
-        <app-overlay-footer [hints]="[['↑↓', 'navigate'], ['⏎', 'open'], ['esc', 'close']]" />
+    <kj-command-palette
+      class="orr-palette orr-palette-narrow"
+      kjAriaLabel="Recent files"
+      kjPlaceholder="Recent files…"
+      [kjOpen]="true"
+      (kjOpenChange)="registry.close()"
+      [kjShouldFilter]="false"
+      [(kjQuery)]="q"
+      [kjEscBadge]="false"
+      [kjAutoCloseOnActivate]="false"
+      (kjValueChange)="active.set($event)"
+      (kjActivate)="pick($event.value)"
+    >
+      @if (!items().length) {
+        <!-- the palette owns the empty slot; the hand-rolled div this replaced
+             carried the copy the e2e asserts on -->
+        <kj-command-empty>no files opened yet</kj-command-empty>
+      }
+      @for (it of items(); track it.key) {
+        <kj-command-item [kjValue]="it.key">
+          <app-icon name="file" size="sm" color="var(--ink-3)" />
+          <span class="orr-cmd-label">
+            @for (s of it.segs; track $index) {
+              @if (s.hit) { <b>{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
+            }
+          </span>
+          <span class="orr-cmd-meta orr-cmd-grow">{{ fdir(it.path) }}</span>
+          @if (it.agentName) { <kj-badge class="orr-cmd-chip">{{ it.agentName }}</kj-badge> }
+        </kj-command-item>
+      }
+      <div kjCommandPaletteFooter class="orr-palette-foot">
+        <span><kj-kbd>↑↓</kj-kbd>navigate</span>
+        <span><kj-kbd>⏎</kj-kbd>open</span>
+        <span><kj-kbd>esc</kj-kbd>close</span>
+        <span class="orr-palette-count tnum">{{ items().length }}</span>
       </div>
-    </app-overlay-shell>
+    </kj-command-palette>
   `,
 })
 export class RecentFilesOverlayComponent {
   readonly registry = inject(CommandRegistryService);
   private recents = inject(RecentFilesService);
   private runtime = inject(AgentRuntimeService);
-  readonly sel = signal(0);
-  readonly fname = fileName;
+  readonly q = signal("");
+  readonly active = signal<unknown>(null);
   readonly fdir = fileDir;
-  private wrap = viewChild.required<ElementRef<HTMLElement>>("wrap");
-  private list = viewChild<ElementRef<HTMLElement>>("list");
-  private focused = false;
+  private host: ElementRef<HTMLElement> = inject(ElementRef);
 
-  /** Entries whose agent still exists, newest first, tagged with the name. */
+  /** Entries whose agent still exists, tagged with the name and fuzzy-scored. */
   readonly items = computed(() => {
+    const q = this.q();
     const agents = this.runtime.agents();
-    return this.recents
+    const rows = this.recents
       .entries()
       .map((e) => {
         const ag = agents.find((a) => a.id === e.agentId);
-        return ag ? { ...e, agentName: ag.name } : null;
+        if (!ag) return null;
+        const name = fileName(e.path);
+        const direct = fzMatch(name, q);
+        const m = direct ?? (q ? fzMatch(e.path, q) : { score: 0, idx: [] });
+        if (!m) return null;
+        return {
+          ...e,
+          agentName: ag.name,
+          key: e.agentId + " " + e.path,
+          score: m.score,
+          segs: fzSegments(name, direct ? direct.idx : []),
+        };
       })
       .filter((x): x is NonNullable<typeof x> => !!x);
+    if (q) rows.sort((a, b) => b.score - a.score);
+    return rows;
   });
 
   constructor() {
     afterRenderEffect(() => {
-      if (!this.focused) {
-        this.focused = true;
-        this.wrap().nativeElement.focus();
-      }
-    });
-    effect(() => {
-      const i = this.sel();
-      this.list()?.nativeElement.querySelector<HTMLElement>(`[data-idx="${i}"]`)?.scrollIntoView({ block: "nearest" });
+      this.active();
+      this.host.nativeElement
+        .querySelector<HTMLElement>(".kj-command-item[data-active]")
+        ?.scrollIntoView({ block: "nearest" });
     });
   }
 
-  onKeys(e: KeyboardEvent) {
-    const n = this.items().length;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      this.sel.update((s) => (n ? (s + 1) % n : 0));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      this.sel.update((s) => (n ? (s - 1 + n) % n : 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (n) this.pick(this.sel());
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      this.registry.close();
-    }
-  }
-
-  pick(i: number) {
-    const it = this.items()[i];
+  pick(value: unknown) {
+    const it = this.items().find((x) => x.key === value);
     if (!it) return;
     this.registry.close();
     setTimeout(() => this.registry.openFileAt(it.agentId, it.path), 0);
@@ -249,10 +253,16 @@ export class RecentFilesOverlayComponent {
 }
 
 // ---------------------------------------------------------------- go to line
+/**
+ * Left on the hand-rolled OverlayShell on purpose: this overlay has no result
+ * list at all (one input plus a parsed-target hint), and `<kj-command-palette>`
+ * is a combobox over a listbox — it would render a permanent "No results
+ * found." under the field and offer nothing in return.
+ */
 @Component({
   selector: "app-goto-line-overlay",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, OverlayShellComponent],
+  imports: [IconComponent, OverlayShellComponent, KjBadgeComponent],
   template: `
     <app-overlay-shell [width]="380" top="20vh" label="Go to line" (closed)="registry.close()">
       <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);flex:none">
@@ -267,9 +277,9 @@ export class RecentFilesOverlayComponent {
           autocomplete="off"
           style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-md)"
         />
-        <span class="chip" style="font-size:var(--fs-3xs)">{{ fname(file()) }}</span>
+        <kj-badge style="font-size:var(--fs-badge)">{{ fname(file()) }}</kj-badge>
       </div>
-      <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-4) var(--sp-7);font-size:var(--fs-xs);color:var(--ink-4)">
+      <div style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-4) var(--sp-7);color:var(--ink-4)">
         @if (parsed(); as p) {
           <span style="color:var(--ink-2)">→ line {{ p.line }}{{ p.col > 1 ? ', column ' + p.col : '' }}</span>
         } @else {

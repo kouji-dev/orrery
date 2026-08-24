@@ -15,6 +15,7 @@ import { fileDir, fileName, langId } from "../../utils";
 import { IconComponent } from "../../shared/icon.component";
 import { AddDelComponent } from "../../shared/git/add-del.component";
 import { CodeDiffComponent } from "../code-diff.component";
+import { KjBadgeComponent, KjButtonComponent } from "@kouji-ui/components";
 
 /**
  * Diff panel for a single file within a commit/range diff view.
@@ -27,14 +28,13 @@ import { CodeDiffComponent } from "../code-diff.component";
  */
 @Component({
   selector: "app-diff-or-blame",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AddDelComponent, CodeDiffComponent],
+  imports: [IconComponent, AddDelComponent, CodeDiffComponent, KjButtonComponent, KjBadgeComponent],
   template: `
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--bg)">
 
       <!-- ---- sticky file header ---- -->
-      <div style="position:sticky;top:0;display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);background:var(--panel);border-bottom:1px solid var(--hair);font-size:var(--fs-sm);z-index:2;flex:none">
+      <div class="pane-head" style="position:sticky;top:0;gap:var(--sp-3);padding:var(--sp-3) var(--sp-5);background:var(--panel);z-index:2">
         <app-icon name="file" size="sm" style="color:var(--ink-3)" />
         @if (dirPart()) {
           <span style="color:var(--ink-4)">{{ dirPart() }}</span>
@@ -47,24 +47,13 @@ import { CodeDiffComponent } from "../code-diff.component";
         }
 
         <!-- annotate toggle -->
-        <button
-          class="btn"
-          [class.ghost-hair]="!blame()"
-          (click)="blame.set(!blame())"
-          title="Annotate — show who last changed each line on both sides"
-          [style.padding]="'var(--sp-1) var(--sp-4)'"
-          [style.font-size]="'var(--fs-xs)'"
-          [style.color]="blame() ? 'var(--ink)' : 'var(--ink-3)'"
-          [style.background]="blame() ? 'var(--ui-sel)' : 'transparent'"
-          [style.border]="'1px solid ' + (blame() ? 'var(--ui-sel-2)' : 'var(--hair)')"
-          style="margin-left:auto;gap:var(--sp-2);border-radius:var(--r-sm)"
-        >
-          <app-icon name="git" size="sm" [px]="12" [color]="blame() ? 'var(--ui-ink)' : null" />
+        <kj-button kjVariant="outline" [kjPressed]="blame()" (click)="blame.set(!blame())" title="Annotate — show who last changed each line on both sides">
+          <app-icon size="md" name="git" [color]="blame() ? 'var(--ui-ink)' : null" />
           Annotate
-        </button>
+        </kj-button>
 
         <!-- lang chip -->
-        <span class="chip" style="font-size:var(--fs-2xs)">{{ lang() }}</span>
+        <kj-badge style="font-size:var(--fs-meta)">{{ lang() }}</kj-badge>
       </div>
 
       <!-- ---- body: the diff, optionally annotated ---- -->
@@ -79,24 +68,11 @@ import { CodeDiffComponent } from "../code-diff.component";
           [newBlame]="newBlameData()"
         />
       } @else {
-        <div style="display:grid;place-items:center;flex:1;color:var(--ink-4);font-size:var(--fs-sm)">
-          no textual diff
-        </div>
+        <div class="pane-empty">no textual diff</div>
       }
 
     </div>
   `,
-  styles: [
-    `
-      :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-        min-width: 0;
-      }
-    `,
-  ],
 })
 export class DiffOrBlameComponent {
   /** Agent id — keys the blame store. */

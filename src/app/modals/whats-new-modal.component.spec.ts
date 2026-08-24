@@ -88,7 +88,7 @@ describe("WhatsNewModalComponent", () => {
     // two release sections
     expect(f.nativeElement.querySelectorAll("section.wn-rel").length).toBe(2);
 
-    f.nativeElement.querySelector("button.primary")!.click(); // Continue
+    f.nativeElement.querySelector('kj-button[kjVariant="default"]')!.click(); // Continue
     expect(store.closeWhatsNew).toHaveBeenCalled();
   });
 

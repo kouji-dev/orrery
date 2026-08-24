@@ -13,12 +13,7 @@ import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { VersionService } from "../shared/version.service";
 import { UiStore } from "../ui/ui.store";
-import {
-  ModelComboComponent,
-  SetRowComponent,
-  SetSegComponent,
-  SettingsModalComponent,
-} from "./settings-modal.component";
+import { SetRowComponent, SettingsModalComponent } from "./settings-modal.component";
 
 beforeAll(() => {
   try {
@@ -91,12 +86,10 @@ async function setup(stored: Partial<Settings> = {}): Promise<Setup> {
     remove: { imports: [IconComponent, ToolBadgeComponent] },
     add: { imports: [IconStub, ToolBadgeStub] },
   });
-  for (const cmp of [SetSegComponent, ModelComboComponent, SetRowComponent]) {
-    TestBed.overrideComponent(cmp, {
-      remove: { imports: [IconComponent] },
-      add: { imports: [IconStub] },
-    });
-  }
+  TestBed.overrideComponent(SetRowComponent, {
+    remove: { imports: [IconComponent] },
+    add: { imports: [IconStub] },
+  });
   const store = TestBed.inject(SettingsStore);
   await store.ready(); // settle the settings_get load before interacting
   store.openModal();
@@ -161,7 +154,7 @@ describe("SettingsModal sections render", () => {
     expect(s.el.textContent).toContain("Native OS notifications");
     expect(s.el.querySelectorAll(".set-row.dis")).toHaveLength(0);
 
-    click(s.fixture, s.el.querySelector(".set-tgl")); // master off
+    click(s.fixture, s.el.querySelector(".set-tgl button")); // master off (the switch is kouji's inner button)
     expect(s.store.settings().osNotifications).toBe(false);
     // 4 event rows + Play sound + Cue & volume stay rendered but disabled
     expect(s.el.querySelectorAll(".set-row.dis")).toHaveLength(6);
@@ -178,7 +171,7 @@ describe("SettingsModal dirty rows + footer", () => {
     expect(s.store.settings().channel).toBe("beta");
     expect(s.el.querySelector(".set-reset")).not.toBeNull();
     expect(s.el.querySelector(".set-warn")).not.toBeNull(); // beta warn chip
-    expect(byText(s.el, "button.reset-all", "Reset all to defaults")).not.toBeNull();
+    expect(byText(s.el, ".reset-all", "Reset all to defaults")).not.toBeNull();
 
     click(s.fixture, s.el.querySelector(".set-reset"));
     expect(s.store.settings().channel).toBe("stable");
@@ -190,7 +183,7 @@ describe("SettingsModal dirty rows + footer", () => {
   it("Reset all restores every default", async () => {
     const s = await setup({ channel: "beta", autoResume: true, volume: 10 });
     expect(s.store.anyDirty()).toBe(true);
-    click(s.fixture, byText(s.el, "button.reset-all", "Reset all"));
+    click(s.fixture, byText(s.el, ".reset-all", "Reset all"));
     expect(s.store.anyDirty()).toBe(false);
     expect(s.store.settings().channel).toBe("stable");
     expect(s.store.settings().volume).toBe(70);
@@ -216,7 +209,7 @@ describe("SettingsModal danger confirm (Everything)", () => {
     const s = await setup();
     navTo(s, "Permissions");
     click(s.fixture, byText(s.el.querySelector(".set-seg") as HTMLElement, "button", "Everything"));
-    click(s.fixture, s.el.querySelector(".set-btn-danger"));
+    click(s.fixture, byText(s.el.querySelector(".set-danger-act") as HTMLElement, "button", "Everything"));
     expect(s.el.querySelector(".set-danger")).toBeNull();
     expect(s.store.settings().autoApprove["claude"]).toBe("everything");
   });
@@ -241,41 +234,15 @@ describe("SettingsModal updates card + nav dot", () => {
   });
 });
 
-describe("SettingsModal combo + Esc + browse", () => {
-  it("Esc closes the model combo first, then the modal; backdrop click closes", async () => {
+describe("SettingsModal browse + teardown", () => {
+  // The model combobox is now kouji's kj-combobox (its open/Esc/free-text
+  // behavior is library-owned and specced upstream); only the modal's own
+  // teardown contract remains ours to assert.
+  it("overlay dismissal (component destroy) clears the store flag", async () => {
     const s = await setup();
-    navTo(s, "Agent defaults");
-    click(s.fixture, s.el.querySelector(".set-combo-btn"));
-    expect(s.el.querySelector(".set-combo-pop")).not.toBeNull();
-
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    s.fixture.detectChanges();
-    expect(s.el.querySelector(".set-combo-pop")).toBeNull(); // combo closed…
-    expect(s.store.open()).toBe(true); // …modal still open
-
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(s.store.open()).toBe(true);
+    s.fixture.destroy();
     expect(s.store.open()).toBe(false);
-
-    s.store.openModal();
-    (s.el.querySelector(".set-backdrop") as HTMLElement).dispatchEvent(
-      new MouseEvent("mousedown", { bubbles: true }),
-    );
-    expect(s.store.open()).toBe(false);
-  });
-
-  it("custom model: typing + Enter applies the override and tags it custom", async () => {
-    const s = await setup();
-    navTo(s, "Agent defaults");
-    click(s.fixture, s.el.querySelector(".set-combo-btn"));
-    const input = s.el.querySelector<HTMLInputElement>(".set-combo-field input")!;
-    input.value = "opus-secret-preview";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    s.fixture.detectChanges();
-
-    expect(s.store.settings().toolModel["claude"]).toBe("opus-secret-preview");
-    expect(s.el.querySelector(".set-combo-pop")).toBeNull(); // commit closes the popover
-    expect(s.el.querySelector(".set-combo-btn .tag")?.textContent).toContain("custom");
   });
 
   it("Browse picks a directory into worktreeRoot", async () => {

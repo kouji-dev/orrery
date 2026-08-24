@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
+import { KjOptionComponent, KjSelectComponent } from "@kouji-ui/components";
 
 export interface SelectOption {
   value: string;
@@ -6,19 +7,32 @@ export interface SelectOption {
 }
 
 /**
- * Shared styled native <select> using the design's `.osel` look.
+ * Shared select control.
+ *
+ * Wraps kouji's `<kj-select>` rather than a native `<select>`: the native
+ * element could not be styled to match the rest of the chrome without
+ * `appearance: none` plus a hand-drawn caret, and it gave no keyboard model we
+ * controlled. kouji's listbox brings roving focus and type-ahead of its own.
+ *
+ * The public API is unchanged, so every existing `<app-select>` call site keeps
+ * working:
  *
  * <app-select [value]="model" [options]="opts" (valueChange)="setModel($event)" />
  */
 @Component({
   selector: "app-select",
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KjOptionComponent, KjSelectComponent],
   template: `
-    <select class="osel" [value]="value()" (change)="onChange($event)">
+    <kj-select
+      kjSize="sm"
+      [value]="value()"
+      (valueChange)="valueChange.emit($any($event))"
+    >
       @for (o of normalized(); track o.value) {
-        <option [value]="o.value">{{ o.label }}</option>
+        <kj-option [value]="o.value">{{ o.label }}</kj-option>
       }
-    </select>
+    </kj-select>
   `,
 })
 export class SelectComponent {
@@ -30,9 +44,5 @@ export class SelectComponent {
     return this.options().map((o) =>
       typeof o === "string" ? { value: o, label: o } : o,
     );
-  }
-
-  onChange(e: Event) {
-    this.valueChange.emit((e.target as HTMLSelectElement).value);
   }
 }

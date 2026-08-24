@@ -4,34 +4,37 @@ import {
   computed,
   input,
 } from "@angular/core";
+import { KjAvatarComponent } from "@kouji-ui/components";
 
 /**
  * Initials chip for a commit author. Derives a 2-char abbreviation and a
  * stable accent hue from the author name/email — no global author registry.
+ *
+ * Built on kouji's `<kj-avatar>`, which owns the circle, the centring and the
+ * image/fallback swap. Unlike most kouji components the avatar host IS the
+ * painted box (it carries `.kj-avatar` itself, not `display: contents`), so the
+ * per-author hue and the caller's pixel diameter can be set as inline styles
+ * here instead of leaking into styles.css.
+ *
+ * `size` stays a px number — call sites pass 13–20px, far below kouji's
+ * t-shirt scale, so `--kj-avatar-size` is driven directly rather than via the
+ * `size` input.
  */
 @Component({
   selector: "app-author-avatar",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KjAvatarComponent],
   template: `
-    <span
-      [title]="author()"
-      [style.width.px]="size()"
-      [style.height.px]="size()"
+    <kj-avatar
+      [alt]="author()"
+      [content]="initials()"
+      [style.--kj-avatar-size]="px()"
+      [style.--kj-avatar-bg]="bg()"
+      [style.--kj-avatar-fg]="color()"
       [style.font-size.px]="size() * 0.44"
-      [style.color]="color()"
-      [style.background]="bg()"
       [style.border]="'1px solid ' + borderColor()"
-      style="
-        flex: none;
-        border-radius: 50%;
-        display: grid;
-        place-items: center;
-        font-weight: 700;
-        line-height: 1;
-        user-select: none;
-      "
-    >{{ initials() }}</span>
+      style="flex: none; font-weight: var(--fw-strong); user-select: none"
+    />
   `,
 })
 export class AuthorAvatarComponent {
@@ -39,6 +42,7 @@ export class AuthorAvatarComponent {
   /** Diameter in px — uses a density-token-driven default of var(--ctl-h-sm). */
   readonly size = input<number>(20);
 
+  readonly px = computed(() => this.size() + "px");
   readonly initials = computed(() => deriveInitials(this.author()));
   readonly color = computed(() => deriveColor(this.author()));
   readonly bg = computed(() => `color-mix(in oklch, ${this.color()}, transparent 84%)`);

@@ -60,12 +60,12 @@ const KIND_COLOR: Record<ActivityKind, string> = {
   template: `
     <!-- Fixed height = 3 rows (10px * 1.6 = 16px each = 48px) + 12px vertical padding = 60px.
          Always render exactly 3 rows so idle and streaming cards are pixel-identical. -->
-    <div style="background:var(--bg);border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-3) var(--sp-4);font-size:var(--fs-xs);line-height:1.6;height:60px;box-sizing:border-box;overflow:hidden">
+    <div style="background:var(--bg);border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-3) var(--sp-4);line-height:1.6;height:60px;box-sizing:border-box;overflow:hidden">
       @for (row of rows(); track $index) {
         <div
           [style.color]="rowColor(row)"
           [style.border-left-color]="row.empty ? 'transparent' : rowColor(row)"
-          style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid transparent;padding-left:var(--sp-2)"
+          class="trunc" style="border-left:2px solid transparent;padding-left:var(--sp-2)"
         >{{ row.text }}</div>
       }
     </div>

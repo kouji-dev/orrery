@@ -215,10 +215,6 @@ export class AgentActionsService {
     }
   }
 
-  startAgent(id: string) {
-    this.act(id, "start");
-  }
-
   /** One-button run toggle for a single agent (pane header / overview).
    *  running → pause; otherwise resume (if it ever ran) or start fresh. */
   toggleRun(ag: Agent) {

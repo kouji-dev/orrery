@@ -10,11 +10,12 @@ import { RingComponent } from "../shared/ring.component";
 import { StatusPillComponent } from "../shared/status-pill.component";
 import { fmtDur, mix, STATUS_META } from "../utils";
 import { MiniTermComponent } from "./mini-term.component";
+import { KjButtonComponent } from "@kouji-ui/components";
 
 @Component({
   selector: "app-agent-card",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RingComponent, StatusPillComponent, IconComponent, MiniTermComponent],
+  imports: [RingComponent, StatusPillComponent, IconComponent, MiniTermComponent, KjButtonComponent],
   template: `
     @let ag = agent();
     <div
@@ -25,28 +26,30 @@ import { MiniTermComponent } from "./mini-term.component";
       <div style="display:flex;align-items:flex-start;gap:var(--sp-5)">
         <div style="position:relative;flex:none" [class.working]="ag.working">
           <app-ring [value]="ringValue()" [size]="36" [stroke]="3" [color]="meta().color" />
-          <span class="tnum" style="position:absolute;inset:0;display:grid;place-items:center;font-size:var(--fs-2xs);color:var(--ink-2)">{{ centerLabel() }}</span>
+          <span class="tnum" style="position:absolute;inset:0;display:grid;place-items:center;font-size:var(--fs-meta);color:var(--ink-2)">{{ centerLabel() }}</span>
         </div>
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:var(--sp-3);min-width:0">
-            <span class="disp" style="font-size:var(--fs-lg);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto">{{ ag.name }}</span>
-            <span style="flex:none"><app-status-pill [status]="ag.status" [filled]="true" /></span>
+            <h3 class="trunc" style="flex:0 1 auto">{{ ag.name }}</h3>
+            <app-status-pill [status]="ag.status" [filled]="true" style="flex:none" />
           </div>
-          <div style="font-size:var(--fs-sm);color:var(--ink-3);margin-top:var(--sp-1);display:flex;gap:var(--sp-3);align-items:center;min-width:0">
+          <div style="font-size:var(--fs-meta);color:var(--ink-3);margin-top:var(--sp-1);display:flex;gap:var(--sp-3);align-items:center;min-width:0">
             @if (proj()) {
               <span [style.color]="proj()!.color" style="display:flex;align-items:center;gap:var(--sp-2);min-width:0;overflow:hidden">
-                <app-icon [name]="proj()!.icon" size="sm" [px]="11" />
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ proj()!.name }}</span>
+                <app-icon size="md" [name]="proj()!.icon" />
+                <span class="trunc">{{ proj()!.name }}</span>
               </span>
             }
             <span style="color:var(--ink-4);flex:none">·</span>
-            <app-icon name="branch" size="sm" [px]="11" />
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
+            <app-icon size="md" name="branch" />
+            <span class="trunc">{{ ag.branch.replace('agent/', '') }}</span>
           </div>
         </div>
       </div>
 
-      <p style="font-size:var(--fs-ui);color:var(--ink-2);line-height:1.5;text-wrap:pretty;min-height:var(--ctl-h-lg)">{{ ag.task }}</p>
+      <!-- fixed two-line clamp so every card keeps the same height regardless
+           of task length -->
+      <p style="color:var(--ink-2);line-height:1.5;text-wrap:pretty;height:3em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ ag.task }}</p>
 
       @if (ag.status === 'blocked') {
         <div
@@ -55,61 +58,57 @@ import { MiniTermComponent } from "./mini-term.component";
           style="display:flex;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-radius:var(--r-sm)"
         >
           <app-icon name="flag" size="sm" color="var(--st-blocked)" style="flex:none;margin-top:1px" />
-          <span style="font-size:var(--fs-sm);color:var(--code-del-ink);line-height:1.45">{{ ag.blockReason }}</span>
+          <!-- single-line clamp keeps blocked cards the same height as the rest -->
+          <span class="trunc" [title]="ag.blockReason" style="color:var(--code-del-ink);line-height:1.45">{{ ag.blockReason }}</span>
         </div>
       }
 
       <app-mini-term [agentId]="ag.id" />
 
-      <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-5);font-size:var(--fs-xs);color:var(--ink-3)">
-        <span style="display:flex;gap:var(--sp-2)"><app-icon name="file" size="sm" [px]="11" />{{ ch().data.length }}</span>
+      <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-5);color:var(--ink-3)">
+        <span style="display:flex;gap:var(--sp-2)"><app-icon size="md" name="file" />{{ ch().data.length }}</span>
         @if (ch().status === 'loading') { <span style="opacity:.5" title="scanning…">·</span> }
         <span style="color:var(--code-add-ink)">+{{ totAdd() }}</span>
         <span style="color:var(--code-del-ink)">−{{ totDel() }}</span>
-        <span style="display:flex;gap:var(--sp-2)"><app-icon name="commit" size="sm" [px]="11" />{{ ag.commits }}</span>
+        <span style="display:flex;gap:var(--sp-2)"><app-icon size="md" name="commit" />{{ ag.commits }}</span>
         <span style="margin-left:auto;display:flex;gap:var(--sp-2);color:var(--ink-4)">
-          <app-icon name="clock" size="sm" [px]="11" />{{ elapsed() ? fmt(elapsed()) : '—' }}
+          <app-icon size="md" name="clock" />{{ elapsed() ? fmt(elapsed()) : '—' }}
         </span>
       </div>
 
       <div style="display:flex;gap:var(--sp-3)" (click)="$event.stopPropagation()">
         @switch (ag.status) {
           @case ('done') {
-            <button class="btn primary" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, 'merge')"><app-icon name="merge" size="sm" />Merge</button>
+            <kj-button kjVariant="default" class="kj-center" [kjFullWidth]="true" (click)="agentActions.act(ag.id, 'merge')"><app-icon name="merge" size="sm" />Merge</kj-button>
           }
           @case ('blocked') {
-            <button class="btn primary" style="flex:1;justify-content:center" (click)="ui.openAgent(ag.id)"><app-icon name="chat" size="sm" />Answer</button>
+            <kj-button kjVariant="default" class="kj-center" [kjFullWidth]="true" (click)="ui.openAgent(ag.id)"><app-icon name="chat" size="sm" />Answer</kj-button>
           }
           @case ('queued') {
-            <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, 'start')"><app-icon name="play" size="sm" />Start now</button>
+            <kj-button kjVariant="outline" class="kj-center" [kjFullWidth]="true" (click)="agentActions.act(ag.id, 'start')"><app-icon name="play" size="sm" />Start now</kj-button>
           }
           @default {
             @if (ag.status === 'running') {
-              <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, 'pause')">
+              <kj-button kjVariant="outline" class="kj-center" [kjFullWidth]="true" (click)="agentActions.act(ag.id, 'pause')">
                 <app-icon name="pause" size="sm" />Pause
-              </button>
+              </kj-button>
             } @else {
               <!-- Start/Resume + a visible Continue button that resumes the captured CLI session -->
-              <button class="btn ghost-hair" style="flex:1;justify-content:center" (click)="agentActions.act(ag.id, ag.started ? 'resume' : 'start')">
+              <kj-button kjVariant="outline" class="kj-center" [kjFullWidth]="true" (click)="agentActions.act(ag.id, ag.started ? 'resume' : 'start')">
                 <app-icon name="play" size="sm" />{{ ag.started ? 'Resume' : 'Start' }}
-              </button>
+              </kj-button>
               @if (ag.sessionId) {
-                <button
-                  class="btn ghost-hair"
-                  (click)="continueSession(ag.id)"
-                  [title]="'continue last session · ' + ag.tool + ' (' + ag.sessionId + ')'"
-                  style="padding:var(--sp-2) var(--sp-4)"
-                >
+                <kj-button kjVariant="outline" (click)="continueSession(ag.id)" [title]="'continue last session · ' + ag.tool + ' (' + ag.sessionId + ')'">
                   <app-icon name="refresh" size="sm" />Continue
-                </button>
+                </kj-button>
               }
             }
           }
         }
         @if (ag.worktree) {
-          <button class="btn ghost-hair" (click)="diagnostics.openWorktree(ag.worktree)" title="Open worktree folder" style="padding:var(--sp-2) var(--sp-4)"><app-icon name="folderOpen" size="sm" /></button>
+          <kj-button kjSize="icon" kjVariant="outline" (click)="diagnostics.openWorktree(ag.worktree)" title="Open worktree folder"><app-icon name="folderOpen" size="sm" /></kj-button>
         }
-        <button class="btn ghost-hair" (click)="ui.openAgent(ag.id)" style="padding:var(--sp-2) var(--sp-4)"><app-icon name="terminal" size="sm" />Open</button>
+        <kj-button kjVariant="outline" (click)="ui.openAgent(ag.id)"><app-icon name="terminal" size="sm" />Open</kj-button>
       </div>
     </div>
   `,

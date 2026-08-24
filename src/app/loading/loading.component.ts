@@ -1,7 +1,7 @@
 import {
-  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  afterNextRender,
   computed,
   ElementRef,
   inject,
@@ -67,7 +67,7 @@ import { WorkspaceStore } from '../stores/workspace.store';
     }
     .ob-word {
       font-family: 'Space Grotesk', sans-serif;
-      font-weight: 600;
+      font-weight: var(--fw-medium);
       font-size: var(--fs-display);
       letter-spacing: 0.01em;
       color: var(--ink);
@@ -75,7 +75,6 @@ import { WorkspaceStore } from '../stores/workspace.store';
     }
     .ob-word .o { color: var(--brand-2); }
     .ob-status {
-      font-size: var(--fs-xs);
       letter-spacing: 0.2em;
       text-transform: uppercase;
       color: var(--ink-3);
@@ -84,7 +83,7 @@ import { WorkspaceStore } from '../stores/workspace.store';
     }
     .ob-bar {
       margin-top: var(--sp-8);
-      width: 188px;
+      width: round(calc(188px * var(--density)), 1px);
       height: var(--sp-1);
       border-radius: 2px;
       background: var(--hair);
@@ -118,14 +117,14 @@ import { WorkspaceStore } from '../stores/workspace.store';
       align-items: center;
       gap: 8px;
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 13px;
-      font-weight: 600;
+      font-size: var(--fs-meta);
+      font-weight: var(--fw-medium);
       letter-spacing: -0.01em;
       color: var(--ink-2);
     }
     .ob-cred-mark { filter: drop-shadow(0 0 8px color-mix(in oklch, var(--brand-2), transparent 65%)); display: block; }
     .ob-cred-wm .o { color: var(--brand-2); }
-    .ob-cred-x { color: var(--ink-4); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; margin: 0 1px; }
+    .ob-cred-x { color: var(--ink-4); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: var(--fs-badge); margin: 0 1px; }
     .ob-cred-link {
       text-decoration: none;
       cursor: pointer;
@@ -149,10 +148,17 @@ import { WorkspaceStore } from '../stores/workspace.store';
     </div>
   `,
 })
-export class LoadingComponent implements AfterViewInit {
+export class LoadingComponent {
   readonly updater = inject(UpdaterService);
   private readonly workspace = inject(WorkspaceStore);
   private readonly router = inject(Router);
+
+  constructor() {
+    afterNextRender(() => {
+      this.draw();
+      void this.boot();
+    });
+  }
 
   /** Cosmetic minimum the splash stays up (ms). */
   minMs = 1600;
@@ -173,11 +179,6 @@ export class LoadingComponent implements AfterViewInit {
     const dl = this.updater.progress();
     return (dl > 0 ? dl : this.introFrac()) * 100;
   });
-
-  ngAfterViewInit() {
-    this.draw();
-    void this.boot();
-  }
 
   /** Testable boot flow: run the updater (with a cosmetic floor), and unless an
    *  update is installing, route into the app. A safety timeout guarantees we

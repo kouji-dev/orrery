@@ -4,14 +4,15 @@ import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { UiStore } from "../ui/ui.store";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { fmtDur, mix, STATUS_META } from "../utils";
+import { KjProgressBarComponent } from "@kouji-ui/components";
 
 @Component({
   selector: "app-timeline-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusDotComponent],
+  imports: [StatusDotComponent, KjProgressBarComponent],
   template: `
     <div style="padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-1)">
-      <div class="up" style="display:grid;grid-template-columns:150px 1fr 70px;gap:var(--sp-6);padding:0 var(--sp-2) var(--sp-4);font-size:var(--fs-2xs)">
+      <div class="up" style="display:grid;grid-template-columns:150px 1fr 70px;gap:var(--sp-6);padding:0 var(--sp-2) var(--sp-4);">
         <span style="color:var(--ink-3)">Agent</span>
         <span style="color:var(--ink-3)">Elapsed · progress</span>
         <span style="color:var(--ink-3);text-align:right">Commits</span>
@@ -19,13 +20,13 @@ import { fmtDur, mix, STATUS_META } from "../utils";
       @for (ag of agents(); track ag.id) {
         @let w = width(ag);
         <div
-          class="timeline-row"
+          class="row-hover"
           (click)="ui.openAgent(ag.id)"
           style="display:grid;grid-template-columns:150px 1fr 70px;gap:var(--sp-6);align-items:center;padding:var(--sp-4) var(--sp-2);cursor:pointer;border-radius:var(--r-sm);border-bottom:1px solid var(--hair)"
         >
           <div style="display:flex;align-items:center;gap:var(--sp-3);min-width:0">
             <app-status-dot [status]="ag.status" />
-            <span class="disp" style="font-size:var(--fs-ui);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</span>
+            <h4 class="trunc">{{ ag.name }}</h4>
           </div>
           <div style="position:relative;height:var(--ctl-h-sm);display:flex;align-items:center">
             <div
@@ -34,21 +35,25 @@ import { fmtDur, mix, STATUS_META } from "../utils";
               [style.border]="'1px solid ' + color(ag)"
               style="position:absolute;left:0;height:var(--sp-4);border-radius:5px;overflow:hidden"
             >
-              <div [style.width]="ag.progress * 100 + '%'" [style.background]="color(ag)" style="height:100%;opacity:0.5"></div>
+              <kj-progress-bar
+                [kjValue]="pct(ag)"
+                kjAriaLabel="Agent progress"
+                [style.--kj-progress-bar-fill]="'color-mix(in oklch,' + color(ag) + ',transparent 50%)'"
+                style="--kj-progress-bar-track:transparent;--kj-progress-bar-radius:0;--kj-progress-bar-height:100%"
+              />
               @if (ag.status === 'running') {
                 <div class="activity" style="position:absolute;inset:0;background:transparent"></div>
               }
             </div>
-            <span class="tnum" [style.left]="'calc(' + w + '% + 8px)'" style="position:absolute;font-size:var(--fs-xs);color:var(--ink-3);white-space:nowrap">
+            <span class="tnum" [style.left]="'calc(' + w + '% + 8px)'" style="position:absolute;color:var(--ink-3);white-space:nowrap">
               {{ elapsed(ag) ? fmt(elapsed(ag)) : '—' }} · {{ pct(ag) }}%
             </span>
           </div>
-          <span class="tnum" style="text-align:right;font-size:var(--fs-sm);color:var(--ink-2)">{{ ag.commits }}</span>
+          <span class="tnum" style="text-align:right;color:var(--ink-2)">{{ ag.commits }}</span>
         </div>
       }
     </div>
   `,
-  styles: [`.timeline-row:hover { background: var(--panel-2); }`],
 })
 export class TimelineViewComponent {
   readonly ui = inject(UiStore);

@@ -24,6 +24,7 @@ import { MonacoFileEditorComponent } from "./monaco-file-editor.component";
 import { ScrollStateService } from "./scroll-state.service";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
+import { KjBadgeComponent, KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent} from "@kouji-ui/components";
 
 /** Don't try to render megabyte-scale documents in the editor. */
 const MAX_CHARS = 1_500_000;
@@ -37,46 +38,34 @@ const MAX_CHARS = 1_500_000;
 @Component({
   selector: "app-file-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, MonacoFileEditorComponent, AnnotateBlameComponent, SendReviewButtonComponent],
+  imports: [IconComponent, MonacoFileEditorComponent, AnnotateBlameComponent, SendReviewButtonComponent, KjButtonComponent, KjBadgeComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     <!-- slim toolbar: path · changed-state · (md toggle) · annotate · lang · refresh -->
-    <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-6);background:var(--panel);border-bottom:1px solid var(--hair);font-size:var(--fs-sm);flex:none;min-width:0">
-      <app-icon name="file" size="sm" [px]="12" color="var(--ink-3)" />
-      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="path()">
+    <div class="pane-head" style="gap:var(--sp-3);padding-block:var(--sp-2);background:var(--panel);min-width:0">
+      <app-icon size="md" name="file" color="var(--ink-3)" />
+      <span class="trunc" [title]="path()">
         <span style="color:var(--ink-4)">{{ fdir(path()) }}</span>{{ fname(path()) }}
       </span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3);flex:none">
         @if (isMarkdown()) {
-          <div style="display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
-            <button class="btn" (click)="preview.set(false)"
-              [style.background]="!preview() ? 'var(--panel-3)' : 'transparent'"
-              [style.color]="!preview() ? 'var(--ink)' : 'var(--ink-3)'"
-              style="padding:var(--sp-1) var(--sp-3);border-radius:4px;font-size:var(--fs-xs)">Raw</button>
-            <button class="btn" (click)="preview.set(true)"
-              [style.background]="preview() ? 'var(--panel-3)' : 'transparent'"
-              [style.color]="preview() ? 'var(--ink)' : 'var(--ink-3)'"
-              style="padding:var(--sp-1) var(--sp-3);border-radius:4px;font-size:var(--fs-xs)">Preview</button>
-          </div>
+          <kj-tabs variant="pills" class="tabs-xs"
+                   [value]="preview() ? 'preview' : 'raw'" (valueChange)="preview.set($event === 'preview')">
+            <kj-tab-list aria-label="Markdown display mode">
+              <kj-tab value="raw">Raw</kj-tab>
+              <kj-tab value="preview">Preview</kj-tab>
+            </kj-tab-list>
+          </kj-tabs>
         }
         @if (kind() === 'text') {
-        <button
-          class="btn"
-          [class.ghost-hair]="!annotate()"
-          (click)="annotate.set(!annotate())"
-          title="Annotate — show who last changed each line"
-          [style.color]="annotate() ? 'var(--ink)' : 'var(--ink-3)'"
-          [style.background]="annotate() ? 'var(--ui-sel)' : 'transparent'"
-          [style.border]="'1px solid ' + (annotate() ? 'var(--ui-sel-2)' : 'var(--hair)')"
-          style="padding:var(--sp-1) var(--sp-4);gap:var(--sp-2);border-radius:var(--r-sm);font-size:var(--fs-xs)"
-        >
-          <app-icon name="git" size="sm" [px]="12" [color]="annotate() ? 'var(--ui-ink)' : null" />
+        <kj-button kjVariant="outline" [kjPressed]="annotate()" (click)="annotate.set(!annotate())" title="Annotate — show who last changed each line">
+          <app-icon size="md" name="git" [color]="annotate() ? 'var(--ui-ink)' : null" />
           Annotate
-        </button>
+        </kj-button>
         }
-        @if (tag()) { <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ tag() }}</span> }
-        <button class="btn" (click)="reload()" title="Reload from the worktree" style="padding:var(--sp-1);border-radius:4px">
-          <app-icon name="refresh" size="sm" [px]="12" [class.set-spin]="loading()" />
-        </button>
+        @if (tag()) { <kj-badge class="tnum" style="font-size:var(--fs-meta);padding:0 var(--sp-3)">{{ tag() }}</kj-badge> }
+        <kj-button kjSize="icon" kjVariant="ghost" (click)="reload()" title="Reload from the worktree">
+          <app-icon size="md" name="refresh" [class.set-spin]="loading()" />
+        </kj-button>
         <app-send-review-button [agent]="agent().id" [agentName]="agent().name" />
       </div>
     </div>
@@ -85,11 +74,10 @@ const MAX_CHARS = 1_500_000;
          this buffer holds unsaved edits -->
     @if (conflict() !== null) {
       <div class="ec-banner">
-        <app-icon name="refresh" size="sm" [px]="12" color="var(--code-del-ink)" />
-        <span>Changed on disk — an agent or another program modified this file.</span>
-        <span style="margin-left:auto"></span>
-        <button class="btn ghost-hair" (click)="acceptDisk()" title="Discard my edits and load the disk version">Reload</button>
-        <button class="btn ghost-hair" (click)="keepMine()" title="Keep my edits — saving will overwrite the disk version">Keep mine</button>
+        <app-icon size="md" name="refresh" color="var(--code-del-ink)" />
+        <p>Changed on disk — an agent or another program modified this file.</p>
+        <kj-button kjVariant="outline" style="margin-left:auto" (click)="acceptDisk()" title="Discard my edits and load the disk version">Reload</kj-button>
+        <kj-button kjVariant="outline" (click)="keepMine()" title="Keep my edits — saving will overwrite the disk version">Keep mine</kj-button>
       </div>
     }
 
@@ -97,7 +85,7 @@ const MAX_CHARS = 1_500_000;
     @if (kind() !== 'text') {
       <!-- B1.4: image / PDF preview (binary read, no text pipeline) -->
       @if (mediaError(); as me) {
-        <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-sm);padding:var(--sp-7);text-align:center">{{ me }}</div>
+        <div class="pane-empty pad" style="text-align:center">{{ me }}</div>
       } @else if (kind() === 'image' && mediaDataUrl()) {
         <div class="scroll-y media-body" (scroll)="onBodyScroll($event)">
           <img [src]="mediaDataUrl()" [alt]="fname(path())" />
@@ -105,12 +93,12 @@ const MAX_CHARS = 1_500_000;
       } @else if (kind() === 'pdf' && mediaSafeUrl()) {
         <embed [src]="mediaSafeUrl()" type="application/pdf" style="flex:1;width:100%;min-height:0" />
       } @else {
-        <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-sm)">loading…</div>
+        <div class="pane-empty">loading…</div>
       }
     } @else if (notice(); as n) {
-      <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-sm);padding:var(--sp-7);text-align:center">{{ n }}</div>
+      <div class="pane-empty pad" style="text-align:center">{{ n }}</div>
     } @else if (isMarkdown() && preview()) {
-      <div class="scroll-y md-body" (scroll)="onBodyScroll($event)" style="flex:1;padding:var(--sp-7) var(--sp-8)" [innerHTML]="mdHtml()"></div>
+      <div class="scroll-y rte-view md-body" (scroll)="onBodyScroll($event)" style="flex:1;padding:var(--sp-7) var(--sp-8)" [innerHTML]="mdHtml()"></div>
     } @else if (annotate()) {
       <app-annotate-blame [lines]="blame()" (openCommit)="onOpenCommit($event)" />
     } @else {
@@ -119,18 +107,13 @@ const MAX_CHARS = 1_500_000;
   `,
   styles: [
     `
+      /* the flex/column/min-height fill comes from the shared app-file-view
+         host rule in styles.css; only the ground is this component's own */
       :host {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
         background: var(--bg);
       }
-      .md-body { font-size: var(--fs-ui); line-height: 1.7; color: var(--ink-2); }
-      .md-body ::ng-deep h1, .md-body ::ng-deep h2, .md-body ::ng-deep h3 { color: var(--ink); margin: var(--sp-6) 0 var(--sp-3); }
-      .md-body ::ng-deep code { background: var(--panel-2); padding: 1px var(--sp-2); border-radius: 4px; font-size: var(--fs-sm); }
-      .md-body ::ng-deep pre { background: var(--panel-2); padding: var(--sp-5) var(--sp-6); border-radius: 8px; overflow-x: auto; }
-      .md-body ::ng-deep a { color: var(--ui-link); }
+      /* Heading / code / pre / link styling is the shared .rte-view recipe.
+         Only the mermaid block, which rte-view knows nothing about, stays. */
       .md-body ::ng-deep .mmd { margin: var(--sp-5) 0; overflow-x: auto; }
       .md-body ::ng-deep .mmd svg { max-width: 100%; height: auto; }
       .ec-banner {
@@ -141,10 +124,8 @@ const MAX_CHARS = 1_500_000;
         background: color-mix(in oklch, var(--code-del-ink), transparent 90%);
         border-bottom: 1px solid color-mix(in oklch, var(--code-del-ink), transparent 70%);
         color: var(--ink-2);
-        font-size: var(--fs-xs);
         flex: none;
       }
-      .ec-banner .btn { padding: var(--sp-1) var(--sp-4); font-size: var(--fs-xs); }
       .media-body {
         flex: 1;
         display: grid;

@@ -232,7 +232,8 @@ describe("DevPanelComponent resources tab (merged tree)", () => {
   it("shows the sampling empty state before the first tree snapshot", async () => {
     const fixture = setup([], null, null); // bridge rejects → no tree
     const el = await openResources(fixture);
-    expect(el.querySelector(".dvc-empty")).not.toBeNull();
+    // .dvc-empty became <kj-empty-state>
+    expect(el.querySelector("kj-empty-state")).not.toBeNull();
     expect(el.textContent).toContain("No process tree yet");
   });
 });
@@ -240,7 +241,9 @@ describe("DevPanelComponent resources tab (merged tree)", () => {
 describe("DevPanelComponent alert badge + ungated perf", () => {
   it("badges the FAB with the count of breaching commands, hidden when clean", () => {
     const clean = setup([row({ cmd: "ok", calls10s: 5, avgRt: 9 })]);
-    expect((clean.nativeElement as HTMLElement).querySelector(".dvc-badge")).toBeNull();
+    // the FAB count is <kj-overlay-badge>, which renders .kj-overlay-badge
+    // only while it has a value (kjHidden drops the span entirely)
+    expect((clean.nativeElement as HTMLElement).querySelector(".kj-overlay-badge")).toBeNull();
     TestBed.resetTestingModule();
     resetTerminalSchedulerForTests();
 
@@ -249,8 +252,8 @@ describe("DevPanelComponent alert badge + ungated perf", () => {
       row({ cmd: "erring", calls10s: 3, avgRt: 8, errPct: 1.2 }),
       row({ cmd: "frozen", calls10s: 0, avgRt: 500, stale: true }), // stale rows don't alert
     ]);
-    const badge = (bad.nativeElement as HTMLElement).querySelector(".dvc-badge");
-    expect(badge?.textContent).toBe("2");
+    const badge = (bad.nativeElement as HTMLElement).querySelector(".kj-overlay-badge");
+    expect(badge?.textContent?.trim()).toBe("2");
   });
 
   it("perf row expand and the recent-calls feed render without a dev-tier gate", () => {

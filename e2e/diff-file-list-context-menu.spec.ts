@@ -117,8 +117,11 @@ test("Delete asks for confirmation, then sends file_delete", async ({ page }) =>
   await page.locator("app-diff-file-list").getByText("report.html").click({ button: "right" });
   await page.locator(".menu-panel").getByRole("button", { name: "Delete" }).click();
 
-  await expect(page.locator(".menu-panel")).toContainText("report.html");
-  await page.locator(".menu-panel").getByRole("button", { name: "Delete" }).click();
+  // the confirm step is kouji's <kj-confirm-popup>, portalled OUT of the menu.
+  // Its content host is display:contents (no box), so assert on the message and
+  // press the action slot's button.
+  await expect(page.locator("kj-confirm-popup-message:visible")).toContainText("report.html");
+  await page.locator("kj-confirm-popup-action button:visible").click();
 
   await expect(page.locator(".menu-panel")).toHaveCount(0);
   const calls = await page.evaluate("window.__calls");

@@ -16,6 +16,7 @@ import { ShaChipComponent } from "../../shared/git/sha-chip.component";
 import { AddDelComponent } from "../../shared/git/add-del.component";
 import { CodeDiffComponent } from "../code-diff.component";
 import { fileDir, fileName, langId } from "../../utils";
+import { KjButtonComponent, KjEmptyStateComponent, KjEmptyStateTitleComponent, KjSkeletonComponent } from "@kouji-ui/components";
 
 /** Unix-seconds → human relative label ("2 hours ago", "3 days ago", …). */
 function relTime(when: number): string {
@@ -43,30 +44,23 @@ function relTime(when: number): string {
  */
 @Component({
   selector: "app-file-history-view",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    IconComponent,
-    AuthorAvatarComponent,
-    ShaChipComponent,
-    AddDelComponent,
-    CodeDiffComponent,
-  ],
+  imports: [IconComponent, AuthorAvatarComponent, ShaChipComponent, AddDelComponent, CodeDiffComponent, KjButtonComponent, KjEmptyStateComponent, KjEmptyStateTitleComponent, KjSkeletonComponent],
   template: `
-    <div class="fh-grid">
+    <div class="split-pane fh-grid">
 
       <!-- ============================================================
            LEFT — revision timeline
            ============================================================ -->
-      <div class="fh-left">
+      <div class="split-pane-side fh-left">
         <!-- header -->
-        <div class="fh-left-head">
+        <div class="pane-head fh-left-head" style="display:block">
           <div style="display:flex;align-items:center;gap:var(--sp-3)">
             <app-icon name="clock" size="sm" style="color:var(--ink-3)" />
-            <span style="color:var(--ink-4);font-size:var(--fs-xs)">{{ dir() }}</span>
-            <span style="font-size:var(--fs-sm);color:var(--ink);margin-left:calc(-1 * var(--sp-2))">{{ name() }}</span>
+            <span style="color:var(--ink-4)">{{ dir() }}</span>
+            <span style="color:var(--ink);margin-left:calc(-1 * var(--sp-2))">{{ name() }}</span>
           </div>
-          <div style="font-size:var(--fs-2xs);color:var(--ink-3);margin-top:var(--sp-2)">
+          <div style="font-size:var(--fs-meta);color:var(--ink-3);margin-top:var(--sp-2)">
             {{ revisions().length }} revisions · click two to compare
           </div>
         </div>
@@ -77,15 +71,19 @@ function relTime(when: number): string {
           <div class="fh-connector"></div>
 
           @if (loadable().status === 'loading' && !revisions().length) {
-            <div class="fh-empty">loading…</div>
+            <kj-skeleton kjSkeletonShape="text-block" [kjLines]="4" style="display:block;margin:var(--sp-3) var(--sp-5)" />
           } @else if (loadable().status === 'error') {
-            <div class="fh-empty" style="color:var(--st-blocked)">failed to load history</div>
+            <kj-empty-state kjVariant="error" kjLive="assertive" kjSize="sm">
+              <kj-empty-state-title [kjLevel]="3">Failed to load history</kj-empty-state-title>
+            </kj-empty-state>
           } @else if (!revisions().length) {
-            <div class="fh-empty">no history</div>
+            <kj-empty-state kjSize="sm">
+              <kj-empty-state-title [kjLevel]="3">No history</kj-empty-state-title>
+            </kj-empty-state>
           } @else {
             @for (r of revisions(); track r.sha) {
               <div
-                class="fh-rev-row"
+                class="fh-rev-row list-row"
                 [class.fh-rev-base]="r.sha === baseSha()"
                 [class.fh-rev-compare]="r.sha === compareSha()"
                 (click)="pick(r.sha)"
@@ -106,7 +104,7 @@ function relTime(when: number): string {
 
                 <!-- content -->
                 <div style="flex:1;min-width:0">
-                  <div class="fh-rev-msg">{{ r.summary }}</div>
+                  <div class="fh-rev-msg trunc">{{ r.summary }}</div>
                   <div class="fh-rev-meta tnum">
                     <app-author-avatar [author]="r.author" [size]="15" />
                     <span style="color:var(--ink-3)">{{ r.author }}</span>
@@ -124,17 +122,19 @@ function relTime(when: number): string {
       <!-- ============================================================
            RIGHT — diff across revisions
            ============================================================ -->
-      <div class="fh-right">
+      <div class="split-pane-main fh-right">
         <!-- diff header -->
-        <div class="fh-diff-head">
+        <div class="pane-head fh-diff-head">
           <app-icon name="diff" size="sm" style="color:var(--ink-3)" />
-          <span style="font-size:var(--fs-xs);color:var(--ink-2)">{{ name() }} across revisions</span>
+          <span style="color:var(--ink-2)">{{ name() }} across revisions</span>
           <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3)" class="tnum">
-            <span class="chip fh-chip-a" style="font-size:var(--fs-2xs);padding:1px var(--sp-3)">A {{ shortSha(baseSha()) }}</span>
-            <button class="btn" title="Swap A↔B" (click)="swap()" style="padding:var(--sp-1);border-radius:var(--r-sm)">
-              <app-icon name="swap" size="sm" [px]="14" />
-            </button>
-            <span class="chip fh-chip-b" style="font-size:var(--fs-2xs);padding:1px var(--sp-3)">B {{ shortSha(compareSha()) }}</span>
+            <span class="fh-rev-label fh-rev-label-base up">A</span>
+            @if (baseSha(); as a) { <app-sha-chip [sha]="a" /> } @else { <span style="color:var(--ink-4)">—</span> }
+            <kj-button kjSize="icon" kjVariant="ghost" title="Swap A↔B" (click)="swap()">
+              <app-icon size="xl" name="swap" />
+            </kj-button>
+            <span class="fh-rev-label fh-rev-label-compare up">B</span>
+            @if (compareSha(); as b) { <app-sha-chip [sha]="b" /> } @else { <span style="color:var(--ink-4)">—</span> }
           </div>
         </div>
 
@@ -151,7 +151,7 @@ function relTime(when: number): string {
         <!-- diff body -->
         <div style="flex:1;min-height:0">
           @if (diffLoading()) {
-            <div style="height:100%;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">loading diff…</div>
+            <div class="pane-empty" style="height:100%">loading diff…</div>
           } @else if (activeDiff(); as d) {
             @defer (on immediate) {
               <app-code-diff
@@ -161,12 +161,12 @@ function relTime(when: number): string {
                 [lang]="fileLang()"
               />
             } @placeholder {
-              <div style="height:100%;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">loading…</div>
+              <div class="pane-empty" style="height:100%">loading…</div>
             }
           } @else if (revisions().length < 2) {
-            <div style="height:100%;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">need at least 2 revisions to compare</div>
+            <div class="pane-empty" style="height:100%">need at least 2 revisions to compare</div>
           } @else {
-            <div style="height:100%;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">select two revisions to compare</div>
+            <div class="pane-empty" style="height:100%">select two revisions to compare</div>
           }
         </div>
       </div>
@@ -175,34 +175,14 @@ function relTime(when: number): string {
   `,
   styles: [
     `
-      /* === host: fills the panel, no overflow at this level === */
-      :host {
-        display: flex;
-        flex: 1;
-        min-height: 0;
-      }
-
-      /* === two-column layout === */
+      /* Layout is the shared .split-pane / -side / -main; the host fill is
+         the app-file-history-view rule in styles.css. Only this view's own
+         column width and grounds are left here. */
       .fh-grid {
-        flex: 1;
-        display: grid;
-        grid-template-columns: var(--fh-list-w, 346px) 1fr;
-        min-height: 0;
-        background: var(--panel-2);
-      }
-
-      /* === left panel === */
-      .fh-left {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        border-right: 1px solid var(--hair);
-        background: var(--panel);
+        --split-w: 346px;
       }
       .fh-left-head {
         padding: var(--sp-3) var(--sp-5);
-        border-bottom: 1px solid var(--hair);
-        flex: none;
       }
 
       /* scroll area — relative so the connector line can be positioned inside */
@@ -224,19 +204,14 @@ function relTime(when: number): string {
       }
 
       /* === revision row === */
+      /* margin / radius / cursor / hover come from .list-row; the A/B skins
+         below are !important so they still outrank that hover. */
       .fh-rev-row {
         position: relative;
         display: flex;
         gap: var(--sp-3);
         padding: var(--sp-3) var(--sp-4) var(--sp-3) var(--sp-3);
-        cursor: pointer;
-        border-radius: var(--r-sm);
-        margin: 1px var(--sp-3);
-        background: transparent;
         transition: background 0.1s ease;
-      }
-      .fh-rev-row:hover:not(.fh-rev-base):not(.fh-rev-compare) {
-        background: var(--panel-2);
       }
       .fh-rev-base {
         background: color-mix(in oklch, var(--side-a), transparent 90%) !important;
@@ -263,67 +238,39 @@ function relTime(when: number): string {
         border: 2px solid var(--ink-4);
       }
       .fh-rev-label {
-        font-size: var(--fs-2xs);
-        font-weight: 700;
+        font-size: var(--fs-meta);
+        font-weight: var(--fw-strong);
       }
       .fh-rev-label-base  { color: var(--side-a); }
       .fh-rev-label-compare { color: var(--side-b); }
 
       /* commit message + meta row */
       .fh-rev-msg {
-        font-size: var(--fs-sm);
         color: var(--ink);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
       }
       .fh-rev-meta {
         display: flex;
         align-items: center;
         gap: var(--sp-2);
         margin-top: var(--sp-2);
-        font-size: var(--fs-2xs);
-        color: var(--ink-4);
-      }
-
-      /* empty / loading state */
-      .fh-empty {
-        padding: var(--sp-5) var(--sp-6);
-        font-size: var(--fs-sm);
+        font-size: var(--fs-meta);
         color: var(--ink-4);
       }
 
       /* === right panel === */
       .fh-right {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
         background: var(--bg);
       }
       .fh-diff-head {
-        display: flex;
-        align-items: center;
         gap: var(--sp-3);
         padding: var(--sp-2) var(--sp-5);
         background: var(--panel);
-        border-bottom: 1px solid var(--hair);
-        flex: none;
-      }
-
-      /* A / B sha chips */
-      .fh-chip-a {
-        color: var(--ink-2);
-        border-color: var(--hair-2);
-      }
-      .fh-chip-b {
-        color: var(--ink-2);
-        border-color: var(--hair-2);
       }
 
       /* revision context bar: shows rel + summary for both ends */
       .fh-rev-bar {
         padding: var(--sp-2) var(--sp-5);
-        font-size: var(--fs-2xs);
+        font-size: var(--fs-meta);
         color: var(--ink-4);
         border-bottom: 1px solid var(--hair);
         display: flex;
@@ -468,8 +415,4 @@ export class FileHistoryViewComponent {
 
   // ---- helpers ----
   readonly rel = relTime;
-
-  shortSha(sha: string | null): string {
-    return sha ? sha.slice(0, 7) : "—";
-  }
 }

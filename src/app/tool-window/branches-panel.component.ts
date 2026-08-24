@@ -11,10 +11,21 @@ import { AgentActionsService } from "../agents/agent-actions.service";
 import { BranchesStore } from "../agents/branches.store";
 import { BranchInfo } from "../data-source/bridge";
 import { Agent, Project } from "../models";
-import { EstimateInput } from "../cost/estimate.service";
-import { GitActionButtonComponent } from "../shared/git/git-action-button.component";
 import { IconComponent } from "../shared/icon.component";
 import { UiStore } from "../ui/ui.store";
+import {
+  KjBadgeComponent,
+  KjButtonComponent,
+  KjConfirmPopupActionComponent,
+  KjConfirmPopupActionsComponent,
+  KjConfirmPopupCancelComponent,
+  KjConfirmPopupComponent,
+  KjConfirmPopupContentComponent,
+  KjConfirmPopupMessageComponent,
+  KjConfirmPopupTriggerComponent,
+  KjInputComponent,
+} from "@kouji-ui/components";
+import { SelectComponent } from "../shared/select.component";
 
 /**
  * Bottom-dock "Branches" panel — LIVE since A3.2: fetch/pull (CLI shell-out so
@@ -25,182 +36,160 @@ import { UiStore } from "../ui/ui.store";
 @Component({
   selector: "app-branches-panel",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, GitActionButtonComponent],
+  imports: [
+    IconComponent,
+    KjButtonComponent,
+    KjBadgeComponent,
+    KjConfirmPopupComponent,
+    KjConfirmPopupTriggerComponent,
+    KjConfirmPopupContentComponent,
+    KjConfirmPopupMessageComponent,
+    KjConfirmPopupActionsComponent,
+    KjConfirmPopupActionComponent,
+    KjConfirmPopupCancelComponent,
+    KjInputComponent,
+    SelectComponent,
+  ],
   template: `
     @if (!project()) {
-      <div style="padding:var(--sp-8);font-size:var(--fs-sm);color:var(--ink-4)">
-        select a project to see its branches &amp; remotes
-      </div>
+      <div class="pane-empty pad">select a project to see its branches &amp; remotes</div>
     } @else {
       @let p = project()!;
       <div style="display:grid;grid-template-columns:300px 1fr;min-height:0;flex:1">
         <!-- remotes -->
         <div style="display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--hair)">
-          <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);flex:none">
-            <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-3)">Remotes</span>
-          </div>
+          <span class="up pane-head" style="color:var(--ink-3)">Remotes</span>
           <div class="scroll-y" style="flex:1;padding:var(--sp-2) 0">
             @for (r of store.remotes(); track r.name) {
               <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair)">
                 <app-icon name="globe" size="sm" color="var(--ink-4)" />
                 <div style="flex:1;min-width:0">
-                  <div style="font-size:var(--fs-sm);color:var(--ink-2)">{{ r.name }}</div>
-                  <div style="font-size:var(--fs-2xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" [title]="r.url">{{ r.url }}</div>
+                  <div style="color:var(--ink-2)">{{ r.name }}</div>
+                  <div class="trunc" style="font-size:var(--fs-meta);color:var(--ink-4)" [title]="r.url">{{ r.url }}</div>
                 </div>
-                <button class="btn br-op" [disabled]="store.busy()" (click)="store.fetch(p.id, r.name)" title="git fetch --prune {{ r.name }}">
-                  <app-icon name="refresh" size="sm" [px]="11" />Fetch
-                </button>
+                <kj-button kjVariant="toolbar" [kjDisabled]="store.busy()" (click)="store.fetch(p.id, r.name)" title="git fetch --prune {{ r.name }}">
+                  <app-icon size="md" name="refresh" />Fetch
+                </kj-button>
               </div>
             }
             @if (!store.remotes().length) {
-              <div style="padding:var(--sp-6);font-size:var(--fs-sm);color:var(--ink-4)">no remotes configured</div>
+              <div class="pane-empty pad">no remotes configured</div>
             }
           </div>
         </div>
 
         <!-- branches -->
         <div style="display:flex;flex-direction:column;min-height:0">
-          <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-6);border-bottom:1px solid var(--hair);flex:none">
-            <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-3)">Branches · {{ p.name }}</span>
+          <div class="pane-head">
+            <span class="up" style="color:var(--ink-3)">Branches · {{ p.name }}</span>
             @if (store.busy()) {
               <span class="dot running" style="background:var(--st-running)"></span>
             }
             <div style="margin-left:auto;display:flex;gap:var(--sp-3);align-items:center">
-              <app-git-action-button label="Fetch" icon="refresh" [small]="true" [disabled]="store.busy()" title="git fetch --all --prune" [estimateInput]="branchEstimate()" (native)="store.fetch(p.id)" />
-              <app-git-action-button label="Pull" icon="stage" [small]="true" [disabled]="store.busy()" [title]="pullTitle()" [estimateInput]="branchEstimate()" (native)="pull(p.id)" />
-              <app-git-action-button
-                label="New branch"
-                icon="plus"
-                kind="primary"
-                [small]="true"
-                [disabled]="store.busy() || !newName().trim()"
+              <kj-button kjVariant="toolbar" [kjDisabled]="store.busy()" title="git fetch --all --prune" (click)="store.fetch(p.id)">
+                <app-icon name="refresh" size="sm" />Fetch
+              </kj-button>
+              <kj-button kjVariant="toolbar" [kjDisabled]="store.busy()" [title]="pullTitle()" (click)="pull(p.id)">
+                <app-icon name="stage" size="sm" />Pull
+              </kj-button>
+              <kj-button
+                kjVariant="default"
+                [kjDisabled]="store.busy() || !newName().trim()"
                 title="create the branch named below"
-                [estimateInput]="branchEstimate()"
-                (native)="create(p.id)"
-              />
+                (click)="create(p.id)"
+              >
+                <app-icon name="plus" size="sm" />New branch
+              </kj-button>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair);flex:none;background:var(--panel-2)">
-            <input
+          <div class="pane-head" style="background:var(--panel-2)">
+            <kj-input
+              kjSize="sm"
               [value]="newName()"
               (input)="newName.set($any($event.target).value)"
               (keydown.enter)="create(p.id)"
               placeholder="new branch name…"
-              spellcheck="false"
-              style="flex:1;background:var(--panel);border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-4);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);outline:none"
             />
-            <span style="font-size:var(--fs-xs);color:var(--ink-4)">from</span>
-            <select class="osel" [value]="newFrom() ?? current()" (change)="newFrom.set($any($event.target).value)" style="width:160px;flex:none;padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm)">
-              @for (b of names(); track b) {
-                <option [value]="b">{{ b }}</option>
-              }
-            </select>
+            <span style="color:var(--ink-4)">from</span>
+            <app-select [value]="newFrom() ?? current()" [options]="names()" (valueChange)="newFrom.set($event)" style="width: round(calc(160px * var(--density)), 1px);flex:none" />
           </div>
           <div class="scroll-y" style="flex:1;padding:var(--sp-2) 0">
             @for (b of rows(); track b.name) {
               @let held = b.checkedOutIn !== undefined;
               <div
-                style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);border-bottom:1px solid var(--hair)"
+                class="pane-head"
                 [style.background]="b.current ? 'var(--ui-sel)' : 'transparent'"
               >
                 <app-icon name="branch" size="sm" [color]="b.current ? 'var(--ui-ink)' : 'var(--ink-4)'" />
-                <span style="font-size:var(--fs-sm)" [style.color]="b.current ? 'var(--ink)' : 'var(--ink-2)'">{{ b.name }}</span>
+                <span [style.color]="b.current ? 'var(--ink)' : 'var(--ink-2)'">{{ b.name }}</span>
                 @if (b.current) {
-                  <span class="chip" style="font-size:var(--fs-3xs);padding:0 var(--sp-2);color:var(--ui-ink);border-color:var(--ui-line)">HEAD</span>
+                  <kj-badge style="font-size:var(--fs-badge);padding:0 var(--sp-2);color:var(--ui-ink);border-color:var(--ui-line)">HEAD</kj-badge>
                 } @else if (held) {
-                  <span class="chip" style="font-size:var(--fs-3xs);padding:0 var(--sp-2);color:var(--ink-4)" [title]="'checked out in ' + (b.checkedOutIn || 'the project checkout')">in use</span>
+                  <kj-badge style="font-size:var(--fs-badge);padding:0 var(--sp-2);color:var(--ink-4)" [title]="'checked out in ' + (b.checkedOutIn || 'the project checkout')">in use</kj-badge>
                 }
                 @if (b.upstream) {
-                  <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-4)" [title]="'upstream ' + b.upstream">
+                  <span class="tnum" style="font-size:var(--fs-meta);color:var(--ink-4)" [title]="'upstream ' + b.upstream">
                     {{ b.upstream }}@if (b.ahead || b.behind) { · ↑{{ b.ahead }} ↓{{ b.behind }} }
                   </span>
                 }
                 @if (renameFor() === b.name) {
-                  <input
-                    class="br-rename"
-                    [value]="renameTo()"
-                    (input)="renameTo.set($any($event.target).value)"
-                    (keydown.enter)="doRename(p.id, b.name)"
-                    (keydown.escape)="renameFor.set(null)"
-                    spellcheck="false"
-                  />
-                  <button class="btn br-op" [disabled]="!renameTo().trim()" (click)="doRename(p.id, b.name)">OK</button>
-                  <button class="btn br-op" (click)="renameFor.set(null)">Cancel</button>
-                } @else if (deleteFor() === b.name) {
-                  <span style="font-size:var(--fs-xs);color:var(--ink-3)">delete {{ b.name }}?</span>
-                  <button class="btn br-op danger" [disabled]="store.busy()" (click)="doDelete(p.id, b.name, false)">Delete</button>
-                  <button class="btn br-op danger" [disabled]="store.busy()" title="delete even if unmerged" (click)="doDelete(p.id, b.name, true)">Force</button>
-                  <button class="btn br-op" (click)="deleteFor.set(null)">Cancel</button>
+                  <span style="margin-left:auto;width: round(calc(180px * var(--density)), 1px);flex:none">
+                    <kj-input
+                      [value]="renameTo()"
+                      (input)="renameTo.set($any($event.target).value)"
+                      (keydown.enter)="doRename(p.id, b.name)"
+                      (keydown.escape)="renameFor.set(null)"
+                    />
+                  </span>
+                  <kj-button kjVariant="toolbar" [kjDisabled]="!renameTo().trim()" (click)="doRename(p.id, b.name)">OK</kj-button>
+                  <kj-button kjVariant="toolbar" (click)="renameFor.set(null)">Cancel</kj-button>
                 } @else {
                   <div style="margin-left:auto;display:flex;gap:var(--sp-1)">
                     @if (!b.current) {
-                      <button class="btn br-op" [disabled]="store.busy() || held || !agent()" [title]="checkoutTitle(b)" (click)="checkout(p.id, b.name)">
-                        <app-icon name="enter" size="sm" [px]="11" />Checkout
-                      </button>
+                      <kj-button kjVariant="toolbar" [kjDisabled]="store.busy() || held || !agent()" [title]="checkoutTitle(b)" (click)="checkout(p.id, b.name)">
+                        <app-icon size="md" name="enter" />Checkout
+                      </kj-button>
                     }
-                    <button class="btn br-op" [disabled]="store.busy()" [title]="upstreamTitle(b)" (click)="toggleUpstream(p.id, b)">
-                      <app-icon name="link" size="sm" [px]="11" />Upstream
-                    </button>
+                    <kj-button kjVariant="toolbar" [kjDisabled]="store.busy()" [title]="upstreamTitle(b)" (click)="toggleUpstream(p.id, b)">
+                      <app-icon size="md" name="link" />Upstream
+                    </kj-button>
                     @if (!b.current && agent()) {
-                      <button class="btn br-op" [disabled]="store.busy()" [title]="'merge ' + b.name + ' into ' + agent()!.branch + ' · native (conflicts open the resolver)'" (click)="mergeIn(b.name)">
-                        <app-icon name="merge" size="sm" [px]="11" />Merge in
-                      </button>
+                      <kj-button kjVariant="toolbar" [kjDisabled]="store.busy()" [title]="'merge ' + b.name + ' into ' + agent()!.branch + ' · native (conflicts open the resolver)'" (click)="mergeIn(b.name)">
+                        <app-icon size="md" name="merge" />Merge in
+                      </kj-button>
                     }
-                    <button class="btn br-op" [disabled]="store.busy() || held" [title]="held ? 'in use — cannot rename' : 'rename branch'" (click)="startRename(b.name)">
-                      <app-icon name="rename" size="sm" [px]="11" />Rename
-                    </button>
+                    <kj-button kjVariant="toolbar" [kjDisabled]="store.busy() || held" [title]="held ? 'in use — cannot rename' : 'rename branch'" (click)="startRename(b.name)">
+                      <app-icon size="md" name="rename" />Rename
+                    </kj-button>
                     @if (!b.current) {
-                      <button class="btn br-op danger" [disabled]="store.busy() || held" [title]="held ? 'in use — cannot delete' : 'delete branch'" (click)="deleteFor.set(b.name)">
-                        <app-icon name="trash" size="sm" [px]="11" />Delete
-                      </button>
+                      <kj-confirm-popup [kjDestructive]="true">
+                        <kj-confirm-popup-trigger #delTrig="kjConfirmPopupTrigger">
+                          <kj-button kjVariant="danger" [kjDisabled]="store.busy() || held" [title]="held ? 'in use — cannot delete' : 'delete branch'">
+                            <app-icon size="md" name="trash" />Delete
+                          </kj-button>
+                        </kj-confirm-popup-trigger>
+                        <kj-confirm-popup-content [kjFor]="delTrig">
+                          <kj-confirm-popup-message>delete {{ b.name }}?</kj-confirm-popup-message>
+                          <kj-confirm-popup-actions>
+                            <kj-confirm-popup-cancel><kj-button kjVariant="toolbar">Cancel</kj-button></kj-confirm-popup-cancel>
+                            <kj-confirm-popup-action><kj-button kjVariant="danger" title="delete even if unmerged" (click)="doDelete(p.id, b.name, true)">Force</kj-button></kj-confirm-popup-action>
+                            <kj-confirm-popup-action><kj-button kjVariant="danger" (click)="doDelete(p.id, b.name, false)">Delete</kj-button></kj-confirm-popup-action>
+                          </kj-confirm-popup-actions>
+                        </kj-confirm-popup-content>
+                      </kj-confirm-popup>
                     }
                   </div>
                 }
               </div>
             }
             @if (!rows().length) {
-              <div style="padding:var(--sp-6);font-size:var(--fs-sm);color:var(--ink-4)">no branches detected — is this a git repo?</div>
+              <div class="pane-empty pad">no branches detected — is this a git repo?</div>
             }
           </div>
         </div>
       </div>
     }
   `,
-  styles: [
-    `
-      :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-        min-width: 0;
-      }
-      .br-op {
-        padding: var(--sp-1) var(--sp-3);
-        font-size: var(--fs-xs);
-        color: var(--ink-3);
-      }
-      .br-op:disabled {
-        opacity: 0.45;
-        cursor: default;
-      }
-      .br-op.danger {
-        color: var(--st-blocked);
-      }
-      .br-rename {
-        margin-left: auto;
-        width: 180px;
-        background: var(--panel);
-        border: 1px solid var(--hair);
-        border-radius: var(--r-sm);
-        padding: var(--sp-1) var(--sp-3);
-        color: var(--ink);
-        font-family: var(--font-mono);
-        font-size: var(--fs-sm);
-        outline: none;
-      }
-    `,
-  ],
 })
 export class BranchesPanelComponent {
   readonly agent = input<Agent | null>(null);
@@ -216,7 +205,6 @@ export class BranchesPanelComponent {
   readonly newFrom = signal<string | null>(null);
   readonly renameFor = signal<string | null>(null);
   readonly renameTo = signal("");
-  readonly deleteFor = signal<string | null>(null);
 
   /** The checked-out branch of the scoped worktree (or the project checkout). */
   readonly current = computed(() => this.agent()?.branch ?? this.project()?.branch ?? "main");
@@ -242,11 +230,6 @@ export class BranchesPanelComponent {
   });
 
   readonly names = computed(() => this.rows().map((b) => b.name));
-
-  readonly branchEstimate = computed<EstimateInput>(() => ({
-    op: "branch",
-    model: this.agent()?.model,
-  }));
 
   constructor() {
     effect(() => {
@@ -322,7 +305,6 @@ export class BranchesPanelComponent {
   startRename(name: string): void {
     this.renameFor.set(name);
     this.renameTo.set(name);
-    this.deleteFor.set(null);
   }
 
   doRename(projectId: string, old: string): void {
@@ -337,8 +319,6 @@ export class BranchesPanelComponent {
   }
 
   doDelete(projectId: string, name: string, force: boolean): void {
-    void this.store.delete(projectId, name, force).then((ok) => {
-      if (ok) this.deleteFor.set(null);
-    });
+    void this.store.delete(projectId, name, force);
   }
 }

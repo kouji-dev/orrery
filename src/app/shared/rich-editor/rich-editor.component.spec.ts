@@ -20,7 +20,6 @@ import {
   applyLinkToSelection,
   applyTextFormat,
   buildRichEditor,
-  loadHtmlIntoEditor,
   readBlockState,
   roundTripHtml,
   serializeEditorToHtml,

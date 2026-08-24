@@ -5,6 +5,7 @@ import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { mix } from "../utils";
 import { AgentRowComponent } from "./agent-row.component";
+import { KjButton } from "@kouji-ui/core";
 
 const STATUS_PRIORITY: Record<AgentStatus, number> = {
   blocked: 0,
@@ -18,7 +19,7 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
 @Component({
   selector: "app-project-group",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AgentRowComponent],
+  imports: [IconComponent, AgentRowComponent, KjButton],
   template: `
     @let p = project();
     <div style="margin-bottom:var(--sp-1)">
@@ -28,26 +29,27 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
         (contextmenu)="ui.openMenu($event, projects.projectMenu(p.id))"
         style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-5);cursor:pointer;position:relative;margin:0 var(--sp-3);border-radius:var(--r-md)"
       >
-        <app-icon [name]="collapsed() ? 'chevron' : 'chevronD'" size="sm" [px]="11" color="var(--ink-4)" />
+        <app-icon size="md" [name]="collapsed() ? 'chevron' : 'chevronD'" color="var(--ink-4)" />
         <span
           [style.background]="mix(p.color, 82)"
           [style.border]="'1px solid ' + mix(p.color, 62)"
           style="width:19px;height:19px;flex:none;border-radius:5px;display:grid;place-items:center"
         >
-          <app-icon [name]="p.icon" size="sm" [px]="12" [color]="p.color" />
+          <app-icon size="md" [name]="p.icon" [color]="p.color" />
         </span>
         <span
           [style.color]="p.folderExists ? 'var(--ink)' : 'var(--ink-3)'"
-          style="font-size:var(--fs-ui);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          class="trunc"
+          style="font-weight:var(--fw-medium)"
         >{{ p.name }}</span>
         @if (!p.folderExists) {
-          <app-icon name="flag" size="sm" [px]="11" color="var(--st-blocked)" title="folder not found — right-click to relocate" />
+          <app-icon size="md" name="flag" color="var(--st-blocked)" title="folder not found — right-click to relocate" />
         }
         @if (needs() > 0) {
-          <span class="tnum" style="font-size:var(--fs-2xs);font-weight:700;color:var(--st-blocked)">{{ needs() }}!</span>
+          <span class="tnum" style="font-size:var(--fs-meta);font-weight:var(--fw-strong);color:var(--st-blocked)">{{ needs() }}!</span>
         }
-        <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4);flex:none">{{ agents().length }}</span>
-        <button
+        <span class="tnum" style="margin-left:auto;font-size:var(--fs-meta);color:var(--ink-4);flex:none">{{ agents().length }}</span>
+        <button kjButton
           class="proj-spawn"
           title="Spawn agent in this project"
           (click)="spawnHere($event)"
@@ -64,7 +66,7 @@ const STATUS_PRIORITY: Record<AgentStatus, number> = {
               <app-agent-row [agent]="ag" [active]="ag.id === activeAgent()" />
             }
           } @else {
-            <div style="padding:var(--sp-2) var(--sp-5) var(--sp-3) var(--sp-10);font-size:var(--fs-xs);color:var(--ink-4)">no agents — spawn one</div>
+            <div style="padding:var(--sp-2) var(--sp-5) var(--sp-3) var(--sp-10);font-size:var(--fs-meta);color:var(--ink-4)">no agents — spawn one</div>
           }
         </div>
       }

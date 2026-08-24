@@ -3,52 +3,40 @@ import {
   Component,
   computed,
   input,
-  output,
 } from "@angular/core";
+import { KjBadgeComponent } from "@kouji-ui/components";
 
 /**
- * Short-sha chip. When `(chipClick)` is observed the chip becomes interactive
- * (pointer cursor, ink hover). `dim` renders the sha in a muted ink.
+ * Short-sha chip.
+ *
+ * Built on kouji's `<kj-badge>`: a sha chip is a label pill, which is exactly
+ * what a badge is. `dim` is per-instance data, not a design variant, so the
+ * muted ink rides the badge's `fg` input — kouji applies `bg`/`fg` as inline
+ * styles, so they win per element.
+ *
+ * The chip skin (mono face, full pill, hairline, hover) lives in styles.css:
+ * it dresses kouji's inner `.kj-badge` span, which sits in kouji's own view and
+ * carries no scope attribute, so component styles cannot reach it.
  */
 @Component({
   selector: "app-sha-chip",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KjBadgeComponent],
   template: `
-    <span
-      class="chip tnum"
-      [class.clickable]="hasListener()"
-      [style.color]="dim() ? 'var(--ink-3)' : 'var(--ink-2)'"
-      [style.cursor]="hasListener() ? 'pointer' : 'default'"
-      style="
-        font-size: var(--fs-2xs);
-        padding: 0 var(--sp-3);
-        letter-spacing: 0.02em;
-      "
-      (click)="hasListener() ? chipClick.emit(sha()) : null"
-    >{{ short() }}</span>
+    <kj-badge
+      bg="var(--panel-2)"
+      [fg]="dim() ? 'var(--ink-3)' : 'var(--ink-2)'"
+    >{{ short() }}</kj-badge>
   `,
-  styles: [
-    `
-      .clickable:hover {
-        color: var(--ink) !important;
-        border-color: var(--hair-2);
-      }
-    `,
-  ],
 })
 export class ShaChipComponent {
-  readonly sha = input.required<string>();
+  /** The commit sha. NOT `input.required`: a required signal input read from a
+   *  computed during creation throws NG0950 under raw vitest JIT — the same
+   *  constraint that keeps several components on @Input() decorators. Every
+   *  call site binds it; the empty default only affects that test environment. */
+  readonly sha = input<string>("");
   /** When true the sha text is rendered in muted ink (var(--ink-3)). */
   readonly dim = input<boolean>(false);
-
-  readonly chipClick = output<string>();
-
-  /** Whether a consumer bound to (chipClick) — controls interactive styling. */
-  readonly hasListener = computed(() => {
-    // Angular signals-based outputs expose .observed
-    return (this.chipClick as unknown as { observed: boolean }).observed;
-  });
 
   readonly short = computed(() => this.sha().slice(0, 7));
 }

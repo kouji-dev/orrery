@@ -9,6 +9,7 @@ import { GridViewComponent } from "./grid-view.component";
 import { KanbanViewComponent } from "./kanban-view.component";
 import { StatBlockComponent } from "./stat-block.component";
 import { TimelineViewComponent } from "./timeline-view.component";
+import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
 
 interface VizDef {
   key: VizMode;
@@ -19,22 +20,15 @@ interface VizDef {
 @Component({
   selector: "app-overview",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    StatBlockComponent,
-    IconComponent,
-    GridViewComponent,
-    KanbanViewComponent,
-    GraphViewComponent,
-    TimelineViewComponent,
-  ],
+  imports: [StatBlockComponent, IconComponent, GridViewComponent, KanbanViewComponent, GraphViewComponent, TimelineViewComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     <div style="display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--panel-2)">
       <!-- stat header — the stat group and the view controls wrap to their own
            rows when the pane is narrow, so content never widens the layout -->
-      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-5) 0;padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);background:var(--panel);min-width:0">
+      <div class="pane-head" style="flex-wrap:wrap;gap:var(--sp-5) 0;padding:var(--sp-6) var(--sp-7);background:var(--panel);min-width:0">
         <div style="margin-right:var(--sp-9);min-width:0">
-          <h1 class="disp" style="font-size:var(--fs-lg);font-weight:600;letter-spacing:-0.02em">Orchestrator</h1>
-          <span style="font-size:var(--fs-xs);color:var(--ink-3)">
+          <h1>Orchestrator</h1>
+          <span style="color:var(--ink-3)">
             {{ runtime.agents().length }} agents across {{ projects.all().length }} projects · {{ ui.org }}
           </span>
         </div>
@@ -45,22 +39,19 @@ interface VizDef {
           <app-stat-block [n]="count('done')" label="Done" color="var(--st-done)" />
         </div>
         <div style="margin-left:auto;display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:var(--sp-4);padding-left:var(--sp-6)">
-          <div style="display:flex;flex-wrap:wrap;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border-radius:var(--r-md);border:1px solid var(--hair)">
-            @for (v of viz; track v.key) {
-              @let on = ui.viz() === v.key;
-              <button
-                class="btn"
-                (click)="ui.viz.set(v.key)"
-                [style.background]="on ? 'var(--panel-3)' : 'transparent'"
-                [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'"
-                [style.box-shadow]="on ? '0 0 0 1px var(--hair-2)' : 'none'"
-                style="padding:var(--sp-2) var(--sp-4);border-radius:var(--r-sm)"
-              >
-                <app-icon [name]="v.icon" size="sm" [color]="on ? 'var(--ui-ink)' : null" />{{ v.label }}
-              </button>
-            }
-          </div>
-          <button class="btn primary" (click)="ui.openSpawn(null)"><app-icon name="bolt" size="sm" />Spawn</button>
+          <!-- a view switcher IS a tab strip: the body below is its panel.
+               pills is the tray shape (design/app.html:5090). -->
+          <kj-tabs variant="pills" [value]="ui.viz()" (valueChange)="ui.viz.set($any($event))">
+            <kj-tab-list aria-label="Visualization" style="flex-wrap:wrap">
+              @for (v of viz; track v.key) {
+                @let on = ui.viz() === v.key;
+                <kj-tab [value]="v.key">
+                  <app-icon [name]="v.icon" size="sm" [color]="on ? 'var(--ui-ink)' : null" />{{ v.label }}
+                </kj-tab>
+              }
+            </kj-tab-list>
+          </kj-tabs>
+          <kj-button kjVariant="default" (click)="ui.openSpawn(null)"><app-icon name="bolt" size="sm" />Spawn</kj-button>
         </div>
       </div>
 

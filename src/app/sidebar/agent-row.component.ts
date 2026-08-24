@@ -17,7 +17,7 @@ import { fmtDur } from "../utils";
   template: `
     @let ag = agent();
     <div
-      class="agent-row"
+      class="agent-row row-hover"
       [class.active]="active()"
       draggable="true"
       (dragstart)="drag.start({ kind: 'agent', agentId: ag.id }); $event.dataTransfer!.effectAllowed = 'copy'"
@@ -32,19 +32,19 @@ import { fmtDur } from "../utils";
       }
       <div style="display:flex;align-items:center;gap:var(--sp-3)">
         <app-status-dot [status]="ag.status" />
-        <span style="font-size:var(--fs-tree);color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</span>
+        <span class="trunc" style="color:var(--ink);font-weight:var(--fw-medium)">{{ ag.name }}</span>
         @if (needs()) {
           <span style="width:var(--sp-2);height:var(--sp-2);border-radius:50%;background:var(--st-blocked);flex:none"></span>
         }
         <app-tool-badge [tool]="ag.tool" [size]="14" />
-        <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ elapsed() ? fmt(elapsed()) : '—' }}</span>
+        <span class="tnum" style="margin-left:auto;font-size:var(--fs-meta);color:var(--ink-4)">{{ elapsed() ? fmt(elapsed()) : '—' }}</span>
       </div>
       <div style="display:flex;align-items:center;gap:var(--sp-3);padding-left:var(--sp-7)">
-        <app-icon name="branch" size="sm" [px]="11" color="var(--ink-4)" />
-        <span style="font-size:var(--fs-xs);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.branch.replace('agent/', '') }}</span>
+        <app-icon size="md" name="branch" color="var(--ink-4)" />
+        <span class="trunc" style="font-size:var(--fs-meta);color:var(--ink-3)">{{ ag.branch.replace('agent/', '') }}</span>
         @if (tot(); as t) {
           @if (t.files > 0) {
-            <span class="tnum" style="margin-left:auto;font-size:var(--fs-xs);display:flex;gap:var(--sp-2);flex:none">
+            <span class="tnum" style="margin-left:auto;font-size:var(--fs-meta);display:flex;gap:var(--sp-2);flex:none">
               <span style="color:var(--code-add-ink)">+{{ t.add }}</span>
               <span style="color:var(--code-del-ink)">−{{ t.del }}</span>
             </span>
@@ -58,10 +58,9 @@ import { fmtDur } from "../utils";
   `,
   styles: [
     `
-      .agent-row:hover:not(.active) {
-        background: var(--panel-2);
-      }
-      .agent-row.active {
+      /* selected outranks the shared .row-hover ground */
+      .agent-row.active,
+      .agent-row.active:hover {
         background: var(--panel-3);
         border: 1px solid var(--hair-2);
       }

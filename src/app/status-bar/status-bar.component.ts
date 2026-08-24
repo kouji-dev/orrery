@@ -16,14 +16,15 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
 import { SettingsStore } from "../settings/settings.store";
 import { DiagnosticsService } from "../shared/diagnostics.service";
 import { ToolWindowStore } from "../tool-window/tool-window.store";
+import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
 
 @Component({
   selector: "app-status-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, VersionBadgeComponent],
+  imports: [IconComponent, VersionBadgeComponent, KjButton, KjTooltipContent, KjTooltipTrigger],
   template: `
     <footer
-      style="display:flex;align-items:center;gap:var(--sp-6);padding:0 var(--sp-6);background:var(--panel);border-top:1px solid var(--hair);font-size:var(--fs-xs);color:var(--ink-3)"
+      style="display:flex;align-items:center;gap:var(--sp-6);padding:0 var(--sp-6);background:var(--panel);border-top:1px solid var(--hair);color:var(--ink-3)"
     >
       <span style="display:flex;gap:var(--sp-3);align-items:center">
         <span class="dot running" style="background:var(--st-running)"></span
@@ -42,7 +43,7 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
         {{ runtime.agents().length }} agents</span
       >
       <span style="display:flex;gap:var(--sp-2)"
-        ><app-icon name="folder" size="sm" [px]="11" />{{
+        ><app-icon size="md" name="folder" />{{
           ui.worktreeRoot
         }}</span
       >
@@ -50,85 +51,84 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
       <!-- bottom tool-window trigger (design: the dock is command-driven; this
            is its one discoverable affordance — Branches/Local History stay a
            tab-switch away once the dock is open). Branch icon by request. -->
-      <button
+      <button kjButton
         type="button"
         class="sb-link"
         [style.color]="toolWindow.panel() ? 'var(--ui-ink)' : null"
         (click)="toolWindow.toggle('graph')"
         title="Git Graph (tool window)"
       >
-        <app-icon name="branch" size="sm" [px]="11" />Git Graph
+        <app-icon size="md" name="branch" />Git Graph
       </button>
-      <span
-        class="tnum"
-        style="margin-left:auto;display:flex;gap:var(--sp-2);align-items:center"
-      >
-        @if (ui.toast()) {
-          <span class="grad-ink" style="font-weight:600">{{ ui.toast() }}</span>
+      <!-- right cluster: the first member that actually renders carries
+           margin-left:auto — no always-rendered spacer span needed -->
+      @if (ui.toast()) {
+        <span class="tnum" style="margin-left:auto;display:flex;gap:var(--sp-2);align-items:center">
+          <span class="grad-ink" style="font-weight:var(--fw-medium)">{{ ui.toast() }}</span>
           <span style="color:var(--ink-4)">·</span>
-        }
-      </span>
+        </span>
+      }
 
       <!-- A0.7 visible indicator: the raw emit trace is recording (opt-in,
            auto-off after 30min/200MB) — click opens the Emits tab -->
       @if (telemetry.traceActive()) {
-        <button type="button" class="sb-link sb-rec" (click)="devPanel.openEmits()" title="Raw emit trace is recording (auto-off after 30min or 200MB) — click to open the Emits panel">
+        <button kjButton type="button" class="sb-link sb-rec" [style.margin-left]="ui.toast() ? null : 'auto'" (click)="devPanel.openEmits()" title="Raw emit trace is recording (auto-off after 30min or 200MB) — click to open the Emits panel">
           <span class="sb-recdot"></span>TRACE
         </button>
       }
 
       <!-- open the rolling diagnostics log file -->
-      <button type="button" class="sb-link" (click)="diag.openLog()" title="Open log file">
-        <app-icon name="file" size="sm" [px]="11" />logs
+      <button kjButton type="button" class="sb-link" [style.margin-left]="ui.toast() || telemetry.traceActive() ? null : 'auto'" (click)="diag.openLog()" title="Open log file">
+        <app-icon size="md" name="file" />logs
       </button>
 
       <!-- app version + channel tag (DEV / BETA) → opens the release changelog -->
-      <button type="button" class="sb-link" (click)="settings.openWhatsNew()" title="View release changelog">
+      <button kjButton type="button" class="sb-link" (click)="settings.openWhatsNew()" title="View release changelog">
         <app-version-badge variant="chip" class="tnum" />
       </button>
 
-      <!-- total Claude cost (ccusage); hover → bigger tooltip. hidden when unavailable -->
+      <!-- total Claude cost (ccusage); hover → rich kouji tooltip. hidden when unavailable -->
       @if (cost.cost()?.available) {
         <span
           class="cost-readout tnum"
-          style="position:relative;display:flex;gap:var(--sp-2);align-items:center;cursor:default"
+          kjTooltipTrigger
+          #costTip="kjTooltipTrigger"
+          style="display:flex;gap:var(--sp-2);align-items:center;cursor:default"
         >
-          <app-icon
+          <app-icon size="md"
             name="sparkles"
-            size="sm"
-            [px]="11"
             [color]="'var(--ui-ink)'"
           />\${{ cost.cost()!.totalCost.toFixed(2) }}
-          <span
-            class="cost-tip"
-            style="position:absolute;bottom:calc(100% + 8px);right:0;z-index:90;width:max-content;background:var(--elev,var(--panel-2));border:1px solid var(--hair-2,var(--hair));border-radius:var(--r-md,8px);box-shadow:var(--shadow,0 8px 28px rgba(0,0,0,.4));padding:var(--sp-4) var(--sp-6);text-align:right"
-          >
+        </span>
+        <kj-tooltip-content [kjFor]="costTip" kjSide="top" kjAlign="end">
+          <span style="display:block;text-align:right">
             <span
-              style="display:block;font-size:var(--fs-2xs);color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em"
+              class="up"
+              style="display:block;color:var(--ink-3)"
               >Total Claude cost</span
             >
             <span
               class="tnum"
-              style="display:block;font-size:var(--fs-xl);font-weight:600;color:var(--ink);line-height:1.35"
+              style="display:block;font-size:var(--fs-xl);font-weight:var(--fw-medium);color:var(--ink);line-height:1.35"
               >\${{ cost.cost()!.totalCost.toFixed(2) }}</span
             >
-            <span style="display:block;font-size:var(--fs-2xs);color:var(--ink-3)"
+            <span style="display:block;font-size:var(--fs-meta);color:var(--ink-3)"
               >all usage · via ccusage</span
             >
           </span>
-        </span>
+        </kj-tooltip-content>
       }
 
       <!-- bottom-right cpu/memory readout; the per-process breakdown lives in
            the dev console's Resources tab — clicking deep-links there -->
-      <button
+      <button kjButton
         type="button"
         class="gauge"
         (click)="devPanel.openResources()"
         title="Open Resources (dev console)"
-        style="display:flex;align-items:center;gap:var(--sp-3);border:none;background:transparent;cursor:pointer;font-family:inherit;font-size:var(--fs-xs);padding:0;color:var(--ink-3)"
+        style="display:flex;align-items:center;gap:var(--sp-3);border:none;background:transparent;cursor:pointer;font-family:inherit;padding:0;color:var(--ink-3)"
       >
-        <app-icon name="cpu" size="sm" [px]="11" [color]="'var(--ui-ink)'" />
+        <app-icon size="md" name="cpu" [color]="'var(--ui-ink)'" />
         <!-- A0.6 agents-only readout: what the footer answers is "what are the
              AGENTS costing me" — Orrery's own footprint (and the full recursive
              tree) lives in the Resources tab this deep-links to -->
@@ -149,6 +149,9 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
   `,
   styles: [
     `
+      .gauge {
+        font-size: inherit;
+      }
       .gauge:hover {
         color: var(--ink-2) !important;
       }
@@ -160,7 +163,10 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
         background: transparent;
         cursor: pointer;
         font-family: inherit;
-        font-size: var(--fs-xs);
+        /* a bare <button> keeps the UA's 13.33px unless told otherwise — these
+           carry the [kjButton] DIRECTIVE, which adds no .kj-button class, so
+           none of the button knobs reach them */
+        font-size: inherit;
         padding: 0;
         color: var(--ink-3);
       }
@@ -169,7 +175,7 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
       }
       .sb-rec {
         color: var(--st-blocked);
-        font-weight: 600;
+        font-weight: var(--fw-medium);
         letter-spacing: 0.06em;
       }
       .sb-recdot {
@@ -187,20 +193,6 @@ import { ToolWindowStore } from "../tool-window/tool-window.store";
         50% {
           opacity: 0.35;
         }
-      }
-      .cost-tip {
-        opacity: 0;
-        visibility: hidden;
-        transform: translateY(4px);
-        transition:
-          opacity 0.12s ease,
-          transform 0.12s ease;
-        pointer-events: none;
-      }
-      .cost-readout:hover .cost-tip {
-        opacity: 1;
-        visibility: visible;
-        transform: translateY(0);
       }
     `,
   ],

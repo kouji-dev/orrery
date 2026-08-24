@@ -27,7 +27,7 @@ const readTokens = `(() => {
 test("graphite ramp + fixed accent in dark", async ({ page }) => {
   await ready(page);
   const t = await page.evaluate(readTokens);
-  expect(t.theme).toBe("dark");
+  expect(t.theme).toBe("orrery");
   expect(t.bg).toBe("#121315"); // graphite, not the old nebula #090a0f
   expect(t.accent).toBe("#a855f7"); // the design token, straight from CSS
   expect(t.inlineAccent).toBe(""); // no tweak-service override on <html>
@@ -40,7 +40,7 @@ test("light mode uses the paper ramp with its own accent", async ({ page }) => {
   await page.locator(".seg button", { hasText: "light" }).click();
   await expect
     .poll(() => page.evaluate(() => document.documentElement.getAttribute("data-theme")))
-    .toBe("light");
+    .toBe("orrery-light");
   const t = await page.evaluate(readTokens);
   expect(t.bg).toBe("#dedede"); // paper — the editor stays the one bright surface
   expect(t.accent).toBe("#8d4dcc"); // light re-tunes the accent for contrast

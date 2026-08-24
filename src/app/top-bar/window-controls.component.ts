@@ -1,13 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  NgZone,
-  OnDestroy,
-  OnInit,
+  DestroyRef,
+  afterNextRender,
   inject,
   signal,
 } from "@angular/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { KjButton } from "@kouji-ui/core";
 
 /** True only inside the Tauri webview (false under a plain `ng serve` browser),
  *  so the controls degrade to no-ops instead of throwing when there's no window. */
@@ -22,18 +22,19 @@ function inTauri(): boolean {
 // intentionally deferred for now (per current scope); the design also has an
 // eye-off "Hide to tray" cell we can slot back in here later.
 @Component({
+  imports: [KjButton],
   selector: "app-window-controls",
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div style="display:flex;align-items:stretch;height:100%;flex:none">
-      <button class="winbtn" title="Minimize" aria-label="Minimize" (click)="minimize()">
+      <button kjButton class="winbtn" title="Minimize" aria-label="Minimize" (click)="minimize()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M6 12h12" />
         </svg>
       </button>
 
-      <button
+      <button kjButton
         class="winbtn"
         [title]="maximized() ? 'Restore' : 'Maximize'"
         [attr.aria-label]="maximized() ? 'Restore' : 'Maximize'"
@@ -53,7 +54,7 @@ function inTauri(): boolean {
         }
       </button>
 
-      <button class="winbtn danger" title="Close" aria-label="Close" (click)="close()">
+      <button kjButton class="winbtn danger" title="Close" aria-label="Close" (click)="close()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M6 6l12 12M18 6L6 18" />
@@ -62,31 +63,28 @@ function inTauri(): boolean {
     </div>
   `,
 })
-export class WindowControlsComponent implements OnInit, OnDestroy {
-  private readonly zone = inject(NgZone);
+export class WindowControlsComponent {
   /** Maximized vs normal — flips the middle button between the square (maximize)
    *  and the offset-squares (restore) glyph, mirroring the design. */
   readonly maximized = signal(false);
-  private unlisten?: () => void;
 
-  async ngOnInit() {
-    if (!inTauri()) return;
-    try {
-      const w = getCurrentWindow();
-      this.maximized.set(await w.isMaximized());
-      // Tauri's resize event fires outside Angular's zone — hop back in so the
-      // signal write schedules change detection and the glyph stays in sync.
-      this.unlisten = await w.onResized(async () => {
-        const m = await w.isMaximized();
-        this.zone.run(() => this.maximized.set(m));
-      });
-    } catch {
-      /* not in tauri / permission missing — controls stay inert */
-    }
-  }
-
-  ngOnDestroy() {
-    this.unlisten?.();
+  constructor() {
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(async () => {
+      if (!inTauri()) return;
+      try {
+        const w = getCurrentWindow();
+        this.maximized.set(await w.isMaximized());
+        // Tauri's resize event fires outside Angular. Under zoneless change
+        // detection the signal write schedules CD by itself, so no zone hop.
+        const unlisten = await w.onResized(async () => {
+          this.maximized.set(await w.isMaximized());
+        });
+        destroyRef.onDestroy(() => unlisten());
+      } catch {
+        /* not in tauri / permission missing — controls stay inert */
+      }
+    });
   }
 
   minimize() {

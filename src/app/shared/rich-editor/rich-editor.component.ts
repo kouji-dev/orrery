@@ -1,11 +1,12 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   ElementRef,
-  type OnDestroy,
-  type AfterViewInit,
   effect,
+  inject,
   input,
   output,
   signal,
@@ -43,6 +44,7 @@ import {
   setParagraphStyle,
   snapshotSelection,
 } from "./rich-editor.lexical";
+import { KjButtonComponent, KjButtonGroupComponent } from "@kouji-ui/components";
 
 /**
  * Lexical-based rich text editor (vanilla core, no React bindings).
@@ -62,58 +64,62 @@ import {
   // makes these rules global — safe because every selector is rte-/.rte-content
   // scoped.
   encapsulation: ViewEncapsulation.None,
-  imports: [IconComponent],
+  imports: [IconComponent, KjButtonComponent, KjButtonGroupComponent],
   template: `
     <div class="rte" [class.compact]="compact()">
-      <div class="rte-toolbar">
+      <div class="pane-head rte-toolbar">
         <div class="rte-block-wrap">
-          <button type="button" class="rte-btn rte-block" title="Paragraph style"
+          <kj-button kjVariant="toolbar" class="rte-btn rte-block" title="Paragraph style"
             [class.on]="blockMenuOpen()" (mousedown)="toggleBlockMenu($event)">
             <span class="cv">{{ blockLabel() }}</span><span class="chev"></span>
-          </button>
+          </kj-button>
           @if (blockMenuOpen()) {
-            <div class="rte-block-pop" (mousedown)="$event.stopPropagation()">
+            <div class="popover rte-block-pop" (mousedown)="$event.stopPropagation()">
               @for (opt of blockOptions; track opt.value) {
-                <button type="button" class="rte-block-opt"
+                <kj-button kjVariant="toolbar" class="rte-block-opt"
                   [class.on]="state().block === opt.value"
                   (mousedown)="setBlock($event, opt.value)">
                   <span [class]="'pv ' + opt.value">{{ opt.label }}</span>
-                </button>
+                </kj-button>
               }
             </div>
           }
         </div>
         <span class="rte-div"></span>
-        <button type="button" class="rte-btn" title="Bold (⌘B)" [class.on]="state().bold"
-          (mousedown)="fmt($event, 'bold')"><span class="bold">B</span></button>
-        <button type="button" class="rte-btn" title="Italic (⌘I)" [class.on]="state().italic"
-          (mousedown)="fmt($event, 'italic')"><span class="ital">I</span></button>
-        <button type="button" class="rte-btn" title="Strikethrough" [class.on]="state().strikethrough"
-          (mousedown)="fmt($event, 'strikethrough')"><span class="strike">S</span></button>
-        <button type="button" class="rte-btn" title="Inline code" [class.on]="state().code"
-          (mousedown)="fmt($event, 'code')"><span class="mono">&lt;/&gt;</span></button>
+        <kj-button-group kjVariant="toolbar" kjAriaLabel="Text formatting">
+          <kj-button kjVariant="toolbar" class="rte-btn" title="Bold (⌘B)" [class.on]="state().bold"
+            (mousedown)="fmt($event, 'bold')"><span class="bold">B</span></kj-button>
+          <kj-button kjVariant="toolbar" class="rte-btn" title="Italic (⌘I)" [class.on]="state().italic"
+            (mousedown)="fmt($event, 'italic')"><span class="ital">I</span></kj-button>
+          <kj-button kjVariant="toolbar" class="rte-btn" title="Strikethrough" [class.on]="state().strikethrough"
+            (mousedown)="fmt($event, 'strikethrough')"><span class="strike">S</span></kj-button>
+          <kj-button kjVariant="toolbar" class="rte-btn" title="Inline code" [class.on]="state().code"
+            (mousedown)="fmt($event, 'code')"><span class="mono">&lt;/&gt;</span></kj-button>
+        </kj-button-group>
         <span class="rte-div"></span>
-        <button type="button" class="rte-btn" title="Bulleted list" [class.on]="state().block === 'ul'"
-          (mousedown)="list($event, 'ul')"><app-icon name="dots" size="sm" /></button>
-        <button type="button" class="rte-btn" title="Numbered list" [class.on]="state().block === 'ol'"
-          (mousedown)="list($event, 'ol')"><span class="num">1.</span></button>
-        <button type="button" class="rte-btn" title="Quote" [class.on]="state().block === 'quote'"
-          (mousedown)="quote($event)"><span class="quo">"</span></button>
-        <button type="button" class="rte-btn" title="Code block" [class.on]="state().block === 'code'"
-          (mousedown)="codeblock($event)"><app-icon name="terminal" size="sm" /></button>
+        <kj-button-group kjVariant="toolbar" kjAriaLabel="Block formatting">
+          <kj-button kjSize="icon" kjVariant="toolbar" class="rte-btn" title="Bulleted list" [class.on]="state().block === 'ul'"
+            (mousedown)="list($event, 'ul')"><app-icon name="dots" size="sm" /></kj-button>
+          <kj-button kjVariant="toolbar" class="rte-btn" title="Numbered list" [class.on]="state().block === 'ol'"
+            (mousedown)="list($event, 'ol')"><span class="num">1.</span></kj-button>
+          <kj-button kjVariant="toolbar" class="rte-btn" title="Quote" [class.on]="state().block === 'quote'"
+            (mousedown)="quote($event)"><span class="quo">"</span></kj-button>
+          <kj-button kjSize="icon" kjVariant="toolbar" class="rte-btn" title="Code block" [class.on]="state().block === 'code'"
+            (mousedown)="codeblock($event)"><app-icon name="terminal" size="sm" /></kj-button>
+        </kj-button-group>
         <span class="rte-div"></span>
         <div class="rte-link-wrap">
-          <button type="button" class="rte-btn" [class.on]="linkOpen()" title="Link (⌘K)"
-            (mousedown)="openLink($event)"><app-icon name="link" size="sm" /></button>
+          <kj-button kjSize="icon" kjVariant="toolbar" class="rte-btn" [class.on]="linkOpen()" title="Link (⌘K)"
+            (mousedown)="openLink($event)"><app-icon name="link" size="sm" /></kj-button>
           @if (linkOpen()) {
-            <div class="rte-link-pop" (mousedown)="$event.stopPropagation()">
+            <div class="popover rte-link-pop" (mousedown)="$event.stopPropagation()">
               <input #linkInput class="rte-link-input" [value]="linkUrl()"
                 (input)="onLinkInput($event)"
                 placeholder="https://…"
                 (keydown.enter)="applyLink(); $event.preventDefault()"
                 (keydown.escape)="closeLink()" />
-              <button type="button" class="rte-link-add"
-                (mousedown)="$event.preventDefault(); applyLink()">Add</button>
+              <kj-button kjVariant="default" class="rte-link-add"
+                (mousedown)="$event.preventDefault(); applyLink()">Add</kj-button>
             </div>
           }
         </div>
@@ -135,91 +141,94 @@ import {
          below the toolbar and must escape the editor box. Corners are kept
          clean by rounding the toolbar/content edges individually instead. */
     }
-    .rte-toolbar {
-      display: flex; align-items: center; gap: var(--sp-1);
-      padding: var(--sp-2) var(--sp-3); flex-wrap: wrap;
-      border-bottom: 1px solid var(--hair);
+    .rte .rte-toolbar {
+      gap: var(--sp-1); flex-wrap: wrap;
+      padding: var(--sp-2) var(--sp-3);
       background: var(--panel);
       border-radius: calc(var(--r-md) - 1px) calc(var(--r-md) - 1px) 0 0;
     }
     .rte-div { width: 1px; height: var(--sp-7); background: var(--hair); margin: 0 var(--sp-1); flex: none; }
-    .rte-btn {
-      width: 27px; height: 27px; border-radius: var(--r-sm);
-      border: 1px solid transparent; background: transparent;
-      color: var(--ink-3); cursor: pointer; display: grid; place-items: center;
-      font-family: var(--font-mono); font-size: var(--fs-ui); flex: none;
-      transition: background .12s, color .12s, border-color .12s;
+    /* Geometry + face for kouji's inner .kj-button. The toolbar variant
+       supplies the muted ink / transparent ground / hover recipe; only the
+       square silhouette and the active state live here. The inner span
+       carries no Angular scope attribute, but this component is
+       ViewEncapsulation.None, so these rte-scoped selectors reach it. */
+    .rte-btn .kj-button {
+      width: 27px; height: 27px; padding: 0; flex: none;
+      border-radius: var(--r-sm);
+      display: grid; place-items: center;
+      font-family: var(--font-mono); transition: background .12s, color .12s, border-color .12s;
     }
-    .rte-btn:hover { background: var(--panel-3); color: var(--ink); }
-    .rte-btn.on {
+    /* This IS the shared .accent-sel recipe, but it cannot use the class: the
+       skin has to land on kouji's inner .kj-button, and a template can only put
+       classes on the <kj-button> HOST (which is display:contents). */
+    .rte-btn.on .kj-button {
       background: var(--ui-sel);
       color: var(--ui-ink);
       border-color: var(--ui-sel-2);
     }
-    .rte-btn .bold { font-weight: 800; }
+    .rte-btn .bold { font-weight: 700; }
     .rte-btn .ital { font-style: italic; font-family: Georgia, serif; }
     .rte-btn .strike { text-decoration: line-through; }
     .rte-btn .mono { font-size: var(--fs-md); font-family: var(--font-mono); }
-    .rte-btn .num { font-size: var(--fs-sm); letter-spacing: -1px; }
+    .rte-btn .num { letter-spacing: -1px; }
     .rte-btn .quo { font-family: Georgia, serif; font-size: var(--fs-lg); line-height: 1; }
 
     /* heading / paragraph dropdown */
     .rte-block-wrap { position: relative; }
-    .rte-btn.rte-block {
+    .rte-btn.rte-block .kj-button {
       width: auto; min-width: 56px; padding: 0 var(--sp-3); gap: var(--sp-2);
       display: flex; align-items: center; justify-content: space-between;
       font-family: var(--font-disp);
     }
-    .rte-btn.rte-block .cv { font-size: var(--fs-sm); font-weight: 600; }
+    .rte-btn.rte-block .cv { font-weight: var(--fw-medium); }
     .rte-btn.rte-block .chev {
       width: 0; height: 0; flex: none;
       border-left: 3.5px solid transparent; border-right: 3.5px solid transparent;
       border-top: 4px solid currentColor; opacity: 0.7;
     }
+    /* elevated card surface comes from the shared .popover */
     .rte-block-pop {
       position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
-      display: flex; flex-direction: column; gap: 1px; padding: var(--sp-2); width: 156px;
-      background: var(--elev); border: 1px solid var(--hair-2);
-      border-radius: var(--r-md); box-shadow: var(--shadow);
+      display: flex; flex-direction: column; gap: 1px; padding: var(--sp-2); width: round(calc(156px * var(--density)), 1px);
     }
-    .rte-block-opt {
-      display: flex; align-items: center; padding: var(--sp-3) var(--sp-4);
-      border: none; border-radius: var(--r-sm); background: transparent;
-      color: var(--ink-2); cursor: pointer; text-align: left;
-      font-family: var(--font-mono); font-size: var(--fs-sm);
-    }
-    .rte-block-opt:hover { background: var(--panel-3); color: var(--ink); }
-    .rte-block-opt.on { color: var(--ui-ink); }
+    .rte-block-opt .kj-button {
+      width: 100%; height: auto;
+      display: flex; align-items: center; justify-content: flex-start;
+      padding: var(--sp-3) var(--sp-4);
+      border: none; border-radius: var(--r-sm);
+      color: var(--ink-2); text-align: left;
+      font-family: var(--font-mono); }
+    .rte-block-opt.on .kj-button { color: var(--ui-ink); }
     .rte-block-opt .pv { color: var(--ink); }
-    .rte-block-opt .pv.paragraph { font-family: var(--font-mono); font-weight: 400; }
-    .rte-block-opt .pv.h1 { font-family: var(--font-disp); font-size: var(--fs-lg); font-weight: 600; }
-    .rte-block-opt .pv.h2 { font-family: var(--font-disp); font-size: var(--fs-lg); font-weight: 600; }
-    .rte-block-opt .pv.h3 { font-family: var(--font-disp); font-size: var(--fs-md); font-weight: 600; }
-    .rte-block-opt .pv.h4 { font-family: var(--font-disp); font-size: var(--fs-ui); font-weight: 600; }
+    .rte-block-opt .pv.paragraph { font-family: var(--font-mono); font-weight: var(--fw-normal); }
+    .rte-block-opt .pv.h1 { font-family: var(--font-disp); font-size: var(--fs-lg); font-weight: var(--fw-medium); }
+    .rte-block-opt .pv.h2 { font-family: var(--font-disp); font-size: var(--fs-lg); font-weight: var(--fw-medium); }
+    .rte-block-opt .pv.h3 { font-family: var(--font-disp); font-size: var(--fs-md); font-weight: var(--fw-medium); }
+    .rte-block-opt .pv.h4 { font-family: var(--font-disp); font-weight: var(--fw-medium); }
     .rte-block-opt .pv.h5,
     .rte-block-opt .pv.h6 {
-      font-family: var(--font-disp); font-size: var(--fs-sm); font-weight: 600;
+      font-family: var(--font-disp); font-weight: var(--fw-medium);
       text-transform: uppercase; letter-spacing: 0.06em;
     }
 
     .rte-link-wrap { position: relative; }
     .rte-link-pop {
       position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
-      display: flex; gap: var(--sp-3); padding: var(--sp-3); width: 250px;
-      background: var(--elev); border: 1px solid var(--hair-2);
-      border-radius: var(--r-md); box-shadow: var(--shadow);
+      display: flex; gap: var(--sp-3); padding: var(--sp-3); width: round(calc(250px * var(--density)), 1px);
     }
     .rte-link-input {
       flex: 1; min-width: 0; padding: var(--sp-2) var(--sp-4);
       background: var(--panel-2); border: 1px solid var(--hair);
       border-radius: var(--r-sm); color: var(--ink);
-      font-family: var(--font-mono); font-size: var(--fs-sm); outline: none;
+      font-family: var(--font-mono); outline: none;
     }
-    .rte-link-add {
-      padding: var(--sp-2) var(--sp-4); border: none; border-radius: var(--r-sm);
-      background: var(--ui-fill);
-      color: var(--ui-on-fill); font-family: var(--font-disp); font-size: var(--fs-sm);
-      cursor: pointer; white-space: nowrap;
+    /* The Add button wears kouji's default (primary) variant — only the
+       compact geometry lives here. */
+    .rte-link-add .kj-button {
+      height: auto; padding: var(--sp-2) var(--sp-4);
+      border-radius: var(--r-sm);
+      font-family: var(--font-disp); white-space: nowrap;
     }
 
     /* Editor body layout only. Content typography (headings, lists, code,
@@ -227,10 +236,10 @@ import {
        read-only view and applied to the DOM Lexical builds at runtime. */
     .rte-content {
       outline: none;
-      padding: var(--sp-6) var(--sp-6); max-height: 460px; overflow-y: auto;
+      padding: var(--sp-6) var(--sp-6); max-height: round(calc(460px * var(--density)), 1px); overflow-y: auto;
       border-radius: 0 0 calc(var(--r-md) - 1px) calc(var(--r-md) - 1px);
     }
-    .rte-content.compact { padding: var(--sp-4) var(--sp-5); max-height: 220px; }
+    .rte-content.compact { padding: var(--sp-4) var(--sp-5); max-height: round(calc(220px * var(--density)), 1px); }
     .rte-content:empty::before,
     .rte-content > p:only-child:empty::before {
       content: attr(data-ph); color: var(--ink-4); pointer-events: none;
@@ -238,7 +247,7 @@ import {
     `,
   ],
 })
-export class RichEditorComponent implements AfterViewInit, OnDestroy {
+export class RichEditorComponent {
   readonly value = input<string>("");
   readonly placeholder = input<string>("Write something…");
   readonly compact = input<boolean>(false);
@@ -301,9 +310,12 @@ export class RichEditorComponent implements AfterViewInit, OnDestroy {
       if (!resetChanged && html === this.lastEmitted) return;
       this.applyExternalHtml(html);
     });
+    // Mount Lexical once the view exists; tear it down with the injector.
+    afterNextRender(() => this.initEditor());
+    inject(DestroyRef).onDestroy(() => this.destroyEditor());
   }
 
-  ngAfterViewInit(): void {
+  private initEditor(): void {
     const root = this.contentRef()?.nativeElement;
     if (!root) return; // view query not resolved (defensive)
     const editor = buildRichEditor("rich-editor");
@@ -363,7 +375,7 @@ export class RichEditorComponent implements AfterViewInit, OnDestroy {
     this.applyExternalHtml(this.value());
   }
 
-  ngOnDestroy(): void {
+  private destroyEditor(): void {
     for (const dispose of this.cleanups) dispose();
     this.cleanups = [];
     this.editor?.setRootElement(null);

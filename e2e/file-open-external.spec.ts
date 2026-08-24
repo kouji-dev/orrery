@@ -43,7 +43,7 @@ async function openTreeWithFile(page: Page): Promise<void> {
   await page.evaluate(
     `window.ng.getComponent(document.querySelector("app-top-bar")).ui.openAgent("e2e-os1")`,
   );
-  await page.locator("app-right-panel").getByRole("button", { name: "Files" }).click();
+  await page.locator("app-right-panel").getByRole("tab", { name: "Files" }).click();
   await expect(page.locator("app-file-tree")).toBeVisible();
   await page.evaluate(seedTreeAndSpy("e2e-os1"));
   await expect(page.locator("app-file-tree")).toContainText("report.html");

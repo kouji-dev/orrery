@@ -1,11 +1,11 @@
 import {
-  AfterViewInit,
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   ElementRef,
   inject,
-  OnInit,
   signal,
   viewChild,
 } from "@angular/core";
@@ -18,8 +18,22 @@ import { effectiveEffort, effectiveModel, SettingsStore } from "../settings/sett
 import { TicketsStore } from "../stores/tickets.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
+import { SelectComponent } from "../shared/select.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { mix } from "../utils";
+import {
+  KjBadgeComponent,
+  KjButtonComponent,
+  KjDialogComponent,
+  KjFieldComponent,
+  KjFieldHelpComponent,
+  KjFieldLabelComponent,
+  KjInputComponent,
+  KjInputGroupAddonComponent,
+  KjInputGroupComponent,
+  KjTextareaComponent,
+} from "@kouji-ui/components";
+import { KjDialog } from "@kouji-ui/core";
 
 /** Strip HTML tags to plain text (no DOM dependency — regex-based). */
 function stripHtml(html: string): string {
@@ -46,27 +60,40 @@ function slugName(title: string): string {
     .slice(0, 50);
 }
 
+/**
+ * Opened through `KjDialog` by the shell, so this component IS the overlay
+ * panel: the backdrop, focus trap, scroll lock, Esc and outside-click all come
+ * from the kj overlay and the markup below is only the panel body.
+ */
 @Component({
   selector: "app-spawn-modal",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ToolBadgeComponent],
+  imports: [
+    IconComponent,
+    SelectComponent,
+    ToolBadgeComponent,
+    KjBadgeComponent,
+    KjButtonComponent,
+    KjDialogComponent,
+    KjFieldComponent,
+    KjFieldHelpComponent,
+    KjFieldLabelComponent,
+    KjInputComponent,
+    KjInputGroupAddonComponent,
+    KjInputGroupComponent,
+    KjTextareaComponent,
+  ],
+  host: { role: "dialog", "aria-modal": "true", "aria-label": "Spawn agent" },
   template: `
     @let proj = project();
     @let tool = currentTool();
     @let linked = !!ticketId();
-    <div
-      (click)="ui.closeSpawn()"
-      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:var(--scrim);backdrop-filter:blur(3px)"
-    >
-      <div
-        class="surface rise"
-        (click)="$event.stopPropagation()"
-        style="width:540px;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;box-shadow:var(--shadow)"
-      >
-        <div style="padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:var(--sp-4);flex:none">
+    <kj-dialog-shell>
+      <div class="kj-dialog rise">
+        <div class="pane-head" style="padding:var(--sp-6) var(--sp-7)">
           <app-icon name="agent" color="var(--ui-ink)" />
-          <span class="disp" style="font-size:var(--fs-lg);font-weight:600;white-space:nowrap">Spawn agent</span>
-          <span class="chip" style="margin-left:auto;font-size:var(--fs-2xs)">new git worktree + branch</span>
+          <h1 style="white-space:nowrap">Spawn agent</h1>
+          <kj-badge style="margin-left:auto;font-size:var(--fs-meta)">new git worktree + branch</kj-badge>
         </div>
 
         <div class="scroll-y" style="padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-7);flex:1">
@@ -74,25 +101,23 @@ function slugName(title: string): string {
           <div style="display:flex;gap:var(--sp-6)">
             <div style="flex:1">
               <label class="field-label">Project</label>
-              <select class="osel" [value]="projectId()" (change)="setProject($any($event.target).value)">
-                @for (p of projects.all(); track p.id) { <option [value]="p.id" [selected]="p.id === projectId()">{{ p.name }}</option> }
-              </select>
-              <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ proj.path }}</div>
+              <app-select [value]="projectId()" [options]="projectOptions()" (valueChange)="setProject($event)" />
+              <div class="trunc" style="font-size:var(--fs-meta);color:var(--ink-4);margin-top:var(--sp-3)">{{ proj.path }}</div>
             </div>
             <div style="flex:1">
               <label class="field-label">Source branch</label>
-              <select class="osel" (change)="branch.set($any($event.target).value)">
-                @for (b of proj.branches; track b) { <option [value]="b" [selected]="b === branch()">{{ b }}</option> }
-              </select>
+              <app-select [value]="branch()" [options]="proj.branches ?? []" (valueChange)="branch.set($event)" />
               @if (!proj.branches?.length) {
-                <div style="font-size:var(--fs-2xs);color:var(--st-blocked);margin-top:var(--sp-3)">no branch found — project git is not initialized</div>
+                <div style="font-size:var(--fs-meta);color:var(--st-blocked);margin-top:var(--sp-3)">no branch found — project git is not initialized</div>
               } @else {
-                <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-3)">base · {{ proj.head }}</div>
+                <div style="font-size:var(--fs-meta);color:var(--ink-4);margin-top:var(--sp-3)">base · {{ proj.head }}</div>
               }
             </div>
           </div>
 
-          <!-- ticket (optional) — prefills + links Name and Initial prompt -->
+          <!-- ticket (optional) — prefills + links Name and Initial prompt.
+               Stays a native select: it needs <optgroup> (To do / In progress),
+               which app-select / kj-select cannot express. -->
           <div>
             <label class="field-label">Ticket</label>
             <select
@@ -118,113 +143,149 @@ function slugName(title: string): string {
               }
             </select>
             @if (linked) {
-              <div style="display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-3);font-size:var(--fs-xs);color:var(--ink-2)">
+              <div style="display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-3);color:var(--ink-2)">
                 <app-icon name="link" size="sm" />Name linked · the ticket is prepended to the prompt on spawn
               </div>
             } @else {
-              <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-3)">optional · attach a ticket to base the agent on it</div>
+              <div style="font-size:var(--fs-meta);color:var(--ink-4);margin-top:var(--sp-3)">optional · attach a ticket to base the agent on it</div>
             }
           </div>
 
           <!-- name (drives the worktree, unique per project) -->
-          <div>
-            <label class="field-label">Name</label>
-            <div
-              style="display:flex;align-items:center;gap:var(--sp-4);background:var(--panel-2);border-radius:var(--r-md);padding:0 var(--sp-5)"
-              [style.border]="linked ? '1px solid var(--ui-focus)' : '1px solid var(--hair)'"
-            >
-              <app-icon name="agent" size="sm" color="var(--ink-4)" />
-              <input
+          <kj-field class="spawn-field">
+            <kj-field-label>Name</kj-field-label>
+            <kj-input-group class="spawn-name" [style.--kj-input-group-border-color]="linked ? 'var(--ui-focus)' : null">
+              <kj-input-group-addon><app-icon name="agent" size="sm" color="var(--ink-4)" /></kj-input-group-addon>
+              <kj-input
                 [value]="name()"
                 (input)="onNameInput($any($event.target).value)"
                 placeholder="e.g. fix-login-bug"
-                style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:var(--sp-5) 0;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui)"
               />
-            </div>
-            <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-3)">unique per project · becomes the worktree → <span style="color:var(--ink-3)">{{ worktreePreview() }}</span></div>
-          </div>
+            </kj-input-group>
+            <kj-field-help>unique per project · becomes the worktree → <span style="color:var(--ink-3)">{{ worktreePreview() }}</span></kj-field-help>
+          </kj-field>
 
           <!-- agent tool -->
-          <div>
-            <label class="field-label">Agent</label>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-3)">
+          <kj-field class="spawn-field">
+            <kj-field-label>Agent</kj-field-label>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-3);width:100%">
               @for (tl of tools; track tl.id) {
                 @let on = toolId() === tl.id;
-                <button
-                  class="btn"
-                  (click)="setTool(tl.id)"
-                  [style.border]="'1px solid ' + (on ? mix(tl.accent, 45) : 'var(--hair)')"
-                  [style.background]="on ? mix(tl.accent, 88) : 'var(--panel-2)'"
-                  style="flex-direction:column;gap:var(--sp-3);padding:var(--sp-5) var(--sp-3);border-radius:var(--r-md)"
-                >
+                <kj-button kjVariant="ghost" (click)="setTool(tl.id)" [style.--kj-button-border-color]="on ? mix(tl.accent, 45) : 'var(--hair)'" [style.--kj-button-bg]="on ? mix(tl.accent, 88) : 'var(--panel-2)'">
                   <app-tool-badge [tool]="tl.id" [size]="20" />
-                  <span [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'" style="font-size:var(--fs-xs)">{{ tl.name }}</span>
+                  <span [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'">{{ tl.name }}</span>
                   @if (!runtime.toolAvailable(tl.id)) {
-                    <span class="tnum" style="font-size:var(--fs-3xs);color:var(--st-blocked)">not found</span>
+                    <span class="tnum" style="font-size:var(--fs-badge);color:var(--st-blocked)">not found</span>
                   }
-                </button>
+                </kj-button>
               }
             </div>
-          </div>
+          </kj-field>
 
           <!-- model + effort -->
           <div style="display:flex;gap:var(--sp-6)">
-            <div style="flex:1">
-              <label class="field-label">Model</label>
-              <select class="osel" [value]="model()" (change)="model.set($any($event.target).value)">
-                @for (m of tool.models; track m) { <option [value]="m" [selected]="m === model()">{{ m }}</option> }
-              </select>
-            </div>
+            <kj-field class="spawn-field" style="flex:1">
+              <kj-field-label>Model</kj-field-label>
+              <app-select [value]="model()" [options]="tool.models" (valueChange)="model.set($event)" />
+            </kj-field>
             @if (tool.effort) {
-              <div style="flex:1">
-                <label class="field-label">Reasoning effort</label>
-                <div style="display:flex;gap:var(--sp-3)">
+              <kj-field class="spawn-field" style="flex:1">
+                <kj-field-label>Reasoning effort</kj-field-label>
+                <div style="display:flex;gap:var(--sp-3);width:100%">
                   @for (ef of tool.effort; track ef) {
-                    <button
-                      class="btn ghost-hair"
-                      (click)="effort.set(ef)"
-                      [style.border-color]="effort() === ef ? 'var(--ui-focus)' : 'var(--hair)'"
-                      [style.color]="effort() === ef ? 'var(--ink)' : 'var(--ink-3)'"
-                      [style.background]="effort() === ef ? 'var(--ui-sel)' : 'transparent'"
-                      style="flex:1;justify-content:center;font-size:var(--fs-sm);text-transform:capitalize"
-                    >{{ ef }}</button>
+                    <kj-button kjVariant="outline" (click)="effort.set(ef)" [style.--kj-button-border-color]="effort() === ef ? 'var(--ui-focus)' : 'var(--hair)'" [style.--kj-button-fg]="effort() === ef ? 'var(--ink)' : 'var(--ink-3)'" [style.--kj-button-bg]="effort() === ef ? 'var(--ui-sel)' : 'transparent'" class="kj-center" style="--kj-button-font-size: var(--fs-meta)">{{ ef }}</kj-button>
                   }
                 </div>
-              </div>
+              </kj-field>
             }
           </div>
 
           <!-- initial prompt — the agent's own instructions. NOT prefilled from
                the ticket; when a ticket is linked its content is prepended
                ("Implement …") at spawn time (see composePrompt). -->
-          <div>
-            <label class="field-label">Initial prompt</label>
-            <textarea
+          <kj-field class="spawn-field">
+            <kj-field-label>Initial prompt</kj-field-label>
+            <kj-textarea
               #promptEl
-              [value]="prompt()"
-              (input)="onPromptInput($any($event.target).value)"
-              rows="3"
-              [placeholder]="linked ? 'Add extra instructions — the ticket is included automatically…' : 'Describe what this agent should do…'"
               class="spawn-textarea"
-              style="width:100%;resize:none;background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:var(--sp-5) var(--sp-6);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui);line-height:1.5;outline:none"
-            ></textarea>
-          </div>
+              [kjValue]="prompt()"
+              (input)="onPromptInput($any($event.target).value)"
+              kjRows="3"
+              kjResize="none"
+              [kjPlaceholder]="linked ? 'Add extra instructions — the ticket is included automatically…' : 'Describe what this agent should do…'"
+            />
+          </kj-field>
         </div>
 
         <div style="padding:var(--sp-6) var(--sp-7);border-top:1px solid var(--hair);display:flex;align-items:center;gap:var(--sp-4);flex:none">
-          <span style="font-size:var(--fs-xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ {{ ui.worktreeRoot }}/{{ proj.id }}-…</span>
-          <div style="margin-left:auto;display:flex;gap:var(--sp-4);flex:none">
-            <button class="btn ghost-hair" (click)="ui.closeSpawn()">Cancel</button>
-            <button class="btn ghost-hair" [disabled]="!name().trim() || !branch()" (click)="submit(false)"><app-icon name="plus" size="sm" />Create</button>
-            <button class="btn primary" [disabled]="!name().trim() || !branch()" (click)="submit(true)"><app-icon name="bolt" size="sm" />Spawn</button>
-          </div>
+          <span class="trunc" style="color:var(--ink-4)">→ {{ ui.worktreeRoot }}/{{ proj.id }}-…</span>
+          <kj-button class="spawn-cancel" kjVariant="outline" (click)="ui.closeSpawn()">Cancel</kj-button>
+          <kj-button kjVariant="outline" [kjDisabled]="!name().trim() || !branch()" (click)="submit(false)"><app-icon name="plus" size="sm" />Create</kj-button>
+          <kj-button kjVariant="default" [kjDisabled]="!name().trim() || !branch()" (click)="submit(true)"><app-icon name="bolt" size="sm" />Spawn</kj-button>
         </div>
       </div>
-    </div>
+    </kj-dialog-shell>
   `,
-  styles: [`.spawn-textarea:focus { border-color: var(--ui-focus) !important; }`],
+  styles: [
+    `
+      /* The panel box is the shared .kj-overlay-wrapper .kj-dialog recipe in
+         styles.css; only this modal's width and height cap are per-instance. */
+      .kj-dialog {
+        width: round(calc(540px * var(--density)), 1px);
+        max-height: 90vh;
+      }
+      /* kj-field label/help mapped onto the app's micro-label vocabulary */
+      .spawn-field { --kj-field-gap: var(--sp-3); }
+      /* the field label is the same micro-label role as .up; kouji owns the
+         element so the recipe is restated here rather than classed */
+      .spawn-field ::ng-deep .kj-field-label {
+        font: var(--fw-normal) var(--fs-badge) / 1.4 var(--font-ui);
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      .spawn-field ::ng-deep .kj-field-help { font-size: var(--fs-meta); color: var(--ink-4); }
+      /* name input group: one panel-2 box, addon + input share the (linkable) border */
+      .spawn-name { width: 100%; border-radius: var(--r-md); }
+      .spawn-name ::ng-deep .kj-input-group__addon {
+        background: var(--panel-2);
+        border-color: var(--kj-input-group-border-color, var(--hair));
+        border-right: none;
+        color: var(--ink-4);
+      }
+      .spawn-name ::ng-deep .kj-input {
+        background: var(--panel-2);
+        border-color: var(--kj-input-group-border-color, var(--hair));
+        border-left: none;
+        box-shadow: none;
+        color: var(--ink);
+        font-family: var(--font-mono);
+        padding: var(--sp-5) var(--sp-5) var(--sp-5) 0;
+      }
+      .spawn-name ::ng-deep .kj-input:focus-visible { outline: none; }
+      /* kj-textarea restyled onto the app tokens (the old .spawn-textarea box) */
+      .spawn-textarea ::ng-deep textarea {
+        width: 100%;
+        resize: none;
+        background: var(--panel-2);
+        border: 1px solid var(--hair);
+        border-radius: var(--r-md);
+        padding: var(--sp-5) var(--sp-6);
+        color: var(--ink);
+        font-family: var(--font-mono);
+        line-height: 1.5;
+        outline: none;
+        box-shadow: none;
+      }
+      .spawn-textarea ::ng-deep textarea:focus {
+        border-color: var(--ui-focus);
+      }
+      /* footer: the path label ellipsizes, the first button pushes the trio right */
+      .spawn-cancel ::ng-deep .kj-button { margin-left: auto; }
+    `,
+  ],
 })
-export class SpawnModalComponent implements AfterViewInit, OnInit {
+export class SpawnModalComponent {
   readonly ui = inject(UiStore);
   readonly projects = inject(ProjectActionsService);
   readonly runtime = inject(AgentRuntimeService);
@@ -252,6 +313,8 @@ export class SpawnModalComponent implements AfterViewInit, OnInit {
   readonly project = computed(
     () => this.projects.all().find((p) => p.id === this.projectId()) || this.projects.all()[0],
   );
+  /** Projects as app-select options (id → display name). */
+  readonly projectOptions = computed(() => this.projects.all().map((p) => ({ value: p.id, label: p.name })));
   // mirror the backend slug so the user sees the worktree name they'll get
   readonly worktreePreview = computed(
     () => this.name().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "—",
@@ -295,7 +358,7 @@ export class SpawnModalComponent implements AfterViewInit, OnInit {
     const m = effectiveModel(this.settingsStore.settings(), tool.id);
     return tool.models.includes(m) ? m : tool.models[0];
   }
-  /** Per-tool settings effort override when valid; "high" (the old hardcoded
+  /** Per-tool settings effort override when valid"high" (the old hardcoded
    *  default) otherwise; null for tools without effort levels. */
   private prefillEffort(tool: AgentTool): string | null {
     if (!tool.effort) return null;
@@ -303,9 +366,13 @@ export class SpawnModalComponent implements AfterViewInit, OnInit {
     return tool.effort.includes(e) ? e : "high";
   }
 
-  private promptEl = viewChild<ElementRef<HTMLTextAreaElement>>("promptEl");
+  private promptEl = viewChild("promptEl", { read: ElementRef });
 
-  ngOnInit() {
+  constructor() {
+    // Esc / outside-click close the overlay, not the store — clear the flag on
+    // teardown so the two can never drift.
+    inject(DestroyRef).onDestroy(() => this.ui.closeSpawn());
+
     // Consume the dispatch ticket id (set by ui.dispatchTicket) and clear it
     // so it doesn't leak into subsequent manual spawns.
     const dispatched = this.ui.spawnTicketId();
@@ -313,12 +380,12 @@ export class SpawnModalComponent implements AfterViewInit, OnInit {
       this.ui.clearSpawnTicket();
       this.applyTicket(dispatched);
     }
-  }
 
-  ngAfterViewInit() {
     // The Initial prompt starts empty (even when a ticket is linked), so focus
-    // it so the user can add instructions immediately.
-    this.promptEl()?.nativeElement.focus();
+    // it so the user can add instructions immediately (focus-only, no hook).
+    afterNextRender(() => {
+      (this.promptEl()?.nativeElement as HTMLElement | undefined)?.querySelector("textarea")?.focus();
+    });
   }
 
   /** Called when the user manually edits the Name field. */

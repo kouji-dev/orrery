@@ -151,11 +151,20 @@ export function buildComposer(
   hint.innerHTML = `<span class="kbd">⌘</span> <span class="kbd">↵</span> to save`;
   const spacer = document.createElement("span");
   spacer.style.marginLeft = "auto";
+  // This widget lives OUTSIDE Angular (Monaco owns the DOM), so it cannot use
+  // <kj-button>. kouji's button skin is pure class + data-attribute CSS, so the
+  // native elements opt into it directly — same control ladder as the app,
+  // no second button recipe. (The old .btn/.primary/.ghost-hair classes died
+  // with the migration and left these two unstyled.)
   const cancel = document.createElement("button");
-  cancel.className = "btn ghost-hair rc-composer-btn";
+  cancel.className = "kj-button rc-composer-btn";
+  cancel.dataset["variant"] = "outline";
+  cancel.dataset["size"] = "xs";
   cancel.textContent = "Cancel";
   const save = document.createElement("button");
-  save.className = "btn primary rc-composer-btn";
+  save.className = "kj-button rc-composer-btn";
+  save.dataset["variant"] = "default";
+  save.dataset["size"] = "xs";
   save.textContent = "Save";
   save.disabled = true;
   foot.append(hint, spacer, cancel, save);
@@ -215,25 +224,25 @@ function ensureStyles(): void {
 .rc-card-bar { width: 24px; flex: none; background: var(--ui-sel); box-shadow: inset 2px 0 0 var(--ui-ind); }
 .rc-card-body { flex: 1; padding: 9px 14px 9px 12px; min-width: 0; }
 .rc-card-head { display: flex; align-items: center; gap: 7px; }
-.rc-card-avatar { width: 17px; height: 17px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 8.5px; font-weight: 700; color: var(--ui-ink); background: var(--ui-sel); border: 1px solid var(--ui-sel-2); }
-.rc-card-who { font-size: 11px; color: var(--ink-2); }
-.rc-card-ref { font-size: 9.5px; color: var(--ink-4); }
-.rc-card-chip { font-size: 8.5px; padding: 0 5px; color: var(--ui-ink); border: 1px solid var(--ui-sel-2); border-radius: 999px; }
+.rc-card-avatar { width: 17px; height: 17px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: var(--fs-micro); font-weight: var(--fw-strong); color: var(--ui-ink); background: var(--ui-sel); border: 1px solid var(--ui-sel-2); }
+.rc-card-who { font-size: var(--fs-badge); color: var(--ink-2); }
+.rc-card-ref { font-size: var(--fs-micro); color: var(--ink-4); }
+.rc-card-chip { font-size: var(--fs-micro); padding: 0 5px; color: var(--ui-ink); border: 1px solid var(--ui-sel-2); border-radius: 999px; }
 .rc-card-del { margin-left: auto; background: transparent; border: none; color: var(--ink-4); cursor: pointer; display: flex; padding: 3px; border-radius: 3px; }
 .rc-card-del:hover { color: var(--code-del-ink); }
-.rc-card-note { font-size: 12px; color: var(--ink); line-height: 1.5; margin-top: 5px; white-space: pre-wrap; word-break: break-word; }
+.rc-card-note { font-size: var(--fs-badge); color: var(--ink); line-height: 1.5; margin-top: 5px; white-space: pre-wrap; word-break: break-word; }
 .rc-composer { display: flex; background: var(--ui-sel); border-top: 1px solid var(--ui-sel-2); border-bottom: 1px solid var(--hair); }
 .rc-composer-bar { width: 24px; flex: none; background: var(--ui-sel-2); }
 .rc-composer-body { flex: 1; padding: 10px 14px 10px 12px; }
 .rc-composer-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
 .rc-composer-icon { color: var(--ui-ink); }
-.rc-composer-label { font-size: 10.5px; color: var(--ink-2); }
+.rc-composer-label { font-size: var(--fs-micro); color: var(--ink-2); }
 .rc-composer-label b { color: var(--ink); }
-.rc-composer-tag { margin-left: auto; font-size: 8.5px; color: var(--ink-4); }
-.rc-composer-ta { width: 100%; resize: vertical; min-height: 56px; background: var(--panel-2); border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 8px 10px; color: var(--ink); font-family: var(--font-mono); font-size: 12px; line-height: 1.55; outline: none; }
+.rc-composer-tag { margin-left: auto; font-size: var(--fs-micro); color: var(--ink-4); }
+.rc-composer-ta { width: 100%; resize: vertical; min-height: 56px; background: var(--panel-2); border: 1px solid var(--hair); border-radius: var(--r-sm); padding: 8px 10px; color: var(--ink); font-family: var(--font-mono); font-size: var(--fs-badge); line-height: 1.55; outline: none; }
 .rc-composer-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.rc-composer-hint { font-size: 9.5px; color: var(--ink-4); }
-.rc-composer-btn { padding: 4px 12px; font-size: 11px; }
+.rc-composer-hint { font-size: var(--fs-micro); color: var(--ink-4); }
+/* geometry comes from .kj-button[data-size="xs"]; nothing to add */
 `;
   document.head.appendChild(style);
 }

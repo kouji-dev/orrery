@@ -10,6 +10,8 @@ import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { mix } from "../utils";
+import { KjButton } from "@kouji-ui/core";
+import { KjDividerComponent } from "@kouji-ui/components";
 
 /**
  * Collapsed sidebar: a 54px rail of project icons. Hovering a project pops a
@@ -19,83 +21,83 @@ import { mix } from "../utils";
 @Component({
   selector: "app-compact-rail",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, StatusDotComponent, ToolBadgeComponent],
+  imports: [IconComponent, StatusDotComponent, ToolBadgeComponent, KjButton, KjDividerComponent],
   template: `
     <aside
       style="display:flex;flex-direction:column;align-items:center;min-height:0;width:54px;background:var(--panel);border-right:1px solid var(--hair);padding:var(--sp-4) 0;gap:var(--sp-2);position:relative"
     >
-      <button class="rail-btn" (click)="ui.toggleSidebarCompact()" title="Expand sidebar" style="margin-bottom:var(--sp-1)">
-        <app-icon name="columns" size="sm" color="var(--ui-ink)" />
+      <button kjButton class="rail-btn" (click)="ui.toggleSidebarCompact()" title="Expand sidebar" style="margin-bottom:var(--sp-1)">
+        <app-icon name="panelLeft" size="sm" color="var(--ui-ink)" />
       </button>
-      <div style="width:24px;height:1px;background:var(--hair);margin:var(--sp-1) 0 var(--sp-2)"></div>
+      <kj-divider style="--kj-divider-color:var(--hair);--kj-divider-spacing:var(--sp-1)" />
 
-      <!-- Backlog entry -->
-      <div style="position:relative">
-        <button
-          class="rail-btn"
-          (click)="ui.openBacklog()"
-          title="Backlog"
-          [style.background]="ui.activeTabKind() === 'backlog' ? 'var(--panel-2)' : 'transparent'"
-          [style.border-color]="ui.activeTabKind() === 'backlog' ? 'var(--ui-line)' : 'transparent'"
-        >
-          <app-icon name="layers" size="sm" [color]="ui.activeTabKind() === 'backlog' ? 'var(--ui-ink)' : 'var(--ink-3)'" />
-        </button>
+      <!-- Backlog entry: the count badge sits inside the button — .rail-btn is
+           already position:relative + grid (styles.css), so no wrapper needed.
+           The rail is the one place the design sanctions an accent surface for
+           the active view (design/app.html:4708). The skin is inline, not the
+           shared .accent-sel: the .rail-btn rule in styles.css resets background
+           and border at equal specificity FURTHER DOWN the sheet, so the class
+           would lose — an inline style is the only thing that outranks it. -->
+      <button kjButton
+        class="rail-btn"
+        [style.background]="backlogActive() ? 'var(--ui-sel)' : null"
+        [style.border-color]="backlogActive() ? 'var(--ui-line)' : null"
+        (click)="ui.openBacklog()"
+        title="Backlog"
+      >
+        <app-icon name="columns" size="sm" [color]="backlogActive() ? 'var(--ui-ink)' : 'var(--ink-3)'" />
         @if (openTicketCount() > 0) {
           <span
             class="tnum"
-            style="position:absolute;top:2px;right:2px;min-width:var(--sp-6);height:var(--sp-6);padding:0 var(--sp-1);border-radius:7px;background:var(--ui-fill);color:var(--ui-on-fill);font-size:var(--fs-3xs);font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
+            style="position:absolute;top:2px;right:2px;min-width:13px;height:13px;padding:0 3px;border-radius:7px;background:var(--ui-fill);color:var(--ui-on-fill);font-size:var(--fs-micro);font-weight:var(--fw-strong);display:grid;place-items:center;border:2px solid var(--panel)"
           >{{ openTicketCount() }}</span>
         }
-      </div>
-      <div style="width:24px;height:1px;background:var(--hair);margin:var(--sp-1) 0 var(--sp-2)"></div>
+      </button>
+      <kj-divider style="--kj-divider-color:var(--hair);--kj-divider-spacing:var(--sp-1)" />
 
       <div class="scroll-y" style="flex:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:var(--sp-2)">
         @for (p of projects.all(); track p.id) {
           @let pa = agentsOf(p.id);
-          <div
-            class="rail-item"
+          <button kjButton
+            class="rail-btn"
             (mouseover)="enter(p.id, $event)"
             (mouseleave)="leave()"
+            (click)="openFirst(pa)"
+            (contextmenu)="ui.openMenu($event, projects.projectMenu(p.id))"
+            [style.border-color]="activeProj() === p.id ? mix(p.color, 50) : 'transparent'"
+            [style.background]="
+              activeProj() === p.id
+                ? mix(p.color, 86)
+                : hover()?.id === p.id
+                  ? 'var(--panel-2)'
+                  : 'transparent'
+            "
           >
-            <button
-              class="rail-btn"
-              (click)="openFirst(pa)"
-              (contextmenu)="ui.openMenu($event, projects.projectMenu(p.id))"
-              [style.border-color]="activeProj() === p.id ? mix(p.color, 50) : 'transparent'"
-              [style.background]="
-                activeProj() === p.id
-                  ? mix(p.color, 86)
-                  : hover()?.id === p.id
-                    ? 'var(--panel-2)'
-                    : 'transparent'
-              "
+            <span
+              [style.background]="mix(p.color, 84)"
+              [style.border]="'1px solid ' + mix(p.color, 60)"
+              style="width:var(--ctl-h-sm);height:var(--ctl-h-sm);border-radius:6px;display:grid;place-items:center"
             >
+              <app-icon size="lg" [name]="p.icon" [color]="p.color" />
+            </span>
+            @if (runningOf(pa) > 0) {
+              <span class="dot running" style="position:absolute;top:3px;right:3px;width:var(--sp-3);height:var(--sp-3);background:var(--st-running)"></span>
+            }
+            @if (needsOf(pa) > 0) {
               <span
-                [style.background]="mix(p.color, 84)"
-                [style.border]="'1px solid ' + mix(p.color, 60)"
-                style="width:var(--ctl-h-sm);height:var(--ctl-h-sm);border-radius:6px;display:grid;place-items:center"
-              >
-                <app-icon [name]="p.icon" size="sm" [px]="13" [color]="p.color" />
-              </span>
-              @if (runningOf(pa) > 0) {
-                <span class="dot running" style="position:absolute;top:3px;right:3px;width:var(--sp-3);height:var(--sp-3);background:var(--st-running)"></span>
-              }
-              @if (needsOf(pa) > 0) {
-                <span
-                  class="tnum"
-                  style="position:absolute;top:2px;right:2px;min-width:var(--sp-6);height:var(--sp-6);padding:0 var(--sp-1);border-radius:7px;background:var(--st-blocked);color:var(--on-solid);font-size:var(--fs-3xs);font-weight:700;display:grid;place-items:center;border:2px solid var(--panel)"
-                >{{ needsOf(pa) }}</span>
-              }
-            </button>
-          </div>
+                class="tnum"
+                style="position:absolute;top:2px;right:2px;min-width:var(--sp-6);height:var(--sp-6);padding:0 var(--sp-1);border-radius:7px;background:var(--st-blocked);color:var(--on-solid);font-size:var(--fs-badge);font-weight:var(--fw-strong);display:grid;place-items:center;border:2px solid var(--panel)"
+              >{{ needsOf(pa) }}</span>
+            }
+          </button>
         }
       </div>
 
-      <div style="width:24px;height:1px;background:var(--hair);margin:var(--sp-2) 0"></div>
-      <button class="rail-btn" (click)="ui.openAddProject()" title="Add project">
+      <kj-divider style="--kj-divider-color:var(--hair);--kj-divider-spacing:var(--sp-2)" />
+      <button kjButton class="rail-btn" (click)="ui.openAddProject()" title="Add project">
         <app-icon name="folder" size="sm" color="var(--ink-3)" />
       </button>
-      <button
+      <button kjButton
         class="rail-btn"
         (click)="ui.openSpawn(null)"
         title="Spawn agent"
@@ -106,30 +108,30 @@ import { mix } from "../utils";
 
       @if (hoverProj(); as hp) {
         <div
-          class="rise"
+          class="rise popover"
           (mouseover)="keep()"
           (mouseleave)="leave()"
           [style.top.px]="popTop()"
-          style="position:fixed;left:52px;z-index:60;width:236px;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);overflow:hidden"
+          style="position:fixed;left:52px;z-index:60;width: round(calc(236px * var(--density)), 1px);overflow:hidden"
         >
-          <div style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--hair)">
+          <div class="pane-head">
             <span
               [style.background]="mix(hp.color, 82)"
               [style.border]="'1px solid ' + mix(hp.color, 62)"
               style="width:17px;height:17px;flex:none;border-radius:5px;display:grid;place-items:center"
             >
-              <app-icon [name]="hp.icon" size="sm" [px]="11" [color]="hp.color" />
+              <app-icon size="md" [name]="hp.icon" [color]="hp.color" />
             </span>
-            <span style="font-size:var(--fs-ui);font-weight:600">{{ hp.name }}</span>
-            <span class="tnum" style="margin-left:auto;font-size:var(--fs-2xs);color:var(--ink-4)">{{ hoverAgents().length }}</span>
-            <button class="pane-btn" (click)="ui.openSpawn(hp.id)" title="Spawn agent">
-              <app-icon name="bolt" size="sm" [px]="13" />
+            <span style="font-weight:var(--fw-medium)">{{ hp.name }}</span>
+            <span class="tnum" style="margin-left:auto;font-size:var(--fs-meta);color:var(--ink-4)">{{ hoverAgents().length }}</span>
+            <button kjButton class="pane-btn" (click)="ui.openSpawn(hp.id)" title="Spawn agent">
+              <app-icon size="lg" name="bolt" />
             </button>
           </div>
-          <div style="padding:var(--sp-2);max-height:280px;overflow-y:auto">
+          <div style="padding:var(--sp-2);max-height: round(calc(280px * var(--density)), 1px);overflow-y:auto">
             @for (ag of hoverAgents(); track ag.id) {
               <div
-                class="rail-pop-row"
+                class="row-hover"
                 draggable="true"
                 (dragstart)="drag.start({ kind: 'agent', agentId: ag.id }); $event.dataTransfer!.effectAllowed = 'copy'"
                 (dragend)="drag.end()"
@@ -138,27 +140,20 @@ import { mix } from "../utils";
                 style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-4);border-radius:6px;cursor:pointer"
               >
                 <app-status-dot [status]="ag.status" />
-                <span style="flex:1;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ ag.name }}</span>
+                <span class="trunc" style="flex:1">{{ ag.name }}</span>
                 @if (needsAgent(ag)) {
                   <span style="width:var(--sp-2);height:var(--sp-2);border-radius:50%;background:var(--st-blocked)"></span>
                 }
                 <app-tool-badge [tool]="ag.tool" [size]="13" />
               </div>
             } @empty {
-              <div style="padding:var(--sp-4) var(--sp-5);font-size:var(--fs-xs);color:var(--ink-4)">no agents — spawn one</div>
+              <div style="padding:var(--sp-4) var(--sp-5);font-size:var(--fs-meta);color:var(--ink-4)">no agents — spawn one</div>
             }
           </div>
         </div>
       }
     </aside>
   `,
-  styles: [
-    `
-      .rail-pop-row:hover {
-        background: var(--panel-2);
-      }
-    `,
-  ],
 })
 export class CompactRailComponent {
   readonly ui = inject(UiStore);
@@ -171,6 +166,8 @@ export class CompactRailComponent {
   readonly openTicketCount = computed(
     () => this.ticketsStore.all().filter((t) => t.status !== "done").length,
   );
+  /** The backlog tab is the active one — drives the rail item's active skin. */
+  readonly backlogActive = computed(() => this.ui.activeTabKind() === "backlog");
 
   readonly mix = mix;
   readonly hover = signal<{ id: string; top: number } | null>(null);

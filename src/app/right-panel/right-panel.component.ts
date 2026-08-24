@@ -8,6 +8,16 @@ import { mix } from "../utils";
 import { FilesTabComponent } from "./files-tab.component";
 import { GitTabComponent } from "./git-tab.component";
 import { InboxTabComponent } from "./inbox-tab.component";
+import {
+  KjBadgeComponent,
+  KjTabComponent,
+  KjTabListComponent,
+  KjTabsComponent,
+  KjEmptyStateComponent,
+  KjEmptyStateDescriptionComponent,
+  KjEmptyStateIconComponent,
+  KjEmptyStateTitleComponent,
+} from "@kouji-ui/components";
 
 interface TabDef {
   key: string;
@@ -19,34 +29,51 @@ interface TabDef {
 @Component({
   selector: "app-right-panel",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, StatusDotComponent, FilesTabComponent, InboxTabComponent, GitTabComponent],
+  imports: [
+    IconComponent,
+    StatusDotComponent,
+    FilesTabComponent,
+    InboxTabComponent,
+    GitTabComponent,
+    KjBadgeComponent,
+    KjTabsComponent,
+    KjTabListComponent,
+    KjTabComponent,
+    KjEmptyStateComponent,
+    KjEmptyStateIconComponent,
+    KjEmptyStateTitleComponent,
+    KjEmptyStateDescriptionComponent,
+  ],
   template: `
     @let scope = runtime.activeAgent();
     <aside style="display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;background:var(--panel);border-left:1px solid var(--hair)">
       @if (scope) {
         <!-- agent header -->
-        <div style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);height:38px;border-bottom:1px solid var(--hair)">
+        <div class="pane-head" style="height:38px">
           <app-status-dot [status]="scope.status" />
-          <span style="font-size:var(--fs-sm);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ scope.name }}</span>
+          <span class="trunc" style="font-weight:var(--fw-medium)">{{ scope.name }}</span>
           @if (project()) {
-            <span class="chip" [style.color]="project()!.color" [style.border-color]="mix(project()!.color, 65)" style="font-size:var(--fs-2xs);padding:1px var(--sp-3)">{{ project()!.name }}</span>
+            <kj-badge [fg]="project()!.color" [style.border-color]="mix(project()!.color, 65)">{{ project()!.name }}</kj-badge>
           }
         </div>
 
-        <!-- tab bar -->
-        <div style="display:flex;align-items:center;padding:0 var(--sp-3);border-bottom:1px solid var(--hair);height:36px">
-          @for (t of tabs(); track t.key) {
-            @let on = tab() === t.key;
-            <button class="btn" (click)="tab.set(t.key)" [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'" style="padding:var(--sp-3) var(--sp-5);border-radius:0;position:relative;flex:1;justify-content:center">
-              @if (on) { <span style="position:absolute;left:8px;right:8px;bottom:0;height:var(--sp-1);background:var(--ui-ind)"></span> }
-              <app-icon [name]="t.icon" size="sm" [color]="on ? 'var(--ui-ink)' : null" />
-              <span style="font-size:var(--fs-sm)">{{ t.label }}</span>
-              @if (t.badge) {
-                <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-2);color:var(--ui-ink);border-color:var(--ui-sel-2)">{{ t.badge }}</span>
-              }
-            </button>
-          }
-        </div>
+        <!-- real tabs: role=tablist/tab/tabpanel, roving focus and aria-controls
+             come from kouji. Panels stay in the @switch — each tab body is an
+             expensive component and kj-tab-panel would keep all three alive. -->
+        <kj-tabs class="rp-tabs" [value]="tab()" (valueChange)="tab.set($event)">
+          <kj-tab-list>
+            @for (t of tabs(); track t.key) {
+              @let on = tab() === t.key;
+              <kj-tab [value]="t.key">
+                <app-icon [name]="t.icon" size="sm" [color]="on ? 'var(--ui-ink)' : null" />
+                <span>{{ t.label }}</span>
+                @if (t.badge) {
+                  <kj-badge class="tnum">{{ t.badge }}</kj-badge>
+                }
+              </kj-tab>
+            }
+          </kj-tab-list>
+        </kj-tabs>
 
         @switch (tab()) {
           @case ('files') { <app-files-tab [agent]="scope" [project]="project()" /> }
@@ -55,16 +82,27 @@ interface TabDef {
         }
       } @else {
         <!-- empty: this panel is agent-scoped -->
-        <div style="flex:1;display:grid;place-items:center;padding:var(--sp-9);text-align:center">
-          <div>
-            <app-icon name="layers" size="lg" color="var(--hair-2)" />
-            <div style="font-size:var(--fs-sm);color:var(--ink-3);margin-top:var(--sp-5)">No agent selected</div>
-            <div style="font-size:var(--fs-xs);color:var(--ink-4);margin-top:var(--sp-1)">Open an agent to see its files, git &amp; inbox</div>
-          </div>
+        <div class="pane-empty pad">
+          <kj-empty-state kjSize="sm">
+            <kj-empty-state-icon><app-icon name="layers" size="lg" color="var(--hair-2)" /></kj-empty-state-icon>
+            <kj-empty-state-title>No agent selected</kj-empty-state-title>
+            <kj-empty-state-description>Open an agent to see its files, git &amp; inbox</kj-empty-state-description>
+          </kj-empty-state>
         </div>
       }
     </aside>
   `,
+  styles: [
+    `
+      /* design pane-tab badge (app.html:5518): one step down in type and a
+         tighter gutter than the app's default chip. kouji declares the knobs
+         ON .kj-badge, so a host-level value never reaches it. */
+      .kj-tab-strip kj-badge ::ng-deep .kj-badge {
+        --kj-badge-font-size: var(--fs-badge);
+        --kj-badge-padding-x: var(--sp-2);
+      }
+    `,
+  ],
 })
 export class RightPanelComponent {
   readonly runtime = inject(AgentRuntimeService);

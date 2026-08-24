@@ -7,6 +7,8 @@ import { BranchesPanelComponent } from "./branches-panel.component";
 import { CommitGraphPanelComponent } from "./commit-graph-panel.component";
 import { LocalHistoryPanelComponent } from "./local-history-panel.component";
 import { TOOL_PANELS, ToolWindowStore } from "./tool-window.store";
+import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
+import { SelectComponent } from "../shared/select.component";
 
 /**
  * The IntelliJ-style bottom tool window (design toolwindow.jsx): a resizable
@@ -19,72 +21,54 @@ import { TOOL_PANELS, ToolWindowStore } from "./tool-window.store";
 @Component({
   selector: "app-tool-window",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, CommitGraphPanelComponent, BranchesPanelComponent, LocalHistoryPanelComponent],
+  imports: [IconComponent, CommitGraphPanelComponent, BranchesPanelComponent, LocalHistoryPanelComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, SelectComponent],
   template: `
     <!-- resize grip (absolute — sits over the top hairline) -->
     <div class="grip" (mousedown)="onGripDown($event)"></div>
 
     <!-- tab strip -->
-    <div
-      style="display:flex;align-items:stretch;gap:var(--sp-1);padding:0 var(--sp-4);border-bottom:1px solid var(--hair);flex:none;background:var(--panel-2)"
-    >
-      @for (p of panels; track p.kind) {
-        @let on = p.kind === tw.panel();
-        <button
-          class="btn tab"
-          (click)="tw.open(p.kind)"
-          [style.color]="on ? 'var(--ink)' : 'var(--ink-3)'"
-        >
-          @if (on) { <span class="tab-line"></span> }
-          <app-icon [name]="p.icon" size="sm" [color]="on ? 'var(--ui-ink)' : null" />{{ p.label }}
-        </button>
-      }
+    <kj-tabs class="tw-tabs" style="flex:none" [value]="tw.panel() ?? ''" (valueChange)="tw.open($any($event))">
+      <kj-tab-list>
+        @for (p of panels; track p.kind) {
+          @let on = p.kind === tw.panel();
+          <kj-tab [value]="p.kind">
+            <app-icon [name]="p.icon" size="sm" [color]="on ? 'var(--ui-ink)' : null" />{{ p.label }}
+          </kj-tab>
+        }
+      </kj-tab-list>
 
       <!-- scope: project + worktree the panels act on -->
       <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3);padding-left:var(--sp-5)">
-        <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-4);flex:none">scope</span>
+        <span class="up" style="color:var(--ink-4);flex:none">scope</span>
         @if (project(); as p) {
           <span style="display:flex;align-items:center;gap:var(--sp-2);flex:none">
-            <app-icon [name]="p.icon" size="sm" [px]="12" [color]="p.color" />
-            <select
-              class="osel"
+            <app-icon size="md" [name]="p.icon" [color]="p.color" />
+            <app-select
               title="Project the panels read from"
               [value]="p.id"
-              (change)="pickProject($any($event.target).value)"
-              style="width:152px;padding:var(--sp-1) var(--sp-9) var(--sp-1) var(--sp-4);font-size:var(--fs-xs)"
-            >
-              @for (pr of projects.all(); track pr.id) {
-                <option [value]="pr.id">{{ pr.name }}</option>
-              }
-            </select>
+              [options]="projectOptions()"
+              (valueChange)="pickProject($event)"
+              style="width: round(calc(152px * var(--density)), 1px)"
+            />
           </span>
         }
-        <select
-          class="osel"
+        <app-select
           title="Worktree the panel reads from"
           [value]="agent()?.id ?? ''"
-          (change)="pickAgent($any($event.target).value)"
-          style="width:150px;padding:var(--sp-1) var(--sp-9) var(--sp-1) var(--sp-4);font-size:var(--fs-xs);flex:none"
-        >
-          @if (!projAgents().length) { <option value="">no worktrees</option> }
-          @for (a of projAgents(); track a.id) {
-            <option [value]="a.id">{{ a.name }}</option>
-          }
-        </select>
+          [options]="agentOptions()"
+          (valueChange)="pickAgent($event)"
+          style="width: round(calc(150px * var(--density)), 1px);flex:none"
+        />
         @if (outOfSync()) {
-          <button
-            class="btn ghost-hair follow"
-            [title]="'Follow the focused agent · ' + focus()!.name"
-            (click)="follow()"
-          >
-            <app-icon name="link" size="sm" [px]="11" />{{ focus()!.name }}
-          </button>
+          <kj-button kjVariant="toolbar" [title]="'Follow the focused agent · ' + focus()!.name" (click)="follow()">
+            <app-icon size="md" name="link" />{{ focus()!.name }}
+          </kj-button>
         }
-        <button class="pane-btn" (click)="tw.close()" title="Hide tool window" style="align-self:center">
+        <button kjButton class="pane-btn" (click)="tw.close()" title="Hide tool window" style="align-self:center">
           <app-icon name="x" size="sm" />
         </button>
       </div>
-    </div>
+    </kj-tabs>
 
     <!-- panel body -->
     <div style="flex:1;min-height:0;display:flex;flex-direction:column;background:var(--panel)">
@@ -119,25 +103,15 @@ import { TOOL_PANELS, ToolWindowStore } from "./tool-window.store";
         cursor: row-resize;
         z-index: 5;
       }
-      .btn.tab {
-        padding: var(--sp-3) var(--sp-5);
-        border-radius: 0;
-        position: relative;
-        font-size: var(--fs-sm);
+      /* the dock's strip carries the tabs AND the scope cluster on one row,
+         so the hairline moves from the list to the strip itself */
+      .tw-tabs {
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid var(--hair);
       }
-      .tab-line {
-        position: absolute;
-        left: 8px;
-        right: 8px;
-        bottom: 0;
-        height: var(--sp-1);
-        background: var(--ui-ind);
-      }
-      .btn.follow {
-        padding: var(--sp-1) var(--sp-3);
-        font-size: var(--fs-xs);
-        color: var(--ink-2);
-        flex: none;
+      .tw-tabs .kj-tab-list {
+        border-bottom: none;
       }
     `,
   ],
@@ -193,6 +167,13 @@ export class ToolWindowComponent {
   readonly projAgents = computed<Agent[]>(() => {
     const p = this.project();
     return p ? this.runtime.agents().filter((a) => a.projectId === p.id) : [];
+  });
+
+  readonly projectOptions = computed(() => this.projects.all().map((p) => ({ value: p.id, label: p.name })));
+
+  readonly agentOptions = computed(() => {
+    const list = this.projAgents();
+    return list.length ? list.map((a) => ({ value: a.id, label: a.name })) : [{ value: "", label: "no worktrees" }];
   });
 
   readonly agent = computed<Agent | null>(() => {

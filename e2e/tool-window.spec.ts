@@ -54,11 +54,12 @@ test("Ctrl+Shift+G toggles the dock on Git Graph; closed by default", async ({ p
   await expect(dock).toHaveCount(1);
 
   // git panels first in the tab strip
-  await expect(dock.getByRole("button", { name: "Git Graph" })).toBeVisible();
-  await expect(dock.getByRole("button", { name: "Branches" })).toBeVisible();
-  await expect(dock.getByRole("button", { name: "Local History" })).toBeVisible();
-  // the active tab carries the accent underline
-  await expect(dock.locator("button.tab", { hasText: "Git Graph" }).locator(".tab-line")).toHaveCount(1);
+  await expect(dock.getByRole("tab", { name: "Git Graph" })).toBeVisible();
+  await expect(dock.getByRole("tab", { name: "Branches" })).toBeVisible();
+  await expect(dock.getByRole("tab", { name: "Local History" })).toBeVisible();
+  // the strip is <kj-tabs> now — the active tab is the aria-selected one, and
+  // kouji draws the underline from it (no hand-rolled .tab-ind span)
+  await expect(dock.getByRole("tab", { name: "Git Graph" })).toHaveAttribute("aria-selected", "true");
   // no agents yet → the graph panel asks for a worktree scope (no fake rows)
   await expect(dock.locator("app-commit-graph-panel")).toContainText("select a worktree");
 
@@ -70,9 +71,20 @@ test("Ctrl+Shift+G toggles the dock on Git Graph; closed by default", async ({ p
 test("the palette lists and runs the tool-window commands", async ({ page }) => {
   await ready(page);
   await page.keyboard.press("Control+Shift+P");
+  // visible is not enough: the palette focuses its input in a microtask after
+  // render, and a keystroke that lands before that goes to the document —
+  // where the app's own shortcuts eat it and can close the palette outright
+  await expect(page.locator("app-command-palette input")).toBeFocused();
   await page.keyboard.type("commit graph");
   await expect(page.locator("app-command-palette")).toContainText("Show Commit Graph");
+  // Enter runs whatever row is HIGHLIGHTED — wait for the palette to settle on
+  // one, or a loaded machine can press Enter between the query landing and the
+  // list re-rendering under it.
+  await expect(page.locator(".kj-command-item[data-active]")).toHaveCount(1);
   await page.keyboard.press("Enter");
+  // Enter must first CLOSE the palette (the command ran); only then does the
+  // dock mount. Splitting the two makes a failure say which half broke.
+  await expect(page.locator("app-command-palette")).toHaveCount(0);
   await expect(page.locator("app-tool-window")).toHaveCount(1);
   await expect(page.locator("app-commit-graph-panel")).toHaveCount(1);
 });
@@ -83,23 +95,25 @@ test("graph panel: real scope, filter chrome, and the B4.1 path filter disabled"
 
   // scoped to the seeded worktree: filter row renders; commits fetch rejects
   // (no backend) → honest empty state, never fabricated rows
-  await expect(panel.getByPlaceholder("Filter by message or sha…")).toBeVisible();
+  await expect(panel.locator(`input[placeholder="Filter by message or sha…"]`)).toBeVisible();
   await expect(panel).toContainText("no commits on this branch yet");
   await expect(panel).toContainText("shift-click two commits");
 
-  const path = panel.getByPlaceholder("path…");
+  // the B4.1 note lives on the <kj-input>'s wrapper, not on the native input
+  const path = panel.locator(`input[placeholder="path…"]`);
   await expect(path).toBeDisabled();
-  await expect(path).toHaveAttribute("title", /B4\.1/);
+  await expect(panel.getByTitle(/B4\.1/)).toBeVisible();
 
-  // the scope cluster shows the seeded project + worktree
+  // the scope cluster shows the seeded project + worktree — <app-select> is a
+  // kouji <kj-select> now, so the trigger LABEL is what's assertable (not a value)
   const dock = page.locator("app-tool-window");
-  await expect(dock.locator("select").first()).toHaveValue("p-e2e");
-  await expect(dock.getByTitle("Worktree the panel reads from")).toHaveValue("e2e-tw1");
+  await expect(dock.getByTitle("Project the panels read from")).toContainText("e2e-proj");
+  await expect(dock.getByTitle("Worktree the panel reads from")).toContainText("e2e-tw");
 });
 
 test("branches panel: live A3.2 chrome with honest no-backend states", async ({ page }) => {
   await openSeeded(page);
-  await page.locator("app-tool-window").getByRole("button", { name: "Branches" }).click();
+  await page.locator("app-tool-window").getByRole("tab", { name: "Branches" }).click();
   const panel = page.locator("app-branches-panel");
 
   // REAL data: detected project branches + the seeded worktree branch
@@ -109,30 +123,32 @@ test("branches panel: live A3.2 chrome with honest no-backend states", async ({ 
   await expect(panel).toContainText("dev");
   await expect(panel).toContainText("agent/e2e-tw");
   // the scoped worktree's branch is HEAD
-  await expect(panel.locator(".chip", { hasText: "HEAD" })).toHaveCount(1);
+  await expect(panel.locator("kj-badge", { hasText: "HEAD" })).toHaveCount(1);
 
   // remotes column: backend rejected → honest empty state, no fake remotes
   await expect(panel).toContainText("Remotes");
   await expect(panel).toContainText("no remotes configured");
 
   // live ops: New branch stays disabled until a name is typed, then enables
-  const newBranch = panel.locator("app-git-action-button", { hasText: "New branch" }).first();
-  await expect(newBranch.locator("button").first()).toBeDisabled();
-  await panel.getByPlaceholder("new branch name…").fill("feat-e2e");
-  await expect(newBranch.locator("button").first()).toBeEnabled();
+  const newBranch = panel.getByRole("button", { name: "New branch" }).first();
+  await expect(newBranch).toBeDisabled();
+  await panel.locator(`input[placeholder="new branch name…"]`).fill("feat-e2e");
+  await expect(newBranch).toBeEnabled();
 
   // row ops are enabled buttons now (invokes reject backend-side — no fake ok)
-  const checkout = panel.locator("button.br-op", { hasText: "Checkout" }).first();
+  const checkout = panel.getByRole("button", { name: "Checkout" }).first();
   await expect(checkout).toBeEnabled();
-  // Delete opens an inline confirm instead of acting immediately
-  await panel.locator("button.br-op", { hasText: "Delete" }).first().click();
-  await expect(panel).toContainText(/delete .+\?/);
-  await panel.locator("button.br-op", { hasText: "Cancel" }).first().click();
+  // Delete opens a <kj-confirm-popup> — its content is portalled out of the
+  // panel, so the confirm chrome is asserted at page scope
+  await panel.getByRole("button", { name: "Delete" }).first().click();
+  // every row owns a (closed) popup, so match the OPEN one, not the first
+  await expect(page.locator("kj-confirm-popup-message:visible")).toHaveText(/delete .+\?/);
+  await page.getByRole("button", { name: "Cancel" }).first().click();
 });
 
 test("local history panel: live B4.4 chrome with an honest empty timeline", async ({ page }) => {
   await openSeeded(page);
-  await page.locator("app-tool-window").getByRole("button", { name: "Local History" }).click();
+  await page.locator("app-tool-window").getByRole("tab", { name: "Local History" }).click();
   const panel = page.locator("app-local-history-panel");
 
   // backend absent → the timeline load fails to an honest empty state

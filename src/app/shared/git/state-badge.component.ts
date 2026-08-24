@@ -4,31 +4,23 @@ import {
   computed,
   input,
 } from "@angular/core";
+import { KjBadgeComponent } from "@kouji-ui/components";
 
 /**
  * File-state badge: A (added), M (modified), D (deleted), R (renamed).
- * Uses design-system status tokens — no hardcoded px colours.
+ *
+ * Built on kouji's `<kj-badge>`: per-state colours are data, not design
+ * variants, so they ride the badge's `bg`/`fg` inputs (kouji applies them
+ * inline). The square silhouette lives in styles.css
+ * (`app-state-badge .kj-badge`) — kouji's inner span carries no Angular scope
+ * attribute, so component styles cannot reach it.
  */
 @Component({
   selector: "app-state-badge",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KjBadgeComponent],
   template: `
-    <span
-      [style.color]="ink()"
-      [style.background]="bg()"
-      style="
-        flex: none;
-        width: var(--sp-6);
-        height: var(--sp-6);
-        border-radius: 3px;
-        display: grid;
-        place-items: center;
-        font-size: var(--fs-2xs);
-        font-weight: 700;
-        user-select: none;
-      "
-    >{{ state() }}</span>
+    <kj-badge [bg]="bg()" [fg]="ink()">{{ state() }}</kj-badge>
   `,
 })
 export class StateBadgeComponent {

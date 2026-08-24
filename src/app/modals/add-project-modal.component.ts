@@ -1,10 +1,10 @@
 import {
-  AfterViewInit,
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
-  ElementRef,
   inject,
   signal,
   viewChild,
@@ -16,61 +16,59 @@ import { IconComponent } from "../shared/icon.component";
 import { ProjectsStore } from "../stores/projects.store";
 import { SettingsStore } from "../settings/settings.store";
 import { mix } from "../utils";
+import { KjButtonComponent, KjDialogComponent, KjInputComponent, KjRadioComponent, KjRadioGroupComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
+import { KjDialog } from "@kouji-ui/core";
 
+/**
+ * Opened through `KjDialog` by the shell, so this component IS the overlay
+ * panel: the backdrop, focus trap, scroll lock, Esc and outside-click all come
+ * from the kj overlay and the markup below is only the panel body.
+ */
 @Component({
   selector: "app-add-project-modal",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, KjButtonComponent, KjDialogComponent, KjInputComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, KjRadioGroupComponent, KjRadioComponent],
+  host: { role: "dialog", "aria-modal": "true", "aria-label": "Add project" },
   template: `
-    <div
-      (click)="ui.closeAddProject()"
-      style="position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:var(--sp-9);background:var(--scrim);backdrop-filter:blur(3px)"
-    >
-      <div
-        class="surface rise"
-        (click)="$event.stopPropagation()"
-        style="width:480px;padding:0;overflow:hidden;box-shadow:var(--shadow)"
-      >
-        <div style="padding:var(--sp-6) var(--sp-7);border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:var(--sp-4)">
+    <kj-dialog-shell>
+      <div class="kj-dialog rise">
+        <div class="pane-head" style="padding:var(--sp-6) var(--sp-7)">
           <span
             [style.background]="mix(color(), 82)"
             [style.border]="'1px solid ' + mix(color(), 55)"
             style="flex:none;width:var(--sp-9);height:var(--sp-9);border-radius:7px;display:grid;place-items:center"
           >
-            <app-icon [name]="icon()" size="sm" [color]="color()" />
+            <app-icon [name]="icon()" [color]="color()" />
           </span>
-          <span class="disp" style="font-size:var(--fs-lg);font-weight:600;white-space:nowrap">Add project</span>
-          <span class="chip" style="margin-left:auto;font-size:var(--fs-2xs)">git repository</span>
+          <h1 style="white-space:nowrap">Add project</h1>
         </div>
 
-        <div style="padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-7)">
+        <!-- the kj panel is height-capped, so the fields scroll between the
+             pinned header and footer (the git source makes this form tall) -->
+        <div class="scroll-y" style="padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-7);flex:1">
           <!-- source: local folder vs remote clone -->
-          <div style="display:flex;gap:var(--sp-3);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:var(--sp-2)">
-            @for (s of sources; track s.key) {
-              <button
-                class="btn"
-                (click)="source.set(s.key)"
-                [style.background]="source() === s.key ? 'var(--ui-sel)' : 'transparent'"
-                [style.border]="'1px solid ' + (source() === s.key ? 'var(--ui-focus)' : 'transparent')"
-                style="flex:1;justify-content:center;border-radius:var(--r-sm);padding:var(--sp-4)"
-              >
-                <app-icon [name]="s.icon" size="sm" [color]="source() === s.key ? 'var(--ink)' : 'var(--ink-3)'" />{{ s.label }}
-              </button>
-            }
-          </div>
+          <kj-tabs variant="pills" [value]="source()" (valueChange)="source.set($any($event))">
+            <kj-tab-list aria-label="Project source">
+              @for (s of sources; track s.key) {
+                <kj-tab [value]="s.key">
+                  <app-icon [name]="s.icon" [color]="source() === s.key ? 'var(--ink)' : 'var(--ink-3)'" />{{ s.label }}
+                </kj-tab>
+              }
+            </kj-tab-list>
+          </kj-tabs>
 
           @if (source() === 'git') {
             <!-- repository url -->
             <div>
               <label class="field-label">Repository URL</label>
               <div style="display:flex;align-items:center;gap:var(--sp-4);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:0 var(--sp-5)">
-                <app-icon name="git" size="sm" color="var(--ink-4)" />
-                <input
+                <app-icon name="git" color="var(--ink-4)" />
+                <kj-input
                   #urlEl
+                  class="bare-input"
                   [value]="url()"
                   (input)="url.set($any($event.target).value)"
                   placeholder="https://github.com/user/repo.git"
-                  style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:var(--sp-5) 0;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui)"
                 />
               </div>
             </div>
@@ -80,18 +78,18 @@ import { mix } from "../utils";
               <label class="field-label">Clone into</label>
               <div style="display:flex;gap:var(--sp-4)">
                 <div style="flex:1;display:flex;align-items:center;gap:var(--sp-4);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:0 var(--sp-5)">
-                  <app-icon name="folder" size="sm" color="var(--ink-4)" />
-                  <input
+                  <app-icon name="folder" color="var(--ink-4)" />
+                  <kj-input
+                    class="bare-input"
                     [value]="dir()"
                     (input)="dir.set($any($event.target).value)"
                     placeholder="~/code"
-                    style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:var(--sp-5) 0;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui)"
                   />
                 </div>
-                <button class="btn ghost-hair" (click)="browse()"><app-icon name="folderOpen" size="sm" />Browse…</button>
+                <kj-button kjVariant="outline" (click)="browse()"><app-icon name="folderOpen" />Browse…</kj-button>
               </div>
               @if (destination()) {
-                <div style="font-size:var(--fs-xs);color:var(--ink-4);margin-top:var(--sp-3)">clones to → <span style="color:var(--ink-2);font-family:var(--font-mono)">{{ destination() }}</span></div>
+                <small style="margin-top:var(--sp-3)">clones to → <code style="color:var(--ink-2)">{{ destination() }}</code></small>
               }
             </div>
 
@@ -108,11 +106,11 @@ import { mix } from "../utils";
                     [style.background]="cloneMode() === m.key ? 'var(--ui-fill)' : 'transparent'"
                     style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:50%;display:grid;place-items:center"
                   >
-                    @if (cloneMode() === m.key) { <app-icon name="check" size="sm" [px]="11" color="var(--ui-on-fill)" /> }
+                    @if (cloneMode() === m.key) { <app-icon size="md" name="check" color="var(--ui-on-fill)" /> }
                   </span>
                   <div style="flex:1">
-                    <div style="font-size:var(--fs-sm);color:var(--ink)">{{ m.label }}</div>
-                    <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">{{ m.hint }}</div>
+                    <div style="color:var(--ink)">{{ m.label }}</div>
+                    <small style="margin-top:var(--sp-1)">{{ m.hint }}</small>
                   </div>
                 </div>
               }
@@ -128,13 +126,13 @@ import { mix } from "../utils";
                 [style.background]="shallow() ? 'var(--ui-fill)' : 'transparent'"
                 style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:4px;display:grid;place-items:center"
               >
-                @if (shallow()) { <app-icon name="check" size="sm" [px]="11" color="var(--ui-on-fill)" /> }
+                @if (shallow()) { <app-icon size="md" name="check" color="var(--ui-on-fill)" /> }
               </span>
               <div style="flex:1">
-                <div style="font-size:var(--fs-sm);color:var(--ink)">Shallow clone (depth 1)</div>
-                <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">fetches only the default branch at its tip — fastest</div>
+                <div style="color:var(--ink)">Shallow clone (depth 1)</div>
+                <small style="margin-top:var(--sp-1)">fetches only the default branch at its tip — fastest</small>
               </div>
-              <app-icon name="bolt" size="sm" color="var(--ui-ink)" />
+              <app-icon name="bolt" color="var(--ui-ink)" />
             </div>
           } @else {
           <!-- working directory -->
@@ -142,19 +140,19 @@ import { mix } from "../utils";
             <label class="field-label">Working directory</label>
             <div style="display:flex;gap:var(--sp-4)">
               <div style="flex:1;display:flex;align-items:center;gap:var(--sp-4);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-md);padding:0 var(--sp-5)">
-                <app-icon name="folder" size="sm" color="var(--ink-4)" />
-                <input
+                <app-icon name="folder" color="var(--ink-4)" />
+                <kj-input
                   #dirEl
+                  class="bare-input"
                   [value]="dir()"
                   (input)="dir.set($any($event.target).value)"
                   placeholder="~/code/my-repo"
-                  style="flex:1;min-width:0;background:transparent;border:none;outline:none;padding:var(--sp-5) 0;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui)"
                 />
               </div>
-              <button class="btn ghost-hair" (click)="browse()"><app-icon name="folderOpen" size="sm" />Browse…</button>
+              <kj-button kjVariant="outline" (click)="browse()"><app-icon name="folderOpen" />Browse…</kj-button>
             </div>
             @if (name()) {
-              <div style="font-size:var(--fs-xs);color:var(--ink-4);margin-top:var(--sp-3)">project name → <span style="color:var(--ink-2)">{{ name() }}</span></div>
+              <small style="margin-top:var(--sp-3)">project name → <span style="color:var(--ink-2)">{{ name() }}</span></small>
             }
           </div>
 
@@ -166,13 +164,13 @@ import { mix } from "../utils";
               style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-6);border-radius:var(--r-md)"
             >
               <span style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:4px;display:grid;place-items:center;background:var(--st-done)">
-                <app-icon name="check" size="sm" [px]="11" color="var(--ui-on-fill)" />
+                <app-icon size="md" name="check" color="var(--ui-on-fill)" />
               </span>
               <div style="flex:1">
-                <div style="font-size:var(--fs-sm);color:var(--ink)">Git repository already exists</div>
-                <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">agents can branch + commit right away</div>
+                <div style="color:var(--ink)">Git repository already exists</div>
+                <small style="margin-top:var(--sp-1)">agents can branch + commit right away</small>
               </div>
-              <app-icon name="git" size="sm" color="var(--st-done)" />
+              <app-icon name="git" color="var(--st-done)" />
             </div>
           } @else {
             <div
@@ -184,13 +182,13 @@ import { mix } from "../utils";
                 [style.background]="gitInit() ? 'var(--ui-fill)' : 'transparent'"
                 style="flex:none;width:var(--sp-7);height:var(--sp-7);border-radius:4px;display:grid;place-items:center"
               >
-                @if (gitInit()) { <app-icon name="check" size="sm" [px]="11" color="var(--ui-on-fill)" /> }
+                @if (gitInit()) { <app-icon size="md" name="check" color="var(--ui-on-fill)" /> }
               </span>
               <div style="flex:1">
-                <div style="font-size:var(--fs-sm);color:var(--ink)">Run git init (no .git found)</div>
-                <div style="font-size:var(--fs-2xs);color:var(--ink-4);margin-top:var(--sp-1)">initializes a repo so agents can branch + commit</div>
+                <div style="color:var(--ink)">Run git init (no .git found)</div>
+                <small style="margin-top:var(--sp-1)">initializes a repo so agents can branch + commit</small>
               </div>
-              <app-icon name="bolt" size="sm" color="var(--ui-ink)" />
+              <app-icon name="bolt" color="var(--ui-ink)" />
             </div>
           }
           }
@@ -198,47 +196,98 @@ import { mix } from "../utils";
           <!-- icon -->
           <div>
             <label class="field-label">Icon</label>
-            <div style="display:flex;gap:var(--sp-3);flex-wrap:wrap">
+            <!-- one choice out of a set: a radio group, not eight buttons.
+                 role=radiogroup/radio, aria-checked and arrow-key selection all
+                 come from kouji; the tile itself is the control, so the dot is
+                 hidden in CSS below. -->
+            <kj-radio-group class="ap-picker" orientation="horizontal" ariaLabel="Project icon"
+                            [value]="icon()" (valueChange)="icon.set($any($event))">
               @for (ic of icons; track ic) {
-                <button
-                  class="btn"
-                  (click)="icon.set(ic)"
-                  [style.border]="'1px solid ' + (icon() === ic ? 'var(--ui-focus)' : 'var(--hair)')"
-                  [style.background]="icon() === ic ? 'var(--ui-sel)' : 'var(--panel-2)'"
-                  style="padding:var(--sp-4);border-radius:var(--r-md)"
+                <kj-radio
+                  [value]="ic"
+                  [style.--ap-tile-ring]="icon() === ic ? 'var(--ui-focus)' : 'var(--hair)'"
+                  [style.--ap-tile-bg]="icon() === ic ? 'var(--ui-sel)' : 'var(--panel-2)'"
                 >
-                  <app-icon [name]="ic" size="sm" [color]="icon() === ic ? color() : 'var(--ink-3)'" />
-                </button>
+                  <app-icon [name]="ic" [color]="icon() === ic ? color() : 'var(--ink-3)'" />
+                </kj-radio>
               }
-            </div>
+            </kj-radio-group>
           </div>
 
           <!-- color -->
           <div>
             <label class="field-label">Color</label>
-            <div style="display:flex;gap:var(--sp-4)">
+            <kj-radio-group class="ap-picker ap-swatches" orientation="horizontal" ariaLabel="Project colour"
+                            [value]="color()" (valueChange)="color.set($any($event))">
               @for (c of colors; track c) {
-                <button
-                  (click)="color.set(c)"
-                  [style.background]="c"
-                  [style.border]="'2px solid ' + (color() === c ? 'var(--ink)' : 'transparent')"
-                  [style.box-shadow]="color() === c ? '0 0 0 2px var(--panel), 0 0 12px -2px ' + c : 'none'"
-                  style="width:var(--ctl-h);height:var(--ctl-h);border-radius:50%;cursor:pointer"
-                ></button>
+                <kj-radio
+                  [value]="c"
+                  [style.--ap-swatch]="c"
+                  [style.--ap-swatch-ring]="color() === c ? 'var(--ink)' : 'transparent'"
+                  [style.--ap-swatch-shadow]="color() === c ? '0 0 0 2px var(--panel), 0 0 12px -2px ' + c : 'none'"
+                ></kj-radio>
               }
-            </div>
+            </kj-radio-group>
           </div>
         </div>
 
-        <div style="padding:var(--sp-6) var(--sp-7);border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:var(--sp-4)">
-          <button class="btn ghost-hair" (click)="ui.closeAddProject()">Cancel</button>
-          <button class="btn primary" [disabled]="!canSubmit()" (click)="submit()"><app-icon name="plus" size="sm" />Add project</button>
+        <div style="padding:var(--sp-6) var(--sp-7);border-top:1px solid var(--hair);display:flex;justify-content:flex-end;gap:var(--sp-4);flex:none">
+          <kj-button kjVariant="outline" (click)="ui.closeAddProject()">Cancel</kj-button>
+          <kj-button kjVariant="default" [kjDisabled]="!canSubmit()" (click)="submit()"><app-icon name="plus" />Add project</kj-button>
         </div>
       </div>
-    </div>
+    </kj-dialog-shell>
   `,
+  styles: [
+    `
+      /* The panel box is the shared .kj-overlay-wrapper .kj-dialog recipe in
+         styles.css; only this modal's width and height cap are per-instance.
+         The field inputs wear .bare-input (also shared) — the surrounding box
+         already draws the border/background/focus ring. */
+      .kj-dialog {
+        width: round(calc(480px * var(--density)), 1px);
+        max-height: 90vh;
+      }
+      /* Both pickers are radio groups. kouji draws a dot plus a label slot;
+         here the projected tile IS the control, so the dot is removed and the
+         label slot becomes the hit target. Everything else — role=radio,
+         aria-checked, arrow-key selection, roving tabindex — is the
+         component's, not ours. ::ng-deep is required: kouji renders these
+         spans with ViewEncapsulation.None, so they carry no scope attribute
+         and an emulated rule from this component cannot reach them.
+
+         Metrics are the mockup's (design/app.html:12917-12930): the icon tile
+         is padding-sized, not a fixed box, and the swatch is a 26px circle. */
+      .ap-picker { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+      .ap-picker ::ng-deep .kj-radio-dot { display: none; }
+      .ap-picker ::ng-deep .kj-radio-inner { display: block; }
+      .ap-picker ::ng-deep .kj-radio-label {
+        display: grid;
+        place-items: center;
+        padding: var(--sp-4);
+        border-radius: var(--r-md);
+        border: 1px solid var(--ap-tile-ring, var(--hair));
+        background: var(--ap-tile-bg, var(--panel-2));
+        cursor: pointer;
+        transition: background .12s, border-color .12s;
+      }
+      .ap-picker ::ng-deep .kj-radio:focus-within .kj-radio-label { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
+
+      /* colour: a bare 26px circle — no tile around it */
+      .ap-swatches { gap: var(--sp-4); }
+      .ap-swatches ::ng-deep .kj-radio-label {
+        padding: 0;
+        width: round(calc(26px * var(--density)), 1px);
+        height: round(calc(26px * var(--density)), 1px);
+        border-radius: 50%;
+        background: var(--ap-swatch);
+        border: 2px solid var(--ap-swatch-ring, transparent);
+        box-shadow: var(--ap-swatch-shadow, none);
+      }
+    `,
+  ],
 })
-export class AddProjectModalComponent implements AfterViewInit {
+export class AddProjectModalComponent {
   readonly ui = inject(UiStore);
   private projectActions = inject(ProjectActionsService);
   private projects = inject(ProjectsStore);
@@ -301,9 +350,18 @@ export class AddProjectModalComponent implements AfterViewInit {
   );
   readonly detectedGit = signal(false);
 
-  private dirEl = viewChild<ElementRef<HTMLInputElement>>("dirEl");
+  private dirEl = viewChild<KjInputComponent>("dirEl");
 
   constructor() {
+    // Esc / outside-click close the overlay, not the store — clear the flag on
+    // teardown so the two can never drift.
+    inject(DestroyRef).onDestroy(() => this.ui.closeAddProject());
+    // Focus the directory field once the view exists. The rAF matters: the
+    // dialog runs a focus trap that pulls focus to the first tabbable element
+    // on open, and since the source picker became a tab strip that element is
+    // now a TAB — so focusing in the same frame gets overridden and the user
+    // lands on the picker instead of the field they came here to fill in.
+    afterNextRender(() => requestAnimationFrame(() => this.dirEl()?.focus()));
     effect(() => {
       const d = this.dir().trim();
       if (!d || this.source() !== "local") {
@@ -316,10 +374,6 @@ export class AddProjectModalComponent implements AfterViewInit {
         this.gitInit.set(!found);
       });
     });
-  }
-
-  ngAfterViewInit() {
-    this.dirEl()?.nativeElement.focus();
   }
 
   async browse() {

@@ -13,9 +13,20 @@ async function openKeymap(page: Page): Promise<void> {
   await page.goto("/");
   await page.waitForSelector("app-top-bar");
   await page.keyboard.press("Control+Shift+P");
+  // wait for the palette to actually mount before typing — a blind type/Enter
+  // races the first keystroke against bootstrap and silently runs nothing
+  // visible is not enough: the palette focuses its input in a microtask after
+  // render, and a keystroke that lands before that goes to the document —
+  // where the app's own shortcuts eat it and can close the palette outright
+  await expect(page.locator("app-command-palette input")).toBeFocused();
   await page.keyboard.type("settings");
+  // Enter runs whatever row is HIGHLIGHTED — wait for the palette to settle on
+  // one, or a loaded machine can press Enter between the query landing and the
+  // list re-rendering under it.
+  await expect(page.locator(".kj-command-item[data-active]")).toHaveCount(1);
   await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: "Keymap" }).click();
+  // the left nav is a <kj-list> of <kj-list-item>, not buttons
+  await page.locator(".set-nav-item", { hasText: "Keymap" }).click();
 }
 
 test("keymap lists commands by group with their default bindings", async ({ page }) => {

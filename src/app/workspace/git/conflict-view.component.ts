@@ -21,6 +21,7 @@ import {
 } from "../../shared/git/git-action-button.component";
 import { UiStore } from "../../ui/ui.store";
 import { fileDir, fileName } from "../../utils";
+import { KjBadgeComponent, KjButtonComponent, KjTextareaComponent } from "@kouji-ui/components";
 
 // ---- diff3 conflict-marker parsing ------------------------------------------
 // The backend checks the merge out with conflict_style_diff3, so `merged` is
@@ -100,23 +101,23 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
 @Component({
   selector: "app-conflict-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, GitActionButtonComponent],
+  imports: [IconComponent, GitActionButtonComponent, KjButtonComponent, KjBadgeComponent, KjTextareaComponent],
   template: `
     @if (session(); as s) {
-      <div class="cf-grid">
+      <div class="split-pane cf-grid">
         <!-- ── conflicted file list + session actions ─────────────────── -->
-        <div class="cf-side">
-          <div class="cf-side-head">
+        <div class="split-pane-side cf-side">
+          <div class="pane-head cf-side-head" style="display:block">
             <div style="display:flex;align-items:center;gap:var(--sp-3)">
               <app-icon name="branch" size="sm" color="var(--vcs-conflicted)" />
-              <span style="font-size:var(--fs-ui);font-weight:600;color:var(--ink)">Merge {{ s.theirs }} → {{ s.ours }}</span>
+              <span style="font-weight:var(--fw-medium);color:var(--ink)">Merge {{ s.theirs }} → {{ s.ours }}</span>
             </div>
-            <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-4);margin-top:var(--sp-4);font-size:var(--fs-2xs);color:var(--ink-4)">
+            <div class="tnum" style="display:flex;align-items:center;gap:var(--sp-4);margin-top:var(--sp-4);font-size:var(--fs-meta);color:var(--ink-4)">
               <span style="display:flex;align-items:center;gap:var(--sp-2)"><span class="sq" style="background:var(--ink-4)"></span>ours · {{ s.ours }}</span>
               <span style="display:flex;align-items:center;gap:var(--sp-2)"><span class="sq" style="background:var(--ink-2)"></span>theirs · {{ s.theirs }}</span>
             </div>
             <div style="margin-top:var(--sp-5)">
-              <div class="tnum" style="display:flex;justify-content:space-between;font-size:var(--fs-2xs);color:var(--ink-3);margin-bottom:var(--sp-2)">
+              <div class="tnum" style="display:flex;justify-content:space-between;font-size:var(--fs-meta);color:var(--ink-3);margin-bottom:var(--sp-2)">
                 <span>{{ totalResolved() }} resolved</span><span>{{ totalConflicts() - totalResolved() }} remaining</span>
               </div>
               <div class="meter">
@@ -130,40 +131,40 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
             @for (f of s.files; track f.path) {
               @let rc = resolvedCount(f);
               @let done = rc === conflictCount(f);
-              <div class="cf-file" [class.on]="f.path === activePath()" (click)="selectFile(f.path)">
+              <div class="cf-file list-row" [class.sel]="f.path === activePath()" (click)="selectFile(f.path)">
                 <span class="cf-dot" [class.done]="done">
-                  @if (done) { <app-icon name="check" size="sm" [px]="10" color="var(--ui-on-fill)" /> } @else { <span class="pip"></span> }
+                  @if (done) { <app-icon size="sm" name="check" color="var(--ui-on-fill)" /> } @else { <span class="pip"></span> }
                 </span>
                 <div style="flex:1;min-width:0">
-                  <div style="font-size:var(--fs-sm);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fname(f.path) }}</div>
-                  <div style="font-size:var(--fs-2xs);color:var(--ink-4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fdir(f.path) }}</div>
+                  <div class="trunc" style="color:var(--ink)">{{ fname(f.path) }}</div>
+                  <div class="trunc" style="font-size:var(--fs-meta);color:var(--ink-4)">{{ fdir(f.path) }}</div>
                 </div>
-                <span class="tnum" style="flex:none;font-size:var(--fs-2xs)" [style.color]="done ? 'var(--st-done)' : 'var(--vcs-conflicted)'">{{ rc }}/{{ conflictCount(f) }}</span>
+                <span class="tnum" style="flex:none;font-size:var(--fs-meta)" [style.color]="done ? 'var(--st-done)' : 'var(--vcs-conflicted)'">{{ rc }}/{{ conflictCount(f) }}</span>
               </div>
             }
           </div>
 
           <div class="cf-actions">
-            <button class="btn" [class.primary]="allDone()" [class.ghost-hair]="!allDone()" [disabled]="!allDone() || busy()"
-              (click)="commitMerge()" style="justify-content:center">
+            <kj-button class="kj-center" [kjVariant]="allDone() ? 'default' : 'outline'" [kjDisabled]="!allDone() || busy()"
+              (click)="commitMerge()">
               <app-icon name="commit" size="sm" />Commit merge
-            </button>
-            <button class="btn ghost-hair" [disabled]="busy()" (click)="abort()" style="justify-content:center;color:var(--st-blocked)">
+            </kj-button>
+            <kj-button class="kj-center" kjVariant="danger" [kjDisabled]="busy()" (click)="abort()">
               <app-icon name="discard" size="sm" />Abort
-            </button>
+            </kj-button>
           </div>
         </div>
 
         <!-- ── per-file 3-way merge surface ───────────────────────────── -->
         @if (activeFile(); as f) {
-          <div class="cf-main">
-            <div class="cf-main-head">
-              <app-icon name="merge" size="sm" color="var(--vcs-conflicted)" [px]="13" />
+          <div class="split-pane-main cf-main">
+            <div class="pane-head cf-main-head">
+              <app-icon size="lg" name="merge" color="var(--vcs-conflicted)" />
               <span style="color:var(--ink-4)">{{ fdir(f.path) }}</span><span style="margin-left:calc(-1 * var(--sp-2))">{{ fname(f.path) }}</span>
-              <span class="chip tnum" style="font-size:var(--fs-3xs);padding:1px var(--sp-3);color:var(--vcs-conflicted);border-color:color-mix(in oklch, var(--vcs-conflicted), transparent 55%)">3-way merge</span>
+              <kj-badge class="tnum" style="font-size:var(--fs-badge);padding:1px var(--sp-3);color:var(--vcs-conflicted);border-color:color-mix(in oklch, var(--vcs-conflicted), transparent 55%)">3-way merge</kj-badge>
               <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3)">
-                <button class="btn ghost-hair sm" (click)="acceptAll('ours')">Accept all ours</button>
-                <button class="btn ghost-hair sm" (click)="acceptAll('theirs')">theirs</button>
+                <kj-button kjVariant="outline" (click)="acceptAll('ours')">Accept all ours</kj-button>
+                <kj-button kjVariant="outline" (click)="acceptAll('theirs')">theirs</kj-button>
                 <!-- per-file AI resolve: native = accept both everywhere;
                      dropdown = the agent drives the resolution (estimate on the row) -->
                 <app-git-action-button
@@ -178,17 +179,16 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
                   style="flex:none"
                 />
                 @if (f.resolved) {
-                  <span class="chip tnum" style="font-size:var(--fs-3xs);color:var(--st-done);border-color:color-mix(in oklch, var(--st-done), transparent 55%)">staged</span>
+                  <kj-badge class="tnum" style="font-size:var(--fs-badge);color:var(--st-done);border-color:color-mix(in oklch, var(--st-done), transparent 55%)">staged</kj-badge>
                 } @else {
-                  <button class="btn ghost-hair sm" [disabled]="resolvedCount(f) !== conflictCount(f) || busy()"
-                    title="Write the chosen result and stage this file" (click)="stageFile(f)">
-                    <app-icon name="check" size="sm" [px]="11" />Stage file
-                  </button>
+                  <kj-button kjVariant="outline" [kjDisabled]="resolvedCount(f) !== conflictCount(f) || busy()" title="Write the chosen result and stage this file" (click)="stageFile(f)">
+                    <app-icon size="md" name="check" />Stage file
+                  </kj-button>
                 }
                 <div class="cf-nav">
-                  <button class="pane-btn" (click)="gotoConf(-1)" title="Previous conflict"><app-icon name="chevron" size="sm" [px]="13" style="transform:rotate(180deg)" /></button>
-                  <span class="tnum" style="font-size:var(--fs-2xs);color:var(--ink-3);padding:0 var(--sp-2)">{{ cursor() + 1 }}/{{ confIdxs().length }}</span>
-                  <button class="pane-btn" (click)="gotoConf(1)" title="Next conflict"><app-icon name="chevron" size="sm" [px]="13" /></button>
+                  <button kjButton class="pane-btn" (click)="gotoConf(-1)" title="Previous conflict"><app-icon size="lg" name="chevron" style="transform:rotate(180deg)" /></button>
+                  <span class="tnum" style="font-size:var(--fs-meta);color:var(--ink-3);padding:0 var(--sp-2)">{{ cursor() + 1 }}/{{ confIdxs().length }}</span>
+                  <button kjButton class="pane-btn" (click)="gotoConf(1)" title="Next conflict"><app-icon size="lg" name="chevron" /></button>
                 </div>
               </div>
             </div>
@@ -204,21 +204,21 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
                   <div class="cf-block" [attr.data-conf]="idx" [class.done]="done">
                     <div class="cf-block-head" [class.done]="done">
                       <span class="st-dot" [style.background]="done ? 'var(--st-done)' : 'var(--vcs-conflicted)'"></span>
-                      <span style="font-size:var(--fs-sm);font-weight:600;color:var(--ink)">Conflict {{ confNum(idx) }}</span>
-                      <span style="font-size:var(--fs-2xs)" [style.color]="done ? 'var(--st-done)' : 'var(--st-blocked)'">
+                      <span style="font-weight:var(--fw-medium);color:var(--ink)">Conflict {{ confNum(idx) }}</span>
+                      <span style="font-size:var(--fs-meta)" [style.color]="done ? 'var(--st-done)' : 'var(--st-blocked)'">
                         {{ done ? 'resolved · ' + resLabel(res) : 'unresolved' }}
                       </span>
                       <div style="margin-left:auto;display:flex;gap:var(--sp-3)">
-                        <button class="btn ghost-hair sm" (click)="resolveSeg(idx, 'both')">Both</button>
-                        <button class="btn ghost-hair sm" [style.color]="baseOpen()[idx] ? 'var(--ink)' : 'var(--ink-3)'" (click)="toggleBase(idx)">
-                          <app-icon [name]="baseOpen()[idx] ? 'chevronD' : 'chevron'" size="sm" [px]="11" />Base
-                        </button>
+                        <kj-button kjVariant="outline" (click)="resolveSeg(idx, 'both')">Both</kj-button>
+                        <kj-button kjVariant="outline" [style.--kj-button-fg]="baseOpen()[idx] ? 'var(--ink)' : 'var(--ink-3)'" (click)="toggleBase(idx)">
+                          <app-icon size="md" [name]="baseOpen()[idx] ? 'chevronD' : 'chevron'" />Base
+                        </kj-button>
                       </div>
                     </div>
 
                     @if (baseOpen()[idx]) {
                       <div style="padding:var(--sp-2) 0;border-bottom:1px solid var(--hair);background:var(--bg)">
-                        <div class="up" style="font-size:var(--fs-3xs);color:var(--ink-4);padding:0 var(--sp-6) var(--sp-2)">base · common ancestor</div>
+                        <div class="up" style="color:var(--ink-4);padding:0 var(--sp-6) var(--sp-2)">base · common ancestor</div>
                         <pre class="cf-base">{{ seg.base.length ? seg.base.join('\n') : '(no common ancestor — both sides added this)' }}</pre>
                       </div>
                     }
@@ -227,22 +227,22 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
                       <div class="side" [class.chosen]="res.res === 'ours'" style="--side:var(--ink-4)">
                         <div class="side-head">
                           <span class="sq" style="background:var(--ink-4)"></span>
-                          <span style="font-size:var(--fs-xs);font-weight:600;color:var(--ink)">Ours</span>
-                          <span class="tnum" style="font-size:var(--fs-3xs);color:var(--ink-4)">{{ s.ours }}</span>
-                          <button class="btn accept" [class.on]="res.res === 'ours'" (click)="resolveSeg(idx, 'ours')">
-                            @if (res.res === 'ours') { <app-icon name="check" size="sm" [px]="11" />accepted } @else { accept }
-                          </button>
+                          <span style="font-weight:var(--fw-medium);color:var(--ink)">Ours</span>
+                          <span class="tnum" style="font-size:var(--fs-badge);color:var(--ink-4)">{{ s.ours }}</span>
+                          <kj-button kjVariant="outline" [kjPressed]="res.res === 'ours'" (click)="resolveSeg(idx, 'ours')">
+                            @if (res.res === 'ours') { <app-icon size="md" name="check" />accepted } @else { accept }
+                          </kj-button>
                         </div>
                         <pre class="side-code">@for (l of seg.ours; track $index) {<div class="ln"><span class="g">{{ res.res === 'ours' ? '✓' : '·' }}</span><code>{{ l }}</code></div>}</pre>
                       </div>
                       <div class="side" [class.chosen]="res.res === 'theirs'" style="--side:var(--ink-2)">
                         <div class="side-head">
                           <span class="sq" style="background:var(--ink-2)"></span>
-                          <span style="font-size:var(--fs-xs);font-weight:600;color:var(--ink)">Theirs</span>
-                          <span class="tnum" style="font-size:var(--fs-3xs);color:var(--ink-4)">{{ s.theirs }}</span>
-                          <button class="btn accept" [class.on]="res.res === 'theirs'" (click)="resolveSeg(idx, 'theirs')">
-                            @if (res.res === 'theirs') { <app-icon name="check" size="sm" [px]="11" />accepted } @else { accept }
-                          </button>
+                          <span style="font-weight:var(--fw-medium);color:var(--ink)">Theirs</span>
+                          <span class="tnum" style="font-size:var(--fs-badge);color:var(--ink-4)">{{ s.theirs }}</span>
+                          <kj-button kjVariant="outline" [kjPressed]="res.res === 'theirs'" (click)="resolveSeg(idx, 'theirs')">
+                            @if (res.res === 'theirs') { <app-icon size="md" name="check" />accepted } @else { accept }
+                          </kj-button>
                         </div>
                         <pre class="side-code">@for (l of seg.theirs; track $index) {<div class="ln"><span class="g">{{ res.res === 'theirs' ? '✓' : '·' }}</span><code>{{ l }}</code></div>}</pre>
                       </div>
@@ -250,25 +250,26 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
 
                     <div style="border-top:1px solid var(--hair);background:var(--bg)">
                       <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-5)">
-                        <app-icon name="enter" size="sm" [px]="12" [color]="done ? 'var(--st-done)' : 'var(--ink-4)'" />
-                        <span class="up" style="font-size:var(--fs-3xs);color:var(--ink-4)">Result</span>
+                        <app-icon size="md" name="enter" [color]="done ? 'var(--st-done)' : 'var(--ink-4)'" />
+                        <span class="up" style="color:var(--ink-4)">Result</span>
                         @if (done) {
-                          <button class="btn sm" style="margin-left:auto" [style.color]="editing() === idx ? 'var(--ui-ink)' : 'var(--ink-3)'"
-                            (click)="editing.set(editing() === idx ? null : idx)">
-                            <app-icon name="rename" size="sm" [px]="11" />{{ editing() === idx ? 'done' : 'edit' }}
-                          </button>
+                          <kj-button kjVariant="ghost" [style.--kj-button-fg]="editing() === idx ? 'var(--ui-ink)' : 'var(--ink-3)'" (click)="editing.set(editing() === idx ? null : idx)">
+                            <app-icon size="md" name="rename" />{{ editing() === idx ? 'done' : 'edit' }}
+                          </kj-button>
                         }
                       </div>
                       @if (done) {
                         @if (editing() === idx) {
-                          <textarea class="cf-edit" spellcheck="false" [value]="resultText(seg, res)"
-                            (blur)="editResult(idx, $any($event.target).value)"></textarea>
+                          <!-- focusout, not blur: the kj-textarea host is display:contents,
+                               so only bubbling events reach a host listener -->
+                          <kj-textarea class="cf-edit" [kjValue]="resultText(seg, res)"
+                            (focusout)="editResult(idx, $any($event.target).value)" />
                         } @else {
                           <pre class="cf-result">@for (l of resultText(seg, res).split('\n'); track $index) {<div class="ln"><span class="g">+</span><code>{{ l }}</code></div>}</pre>
                         }
                       } @else {
-                        <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4);border-top:1px dashed var(--hair-2);display:flex;align-items:center;gap:var(--sp-3)">
-                          <app-icon name="flag" size="sm" [px]="12" color="var(--st-blocked)" />pick a side above, or accept both, to resolve
+                        <div style="padding:var(--sp-4) var(--sp-6);color:var(--ink-4);border-top:1px dashed var(--hair-2);display:flex;align-items:center;gap:var(--sp-3)">
+                          <app-icon size="md" name="flag" color="var(--st-blocked)" />pick a side above, or accept both, to resolve
                         </div>
                       }
                     </div>
@@ -278,42 +279,23 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
             </div>
           </div>
         } @else {
-          <div style="display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">no conflicted files</div>
+          <div class="pane-empty">no conflicted files</div>
         }
       </div>
     } @else if (loading()) {
-      <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">reading merge session…</div>
+      <div class="pane-empty">reading merge session…</div>
     } @else {
-      <div style="flex:1;display:grid;place-items:center;color:var(--ink-4);font-size:var(--fs-ui)">no merge in progress</div>
+      <div class="pane-empty">no merge in progress</div>
     }
   `,
   styles: [
     `
-      :host {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 0;
-        min-width: 0;
-      }
+      /* geometry: .split-pane / .split-pane-side / .split-pane-main + the
+         .pane-head header rows; the host fill is the shared app-conflict-view
+         rule in styles.css. Only the column width and this view's own grounds
+         are left here. */
       .cf-grid {
-        flex: 1;
-        display: grid;
-        grid-template-columns: 292px 1fr;
-        min-height: 0;
-        background: var(--panel-2);
-      }
-      .cf-side {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        border-right: 1px solid var(--hair);
-        background: var(--panel);
-      }
-      .cf-side-head {
-        padding: var(--sp-4) var(--sp-6);
-        border-bottom: 1px solid var(--hair);
-        flex: none;
+        --split-w: 292px;
       }
       .sq {
         width: 7px;
@@ -322,32 +304,16 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
         flex: none;
         display: inline-block;
       }
-      .meter {
-        height: 4px;
-        border-radius: 3px;
-        background: var(--hair);
-        overflow: hidden;
-      }
-      .meter i {
-        display: block;
-        height: 100%;
-        border-radius: 3px;
+      /* box comes from the shared .meter; the fill animation is local */
+      .meter > i {
         transition: width 0.2s ease;
       }
+      /* margin / radius / cursor / hover / selected all come from .list-row */
       .cf-file {
         display: flex;
         align-items: center;
         gap: var(--sp-3);
         padding: var(--sp-3) var(--sp-5);
-        cursor: pointer;
-        margin: 1px var(--sp-3);
-        border-radius: var(--r-sm);
-      }
-      .cf-file:hover:not(.on) {
-        background: var(--panel-2);
-      }
-      .cf-file.on {
-        background: var(--panel-3);
       }
       .cf-dot {
         flex: none;
@@ -377,26 +343,13 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
         flex: none;
       }
       .cf-main {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        min-width: 0;
         background: var(--bg);
       }
       .cf-main-head {
-        display: flex;
-        align-items: center;
         gap: var(--sp-3);
         padding: var(--sp-3) var(--sp-5);
         background: var(--panel);
-        border-bottom: 1px solid var(--hair);
-        font-size: var(--fs-sm);
-        flex: none;
-      }
-      .btn.sm {
-        padding: var(--sp-1) var(--sp-3);
-        font-size: var(--fs-xs);
-      }
+        }
       .cf-nav {
         display: flex;
         align-items: center;
@@ -410,7 +363,6 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
       pre {
         margin: 0;
         font-family: var(--font-mono);
-        font-size: var(--fs-sm);
         line-height: 1.65;
       }
       .ln {
@@ -487,19 +439,6 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
         border-bottom: 1px solid var(--hair);
         background: color-mix(in oklch, var(--side), transparent 88%);
       }
-      .btn.accept {
-        margin-left: auto;
-        padding: var(--sp-1) var(--sp-4);
-        font-size: var(--fs-2xs);
-        color: var(--ink-3);
-        border: 1px solid var(--hair);
-        background: transparent;
-      }
-      .btn.accept.on {
-        color: var(--side);
-        border-color: var(--side);
-        background: color-mix(in oklch, var(--side), transparent 86%);
-      }
       .side-code {
         padding: var(--sp-2) 0;
       }
@@ -517,18 +456,18 @@ function resultLines(seg: Extract<ConflictSegment, { type: "conflict" }>, r: Sid
       .cf-result code {
         color: var(--code-add-ink);
       }
-      .cf-edit {
-        width: 100%;
-        min-height: 70px;
-        resize: vertical;
-        background: var(--panel-2);
-        border: 1px solid var(--ui-focus);
-        outline: none;
-        color: var(--code-add-ink);
-        font-family: var(--font-mono);
-        font-size: var(--fs-sm);
-        line-height: 1.65;
-        padding: var(--sp-2) var(--sp-5) var(--sp-2) var(--sp-6);
+      /* Result editor — kouji declares the --kj-textarea-* knobs ON the inner
+         .kj-textarea (layered), so this unlayered ::ng-deep rule retargets them
+         there; host-level custom properties would lose to those declarations. */
+      /* only the DELTAS from the app-wide kj-textarea defaults in styles.css */
+      :host ::ng-deep kj-textarea.cf-edit .kj-textarea {
+        --kj-textarea-fg: var(--code-add-ink);
+        --kj-textarea-border-color: var(--ui-focus);
+        --kj-textarea-radius: 0;
+        --kj-textarea-line-height: 1.65;
+        --kj-textarea-padding-y: var(--sp-2);
+        --kj-textarea-min-height: 70px;
+        padding-left: var(--sp-6);
       }
     `,
   ],

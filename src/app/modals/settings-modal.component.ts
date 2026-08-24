@@ -2,8 +2,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   EventEmitter,
-  HostListener,
   inject,
   Input,
   Output,
@@ -28,11 +28,30 @@ import {
   SOUND_OPTIONS,
 } from "../settings/settings.store";
 import { IconComponent } from "../shared/icon.component";
+import { SelectComponent } from "../shared/select.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { RuntimeRowComponent } from "./runtime-row.component";
 import { NotificationAlertService } from "../notifications/notification-alert.service";
 import { VersionService } from "../shared/version.service";
 import { RELEASES_URL } from "../shared/links";
+import {
+  KjBadgeComponent,
+  KjButtonComponent,
+  KjComboboxComponent,
+  KjComboboxEmptyComponent,
+  KjComboboxOptionComponent,
+  KjKbdComponent,
+  KjNumberInputComponent,
+  KjProgressBarComponent,
+  KjSliderComponent,
+  KjTabComponent,
+  KjTabListComponent,
+  KjTabsComponent,
+  KjListComponent,
+  KjListItemComponent,
+  KjSpinnerComponent,
+  KjToggleComponent,
+} from "@kouji-ui/components";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ORCHESTRA settings surface — faithful Angular port of the KJ design bundle v2
@@ -40,237 +59,16 @@ import { RELEASES_URL } from "../shared/links";
 // reset-all + "changes apply instantly" + Cancel + Done). Instant-apply via
 // SettingsStore; per-row reset pills compare against the backend defaults.
 //
-// The primitives below use classic @Input/@Output (not signal inputs) ON PURPOSE:
-// the vitest JIT compiler can't wire signal inputs (NG0950), and these are the
-// components the modal's DOM specs render for real.
+// Controls are kouji primitives (kj-toggle / kj-button / kj-combobox /
+// kj-number-input / kj-slider / app-select); only SetRowComponent remains a
+// local primitive. It uses classic @Input/@Output (not signal inputs) ON
+// PURPOSE: the vitest JIT compiler can't wire signal inputs (NG0950), and it's
+// a component the modal's DOM specs render for real.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SegOption {
   value: string;
   label: string;
-}
-
-@Component({
-  selector: "app-set-seg",
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  // every settings primitive ships its slice of the design stylesheet with
-  // encapsulation OFF (classes are .set--namespaced; the CSS styles svg glyphs
-  // inside the icon component) — and splitting keeps each chunk well under the
-  // per-component style budget.
-  encapsulation: ViewEncapsulation.None,
-  imports: [IconComponent],
-  styles: [
-    `
-.set-seg{display:inline-flex;padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);
-  border-radius:8px;gap:var(--sp-1);}
-.set-seg button{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-3);
-  height:var(--ctl-h);padding:0 var(--sp-6);border:none;background:transparent;color:var(--ink-3);
-  font-family:var(--font-mono);font-size:var(--fs-sm);cursor:pointer;border-radius:6px;white-space:nowrap;
-  transition:all .12s;}
-.set-seg button:hover{color:var(--ink-2);}
-.set-seg button.on{color:var(--ink);background:var(--panel-3);box-shadow:0 0 0 1px var(--hair-2);}
-.set-seg button.on svg{color:var(--ui-ink);}
-.set-seg button svg{width:var(--sp-6);height:var(--sp-6);}
-.set-seg button.dgr.on{color:var(--set-danger);
-  background:color-mix(in oklch,var(--set-danger),transparent 88%);
-  box-shadow:0 0 0 1px color-mix(in oklch,var(--set-danger),transparent 52%);}
-.set-seg button.dgr.on svg{color:var(--set-danger);}
-    `,
-  ],
-  template: `
-    <div class="set-seg" role="radiogroup">
-      @for (o of opts; track o.value) {
-        <button
-          type="button"
-          role="radio"
-          [attr.aria-checked]="o.value === value"
-          [class.on]="o.value === value"
-          [class.dgr]="danger !== null && o.value === danger"
-          (click)="changed.emit(o.value)"
-        >
-          @if (danger !== null && o.value === danger) { <app-icon name="flag" size="sm" /> }
-          {{ o.label }}
-        </button>
-      }
-    </div>
-  `,
-})
-export class SetSegComponent {
-  @Input() value = "";
-  @Input() set options(v: ReadonlyArray<string | SegOption>) {
-    this.opts = v.map((o) => (typeof o === "string" ? { value: o, label: o } : o));
-  }
-  /** A value rendered in the danger style (flag icon + red when selected). */
-  @Input() danger: string | null = null;
-  @Output() readonly changed = new EventEmitter<string>();
-  opts: SegOption[] = [];
-}
-
-@Component({
-  selector: "app-set-tgl",
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None,
-  styles: [
-    `
-.set-tgl{position:relative;width:34px;height:19px;border:none;border-radius:999px;
-  background:var(--hair-2);cursor:pointer;padding:0;transition:background .16s;flex:none;}
-.set-tgl.on{background:var(--ui-fill);}
-.set-tgl i{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;
-  background:var(--on-solid);box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .16s;}
-.set-tgl.on i{transform:translateX(15px);}
-/* toggle dims are deliberate fixed-geometry mini-widget — 34×19 track + 15×15 thumb */
-    `,
-  ],
-  template: `
-    <button
-      type="button"
-      class="set-tgl"
-      [class.on]="value"
-      role="switch"
-      [attr.aria-checked]="value"
-      [disabled]="disabled"
-      (click)="changed.emit(!value)"
-    ><i></i></button>
-  `,
-})
-export class SetToggleComponent {
-  @Input() value = false;
-  @Input() disabled = false;
-  @Output() readonly changed = new EventEmitter<boolean>();
-}
-
-@Component({
-  selector: "app-set-select",
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None,
-  styles: [
-    `
-.set-sel{appearance:none;height:var(--ctl-h);padding:0 var(--sp-10) 0 var(--sp-5);background:var(--panel-2);
-  border:1px solid var(--hair);border-radius:7px;color:var(--ink);font-family:var(--font-mono);
-  font-size:var(--fs-ui);cursor:pointer;outline:none;transition:border-color .12s;
-  background-image:linear-gradient(45deg,transparent 50%,var(--ink-3) 50%),linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);
-  background-position:right 13px center,right 8px center;background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
-.set-sel:hover{border-color:var(--hair-2);}
-.set-sel:focus{border-color:var(--ui-focus);}
-    `,
-  ],
-  template: `
-    <select class="set-sel" [style.width.px]="width" (change)="changed.emit($any($event.target).value)">
-      @for (o of opts; track o.value) {
-        <option [value]="o.value" [selected]="o.value === value">{{ o.label }}</option>
-      }
-    </select>
-  `,
-})
-export class SetSelectComponent {
-  @Input() value = "";
-  @Input() set options(v: ReadonlyArray<string | SegOption>) {
-    this.opts = v.map((o) => (typeof o === "string" ? { value: o, label: o } : o));
-  }
-  @Input() width: number | null = null;
-  @Output() readonly changed = new EventEmitter<string>();
-  opts: SegOption[] = [];
-}
-
-/** Model combobox — curated list + free-text custom override (Enter to apply). */
-@Component({
-  selector: "app-set-combo",
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None,
-  imports: [IconComponent],
-  styles: [
-    `
-.set-combo{position:relative;}
-.set-combo-btn{display:inline-flex;align-items:center;gap:var(--sp-5);height:var(--ctl-h);padding:0 var(--sp-4) 0 var(--sp-5);
-  min-width:186px;justify-content:space-between;background:var(--panel-2);border:1px solid var(--hair);
-  border-radius:7px;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-ui);cursor:pointer;transition:all .12s;}
-.set-combo-btn:hover{border-color:var(--hair-2);}
-.set-combo-btn.open{border-color:var(--ui-focus);box-shadow:0 0 0 3px var(--ui-sel);}
-.set-combo-btn .cv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.set-combo-btn .tag{font-size:var(--fs-3xs);letter-spacing:.1em;text-transform:uppercase;color:var(--ui-ink);
-  border:1px solid var(--ui-sel-2);border-radius:4px;padding:1px var(--sp-2);flex:none;}
-.set-combo-btn svg{width:var(--sp-6);height:var(--sp-6);color:var(--ink-3);flex:none;transition:transform .15s;}
-.set-combo-btn.open svg{transform:rotate(180deg);color:var(--ui-ink);}
-.set-combo-pop{position:absolute;top:calc(100% + 6px);right:0;z-index:6;width:248px;
-  background:var(--elev);border:1px solid var(--hair-2);border-radius:11px;box-shadow:var(--shadow);
-  padding:var(--sp-3);animation:set-pop .14s ease;}
-.set-combo-lbl{font-size:var(--fs-3xs);letter-spacing:.13em;text-transform:uppercase;color:var(--ink-4);
-  padding:var(--sp-2) var(--sp-4) var(--sp-2);}
-.set-combo-opt{display:flex;align-items:center;gap:var(--sp-4);height:var(--row-h);padding:0 var(--sp-4);border-radius:7px;
-  color:var(--ink-2);font-size:var(--fs-ui);cursor:pointer;transition:all .1s;}
-.set-combo-opt:hover{background:var(--panel-3);color:var(--ink);}
-.set-combo-opt.on{color:var(--ink);background:var(--panel-2);}
-.set-combo-opt .ck{width:14px;flex:none;color:var(--ui-ink);}
-.set-combo-opt .cn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.set-combo-custom{margin-top:var(--sp-2);border-top:1px solid var(--hair);padding-top:var(--sp-3);}
-.set-combo-field{display:flex;align-items:center;gap:var(--sp-3);height:var(--row-h);padding:0 var(--sp-4);background:var(--panel-2);
-  border:1px solid var(--hair);border-radius:7px;}
-.set-combo-field:focus-within{border-color:var(--ui-focus);}
-.set-combo-field span{color:var(--ink-4);font-size:var(--fs-sm);flex:none;}
-.set-combo-field input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);
-  font-family:var(--font-mono);font-size:var(--fs-ui);}
-.set-combo-field kbd{font-size:var(--fs-3xs);color:var(--ink-4);border:1px solid var(--hair-2);border-radius:4px;
-  padding:1px var(--sp-2);flex:none;}
-    `,
-  ],
-  template: `
-    <div class="set-combo">
-      <button type="button" class="set-combo-btn" [class.open]="open" (click)="openChange.emit(!open)">
-        <span class="cv">{{ value }}</span>
-        <span style="display:flex;align-items:center;gap:var(--sp-4);flex:none">
-          @if (isCustom) { <span class="tag">custom</span> }
-          <app-icon name="chevronD" size="sm" />
-        </span>
-      </button>
-      @if (open) {
-        <div class="set-combo-pop">
-          <div class="set-combo-lbl">Curated models</div>
-          @for (m of options; track m) {
-            <div class="set-combo-opt" [class.on]="m === value" (click)="pick(m)">
-              <span class="ck">@if (m === value) { <app-icon name="check" size="sm" /> }</span>
-              <span class="cn">{{ m }}</span>
-            </div>
-          }
-          <div class="set-combo-custom">
-            <div class="set-combo-lbl" style="padding-top:0">Custom — CLIs don’t expose a list</div>
-            <div class="set-combo-field">
-              <span>›</span>
-              <input
-                [value]="custom()"
-                [placeholder]="isCustom ? value : 'model-id…'"
-                (input)="custom.set($any($event.target).value)"
-                (keydown.enter)="commit()"
-              />
-              <kbd>↵</kbd>
-            </div>
-          </div>
-        </div>
-      }
-    </div>
-  `,
-})
-export class ModelComboComponent {
-  @Input() value = "";
-  @Input() options: string[] = [];
-  @Input() open = false;
-  @Output() readonly openChange = new EventEmitter<boolean>();
-  @Output() readonly changed = new EventEmitter<string>();
-  readonly custom = signal("");
-
-  get isCustom(): boolean {
-    return !this.options.includes(this.value);
-  }
-  pick(m: string): void {
-    this.changed.emit(m);
-    this.openChange.emit(false);
-  }
-  commit(): void {
-    const v = this.custom().trim();
-    if (!v) return;
-    this.changed.emit(v);
-    this.custom.set("");
-    this.openChange.emit(false);
-  }
 }
 
 /** One settings row: label (+ reset pill when dirty), help, and the projected
@@ -279,7 +77,7 @@ export class ModelComboComponent {
   selector: "app-set-row",
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
-  imports: [IconComponent],
+  imports: [IconComponent, KjButtonComponent],
   styles: [
     `
 .set-row{display:flex;align-items:flex-start;gap:var(--sp-7);padding:var(--sp-5) 0;}
@@ -289,21 +87,21 @@ export class ModelComboComponent {
 .set-row.dis{opacity:.45;pointer-events:none;}
 .set-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--sp-1);}
 .set-row.wide .set-row-main{width:100%;}
-.set-row-lbl{font-size:var(--fs-ui);color:var(--ink);display:flex;align-items:center;gap:var(--sp-4);line-height:1.2;}
-.set-row-help{font-size:var(--fs-xs);color:var(--ink-4);line-height:1.5;max-width:46ch;}
-.set-row-help code{font-family:var(--font-mono);color:var(--ink-3);background:var(--panel-2);
-  padding:0 var(--sp-2);border-radius:4px;font-size:var(--fs-xs);}
+.set-row-lbl{color:var(--ink);display:flex;align-items:center;gap:var(--sp-4);line-height:1.2;}
+/* only the measure is Settings-specific; the rest is the global <small> */
+.set-row-help{max-width:46ch;}
+.set-row-help code{color:var(--ink-3);background:var(--panel-2);
+  padding:0 var(--sp-2);border-radius:4px;}
 .set-row-ctrl{flex:none;display:flex;align-items:center;gap:var(--sp-4);padding-top:1px;}
-.set-kbd{font-family:var(--font-mono);font-size:var(--fs-xs);padding:var(--sp-1) var(--sp-4);min-width:110px;justify-content:center;}
 .set-row.wide .set-row-ctrl{width:100%;padding-top:0;}
 
-.set-reset{display:inline-flex;align-items:center;gap:var(--sp-2);height:var(--sp-7);padding:0 var(--sp-3) 0 var(--sp-2);
+.set-reset .kj-button{display:inline-flex;align-items:center;gap:var(--sp-2);height:var(--sp-7);padding:0 var(--sp-3) 0 var(--sp-2);
   border-radius:999px;border:1px solid var(--hair);background:var(--panel-2);color:var(--ink-3);
-  font-family:var(--font-mono);font-size:var(--fs-3xs);letter-spacing:.06em;text-transform:uppercase;
-  cursor:pointer;transition:all .12s;flex:none;}
-.set-reset:hover{color:var(--ui-ink);border-color:var(--ui-line);
+  font-family:var(--font-mono);font-size:var(--fs-badge);letter-spacing:.06em;text-transform:uppercase;
+  cursor:pointer;transition:all .12s;flex:none;box-shadow:none;}
+.set-reset .kj-button:hover{color:var(--ui-ink);border-color:var(--ui-line);
   background:var(--ui-sel);}
-.set-reset svg{width:var(--sp-4);height:var(--sp-4);}
+.set-reset .kj-button svg{width:var(--sp-4);height:var(--sp-4);}
     `,
   ],
   template: `
@@ -312,12 +110,12 @@ export class ModelComboComponent {
         <div class="set-row-lbl">
           <ng-content select="[row-label]" />
           @if (dirty && !disabled) {
-            <button type="button" class="set-reset" title="Reset to default" (click)="reset.emit()">
+            <kj-button kjVariant="ghost" class="set-reset" title="Reset to default" (click)="reset.emit()">
               <app-icon name="refresh" size="sm" />reset
-            </button>
+            </kj-button>
           }
         </div>
-        <div class="set-row-help"><ng-content select="[row-help]" /></div>
+        <small class="set-row-help"><ng-content select="[row-help]" /></small>
       </div>
       <div class="set-row-ctrl"><ng-content /></div>
     </div>
@@ -360,435 +158,502 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   // glyphs INSIDE the icon/badge child components — encapsulation off keeps the
   // pixel-level CSS working verbatim (everything is namespaced under .set-).
   encapsulation: ViewEncapsulation.None,
-  imports: [IconComponent, ToolBadgeComponent, SetSegComponent, SetToggleComponent, SetSelectComponent, ModelComboComponent, SetRowComponent, RuntimeRowComponent],
+  imports: [
+    IconComponent,
+    ToolBadgeComponent,
+    SelectComponent,
+    SetRowComponent,
+    RuntimeRowComponent,
+    KjBadgeComponent,
+    KjButtonComponent,
+    KjComboboxComponent,
+    KjComboboxEmptyComponent,
+    KjComboboxOptionComponent,
+    KjKbdComponent,
+    KjNumberInputComponent,
+    KjProgressBarComponent,
+    KjSliderComponent,
+    KjTabsComponent,
+    KjTabListComponent,
+    KjTabComponent,
+    KjListComponent,
+    KjListItemComponent,
+    KjSpinnerComponent,
+    KjToggleComponent,
+  ],
+  host: { role: "dialog", "aria-modal": "true", "aria-label": "Settings" },
   template: `
     @let s = store.settings();
-    <div class="set-backdrop" (mousedown)="close()">
-      <div class="set-modal" role="dialog" aria-label="Settings" (mousedown)="onModalDown($event)">
-        <!-- nav -->
-        <nav class="set-nav">
-          <div class="set-brand">
-            <span class="gi"><app-icon name="settings" size="sm" /></span>
-            <div style="min-width:0">
-              <div class="bt">Settings</div>
-              <div class="bs">Orrery preferences</div>
-            </div>
+    <div class="set-modal">
+      <!-- nav -->
+      <nav class="set-nav">
+        <div class="set-brand">
+          <span class="gi glyph-plate"><app-icon name="settings" size="sm" /></span>
+          <div style="min-width:0">
+            <h1 class="bt">Settings</h1>
+            <p class="bs">Orrery preferences</p>
           </div>
-          <div class="set-nav-list">
-            @for (sec of sections; track sec.id) {
-              <button type="button" class="set-nav-item" [class.on]="section() === sec.id" (click)="selectSection(sec.id)">
-                <app-icon [name]="sec.icon" size="sm" />
-                <span class="lb">{{ sec.label }}</span>
-                @if (sec.id === 'updates' && store.updateKnown()) { <span class="set-nav-dot" title="Update available"></span> }
-              </button>
-            }
+        </div>
+        <!-- kouji's list is built for exactly this row ("Sidebar nav with
+             active row" in its docs): it carries the list semantics, the
+             current-row state and arrow-key navigation, none of which the old
+             [class.on] buttons gave assistive tech. -->
+        <kj-list
+          class="set-nav-list"
+          as="ul"
+          [arrowNavigation]="true"
+          [hoverable]="true"
+          ariaLabel="Settings sections"
+        >
+          @for (sec of sections; track sec.id) {
+            <kj-list-item
+              class="set-nav-item"
+              [active]="section() === sec.id"
+              (click)="selectSection(sec.id)"
+            >
+              <app-icon [name]="sec.icon" size="sm" />
+              <span class="lb trunc">{{ sec.label }}</span>
+              @if (sec.id === 'updates' && store.updateKnown()) { <span class="set-nav-dot" title="Update available"></span> }
+            </kj-list-item>
+          }
+        </kj-list>
+      </nav>
+
+      <!-- main -->
+      <div class="set-main">
+        <div class="set-head">
+          <div>
+            <h2 class="ht">{{ current().label }}</h2>
+            <p class="hs">{{ subs[section()] }}</p>
           </div>
-        </nav>
+          <kj-button kjSize="icon" class="set-x" kjAriaLabel="Close settings" (click)="close()"><app-icon name="x" size="sm" /></kj-button>
+        </div>
 
-        <!-- main -->
-        <div class="set-main">
-          <div class="set-head">
-            <div>
-              <div class="ht">{{ current().label }}</div>
-              <div class="hs">{{ subs[section()] }}</div>
-            </div>
-            <button type="button" class="set-x" aria-label="Close settings" (click)="close()"><app-icon name="x" size="sm" /></button>
-          </div>
-
-          <div class="set-body">
-            @switch (section()) {
-              <!-- ── Updates ─────────────────────────────────────────────── -->
-              @case ("updates") {
-                <div class="set-grp">
-                  <div class="set-grp-h">Release channel<span class="ln"></span></div>
-                  <app-set-row [dirty]="s.channel !== D.channel" (reset)="store.set({ channel: D.channel })">
-                    <ng-container row-label>Channel</ng-container>
-                    <ng-container row-help>Beta receives pre-release builds first.</ng-container>
-                    <app-set-seg [value]="s.channel" [options]="['stable', 'beta']" (changed)="store.set({ channel: $any($event) })" />
-                  </app-set-row>
-                  @if (s.channel === 'beta') {
-                    <div class="set-warn" style="margin-top:var(--sp-1)">
-                      <app-icon name="flag" size="sm" />
-                      Pre-release builds — may be unstable or break worktrees. Roll back from this panel anytime.
-                    </div>
-                  }
-                  <app-set-row [dirty]="s.updatePolicy !== D.updatePolicy" (reset)="store.set({ updatePolicy: D.updatePolicy })">
-                    <ng-container row-label>Install policy</ng-container>
-                    <ng-container row-help>What Orrery does when a new build is available.</ng-container>
-                    <app-set-seg [value]="s.updatePolicy" [options]="policyOptions" (changed)="store.set({ updatePolicy: $any($event) })" />
-                  </app-set-row>
-                </div>
-
-                <div class="set-grp">
-                  <div class="set-grp-h">Version<span class="ln"></span></div>
-                  <app-set-row>
-                    <ng-container row-label>Current build</ng-container>
-                    <ng-container row-help>
-                      Orrery <code>v{{ version.version() || '—' }}</code> · {{ s.channel }} channel · checked
-                      {{ store.checking() ? 'now…' : lastChecked() }}
-                    </ng-container>
-                    <div style="display:flex;align-items:center;gap:var(--sp-4)">
-                      <span class="set-vchip tnum">v{{ version.version() || '—' }}<b>·</b>{{ s.channel === 'beta' ? 'BETA' : 'STABLE' }}</span>
-                      <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-5)" [disabled]="store.checking()" (click)="store.checkNow()">
-                        <app-icon name="refresh" size="sm" [class.set-spin]="store.checking()" />
-                        {{ store.checking() ? 'Checking…' : 'Check now' }}
-                      </button>
-                    </div>
-                  </app-set-row>
-
-                  @if (store.updateCard(); as upd) {
-                    <app-set-row [wide]="true">
-                      <ng-container row-label>Update available</ng-container>
-                      <ng-container row-help>A newer build is ready to install.</ng-container>
-                      <div class="set-upd">
-                        <div class="set-upd-top">
-                          <span class="set-upd-ic"><app-icon name="stage" /></span>
-                          <div class="set-upd-tt">
-                            <div class="u1">Orrery <span class="set-upd-ver">v{{ upd.version }}</span></div>
-                            <div class="u2">@if (upd.date) { released {{ upd.date }} · } upgrades from v{{ version.version() || '—' }}</div>
-                          </div>
-                        </div>
-                        <a class="set-upd-notes" [href]="releasesUrl" (click)="openWhatsNew($event)">
-                          <app-icon name="file" size="sm" />Read release notes<app-icon name="ext" size="sm" />
-                        </a>
-                        <div class="set-upd-act">
-                          <button class="btn primary" [disabled]="store.installing()" (click)="store.install()">
-                            <app-icon name="stage" size="sm" />
-                            {{ !store.installing() ? 'Install & relaunch' : store.installPhase() === 'installing' ? 'Installing…' : 'Downloading ' + installPct() + '%' }}
-                          </button>
-                          <button class="btn ghost-hair" (click)="store.dismissUpdate()">Later</button>
-                        </div>
-                        @if (store.installing()) {
-                          <div class="set-upd-bar"><i [style.width.%]="installPct()" [class.full]="store.installPhase() === 'installing'"></i></div>
-                          <div class="set-upd-stage">
-                            {{ store.installPhase() === 'installing'
-                              ? 'Handing off to the installer — Orrery restarts when it finishes'
-                              : 'Downloading v' + upd.version + ' · ' + installPct() + '%' }}
-                          </div>
-                        }
-                      </div>
-                    </app-set-row>
-                  }
-                </div>
-
-                <div class="set-grp">
-                  <div class="set-grp-h">Diagnostics<span class="ln"></span></div>
-                  <app-set-row>
-                    <ng-container row-label>Log file</ng-container>
-                    <ng-container row-help>
-                      Orrery appends a rolling diagnostics log — orchestrator, updater, git and IPC events. Open it when something needs a closer look.
-                    </ng-container>
-                    <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-5)" (click)="openLog()">
-                      <app-icon name="ext" size="sm" />Open log file
-                    </button>
-                  </app-set-row>
-                </div>
-              }
-
-              <!-- ── Agent defaults ──────────────────────────────────────── -->
-              @case ("agent") {
-                <div class="set-grp">
-                  <div class="set-grp-h">Worktrees<span class="ln"></span></div>
-                  <app-set-row [wide]="true" [dirty]="s.branchTemplate !== D.branchTemplate" (reset)="store.set({ branchTemplate: D.branchTemplate })">
-                    <ng-container row-label>Branch template</ng-container>
-                    <ng-container row-help>Tokens: <code>{{ '{name}' }}</code> <code>{{ '{tool}' }}</code> <code>{{ '{date}' }}</code></ng-container>
-                    <div style="display:flex;flex-direction:column;gap:0;width:100%">
-                      <div class="set-text" style="max-width:320px">
-                        <app-icon name="branch" size="sm" />
-                        <input [value]="s.branchTemplate" spellcheck="false" (input)="store.set({ branchTemplate: $any($event.target).value })" />
-                      </div>
-                      <div class="set-preview">
-                        <span class="arr">preview</span><app-icon name="chevron" size="sm" [px]="11" /><b>{{ branchPreview() }}</b>
-                      </div>
-                    </div>
-                  </app-set-row>
-
-                  <app-set-row [dirty]="s.worktreeRoot !== D.worktreeRoot" (reset)="store.set({ worktreeRoot: D.worktreeRoot })">
-                    <ng-container row-label>Worktree root</ng-container>
-                    <ng-container row-help>Where new agent worktrees are created on disk.</ng-container>
-                    <div style="display:flex;align-items:center;gap:var(--sp-4);width:300px">
-                      <div class="set-path"><app-icon name="folder" size="sm" /><span class="pt">{{ s.worktreeRoot || 'app data · worktrees' }}</span></div>
-                      <button class="btn ghost-hair" style="flex:none;padding:var(--sp-2) var(--sp-5)" (click)="browse()"><app-icon name="folderOpen" size="sm" />Browse</button>
-                    </div>
-                  </app-set-row>
-
-                  <app-set-row [dirty]="s.autoResume !== D.autoResume" (reset)="store.set({ autoResume: D.autoResume })">
-                    <ng-container row-label>Auto-resume on restart</ng-container>
-                    <ng-container row-help>Re-attach to running agent sessions when Orrery relaunches.</ng-container>
-                    <app-set-tgl [value]="s.autoResume" (changed)="store.set({ autoResume: $event })" />
-                  </app-set-row>
-
-                  <app-set-row [dirty]="s.autosave !== D.autosave" (reset)="store.set({ autosave: D.autosave })">
-                    <ng-container row-label>Autosave edits</ng-container>
-                    <ng-container row-help>Write unsaved editor buffers 2s after you stop typing. Ctrl+S still saves on demand.</ng-container>
-                    <app-set-tgl [value]="s.autosave" (changed)="store.set({ autosave: $event })" />
-                  </app-set-row>
-                </div>
-
-                <div class="set-grp">
-                  <div class="set-grp-h">Projects<span class="ln"></span></div>
-                  <app-set-row [dirty]="s.projectsRoot !== D.projectsRoot" (reset)="store.set({ projectsRoot: D.projectsRoot })">
-                    <ng-container row-label>Projects folder</ng-container>
-                    <ng-container row-help>Where the folder picker opens when adding a project.</ng-container>
-                    <div style="display:flex;align-items:center;gap:var(--sp-4);width:300px">
-                      <div class="set-path"><app-icon name="folder" size="sm" /><span class="pt">{{ s.projectsRoot || 'OS default' }}</span></div>
-                      <button class="btn ghost-hair" style="flex:none;padding:var(--sp-2) var(--sp-5)" (click)="browseProjects()"><app-icon name="folderOpen" size="sm" />Browse</button>
-                    </div>
-                  </app-set-row>
-                </div>
-
-                <!-- ── AI cost & budget (A4.3 / A4.4) — hidden while the cost
-                     kill switch is off ─────────────────────────────────────── -->
-                @if (costEnabled) {
-                <div class="set-grp">
-                  <div class="set-grp-h">AI cost &amp; budget<span class="ln"></span></div>
-                  <app-set-row [dirty]="s.budgetCapUsd !== D.budgetCapUsd" (reset)="store.set({ budgetCapUsd: D.budgetCapUsd })">
-                    <ng-container row-label>Budget cap</ng-container>
-                    <ng-container row-help>USD ceiling for AI git actions. At the cap, AI variants disable — native actions stay fully usable. 0 = no cap.</ng-container>
-                    <div class="set-text" style="max-width:120px">
-                      <span style="color:var(--ink-4)">$</span>
-                      <input type="number" min="0" step="1" [value]="s.budgetCapUsd" (change)="setBudget('budgetCapUsd', $any($event.target).value)" />
-                    </div>
-                  </app-set-row>
-                  <app-set-row [dirty]="s.confirmAboveUsd !== D.confirmAboveUsd" (reset)="store.set({ confirmAboveUsd: D.confirmAboveUsd })">
-                    <ng-container row-label>Confirm above</ng-container>
-                    <ng-container row-help>AI actions estimated above this amount need a confirming second click. 0 = never confirm.</ng-container>
-                    <div class="set-text" style="max-width:120px">
-                      <span style="color:var(--ink-4)">$</span>
-                      <input type="number" min="0" step="0.1" [value]="s.confirmAboveUsd" (change)="setBudget('confirmAboveUsd', $any($event.target).value)" />
-                    </div>
-                  </app-set-row>
-                </div>
+        <div class="set-body">
+          @switch (section()) {
+            <!-- ── Updates ─────────────────────────────────────────────── -->
+            @case ("updates") {
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Release channel</h3>
+                <app-set-row [dirty]="s.channel !== D.channel" (reset)="store.set({ channel: D.channel })">
+                  <ng-container row-label>Channel</ng-container>
+                  <ng-container row-help>Beta receives pre-release builds first.</ng-container>
+                  <kj-tabs variant="pills" class="set-seg" [value]="s.channel" (valueChange)="store.set({ channel: $any($event) })">
+                    <kj-tab-list aria-label="Release channel">
+                      @for (o of channelOptions; track o.value) {
+                        <kj-tab [value]="o.value">{{ o.label }}</kj-tab>
+                      }
+                    </kj-tab-list>
+                  </kj-tabs>
+                </app-set-row>
+                @if (s.channel === 'beta') {
+                  <div class="set-warn" style="margin-top:var(--sp-1)">
+                    <app-icon name="flag" size="sm" />
+                    Pre-release builds — may be unstable or break worktrees. Roll back from this panel anytime.
+                  </div>
                 }
+                <app-set-row [dirty]="s.updatePolicy !== D.updatePolicy" (reset)="store.set({ updatePolicy: D.updatePolicy })">
+                  <ng-container row-label>Install policy</ng-container>
+                  <ng-container row-help>What Orrery does when a new build is available.</ng-container>
+                  <kj-tabs variant="pills" class="set-seg" [value]="s.updatePolicy" (valueChange)="store.set({ updatePolicy: $any($event) })">
+                    <kj-tab-list aria-label="Install policy">
+                      @for (o of policyOptions; track o.value) {
+                        <kj-tab [value]="o.value">{{ o.label }}</kj-tab>
+                      }
+                    </kj-tab-list>
+                  </kj-tabs>
+                </app-set-row>
+              </div>
 
-                <div class="set-grp">
-                  <div class="set-grp-h">Default agent<span class="ln"></span></div>
-                  <app-set-row [wide]="true" [dirty]="s.defaultTool !== D.defaultTool" (reset)="store.set({ defaultTool: D.defaultTool })">
-                    <ng-container row-label>Default tool</ng-container>
-                    <ng-container row-help>Used when you spawn without picking one. Pick an agent to configure its model, effort and executable path below.</ng-container>
-                    <div class="set-tools">
-                      @for (tl of tools; track tl.id) {
-                        @let e = runtime.detection(tl.id);
-                        @let runnable = e?.status === 'ok';
-                        @let on = s.defaultTool === tl.id;
-                        <button type="button" class="set-tool"
-                          [class.on]="on" [class.warn]="on && !runnable" [class.off]="!runnable && !on"
-                          [title]="runnable ? e?.path : (e?.status === 'error' ? 'Found but can’t run — set its path below' : 'Not installed — locate it below')"
-                          (click)="store.set({ defaultTool: tl.id })">
-                          <app-tool-badge [tool]="tl.id" [size]="22" />
-                          <div class="tn">{{ tl.name }}</div>
-                          <div class="ts">
-                            @if (runnable) {
-                              <span class="dot done" style="width:var(--sp-2);height:var(--sp-2)"></span>detected{{ e?.version ? ' · v' + e?.version : '' }}
-                            } @else if (e?.status === 'error') {
-                              <span style="color:var(--set-amber)">can’t run</span>
-                            } @else { not installed }
-                          </div>
-                          @if (on) { <span class="pick"><app-icon name="check" size="sm" [px]="11" /></span> }
-                          @if (!runnable && !on) {
-                            <span class="nf" [class.amber]="e?.status === 'error'">{{ e?.status === 'error' ? 'needs path' : 'not found' }}</span>
-                          }
-                        </button>
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Version</h3>
+                <app-set-row>
+                  <ng-container row-label>Current build</ng-container>
+                  <ng-container row-help>
+                    Orrery <code>v{{ version.version() || '—' }}</code> · {{ s.channel }} channel · checked
+                    {{ store.checking() ? 'now…' : lastChecked() }}
+                  </ng-container>
+                  <div style="display:flex;align-items:center;gap:var(--sp-4)">
+                    <kj-badge class="set-vchip tnum" variant="outline">v{{ version.version() || '—' }} · {{ s.channel === 'beta' ? 'BETA' : 'STABLE' }}</kj-badge>
+                    <kj-button kjVariant="outline" [kjDisabled]="store.checking()" (click)="store.checkNow()">
+                      @if (store.checking()) {
+                        <kj-spinner kjAriaLabel="Checking for updates" />
+                      } @else {
+                        <app-icon name="refresh" size="sm" />
+                      }
+                      {{ store.checking() ? 'Checking…' : 'Check now' }}
+                    </kj-button>
+                  </div>
+                </app-set-row>
+
+                @if (store.updateCard(); as upd) {
+                  <app-set-row [wide]="true">
+                    <ng-container row-label>Update available</ng-container>
+                    <ng-container row-help>A newer build is ready to install.</ng-container>
+                    <div class="set-upd">
+                      <div class="set-upd-top">
+                        <span class="set-upd-ic glyph-plate"><app-icon name="stage" /></span>
+                        <div class="set-upd-tt">
+                          <div class="u1">Orrery <span class="set-upd-ver">v{{ upd.version }}</span></div>
+                          <div class="u2">@if (upd.date) { released {{ upd.date }} · } upgrades from v{{ version.version() || '—' }}</div>
+                        </div>
+                      </div>
+                      <a class="set-upd-notes" [href]="releasesUrl" (click)="openWhatsNew($event)">
+                        <app-icon name="file" size="sm" />Read release notes<app-icon name="ext" size="sm" />
+                      </a>
+                      <div class="set-upd-act">
+                        <kj-button kjVariant="default" [kjDisabled]="store.installing()" (click)="store.install()">
+                          <app-icon name="stage" size="sm" />
+                          {{ !store.installing() ? 'Install & relaunch' : store.installPhase() === 'installing' ? 'Installing…' : 'Downloading ' + installPct() + '%' }}
+                        </kj-button>
+                        <kj-button kjVariant="outline" (click)="store.dismissUpdate()">Later</kj-button>
+                      </div>
+                      @if (store.installing()) {
+                        <kj-progress-bar class="set-upd-bar" [kjValue]="$any(installBarValue())" kjAriaLabel="Update download progress" />
+                        <div class="set-upd-stage">
+                          {{ store.installPhase() === 'installing'
+                            ? 'Handing off to the installer — Orrery restarts when it finishes'
+                            : 'Downloading v' + upd.version + ' · ' + installPct() + '%' }}
+                        </div>
                       }
                     </div>
                   </app-set-row>
+                }
+              </div>
 
-                  <app-set-row [wide]="true" [dirty]="s.toolPath[modelTool().id] !== undefined" (reset)="resetToolPath(modelTool().id)">
-                    <ng-container row-label>Executable <span style="color:var(--ink-4);font-weight:400">· {{ modelTool().name }}</span></ng-container>
-                    <ng-container row-help>Where Orrery launches <b style="color:var(--ink-3);font-weight:500">{{ modelTool().name }}</b> from — detected on your <code>PATH</code> at startup. Override it if the binary lives elsewhere or couldn’t run.</ng-container>
-                    <app-runtime-row [toolId]="modelTool().id" [toolName]="modelTool().name" />
-                  </app-set-row>
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Diagnostics</h3>
+                <app-set-row>
+                  <ng-container row-label>Log file</ng-container>
+                  <ng-container row-help>
+                    Orrery appends a rolling diagnostics log — orchestrator, updater, git and IPC events. Open it when something needs a closer look.
+                  </ng-container>
+                  <kj-button kjVariant="outline" (click)="openLog()">
+                    <app-icon name="ext" size="sm" />Open log file
+                  </kj-button>
+                </app-set-row>
+              </div>
+            }
 
-                  <app-set-row [dirty]="s.toolModel[modelTool().id] !== undefined" (reset)="store.setMap('toolModel', modelTool().id, null)">
-                    <ng-container row-label>Model <span style="color:var(--ink-4);font-weight:400">· {{ modelTool().name }}</span></ng-container>
-                    <ng-container row-help>Curated per tool, with a free-text override — Enter to apply a custom id.</ng-container>
-                    <app-set-combo
-                      [value]="effModel()"
-                      [options]="modelTool().models"
-                      [open]="modelOpen()"
-                      (openChange)="modelOpen.set($event)"
-                      (changed)="store.setMap('toolModel', modelTool().id, $event)"
-                    />
-                  </app-set-row>
+            <!-- ── Agent defaults ──────────────────────────────────────── -->
+            @case ("agent") {
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Worktrees</h3>
+                <app-set-row [wide]="true" [dirty]="s.branchTemplate !== D.branchTemplate" (reset)="store.set({ branchTemplate: D.branchTemplate })">
+                  <ng-container row-label>Branch template</ng-container>
+                  <ng-container row-help>Tokens: <code>{{ '{name}' }}</code> <code>{{ '{tool}' }}</code> <code>{{ '{date}' }}</code></ng-container>
+                  <div style="display:flex;flex-direction:column;gap:0;width:100%">
+                    <div class="set-text" style="max-width: round(calc(320px * var(--density)), 1px)">
+                      <app-icon name="branch" size="sm" />
+                      <input [value]="s.branchTemplate" spellcheck="false" (input)="store.set({ branchTemplate: $any($event.target).value })" />
+                    </div>
+                    <div class="set-preview">
+                      <span class="arr">preview</span><app-icon size="md" name="chevron" /><b>{{ branchPreview() }}</b>
+                    </div>
+                  </div>
+                </app-set-row>
 
-                  <app-set-row [dirty]="s.toolEffort[modelTool().id] !== undefined" (reset)="store.setMap('toolEffort', modelTool().id, null)">
-                    <ng-container row-label>Reasoning effort</ng-container>
-                    <ng-container row-help>
-                      @if (effortOptions(); as eo) { How hard the model thinks before acting. } @else { {{ modelTool().name }} doesn’t expose an effort setting. }
-                    </ng-container>
-                    @if (effortOptions(); as eo) {
-                      <app-set-seg [value]="effEffort()" [options]="eo" (changed)="store.setMap('toolEffort', modelTool().id, $event)" />
-                    } @else {
-                      <span class="set-muted"><app-icon name="dots" size="sm" />not supported</span>
-                    }
-                  </app-set-row>
+                <app-set-row [dirty]="s.worktreeRoot !== D.worktreeRoot" (reset)="store.set({ worktreeRoot: D.worktreeRoot })">
+                  <ng-container row-label>Worktree root</ng-container>
+                  <ng-container row-help>Where new agent worktrees are created on disk.</ng-container>
+                  <div style="display:flex;align-items:center;gap:var(--sp-4);width: round(calc(300px * var(--density)), 1px)">
+                    <div class="set-path"><app-icon name="folder" size="sm" /><span class="pt trunc">{{ s.worktreeRoot || 'app data · worktrees' }}</span></div>
+                    <kj-button kjVariant="outline" (click)="browse()"><app-icon name="folderOpen" size="sm" />Browse</kj-button>
+                  </div>
+                </app-set-row>
 
-                  <!-- per-model AI rates, scoped to the SELECTED agent's model
-                       list (common budget caps stay in the group above) —
-                       hidden while the cost kill switch is off -->
-                  @for (m of costEnabled ? toolRateModels() : []; track m) {
-                    <app-set-row [dirty]="rateDirty(m)" (reset)="resetRate(m)">
-                      <ng-container row-label>
-                        <span style="display:inline-flex;align-items:center;gap:var(--sp-3)">
-                          <span style="color:var(--ink-4);font-weight:400">rate ·</span>
-                          <span style="font-family:var(--font-mono)">{{ m }}</span>
-                        </span>
-                      </ng-container>
-                      <ng-container row-help>$ per million tokens — in / out. Feeds the AI-action estimates for {{ modelTool().name }}.</ng-container>
-                      <div style="display:flex;align-items:center;gap:var(--sp-3)">
-                        <div class="set-text" style="max-width:96px">
-                          <input type="number" min="0" step="0.1" [value]="rateOf(m).in" title="input $/Mtok" (change)="setRate(m, 'in', $any($event.target).value)" />
-                        </div>
-                        <span style="color:var(--ink-4);font-size:var(--fs-xs)">/</span>
-                        <div class="set-text" style="max-width:96px">
-                          <input type="number" min="0" step="0.1" [value]="rateOf(m).out" title="output $/Mtok" (change)="setRate(m, 'out', $any($event.target).value)" />
-                        </div>
-                      </div>
-                    </app-set-row>
-                  }
-                </div>
+                <app-set-row [dirty]="s.autoResume !== D.autoResume" (reset)="store.set({ autoResume: D.autoResume })">
+                  <ng-container row-label>Auto-resume on restart</ng-container>
+                  <ng-container row-help>Re-attach to running agent sessions when Orrery relaunches.</ng-container>
+                  <kj-toggle class="set-tgl" appearance="switch" size="sm" ariaLabel="Auto-resume on restart" [pressed]="s.autoResume" (pressedChange)="store.set({ autoResume: $event })" />
+                </app-set-row>
+
+                <app-set-row [dirty]="s.autosave !== D.autosave" (reset)="store.set({ autosave: D.autosave })">
+                  <ng-container row-label>Autosave edits</ng-container>
+                  <ng-container row-help>Write unsaved editor buffers 2s after you stop typing. Ctrl+S still saves on demand.</ng-container>
+                  <kj-toggle class="set-tgl" appearance="switch" size="sm" ariaLabel="Autosave edits" [pressed]="s.autosave" (pressedChange)="store.set({ autosave: $event })" />
+                </app-set-row>
+              </div>
+
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Projects</h3>
+                <app-set-row [dirty]="s.projectsRoot !== D.projectsRoot" (reset)="store.set({ projectsRoot: D.projectsRoot })">
+                  <ng-container row-label>Projects folder</ng-container>
+                  <ng-container row-help>Where the folder picker opens when adding a project.</ng-container>
+                  <div style="display:flex;align-items:center;gap:var(--sp-4);width: round(calc(300px * var(--density)), 1px)">
+                    <div class="set-path"><app-icon name="folder" size="sm" /><span class="pt trunc">{{ s.projectsRoot || 'OS default' }}</span></div>
+                    <kj-button kjVariant="outline" (click)="browseProjects()"><app-icon name="folderOpen" size="sm" />Browse</kj-button>
+                  </div>
+                </app-set-row>
+              </div>
+
+              <!-- ── AI cost & budget (A4.3 / A4.4) — hidden while the cost
+                   kill switch is off ─────────────────────────────────────── -->
+              @if (costEnabled) {
+              <div class="set-grp">
+                <h3 class="up set-grp-h">AI cost &amp; budget</h3>
+                <app-set-row [dirty]="s.budgetCapUsd !== D.budgetCapUsd" (reset)="store.set({ budgetCapUsd: D.budgetCapUsd })">
+                  <ng-container row-label>Budget cap</ng-container>
+                  <ng-container row-help>USD ceiling for AI git actions. At the cap, AI variants disable — native actions stay fully usable. 0 = no cap.</ng-container>
+                  <div style="display:flex;align-items:center;gap:var(--sp-3)">
+                    <span style="color:var(--ink-4)">$</span>
+                    <kj-number-input class="set-num-cap" [kjMin]="0" [kjStep]="1" [kjAllowDecimals]="true"
+                      [kjValue]="s.budgetCapUsd" (kjValueChange)="setBudget('budgetCapUsd', $event)" kjAriaLabel="Budget cap in USD" />
+                  </div>
+                </app-set-row>
+                <app-set-row [dirty]="s.confirmAboveUsd !== D.confirmAboveUsd" (reset)="store.set({ confirmAboveUsd: D.confirmAboveUsd })">
+                  <ng-container row-label>Confirm above</ng-container>
+                  <ng-container row-help>AI actions estimated above this amount need a confirming second click. 0 = never confirm.</ng-container>
+                  <div style="display:flex;align-items:center;gap:var(--sp-3)">
+                    <span style="color:var(--ink-4)">$</span>
+                    <kj-number-input class="set-num-cap" [kjMin]="0" [kjStep]="0.1" [kjAllowDecimals]="true"
+                      [kjValue]="s.confirmAboveUsd" (kjValueChange)="setBudget('confirmAboveUsd', $event)" kjAriaLabel="Confirm above USD" />
+                  </div>
+                </app-set-row>
+              </div>
               }
 
-              <!-- ── Keymap (B6.2) ───────────────────────────────────────── -->
-              @case ("keymap") {
-                @for (grp of keymapGroups(); track grp.name) {
-                  <div class="set-grp">
-                    <div class="set-grp-h">{{ grp.name }}<span class="ln"></span></div>
-                    @for (cmd of grp.commands; track cmd.id) {
-                      <app-set-row [dirty]="!!s.keymap[cmd.id]" (reset)="store.setKeymapEntry(cmd.id, null)">
-                        <ng-container row-label>{{ cmd.label }}</ng-container>
-                        <ng-container row-help>
-                          @if (capturing() === cmd.id) {
-                            press the new chord — Esc cancels, Backspace unbinds
-                          } @else if (conflictOf(cmd)) {
-                            also bound to "{{ conflictOf(cmd) }}"
-                          }
-                        </ng-container>
-                        <button
-                          class="btn ghost-hair set-kbd"
-                          (click)="startCapture(cmd.id)"
-                          [style.border-color]="capturing() === cmd.id ? 'var(--ui-focus)' : conflictOf(cmd) ? 'var(--sem-del)' : null"
-                          [style.color]="cmd.kbd ? 'var(--ink)' : 'var(--ink-4)'"
-                          [title]="'Click, then press the new shortcut'"
-                        >{{ capturing() === cmd.id ? 'recording…' : cmd.kbd ? kbdChip(cmd.kbd) : 'unassigned' }}</button>
-                      </app-set-row>
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Default agent</h3>
+                <app-set-row [wide]="true" [dirty]="s.defaultTool !== D.defaultTool" (reset)="store.set({ defaultTool: D.defaultTool })">
+                  <ng-container row-label>Default tool</ng-container>
+                  <ng-container row-help>Used when you spawn without picking one. Pick an agent to configure its model, effort and executable path below.</ng-container>
+                  <div class="set-tools">
+                    @for (tl of tools; track tl.id) {
+                      @let e = runtime.detection(tl.id);
+                      @let runnable = e?.status === 'ok';
+                      @let on = s.defaultTool === tl.id;
+                      <kj-button kjVariant="ghost" class="set-tool"
+                        [class.on]="on" [class.warn]="on && !runnable" [class.off]="!runnable && !on"
+                        [title]="runnable ? e?.path : (e?.status === 'error' ? 'Found but can’t run — set its path below' : 'Not installed — locate it below')"
+                        (click)="store.set({ defaultTool: tl.id })">
+                        <app-tool-badge [tool]="tl.id" [size]="22" />
+                        <div class="tn">{{ tl.name }}</div>
+                        <div class="ts">
+                          @if (runnable) {
+                            <span class="dot done" style="width:var(--sp-2);height:var(--sp-2)"></span>detected{{ e?.version ? ' · v' + e?.version : '' }}
+                          } @else if (e?.status === 'error') {
+                            <span style="color:var(--set-amber)">can’t run</span>
+                          } @else { not installed }
+                        </div>
+                        @if (on) { <span class="pick"><app-icon size="md" name="check" /></span> }
+                        @if (!runnable && !on) {
+                          <span class="nf" [class.amber]="e?.status === 'error'">{{ e?.status === 'error' ? 'needs path' : 'not found' }}</span>
+                        }
+                      </kj-button>
                     }
                   </div>
-                }
-              }
+                </app-set-row>
 
-              <!-- ── Permissions & safety ────────────────────────────────── -->
-              @case ("perms") {
-                <div class="set-grp">
-                  <div class="set-grp-h">Auto-approve policy<span class="ln"></span></div>
-                  @for (tl of detectedTools(); track tl.id) {
-                    @let val = approveOf(tl.id);
-                    <app-set-row [dirty]="val !== 'off'" (reset)="resetApprove(tl.id)">
-                      <ng-container row-label>
-                        <span style="display:inline-flex;align-items:center;gap:var(--sp-4)"><app-tool-badge [tool]="tl.id" [size]="16" />{{ tl.name }}</span>
-                      </ng-container>
-                      <ng-container row-help>{{ approveHelp(val) }}</ng-container>
-                      <app-set-seg [value]="val" [options]="approveOptions" danger="everything" (changed)="pickPolicy(tl.id, $any($event))" />
-                    </app-set-row>
-                    @if (confirm()?.tool === tl.id) {
-                      <div class="set-danger">
-                        <div class="set-danger-h"><app-icon name="flag" />Allow {{ tl.name }} to run <b style="color:inherit">everything</b>?</div>
-                        <div class="set-danger-b">
-                          Auto-approving <b>every</b> command lets {{ tl.name }} run destructive operations —
-                          <code style="font-family:var(--font-mono)">rm&nbsp;-rf</code>, force-push, network calls — with no prompt.
-                          Recommended only for fully sandboxed worktrees.
-                        </div>
-                        <div class="set-danger-act">
-                          <button class="btn ghost-hair" (click)="cancelEverything(tl.id)">Cancel</button>
-                          <button type="button" class="set-btn-danger" (click)="confirm.set(null)"><app-icon name="flag" size="sm" />Enable “Everything”</button>
-                        </div>
-                      </div>
-                    }
+                <app-set-row [wide]="true" [dirty]="s.toolPath[modelTool().id] !== undefined" (reset)="resetToolPath(modelTool().id)">
+                  <ng-container row-label>Executable <span style="color:var(--ink-4);font-weight:var(--fw-normal)">· {{ modelTool().name }}</span></ng-container>
+                  <ng-container row-help>Where Orrery launches <b style="color:var(--ink-3);font-weight:var(--fw-medium)">{{ modelTool().name }}</b> from — detected on your <code>PATH</code> at startup. Override it if the binary lives elsewhere or couldn’t run.</ng-container>
+                  <app-runtime-row [toolId]="modelTool().id" [toolName]="modelTool().name" />
+                </app-set-row>
+
+                <app-set-row [dirty]="s.toolModel[modelTool().id] !== undefined" (reset)="store.setMap('toolModel', modelTool().id, null)">
+                  <ng-container row-label>Model <span style="color:var(--ink-4);font-weight:var(--fw-normal)">· {{ modelTool().name }}</span></ng-container>
+                  <ng-container row-help>Curated per tool, with a free-text override — Enter to apply a custom id.</ng-container>
+                  <div style="display:flex;align-items:center;gap:var(--sp-4)">
+                    @if (isCustomModel()) { <kj-badge variant="outline">custom</kj-badge> }
+                    <kj-combobox class="set-model-combo" [freeText]="true" placeholder="model-id…"
+                      [value]="effModel()" (valueChange)="onModelChange($event)">
+                      @for (m of modelTool().models; track m) {
+                        <kj-combobox-option [value]="m">{{ m }}</kj-combobox-option>
+                      }
+                      <kj-combobox-empty>Custom — CLIs don’t expose a list. Enter applies the typed id.</kj-combobox-empty>
+                    </kj-combobox>
+                  </div>
+                </app-set-row>
+
+                <app-set-row [dirty]="s.toolEffort[modelTool().id] !== undefined" (reset)="store.setMap('toolEffort', modelTool().id, null)">
+                  <ng-container row-label>Reasoning effort</ng-container>
+                  <ng-container row-help>
+                    @if (effortOptions(); as eo) { How hard the model thinks before acting. } @else { {{ modelTool().name }} doesn’t expose an effort setting. }
+                  </ng-container>
+                  @if (effortOptions(); as eo) {
+                    <kj-tabs variant="pills" class="set-seg" [value]="effEffort()" (valueChange)="store.setMap('toolEffort', modelTool().id, $any($event))">
+                      <kj-tab-list aria-label="Reasoning effort">
+                        @for (o of eo; track o) {
+                          <kj-tab [value]="o">{{ o }}</kj-tab>
+                        }
+                      </kj-tab-list>
+                    </kj-tabs>
+                  } @else {
+                    <span class="set-muted"><app-icon name="dots" size="sm" />not supported</span>
                   }
-                </div>
+                </app-set-row>
 
-                <div class="set-grp">
-                  <div class="set-grp-h">Remote approval<span class="ln"></span></div>
-                  <app-set-row [dirty]="s.remoteApproval !== D.remoteApproval" (reset)="store.set({ remoteApproval: D.remoteApproval })">
-                    <ng-container row-label>Approve from notifications</ng-container>
-                    <ng-container row-help>Answer permission prompts straight from OS notifications.</ng-container>
-                    <app-set-tgl [value]="s.remoteApproval" (changed)="store.set({ remoteApproval: $event })" />
-                  </app-set-row>
-                </div>
-
-                <!-- ── Diagnostics (A0.7 raw emit trace) ──────────────────── -->
-                <div class="set-grp">
-                  <div class="set-grp-h">Diagnostics<span class="ln"></span></div>
-                  <app-set-row [dirty]="s.telemetryRawTrace !== D.telemetryRawTrace" (reset)="store.set({ telemetryRawTrace: D.telemetryRawTrace })">
-                    <ng-container row-label>Raw emit trace</ng-container>
-                    <ng-container row-help>Records one line per backend event (timestamp, name, byte count — never contents) to app-data/telemetry. Auto-stops after 30 min or 200 MB; a status-bar chip shows while it records.</ng-container>
-                    <app-set-tgl [value]="s.telemetryRawTrace" (changed)="setRawTrace($event)" />
-                  </app-set-row>
-                </div>
-              }
-
-              <!-- ── Notifications ───────────────────────────────────────── -->
-              @case ("notif") {
-                @let off = !s.osNotifications;
-                <div class="set-grp">
-                  <div class="set-grp-h">Delivery<span class="ln"></span></div>
-                  <app-set-row [dirty]="s.osNotifications !== D.osNotifications" (reset)="store.set({ osNotifications: D.osNotifications })">
-                    <ng-container row-label>Native OS notifications</ng-container>
-                    <ng-container row-help>Off keeps all alerts inside the app only.</ng-container>
-                    <app-set-tgl [value]="s.osNotifications" (changed)="store.set({ osNotifications: $event })" />
-                  </app-set-row>
-                </div>
-
-                <div class="set-grp">
-                  <div class="set-grp-h">Events<span class="ln"></span></div>
-                  @for (ev of events; track ev.k) {
-                    <app-set-row [disabled]="off" [dirty]="s.events[ev.k] !== D.events[ev.k]" (reset)="store.setEvent(ev.k, D.events[ev.k])">
-                      <ng-container row-label>{{ ev.label }}</ng-container>
-                      <ng-container row-help>{{ ev.help }}</ng-container>
-                      <app-set-tgl [value]="s.events[ev.k]" [disabled]="off" (changed)="store.setEvent(ev.k, $event)" />
-                    </app-set-row>
-                  }
-                </div>
-
-                <div class="set-grp">
-                  <div class="set-grp-h">Sound<span class="ln"></span></div>
-                  <app-set-row [disabled]="off" [dirty]="s.sound !== D.sound" (reset)="store.set({ sound: D.sound })">
-                    <ng-container row-label>Play sound</ng-container>
-                    <ng-container row-help>A short cue when a notification fires.</ng-container>
-                    <app-set-tgl [value]="s.sound" [disabled]="off" (changed)="store.set({ sound: $event })" />
-                  </app-set-row>
-                  <app-set-row
-                    [disabled]="off || !s.sound"
-                    [dirty]="s.soundName !== D.soundName || s.volume !== D.volume"
-                    (reset)="store.set({ soundName: D.soundName, volume: D.volume })"
-                  >
-                    <ng-container row-label>Cue &amp; volume</ng-container>
-                    <ng-container row-help>Notification tone and loudness.</ng-container>
-                    <div style="display:flex;align-items:center;gap:var(--sp-5)">
-                      <app-set-select [value]="s.soundName" [options]="soundOptions" (changed)="store.set({ soundName: $event })" />
-                      <button type="button" class="set-play" (click)="previewCue()" title="Send a test notification" aria-label="Send a test notification">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z" /></svg>
-                      </button>
-                      <app-icon name="volume" size="sm" color="var(--ink-4)" />
-                      <input type="range" class="set-slider" min="0" max="100" [value]="s.volume" (input)="store.set({ volume: +$any($event.target).value })" />
-                      <span class="tnum" style="font-size:var(--fs-sm);color:var(--ink-3);width:30px;text-align:right">{{ s.volume }}%</span>
+                <!-- per-model AI rates, scoped to the SELECTED agent's model
+                     list (common budget caps stay in the group above) —
+                     hidden while the cost kill switch is off -->
+                @for (m of costEnabled ? toolRateModels() : []; track m) {
+                  <app-set-row [dirty]="rateDirty(m)" (reset)="resetRate(m)">
+                    <ng-container row-label>
+                      <span style="display:inline-flex;align-items:center;gap:var(--sp-3)">
+                        <span style="color:var(--ink-4);font-weight:var(--fw-normal)">rate ·</span>
+                        <code>{{ m }}</code>
+                      </span>
+                    </ng-container>
+                    <ng-container row-help>$ per million tokens — in / out. Feeds the AI-action estimates for {{ modelTool().name }}.</ng-container>
+                    <div style="display:flex;align-items:center;gap:var(--sp-3)">
+                      <kj-number-input class="set-num-rate" [kjMin]="0" [kjStep]="0.1" [kjAllowDecimals]="true"
+                        [kjValue]="rateOf(m).in" (kjValueChange)="setRate(m, 'in', $event)" kjAriaLabel="input $/Mtok" />
+                      <span style="color:var(--ink-4)">/</span>
+                      <kj-number-input class="set-num-rate" [kjMin]="0" [kjStep]="0.1" [kjAllowDecimals]="true"
+                        [kjValue]="rateOf(m).out" (kjValueChange)="setRate(m, 'out', $event)" kjAriaLabel="output $/Mtok" />
                     </div>
                   </app-set-row>
+                }
+              </div>
+            }
+
+            <!-- ── Keymap (B6.2) ───────────────────────────────────────── -->
+            @case ("keymap") {
+              @for (grp of keymapGroups(); track grp.name) {
+                <div class="set-grp">
+                  <h3 class="up set-grp-h">{{ grp.name }}</h3>
+                  @for (cmd of grp.commands; track cmd.id) {
+                    <app-set-row [dirty]="!!s.keymap[cmd.id]" (reset)="store.setKeymapEntry(cmd.id, null)">
+                      <ng-container row-label>{{ cmd.label }}</ng-container>
+                      <ng-container row-help>
+                        @if (capturing() === cmd.id) {
+                          press the new chord — Esc cancels, Backspace unbinds
+                        } @else if (conflictOf(cmd)) {
+                          also bound to "{{ conflictOf(cmd) }}"
+                        }
+                      </ng-container>
+                      <kj-button kjVariant="outline" class="set-kbd"
+                        (click)="startCapture(cmd.id)"
+                        [style.--kj-button-border-color]="capturing() === cmd.id ? 'var(--ui-focus)' : conflictOf(cmd) ? 'var(--sem-del)' : null"
+                        [style.--kj-button-fg]="cmd.kbd ? 'var(--ink)' : 'var(--ink-4)'"
+                        [title]="'Click, then press the new shortcut'"
+                      ><kj-kbd>{{ capturing() === cmd.id ? 'recording…' : cmd.kbd ? kbdChip(cmd.kbd) : 'unassigned' }}</kj-kbd></kj-button>
+                    </app-set-row>
+                  }
                 </div>
               }
             }
-          </div>
 
-          <div class="set-foot">
-            @if (store.anyDirty()) {
-              <button type="button" class="reset-all" (click)="resetAll()"><app-icon name="refresh" size="sm" />Reset all to defaults</button>
-            } @else {
-              <span class="fl"><span class="fd"></span>Changes apply instantly</span>
+            <!-- ── Permissions & safety ────────────────────────────────── -->
+            @case ("perms") {
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Auto-approve policy</h3>
+                @for (tl of detectedTools(); track tl.id) {
+                  @let val = approveOf(tl.id);
+                  <app-set-row [dirty]="val !== 'off'" (reset)="resetApprove(tl.id)">
+                    <ng-container row-label>
+                      <span style="display:inline-flex;align-items:center;gap:var(--sp-4)"><app-tool-badge [tool]="tl.id" [size]="16" />{{ tl.name }}</span>
+                    </ng-container>
+                    <ng-container row-help>{{ approveHelp(val) }}</ng-container>
+                    <kj-tabs variant="pills" class="set-seg" [value]="val" (valueChange)="pickPolicy(tl.id, $any($event))">
+                      <kj-tab-list aria-label="Auto-approve policy">
+                        @for (o of approveOptions; track o.value) {
+                          <kj-tab [value]="o.value" [class.dgr]="o.value === 'everything'">
+                            @if (o.value === 'everything') { <app-icon name="flag" size="sm" /> }
+                            {{ o.label }}
+                          </kj-tab>
+                        }
+                      </kj-tab-list>
+                    </kj-tabs>
+                  </app-set-row>
+                  @if (confirm()?.tool === tl.id) {
+                    <div class="set-danger">
+                      <div class="set-danger-h"><app-icon name="flag" />Allow {{ tl.name }} to run <b style="color:inherit">everything</b>?</div>
+                      <div class="set-danger-b">
+                        Auto-approving <b>every</b> command lets {{ tl.name }} run destructive operations —
+                        <code>rm&nbsp;-rf</code>, force-push, network calls — with no prompt.
+                        Recommended only for fully sandboxed worktrees.
+                      </div>
+                      <div class="set-danger-act">
+                        <kj-button kjVariant="outline" (click)="cancelEverything(tl.id)">Cancel</kj-button>
+                        <kj-button kjVariant="danger" (click)="confirm.set(null)"><app-icon name="flag" size="sm" />Enable “Everything”</kj-button>
+                      </div>
+                    </div>
+                  }
+                }
+              </div>
+
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Remote approval</h3>
+                <app-set-row [dirty]="s.remoteApproval !== D.remoteApproval" (reset)="store.set({ remoteApproval: D.remoteApproval })">
+                  <ng-container row-label>Approve from notifications</ng-container>
+                  <ng-container row-help>Answer permission prompts straight from OS notifications.</ng-container>
+                  <kj-toggle class="set-tgl" appearance="switch" size="sm" ariaLabel="Approve from notifications" [pressed]="s.remoteApproval" (pressedChange)="store.set({ remoteApproval: $event })" />
+                </app-set-row>
+              </div>
+
+              <!-- ── Diagnostics (A0.7 raw emit trace) ──────────────────── -->
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Diagnostics</h3>
+                <app-set-row [dirty]="s.telemetryRawTrace !== D.telemetryRawTrace" (reset)="store.set({ telemetryRawTrace: D.telemetryRawTrace })">
+                  <ng-container row-label>Raw emit trace</ng-container>
+                  <ng-container row-help>Records one line per backend event (timestamp, name, byte count — never contents) to app-data/telemetry. Auto-stops after 30 min or 200 MB; a status-bar chip shows while it records.</ng-container>
+                  <kj-toggle class="set-tgl" appearance="switch" size="sm" ariaLabel="Raw emit trace" [pressed]="s.telemetryRawTrace" (pressedChange)="setRawTrace($event)" />
+                </app-set-row>
+              </div>
             }
-            <span class="sp"></span>
-            <button class="btn ghost-hair" style="padding:var(--sp-2) var(--sp-6)" (click)="close()">Cancel</button>
-            <button type="button" class="set-done" (click)="close()"><app-icon name="check" size="sm" />Done</button>
-          </div>
+
+            <!-- ── Notifications ───────────────────────────────────────── -->
+            @case ("notif") {
+              @let off = !s.osNotifications;
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Delivery</h3>
+                <app-set-row [dirty]="s.osNotifications !== D.osNotifications" (reset)="store.set({ osNotifications: D.osNotifications })">
+                  <ng-container row-label>Native OS notifications</ng-container>
+                  <ng-container row-help>Off keeps all alerts inside the app only.</ng-container>
+                  <kj-toggle class="set-tgl" appearance="switch" size="sm" ariaLabel="Native OS notifications" [pressed]="s.osNotifications" (pressedChange)="store.set({ osNotifications: $event })" />
+                </app-set-row>
+              </div>
+
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Events</h3>
+                @for (ev of events; track ev.k) {
+                  <app-set-row [disabled]="off" [dirty]="s.events[ev.k] !== D.events[ev.k]" (reset)="store.setEvent(ev.k, D.events[ev.k])">
+                    <ng-container row-label>{{ ev.label }}</ng-container>
+                    <ng-container row-help>{{ ev.help }}</ng-container>
+                    <kj-toggle class="set-tgl" appearance="switch" size="sm" [ariaLabel]="ev.label" [pressed]="s.events[ev.k]" [disabled]="off" (pressedChange)="store.setEvent(ev.k, $event)" />
+                  </app-set-row>
+                }
+              </div>
+
+              <div class="set-grp">
+                <h3 class="up set-grp-h">Sound</h3>
+                <app-set-row [disabled]="off" [dirty]="s.sound !== D.sound" (reset)="store.set({ sound: D.sound })">
+                  <ng-container row-label>Play sound</ng-container>
+                  <ng-container row-help>A short cue when a notification fires.</ng-container>
+                  <kj-toggle class="set-tgl" appearance="switch" size="sm" ariaLabel="Play sound" [pressed]="s.sound" [disabled]="off" (pressedChange)="store.set({ sound: $event })" />
+                </app-set-row>
+                <app-set-row
+                  [disabled]="off || !s.sound"
+                  [dirty]="s.soundName !== D.soundName || s.volume !== D.volume"
+                  (reset)="store.set({ soundName: D.soundName, volume: D.volume })"
+                >
+                  <ng-container row-label>Cue &amp; volume</ng-container>
+                  <ng-container row-help>Notification tone and loudness.</ng-container>
+                  <div style="display:flex;align-items:center;gap:var(--sp-5)">
+                    <app-select [value]="s.soundName" [options]="soundOptions" (valueChange)="store.set({ soundName: $event })" />
+                    <kj-button kjVariant="ghost" class="set-play" title="Send a test notification" kjAriaLabel="Send a test notification" (click)="previewCue()">
+                      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z" /></svg>
+                    </kj-button>
+                    <app-icon name="volume" size="sm" color="var(--ink-4)" />
+                    <kj-slider class="set-slider" [kjMin]="0" [kjMax]="100" [kjValue]="s.volume" (kjValueChange)="store.set({ volume: $event })" kjAriaLabel="Notification volume" />
+                    <span class="tnum" style="font-size:var(--fs-meta);color:var(--ink-3);width:30px;text-align:right">{{ s.volume }}%</span>
+                  </div>
+                </app-set-row>
+              </div>
+            }
+          }
+        </div>
+
+        <div class="set-foot">
+          @if (store.anyDirty()) {
+            <kj-button class="reset-all" kjVariant="quiet" (click)="resetAll()"><app-icon name="refresh" size="sm" />Reset all to defaults</kj-button>
+          } @else {
+            <span class="fl"><span class="fd"></span>Changes apply instantly</span>
+          }
+          <kj-button class="set-foot-cancel" kjVariant="outline" (click)="close()">Cancel</kj-button>
+          <kj-button kjVariant="default" (click)="close()"><app-icon name="check" size="sm" />Done</kj-button>
         </div>
       </div>
     </div>
@@ -796,42 +661,39 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   styles: [
     `
 /* ── ORCHESTRA settings — scoped by the .set- prefix (encapsulation: None) ── */
-.set-backdrop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:var(--sp-10);
-  background:var(--scrim);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);}
-
+/* No backdrop here: KjDialog centers this component's host and paints the
+   scrim (see the kouji overlay chrome block in styles.css). .set-modal is the panel box. */
 .set-modal{--set-amber:var(--sem-attn);--set-danger:var(--sem-del);
-  width:760px;max-width:calc(100vw - 56px);height:600px;max-height:84vh;display:flex;
+  width: round(calc(760px * var(--density)), 1px);max-width:calc(100vw - 56px);height:600px;max-height:84vh;display:flex;
   background:var(--panel);border:1px solid var(--hair-2);border-radius:15px;overflow:hidden;
   box-shadow:var(--shadow);
-  font-family:var(--font-mono);color:var(--ink);
+  font-family:var(--font-ui);color:var(--ink);
   transform-origin:center;animation:set-pop .22s cubic-bezier(.2,.7,.2,1);}
 /* transform-only entrance: if the frame is throttled and the animation freezes
    at 0%, content stays visible (just offset) instead of stuck at opacity:0 */
 @keyframes set-pop{from{transform:translateY(10px) scale(.99)}to{transform:none}}
 @media (prefers-reduced-motion:reduce){.set-modal{animation:none}}
-.set-spin{animation:set-spin .9s linear infinite;}
-@keyframes set-spin{to{transform:rotate(360deg)}}
 
 /* ── left nav ── */
-.set-nav{width:204px;flex:none;background:var(--panel-2);border-right:1px solid var(--hair);
+.set-nav{width: round(calc(204px * var(--density)), 1px);flex:none;background:var(--panel-2);border-right:1px solid var(--hair);
   display:flex;flex-direction:column;padding:var(--sp-6) var(--sp-5);}
 .set-brand{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-2) var(--sp-4) var(--sp-6);}
-.set-brand .gi{width:var(--ctl-h);height:var(--ctl-h);border-radius:8px;display:grid;place-items:center;flex:none;
-  color:var(--ui-ink);background:var(--ui-sel);
-  box-shadow:inset 0 0 0 1px var(--ui-sel-2);}
-.set-brand .bt{font-family:var(--font-disp);font-size:var(--fs-lg);font-weight:600;letter-spacing:-.01em;}
-.set-brand .bs{font-size:var(--fs-2xs);color:var(--ink-4);letter-spacing:.04em;}
+/* skin from the shared .glyph-plate; size + radius stay per-instance */
+.set-brand .gi{width:var(--ctl-h);height:var(--ctl-h);border-radius:8px;flex:none;}
+.set-brand .bt{font-size:var(--fs-body);}
+.set-brand .bs{font-size:var(--fs-meta);color:var(--ink-4);letter-spacing:.04em;}
 .set-nav-list{display:flex;flex-direction:column;gap:var(--sp-1);}
-.set-nav-item{position:relative;display:flex;align-items:center;gap:var(--sp-5);height:35px;padding:0 var(--sp-5);
-  border-radius:9px;color:var(--ink-3);cursor:pointer;font-size:var(--fs-ui);border:1px solid transparent;
-  transition:background .12s,color .12s,border-color .12s;text-align:left;background:transparent;
-  font-family:var(--font-mono);width:100%;}
-.set-nav-item:hover{background:var(--panel-3);color:var(--ink-2);}
-.set-nav-item.on{background:var(--panel-3);color:var(--ink);border-color:var(--hair-2);}
-.set-nav-item svg{width:var(--sp-7);height:var(--sp-7);flex:none;color:var(--ink-4);transition:color .12s;}
-.set-nav-item:hover svg,.set-nav-item.on svg{color:var(--ui-ink);}
-.set-nav-item .lb{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.set-nav-item.on::before{content:"";position:absolute;left:-11px;top:9px;bottom:9px;width:2.5px;
+/* The rows are kj-list-items now, so the ground, hover and current-row state
+   come from the component (--kj-list-* / [active]). What stays here is only
+   what the list cannot know: the row's height and the accent bar that marks
+   the current section on the panel's edge. */
+.set-nav-list{--kj-list-row-padding:0 var(--sp-5);--kj-list-radius:9px;}
+.set-nav-item{position:relative;height:35px;gap:var(--sp-5);cursor:pointer;}
+.set-nav-item app-icon{color:var(--ink-4);transition:color .12s;}
+.set-nav-item:hover app-icon,
+.set-nav-item[data-active] app-icon{color:var(--ui-ink);}
+.set-nav-item .lb{flex:1;}
+.set-nav-item[data-active]::before{content:"";position:absolute;left:-11px;top:9px;bottom:9px;width:2.5px;
   border-radius:2px;background:var(--ui-ind);}
 .set-nav-dot{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--set-amber);flex:none;
   box-shadow:0 0 7px -1px var(--set-amber);}
@@ -840,71 +702,104 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 .set-main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel);}
 .set-head{flex:none;display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-7) var(--sp-7) var(--sp-6);
   border-bottom:1px solid var(--hair);}
-.set-head .ht{font-family:var(--font-disp);font-size:var(--fs-lg);font-weight:600;letter-spacing:-.01em;}
-.set-head .hs{font-size:var(--fs-xs);color:var(--ink-4);margin-top:var(--sp-1);}
-.set-x{margin-left:auto;flex:none;width:var(--ctl-h);height:var(--ctl-h);border-radius:7px;border:1px solid transparent;
-  background:transparent;color:var(--ink-3);cursor:pointer;display:grid;place-items:center;transition:all .12s;}
-.set-x:hover{background:var(--panel-3);color:var(--ink);border-color:var(--hair);}
+.set-head .ht{font-size:var(--fs-body);}
+.set-head .hs{color:var(--ink-4);margin-top:var(--sp-1);}
+.set-x .kj-button{margin-left:auto;flex:none;width:var(--ctl-h);height:var(--ctl-h);padding:0;border-radius:7px;border:1px solid transparent;
+  background:transparent;color:var(--ink-3);cursor:pointer;display:grid;place-items:center;transition:all .12s;box-shadow:none;}
+.set-x .kj-button:hover{background:var(--panel-3);color:var(--ink);border-color:var(--hair);}
 
 .set-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:var(--sp-2) var(--sp-7) var(--sp-8);}
-.set-body::-webkit-scrollbar{width:9px;}
-.set-body::-webkit-scrollbar-thumb{background:var(--hair-2);border-radius:6px;border:2px solid transparent;background-clip:padding-box;}
-.set-body::-webkit-scrollbar-thumb:hover{background:var(--ink-4);background-clip:padding-box;}
 
 .set-grp{padding:var(--sp-7) 0 var(--sp-7);border-bottom:1px solid var(--hair);}
 .set-grp:last-child{border-bottom:none;}
-.set-grp-h{font-size:var(--fs-2xs);letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);
+.set-grp-h{color:var(--ink-3);
   margin-bottom:var(--sp-3);display:flex;align-items:center;gap:var(--sp-4);}
-.set-grp-h .ln{flex:1;height:1px;background:var(--hair);}
+.set-grp-h::after{content:"";flex:1;height:1px;background:var(--hair);}
 
-/* (row / reset-pill / seg / toggle / select / combo styles live on their own
-   sub-components below-in-file — same flat .set- vocabulary, encapsulation off) */
+/* ── segmented control ──
+   The tray, the chip and the selected state are kouji's pills tabs now
+   (--kj-tab-* knobs in styles.css). What is Settings-specific: its size step
+   and the danger tint on "everything". */
+.set-seg{--kj-tab-padding-x:var(--sp-6);--kj-tab-font-size:var(--fs-body);}
+.set-seg .kj-tab svg{width:var(--sp-6);height:var(--sp-6);}
+.set-seg .kj-tab[aria-selected="true"] svg{color:var(--ui-ink);}
+.set-seg .kj-tab.dgr[aria-selected="true"]{color:var(--set-danger);
+  background:color-mix(in oklch,var(--set-danger),transparent 88%);
+  box-shadow:0 0 0 1px color-mix(in oklch,var(--set-danger),transparent 52%);}
+.set-seg .kj-tab.dgr[aria-selected="true"] svg{color:var(--set-danger);}
+
+/* ── switch toggle — 34×19 track + 15×15 thumb, the design's fixed geometry ── */
+.set-tgl .kj-toggle--switch{--kj-switch-w:34px;--kj-switch-h:19px;--kj-switch-thumb:15px;flex:none;}
+
+/* ── model combobox / numeric fields / volume slider widths ── */
+.set-model-combo{min-width: round(calc(186px * var(--density)), 1px);}
+.set-num-cap .kj-number-input{width: round(calc(120px * var(--density)), 1px);}
+.set-num-rate .kj-number-input{width: round(calc(96px * var(--density)), 1px);}
+.set-num-cap .kj-number-input__field,.set-num-rate .kj-number-input__field{width:100%;min-width:0;}
+.set-slider .kj-slider{width: round(calc(128px * var(--density)), 1px);}
+.set-upd-bar .kj-progress-bar{width:100%;}
 
 /* ── tool select grid (agent default tool) ── */
-.set-tools{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-4);width:100%;}
-.set-tool{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-4);
-  padding:var(--sp-5) var(--sp-5) var(--sp-5);border-radius:11px;border:1px solid var(--hair);background:var(--panel-2);
-  color:var(--ink-3);cursor:pointer;transition:all .13s;text-align:left;font-family:var(--font-mono);}
-.set-tool:hover:not(.off){border-color:var(--hair-2);color:var(--ink-2);transform:translateY(-1px);}
-.set-tool.on{color:var(--ink);border-color:var(--ui-line);
+/* auto-fit, NOT repeat(4,1fr): a grid item's min-width is auto, so a 1fr
+   track cannot shrink below its content. At a larger --fs-scale the tool names
+   outgrew their quarter-share, the tracks pushed the grid past .set-body — which
+   is overflow-x:hidden — and the 4th tile was simply cut off with no scrollbar.
+   Wrapping to fewer columns keeps every tile whole and readable; minmax(0,…) on
+   the floor plus the truncation below stops it re-appearing at extreme scales. */
+.set-tools{display:grid;gap:var(--sp-4);width:100%;
+  /* the floor is in ch, so it grows with the TYPE: when the names no longer
+     fit four across, auto-fit drops to three or two and every tile stays
+     whole, instead of four cramped tiles truncating their labels. */
+  grid-template-columns:repeat(auto-fit,minmax(14ch,1fr));}
+.set-tool .kj-button{min-width:0;}
+.set-tool .tn,.set-tool .ts{max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.set-tool .kj-button{position:relative;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:var(--sp-4);
+  height:auto;padding:var(--sp-5) var(--sp-5) var(--sp-5);border-radius:11px;border:1px solid var(--hair);background:var(--panel-2);
+  color:var(--ink-3);cursor:pointer;transition:all .13s;text-align:left;box-shadow:none;width:100%;
+  /* DELIBERATE EXCEPTION: the tool tiles stay mono. They read as machine
+     identities (claude / codex / gemini + their binaries), not as chrome, so
+     they keep the data typeface even though the rest of the dialog is UI. */
+  font-family:var(--font-mono);}
+.set-tool .kj-button:hover{border-color:var(--hair-2);color:var(--ink-2);transform:translateY(-1px);}
+.set-tool.off .kj-button:hover{border-color:var(--hair);color:var(--ink-3);transform:none;}
+.set-tool.on .kj-button{color:var(--ink);border-color:var(--ui-line);
   background:var(--ui-sel);}
-.set-tool.off{opacity:.5;}
-.set-tool.warn{color:var(--ink);border-color:color-mix(in oklch,var(--set-amber),transparent 50%);
+.set-tool.off .kj-button{opacity:.5;}
+.set-tool.warn .kj-button{color:var(--ink);border-color:color-mix(in oklch,var(--set-amber),transparent 50%);
   background:color-mix(in oklch,var(--set-amber),transparent 90%);}
 .set-tool.warn .pick{background:var(--set-amber);}
-.set-tool .tn{font-size:var(--fs-sm);font-weight:500;}
-.set-tool .ts{font-size:var(--fs-2xs);color:var(--ink-4);display:flex;align-items:center;gap:var(--sp-2);}
+.set-tool .tn{font-weight:var(--fw-medium);}
+.set-tool .ts{font-size:var(--fs-meta);color:var(--ink-4);display:flex;align-items:center;gap:var(--sp-2);}
 .set-tool .pick{position:absolute;top:9px;right:9px;width:var(--sp-7);height:var(--sp-7);border-radius:50%;
   display:grid;place-items:center;background:var(--ui-fill);color:var(--ui-on-fill);}
-.set-tool .nf{position:absolute;top:10px;right:10px;font-size:var(--fs-3xs);letter-spacing:.08em;text-transform:uppercase;
-  color:var(--ink-4);border:1px solid var(--hair);border-radius:4px;padding:1px var(--sp-2);}
+.set-tool .nf{position:absolute;top:10px;right:10px;font-size:var(--fs-micro);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-4);border:1px solid var(--hair);border-radius:4px;padding:0 var(--sp-1);
+  /* the tile is ~125px wide and this badge shares its top row with the tool
+     glyph — at the badge step (12px) the uppercase label filled the tile and
+     collided with the icon, so it takes the micro step (design uses 8px) */
+  max-width:calc(100% - var(--sp-9));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .set-tool .nf.amber{color:var(--set-amber);border-color:color-mix(in oklch,var(--set-amber),transparent 55%);}
 
 /* ── chips / amber / fields ── */
-.set-warn{display:inline-flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-5);border-radius:8px;font-size:var(--fs-xs);
+.set-warn{display:inline-flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-5);border-radius:8px;
   color:var(--set-amber);background:color-mix(in oklch,var(--set-amber),transparent 88%);
   border:1px solid color-mix(in oklch,var(--set-amber),transparent 60%);line-height:1.4;}
 .set-warn svg{width:var(--sp-6);height:var(--sp-6);flex:none;}
-.set-vchip{display:inline-flex;align-items:center;gap:var(--sp-3);height:var(--ctl-h-sm);padding:0 var(--sp-4);border-radius:999px;
-  border:1px solid var(--hair);background:var(--panel-2);color:var(--ink-2);font-size:var(--fs-xs);
-  font-variant-numeric:tabular-nums;}
-.set-vchip b{color:var(--ink);font-weight:600;}
-.set-muted{font-size:var(--fs-sm);color:var(--ink-4);display:inline-flex;align-items:center;gap:var(--sp-3);}
+.set-muted{font-size:var(--fs-meta);color:var(--ink-4);display:inline-flex;align-items:center;gap:var(--sp-3);}
 
 .set-text{display:flex;align-items:center;gap:var(--sp-4);height:var(--row-h);padding:0 var(--sp-5);background:var(--panel-2);
   border:1px solid var(--hair);border-radius:8px;min-width:0;transition:border-color .12s;}
 .set-text:focus-within{border-color:var(--ui-focus);}
 .set-text input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);
-  font-family:var(--font-mono);font-size:var(--fs-ui);}
+  font-family:var(--font-mono);}
 .set-text svg{width:var(--sp-6);height:var(--sp-6);color:var(--ink-4);flex:none;}
-.set-preview{display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-sm);color:var(--ink-4);margin-top:var(--sp-1);}
-.set-preview b{color:var(--ink);font-weight:500;}
+.set-preview{display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-meta);color:var(--ink-4);margin-top:var(--sp-1);}
+.set-preview b{color:var(--ink);font-weight:var(--fw-medium);}
 .set-preview .arr{color:var(--ink-4);}
 
 .set-path{flex:1;min-width:0;display:flex;align-items:center;gap:var(--sp-4);height:var(--row-h);padding:0 var(--sp-5);
   background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;color:var(--ink-2);
-  font-size:var(--fs-ui);overflow:hidden;}
-.set-path .pt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  overflow:hidden;}
 .set-path svg{width:var(--sp-6);height:var(--sp-6);color:var(--ink-4);flex:none;}
 
 /* ── update available card ── */
@@ -912,73 +807,48 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   background:var(--ui-sel);
   border:1px solid var(--ui-sel-2);}
 .set-upd-top{display:flex;align-items:center;gap:var(--sp-5);}
-.set-upd-ic{width:var(--ctl-h-lg);height:var(--ctl-h-lg);border-radius:9px;flex:none;display:grid;place-items:center;color:var(--ui-ink);
-  background:var(--ui-sel);
+/* .glyph-plate + the update card's stronger --ui-line ring (design/app.html:10622) */
+.set-upd-ic{width:var(--ctl-h-lg);height:var(--ctl-h-lg);flex:none;
   box-shadow:inset 0 0 0 1px var(--ui-line);}
 .set-upd-tt{flex:1;min-width:0;}
-.set-upd-tt .u1{font-size:var(--fs-ui);color:var(--ink);font-weight:500;display:flex;align-items:center;gap:var(--sp-4);}
-.set-upd-tt .u2{font-size:var(--fs-xs);color:var(--ink-3);margin-top:var(--sp-1);font-variant-numeric:tabular-nums;}
-.set-upd-ver{font-family:var(--font-disp);font-size:var(--fs-lg);font-weight:600;color:var(--ui-ink);letter-spacing:-.01em;}
-.set-upd-notes{display:inline-flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-xs);color:var(--ui-link);
+.set-upd-tt .u1{color:var(--ink);font-weight:var(--fw-medium);display:flex;align-items:center;gap:var(--sp-4);}
+.set-upd-tt .u2{color:var(--ink-3);margin-top:var(--sp-1);font-variant-numeric:tabular-nums;}
+.set-upd-ver{font-family:var(--font-disp);font-size:var(--fs-lg);font-weight:var(--fw-medium);color:var(--ui-ink);letter-spacing:-.01em;}
+.set-upd-notes{display:inline-flex;align-items:center;gap:var(--sp-2);color:var(--ui-link);
   text-decoration:none;border-bottom:1px solid color-mix(in oklch,var(--ui-link),transparent 70%);
   padding-bottom:1px;align-self:flex-start;}
 .set-upd-notes:hover{border-color:var(--ui-link);}
 .set-upd-notes svg{width:var(--sp-5);height:var(--sp-5);}
 .set-upd-act{display:flex;gap:var(--sp-4);}
-.set-upd-bar{width:100%;height:var(--sp-1);border-radius:999px;overflow:hidden;
-  background:var(--ui-sel);}
-.set-upd-bar i{display:block;height:100%;border-radius:999px;background:var(--ui-meter);
-  transition:width .15s linear;}
-.set-upd-bar i.full{animation:set-upd-pulse 1.1s ease-in-out infinite;}
-@keyframes set-upd-pulse{0%,100%{opacity:1}50%{opacity:.55}}
-.set-upd-stage{font-size:var(--fs-xs);color:var(--ink-3);font-variant-numeric:tabular-nums;}
+.set-upd-stage{color:var(--ink-3);font-variant-numeric:tabular-nums;}
 
 /* ── danger confirm ── */
 .set-danger{margin-top:var(--sp-6);width:100%;padding:var(--sp-6);border-radius:11px;display:flex;flex-direction:column;gap:var(--sp-5);
   border:1px solid var(--set-danger);background:color-mix(in oklch,var(--set-danger),transparent 90%);
   box-shadow:0 0 0 3px color-mix(in oklch,var(--set-danger),transparent 88%);animation:set-pop .16s ease;}
-.set-danger-h{display:flex;align-items:center;gap:var(--sp-4);color:var(--set-danger);font-size:var(--fs-ui);font-weight:600;}
+.set-danger-h{display:flex;align-items:center;gap:var(--sp-4);color:var(--set-danger);font-weight:var(--fw-medium);}
 .set-danger-h svg{width:var(--sp-7);height:var(--sp-7);flex:none;}
-.set-danger-b{font-size:var(--fs-sm);color:var(--ink-2);line-height:1.55;}
-.set-danger-b b{color:var(--ink);font-weight:600;}
+.set-danger-b{color:var(--ink-2);line-height:1.55;}
+.set-danger-b b{color:var(--ink);font-weight:var(--fw-medium);}
 .set-danger-act{display:flex;gap:var(--sp-4);justify-content:flex-end;}
-.set-btn-danger{display:inline-flex;align-items:center;gap:var(--sp-3);height:var(--row-h);padding:0 var(--sp-6);border-radius:7px;
-  border:none;background:var(--set-danger);color:var(--on-solid);font-family:var(--font-mono);font-size:var(--fs-sm);
-  font-weight:600;cursor:pointer;transition:filter .12s;}
-.set-btn-danger:hover{filter:brightness(1.08);}
-.set-btn-danger svg{width:var(--sp-6);height:var(--sp-6);}
 
 /* ── cue preview ── */
-.set-play{width:var(--ctl-h);height:var(--ctl-h);flex:none;display:grid;place-items:center;border-radius:7px;
-  border:1px solid var(--hair);background:var(--panel-2);color:var(--ink-3);cursor:pointer;transition:all .12s;}
-.set-play:hover{color:var(--ui-ink);border-color:var(--ui-line);
+.set-play .kj-button{width:var(--ctl-h);height:var(--ctl-h);flex:none;display:grid;place-items:center;border-radius:7px;padding:0;
+  border:1px solid var(--hair);background:var(--panel-2);color:var(--ink-3);cursor:pointer;transition:all .12s;box-shadow:none;}
+.set-play .kj-button:hover{color:var(--ui-ink);border-color:var(--ui-line);
   background:var(--ui-sel);}
-.set-play svg{width:var(--sp-5);height:var(--sp-5);}
-
-/* ── slider (volume) ── */
-/* slider track (4px) and thumb (14×14) are fixed-geometry mini-widget dims — not control-height tokens */
-.set-slider{appearance:none;-webkit-appearance:none;width:128px;height:4px;border-radius:999px;
-  background:var(--hair-2);outline:none;cursor:pointer;}
-.set-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;
-  background:var(--ui-fill);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--hair-2);cursor:pointer;}
-.set-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ui-fill);
-  border:2px solid var(--panel);box-shadow:0 0 0 1px var(--hair-2);cursor:pointer;}
+.set-play .kj-button svg{width:var(--sp-5);height:var(--sp-5);}
 
 /* ── footer ── */
 .set-foot{flex:none;display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-7);border-top:1px solid var(--hair);
-  background:var(--panel-2);font-size:var(--fs-xs);color:var(--ink-3);}
+  background:var(--panel-2);color:var(--ink-3);}
 .set-foot .fl{display:inline-flex;align-items:center;gap:var(--sp-3);}
 .set-foot .fd{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--st-done);flex:none;}
-.set-foot .reset-all{display:inline-flex;align-items:center;gap:var(--sp-2);background:transparent;border:none;
-  color:var(--ink-3);font-family:var(--font-mono);font-size:var(--fs-xs);cursor:pointer;padding:0;}
-.set-foot .reset-all:hover{color:var(--ui-ink);}
-.set-foot .reset-all svg{width:var(--sp-5);height:var(--sp-5);}
-.set-foot .sp{flex:1;}
-.set-done{display:inline-flex;align-items:center;gap:var(--sp-3);height:var(--ctl-h);padding:0 var(--sp-6);border-radius:7px;
-  border:none;font-family:var(--font-mono);font-size:var(--fs-sm);font-weight:600;cursor:pointer;color:var(--ui-on-fill);
-  background:var(--ui-fill);
-  }
-.set-done:hover{filter:brightness(1.07);}
+/* .kj-quiet is the bare-label recipe; only the type and hover ink differ */
+.set-foot .reset-all .kj-button{--kj-button-gap:var(--sp-2);font-family:var(--font-mono);}
+.set-foot .reset-all .kj-button:hover:not([aria-disabled="true"]){--kj-button-fg:var(--ui-ink);}
+.set-foot .reset-all .kj-button svg{width:var(--sp-5);height:var(--sp-5);}
+.set-foot-cancel .kj-button{margin-left:auto;}
     `,
   ],
 })
@@ -992,6 +862,15 @@ export class SettingsModalComponent {
   private readonly alerts = inject(NotificationAlertService);
   private readonly diag = inject(DiagnosticsService);
   private readonly registry = inject(CommandRegistryService);
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      // Esc / outside-click dismiss the overlay, not the store — run the same
+      // teardown (revert a pending danger confirm, stop a keymap recorder,
+      // clear the store flag) whichever side closed it.
+      this.close();
+    });
+  }
 
   // ---- Keymap (B6.2) ----
   /** Command id currently recording a new chord (null = not recording). */
@@ -1063,9 +942,13 @@ export class SettingsModalComponent {
   readonly sections = SECTIONS;
   readonly subs = SUBS;
   readonly events = EVENTS;
-  readonly soundOptions = SOUND_OPTIONS;
+  readonly soundOptions: string[] = [...SOUND_OPTIONS];
   readonly releasesUrl = RELEASES_URL;
   readonly D = settingsDefaults();
+  readonly channelOptions: SegOption[] = [
+    { value: "stable", label: "stable" },
+    { value: "beta", label: "beta" },
+  ];
   readonly policyOptions: SegOption[] = [
     { value: "auto", label: "Auto-install" },
     { value: "notify", label: "Notify only" },
@@ -1078,7 +961,6 @@ export class SettingsModalComponent {
   ];
 
   readonly section = signal<SettingsSection>(this.store.openSection());
-  readonly modelOpen = signal(false);
   readonly confirm = signal<{ tool: string; prev: AutoApprovePolicy } | null>(null);
 
   readonly current = computed(() => SECTIONS.find((x) => x.id === this.section()) ?? SECTIONS[0]);
@@ -1093,6 +975,8 @@ export class SettingsModalComponent {
     const e = this.modelTool().effort;
     return e ? e : null;
   });
+  /** The effective model isn't in the curated list — a free-text override. */
+  readonly isCustomModel = computed(() => !this.modelTool().models.includes(this.effModel()));
   readonly detectedTools = computed(() => AGENT_TOOLS.filter((t) => this.runtime.toolAvailable(t.id)));
   readonly branchPreview = computed(() => {
     const s = this.store.settings();
@@ -1108,7 +992,6 @@ export class SettingsModalComponent {
   // ── shell ──
   selectSection(id: SettingsSection): void {
     this.section.set(id);
-    this.modelOpen.set(false);
   }
   close(): void {
     this.stopCapture(); // a dangling recorder would keep eating keystrokes
@@ -1121,20 +1004,6 @@ export class SettingsModalComponent {
       this.confirm.set(null);
     }
     this.store.closeModal();
-  }
-  /** Esc closes the model combo first, then the modal. */
-  @HostListener("document:keydown.escape")
-  onEsc(): void {
-    if (this.modelOpen()) this.modelOpen.set(false);
-    else this.close();
-  }
-  /** Clicks inside the modal don't reach the backdrop; a click outside an OPEN
-   *  combo closes the popover (the design's document-level outside-click). */
-  onModalDown(e: MouseEvent): void {
-    e.stopPropagation();
-    if (this.modelOpen() && !(e.target as HTMLElement | null)?.closest(".set-combo")) {
-      this.modelOpen.set(false);
-    }
   }
 
   // ── updates ──
@@ -1149,6 +1018,10 @@ export class SettingsModalComponent {
   /** Download fraction as a whole percent for the update card. */
   installPct(): number {
     return Math.round(this.store.installProgress() * 100);
+  }
+  /** Progress-bar value: null (indeterminate stripe) once the installer runs. */
+  installBarValue(): number | null {
+    return this.store.installPhase() === "installing" ? null : this.installPct();
   }
   /** "Read release notes": open the in-app What's New digest (it carries a
    *  "View full changelog" link to the releases page). */
@@ -1188,13 +1061,13 @@ export class SettingsModalComponent {
     void this.runtime.refreshDetections();
   }
 
+  /** Combobox commit (curated pick or free-text Enter) → per-tool override. */
+  onModelChange(v: unknown): void {
+    const m = String(v ?? "").trim();
+    if (m) this.store.setMap("toolModel", this.modelTool().id, m);
+  }
+
   // ── AI cost & budget (A4.3 / A4.4) ──
-  /** Model ids shown in the rate table: built-in defaults + any user overrides. */
-  readonly rateModels = computed(() => {
-    const overrides = Object.keys(this.store.settings().costRates);
-    const builtin = Object.keys(DEFAULT_RATES).filter((k) => k !== "default");
-    return Array.from(new Set([...builtin, ...overrides]));
-  });
   /** The SELECTED tool's curated models (+ a custom effective model, so its
    *  rate stays editable) — the per-agent slice of the rate table. */
   readonly toolRateModels = computed(() => {
@@ -1208,8 +1081,7 @@ export class SettingsModalComponent {
   rateDirty(model: string): boolean {
     return this.store.settings().costRates[model] !== undefined;
   }
-  setRate(model: string, field: "in" | "out", raw: string): void {
-    const v = parseFloat(raw);
+  setRate(model: string, field: "in" | "out", v: number): void {
     if (!isFinite(v) || v < 0) return;
     const next: CostRate = { ...this.rateOf(model), [field]: v };
     const def = DEFAULT_RATES[model];
@@ -1224,8 +1096,7 @@ export class SettingsModalComponent {
     delete rates[model];
     this.store.set({ costRates: rates });
   }
-  setBudget(key: "budgetCapUsd" | "confirmAboveUsd", raw: string): void {
-    const v = parseFloat(raw);
+  setBudget(key: "budgetCapUsd" | "confirmAboveUsd", v: number): void {
     if (!isFinite(v) || v < 0) return;
     this.store.set({ [key]: v });
   }

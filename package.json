@@ -1,6 +1,6 @@
 {
   "name": "orrery",
-  "version": "0.19.4",
+  "version": "0.20.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -18,13 +18,16 @@
   },
   "private": true,
   "dependencies": {
-    "@angular/cdk": "^20.2.14",
-    "@angular/common": "^20.1.4",
-    "@angular/compiler": "^20.1.4",
-    "@angular/core": "^20.1.4",
-    "@angular/forms": "^20.1.4",
-    "@angular/platform-browser": "^20.1.4",
-    "@angular/router": "^20.1.4",
+    "@angular/cdk": "^22.1.3",
+    "@angular/common": "^22.1.3",
+    "@angular/compiler": "^22.1.3",
+    "@angular/core": "^22.1.3",
+    "@angular/forms": "^22.1.3",
+    "@angular/platform-browser": "^22.1.3",
+    "@angular/router": "^22.1.3",
+    "@kouji-ui/components": "^0.7.0",
+    "@kouji-ui/core": "^0.6.3",
+    "@kouji-ui/themes": "^0.1.1",
     "@lexical/code": "^0.45.0",
     "@lexical/history": "^0.45.0",
     "@lexical/html": "^0.45.0",
@@ -52,21 +55,17 @@
     "mermaid": "^11.16.1",
     "monaco-editor": "^0.55.1",
     "rxjs": "~7.8.2",
-    "tslib": "^2.8.1",
-    "zone.js": "~0.15.1"
+    "tslib": "^2.8.1"
   },
   "devDependencies": {
-    "@angular/build": "^20.1.4",
-    "@angular/cli": "^20.1.4",
-    "@angular/compiler-cli": "^20.1.4",
+    "@angular/build": "^22.1.5",
+    "@angular/cli": "^22.1.5",
+    "@angular/compiler-cli": "^22.1.3",
     "@playwright/test": "^1.61.0",
-    "@tailwindcss/postcss": "^4.3.0",
     "@tauri-apps/cli": "^2",
     "ccusage": "^20.0.6",
     "jsdom": "^29.1.1",
-    "postcss": "^8.5.15",
-    "tailwindcss": "^4.3.0",
-    "typescript": "~5.8.3",
+    "typescript": "~6.0.3",
     "vitest": "^4.1.8"
   }
 }

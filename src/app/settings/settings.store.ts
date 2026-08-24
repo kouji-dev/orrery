@@ -1,7 +1,7 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS } from "../data";
 import { BRIDGE, Commands, Events } from "../data-source/bridge";
-import { AutoApprovePolicy, Settings, SettingsEvents, UpdateInfo } from "../models";
+import { Settings, SettingsEvents, UpdateInfo } from "../models";
 import { AgentsStore } from "../stores/agents.store";
 import { WorkspaceStore } from "../stores/workspace.store";
 import { UiStore } from "../ui/ui.store";
@@ -66,11 +66,6 @@ export function settingsMapDefault(key: SettingsMapKey, tool: string): string | 
   return meta.effort ? "high" : null; // toolEffort — spawn's hardcoded default
 }
 
-/** Effective manual path override for a tool ("" when none — auto-detect). */
-export function effectiveToolPath(s: Settings, tool: string): string {
-  return s.toolPath[tool] ?? "";
-}
-
 /** Effective (override-or-default) model for a tool. */
 export function effectiveModel(s: Settings, tool: string): string {
   return s.toolModel[tool] ?? settingsMapDefault("toolModel", tool) ?? "";
@@ -78,10 +73,6 @@ export function effectiveModel(s: Settings, tool: string): string {
 /** Effective (override-or-default) effort for a tool ("" when unsupported). */
 export function effectiveEffort(s: Settings, tool: string): string {
   return s.toolEffort[tool] ?? settingsMapDefault("toolEffort", tool) ?? "";
-}
-/** Effective (override-or-default) auto-approve policy for a tool. */
-export function effectiveApprove(s: Settings, tool: string): AutoApprovePolicy {
-  return s.autoApprove[tool] ?? "off";
 }
 
 function deepEq(a: unknown, b: unknown): boolean {

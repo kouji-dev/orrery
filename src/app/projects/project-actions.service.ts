@@ -11,7 +11,7 @@ export interface AddProjectRequest {
   gitInit: boolean;
   /** clone source — forwarded as-is; the backend decides what happens */
   sourceUrl?: string;
-  /** "root" → clone into path/<repo-name>; "project" → path IS the project ("." clone) */
+  /** "root" → clone into path/<repo-name>"project" → path IS the project ("." clone) */
   sourceMode?: "root" | "project";
   /** shallow-clone depth (only the default branch); omit for full history */
   depth?: number;

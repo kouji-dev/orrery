@@ -1,7 +1,7 @@
 // Orrery shared helpers, status metadata. (The icon set now lives in
 // icon.component.ts, backed by Lucide — see `LUCIDE` there.)
 import { AGENT_TOOLS } from "./data";
-import { AgentStatus, LogKind } from "./models";
+import { AgentStatus } from "./models";
 
 export interface StatusMeta {
   label: string;
@@ -54,34 +54,6 @@ export function isMarkdownPath(p: string): boolean {
  *  dropped file's absolute path is inserted into a terminal or prompt. */
 export function quotePath(p: string): string {
   return p === "" || /\s/.test(p) ? `"${p.replace(/"/g, '\\"')}"` : p;
-}
-
-export function logColor(t: LogKind | string): string {
-  return (
-    (
-      {
-        cmd: "var(--ink)",
-        out: "var(--log-info)",
-        ok: "var(--sem-add)",
-        warn: "var(--log-warn)",
-        err: "var(--log-err)",
-        sys: "var(--log-sys)",
-      } as Record<string, string>
-    )[t] || "var(--ink-2)"
-  );
-}
-export function logPrefix(t: LogKind | string): string {
-  return (
-    ({ cmd: "$", out: " ", ok: "✓", warn: "!", err: "✗", sys: "›" } as Record<string, string>)[t] || " "
-  );
-}
-
-// Matches CSI (\x1b[ … final), OSC (\x1b] … BEL/ST) and 2-char escape sequences.
-const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-Z\\-_]/g;
-
-/** Strip ANSI / escape sequences from a PTY chunk for plain-text display. */
-export function stripAnsi(s: string): string {
-  return s.replace(ANSI_RE, "");
 }
 
 // A single ANSI/escape token (CSI / OSC / 2-char), a RUN of plain printable
@@ -211,42 +183,6 @@ export function appendPtyTail(prev: string[], chunk: string, max = 60): string[]
   return lines.length > max ? lines.slice(lines.length - max) : lines;
 }
 
-// ---- terminal-title status detection ----
-// CLI coding agents encode live state in their OSC window title: an animated
-// braille spinner (or tool glyph / keyword) while working, a distinct glyph
-// when idle or waiting on the user. Reading the title lets us tell "actively
-// working" from "waiting for input" without the agent reporting anything.
-export type TitleStatus = "working" | "permission" | "idle";
-
-const BRAILLE_SPINNER_RE = /[⠀-⣿]/; // ⠋⠙⠹… spinner frames
-// "working" | "thinking" | "running" | "generating", but not inside another
-// word ("reworking") or a path ("~/codex/working").
-const WORKING_KEYWORDS_RE = /(?<![\w./\\-])(working|thinking|running|generating)(?![\w-])/i;
-const GEMINI_WORKING = "✦"; // ✦
-const GEMINI_SILENT_WORKING = "⏲"; // ⏲
-const PERMISSION_GLYPH = "✋"; // ✋ (gemini permission prompt)
-const CLAUDE_IDLE = "✳"; // ✳ (claude idle prefix)
-const GEMINI_IDLE = "◇"; // ◇
-
-/**
- * Classify a terminal title. Returns null when the title carries no recognized
- * signal (e.g. a plain cwd) so the caller can fall back to output activity.
- */
-export function detectTitleStatus(title: string): TitleStatus | null {
-  if (!title) return null;
-  if (title.includes(PERMISSION_GLYPH)) return "permission";
-  if (
-    BRAILLE_SPINNER_RE.test(title) ||
-    title.includes(GEMINI_WORKING) ||
-    title.includes(GEMINI_SILENT_WORKING) ||
-    WORKING_KEYWORDS_RE.test(title)
-  ) {
-    return "working";
-  }
-  if (title.includes(CLAUDE_IDLE) || title.includes(GEMINI_IDLE)) return "idle";
-  return null;
-}
-
 // ---- prompt classification (notification typing) ----
 // Heuristic: does the scraped terminal prompt read like a yes/no permission
 // request (→ Accept/Reject actions) vs an open question (→ open the terminal)?
@@ -255,18 +191,6 @@ const PERMISSION_RE =
 
 export function isPermissionPrompt(text: string): boolean {
   return PERMISSION_RE.test(text);
-}
-
-/**
- * Does the scraped terminal tail read like the agent is blocked on the user?
- * Catches y/n permission prompts and trailing questions — the signal CLI agents
- * that don't set a "waiting" terminal title (claude/codex) still leave in output.
- */
-export function isAwaitingInput(tail: string): boolean {
-  if (!tail) return false;
-  if (isPermissionPrompt(tail)) return true;
-  const last = tail.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? "";
-  return /\?\s*$/.test(last); // a trailing question
 }
 
 export function toolMeta(id: string) {
@@ -288,12 +212,6 @@ export const TOOL_GLYPH: Record<string, string> = {
   cursor: "▸",
   gemini: "✦",
 };
-
-export function hexRgb(hex: string): string {
-  const h = hex.replace("#", "");
-  const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(", ");
-}
 
 // color-mix helper to keep templates terse
 export function mix(color: string, transparentPct: number): string {

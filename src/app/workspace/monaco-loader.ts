@@ -1,4 +1,5 @@
 import type * as monacoApi from "monaco-editor";
+import { codeMetrics } from "../ui/density";
 
 /**
  * Lazy loader for Monaco (B1.1 editor migration). Unlike the CodeMirror setup
@@ -180,4 +181,21 @@ export async function monacoLanguage(lang: string): Promise<string> {
     }
   }
   return def.id;
+}
+
+/** The editor options that carry density. Monaco reads these once at create()
+ *  and never re-reads them, so a density switch must push them back in. */
+export function monacoDensityOptions(): { fontSize: number; lineHeight: number } {
+  return codeMetrics();
+}
+
+/**
+ * Re-apply the current density's code metrics to a live editor (plain or diff).
+ * Safe to call with null — the surfaces call it from an effect that may run
+ * before, or after, the editor exists.
+ */
+export function applyMonacoDensity(
+  editor: { updateOptions(o: { fontSize: number; lineHeight: number }): void } | null,
+): void {
+  editor?.updateOptions(monacoDensityOptions());
 }

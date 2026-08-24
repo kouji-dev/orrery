@@ -7,53 +7,69 @@ import { TicketsStore } from "../stores/tickets.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ProjectGroupComponent } from "./project-group.component";
+import { KjBadgeComponent, KjButtonComponent, KjInputComponent, KjInputGroupAddonComponent, KjInputGroupComponent } from "@kouji-ui/components";
 
 @Component({
   selector: "app-sidebar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ProjectGroupComponent],
+  imports: [IconComponent, ProjectGroupComponent, KjButtonComponent, KjBadgeComponent, KjInputComponent, KjInputGroupAddonComponent, KjInputGroupComponent],
   template: `
     <aside style="display:flex;flex-direction:column;min-height:0;background:var(--panel);border-right:1px solid var(--hair)">
       <div style="padding:var(--sp-5) var(--sp-6) var(--sp-4);border-bottom:1px solid var(--hair)">
-        <!-- Backlog nav entry -->
-        <button
-          (click)="ui.openBacklog()"
-          [style.background]="ui.activeTabKind() === 'backlog' ? 'var(--panel-2)' : 'transparent'"
-          [style.color]="ui.activeTabKind() === 'backlog' ? 'var(--ink)' : 'var(--ink-3)'"
-          style="display:flex;align-items:center;gap:var(--sp-3);width:100%;padding:var(--sp-2) var(--sp-3);border-radius:var(--r-sm);border:none;cursor:pointer;font-size:var(--fs-ui);margin-bottom:var(--sp-3)"
-        >
-          <app-icon name="layers" size="sm" [color]="ui.activeTabKind() === 'backlog' ? 'var(--ui-ink)' : null" />
-          <span>Backlog</span>
-          @if (openTicketCount() > 0) {
-            <span
-              class="tnum"
-              style="margin-left:auto;min-width:16px;height:var(--sp-7);padding:0 var(--sp-2);border-radius:8px;background:var(--ui-fill);color:var(--ui-on-fill);font-size:var(--fs-2xs);font-weight:700;display:grid;place-items:center"
-            >{{ openTicketCount() }}</span>
+        <!-- Backlog nav entry — design/app.html NavRow (4569): idle transparent,
+             active = panel-3 ground + hairline ring + a 2.5px --ui-ind bar on the
+             sidebar's left edge. -->
+        <div style="position:relative;margin-bottom:var(--sp-3)">
+          @if (backlogActive()) {
+            <span style="position:absolute;left:calc(-1 * var(--sp-6));top:7px;bottom:7px;width:2.5px;border-radius:3px;background:var(--ui-ind)"></span>
           }
-        </button>
-        <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)">
-          <app-icon name="layers" size="sm" color="var(--ui-ink)" />
-          <span class="up" style="font-size:var(--fs-2xs);color:var(--ink-3)">Projects</span>
-          <span class="chip tnum" style="font-size:var(--fs-2xs);padding:0 var(--sp-3)">{{ projects.all().length }}</span>
-          <span class="chip tnum" style="margin-left:auto;font-size:var(--fs-2xs);padding:1px var(--sp-3)">
-            <span class="dot running" style="background:var(--st-running);width:var(--sp-3);height:var(--sp-3)"></span>{{ totalRunning() }}/5
-          </span>
-          <button class="pane-btn" (click)="ui.toggleSidebarCompact()" title="Collapse sidebar">
-            <app-icon name="panelLeft" size="sm" [px]="14" />
-          </button>
+          <kj-button
+            class="nav-row"
+            [class.active]="backlogActive()"
+            kjVariant="ghost"
+            [kjFullWidth]="true"
+            (click)="ui.openBacklog()"
+            style="display:flex;--kj-button-gap:var(--sp-3);--kj-button-padding-y:var(--sp-2);--kj-button-padding-x:var(--sp-3);--kj-button-radius:var(--r-md);--kj-button---kj-button-height:auto;--kj-button-justify:flex-start"
+          >
+            <app-icon name="columns" size="sm" [color]="backlogActive() ? 'var(--ui-ink)' : 'var(--ink-3)'" />
+            <span style="font-weight:var(--fw-medium)">Backlog</span>
+            @if (openTicketCount() > 0) {
+              <kj-badge class="tnum">{{ openTicketCount() }}</kj-badge>
+            }
+          </kj-button>
         </div>
-        <div style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm)">
-          <app-icon name="search" size="sm" color="var(--ink-4)" />
-          <input
+        <!-- nowrap + the collapse button owning the auto-margin keeps it pinned
+             to the far right of THIS row whatever the counts do -->
+        <div style="display:flex;align-items:center;flex-wrap:nowrap;gap:var(--sp-3);margin-bottom:var(--sp-4);min-width:0">
+          <app-icon name="layers" size="sm" color="var(--ui-ink)" />
+          <span class="up trunc" style="color:var(--ink-3)">Projects</span>
+          <kj-badge class="tnum">{{ projects.all().length }}</kj-badge>
+          <kj-badge class="tnum">
+            <span class="dot running" style="background:var(--st-running);width:var(--sp-3);height:var(--sp-3)"></span>{{ totalRunning() }}/5
+          </kj-badge>
+          <kj-button kjSize="icon" class="pane-act kj-push" kjVariant="ghost" (click)="ui.toggleSidebarCompact()" title="Collapse sidebar" kjAriaLabel="Collapse sidebar"
+            style="flex:none;--kj-button-padding-x:var(--sp-1);--kj-button-padding-y:var(--sp-1);--kj-button-height:auto;--kj-button-radius:4px">
+            <app-icon size="sm" name="panelLeft" />
+          </kj-button>
+        </div>
+        <!-- kj-input-group does NOT cascade kjSize to the child input (it stays
+             data-size-less), so the xs metrics are set as knobs here — they
+             inherit down to the input that reads them. -->
+        <kj-input-group style="--kj-input-font-family:var(--font-mono)">
+          <kj-input-group-addon kjPosition="start" kjAriaHidden="true">
+            <app-icon name="search" size="sm" color="var(--ink-4)" />
+          </kj-input-group-addon>
+          <kj-input
             [value]="ui.query()"
             (input)="ui.query.set($any($event.target).value)"
             placeholder="filter agents…"
-            style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm)"
           />
           @if (ui.query()) {
-            <app-icon name="x" size="sm" color="var(--ink-4)" style="cursor:pointer" (click)="ui.query.set('')" />
+            <kj-input-group-addon kjPosition="end">
+              <app-icon name="x" size="sm" color="var(--ink-4)" style="cursor:pointer" (click)="ui.query.set('')" />
+            </kj-input-group-addon>
           }
-        </div>
+        </kj-input-group>
       </div>
 
       <!-- empty space below the groups still offers the panel-level actions;
@@ -73,16 +89,50 @@ import { ProjectGroupComponent } from "./project-group.component";
         }
       </div>
 
-      <div style="padding:var(--sp-5);border-top:1px solid var(--hair);display:flex;gap:var(--sp-4)">
-        <button class="btn ghost-hair" (click)="ui.openAddProject()" style="flex:1;justify-content:center">
+      <div class="sb-foot" style="padding:var(--sp-5);border-top:1px solid var(--hair);display:flex;gap:var(--sp-4)">
+        <kj-button kjVariant="outline" (click)="ui.openAddProject()">
           <app-icon name="folder" size="sm" />Add project
-        </button>
-        <button class="btn primary" (click)="ui.openSpawn(null)" title="Spawn agent" style="padding:var(--sp-2) var(--sp-5)">
+        </kj-button>
+        <kj-button kjVariant="default" (click)="ui.openSpawn(null)" title="Spawn agent">
           <app-icon name="bolt" size="sm" />Agent
-        </button>
+        </kj-button>
       </div>
     </aside>
   `,
+  styles: [
+    `
+      /* mockup NavRow/pane-btn hovers: neutral panel tints, no lift.
+         Unlayered component styles outrank kouji's @layer kj.component,
+         which otherwise tints ghost hover with a fg mix + translateY. */
+      kj-button.pane-act {
+        --kj-button-fg: var(--ink-3);
+      }
+      /* NavRow active (design/app.html:4569): the knobs have to land on the
+         INNER .kj-button — the global ghost-variant rules declare them there,
+         so a host-level value would lose the cascade. */
+      /* The count pill is the design's neutral .chip (app.html:4578), not a
+         bold accent pill: kouji declares the badge knobs ON .kj-badge, so the
+         size + the push have to be set there — a host-level value (the host is
+         display:contents) never reaches the box. */
+      kj-button.nav-row kj-badge ::ng-deep .kj-badge {
+        --kj-badge-font-size: var(--fs-badge);
+        --kj-badge-padding-x: var(--sp-3);
+        margin-left: auto;
+      }
+      kj-button.nav-row:not(.active) ::ng-deep .kj-button:hover {
+        --kj-button-bg: var(--panel-2);
+      }
+      kj-button.nav-row.active ::ng-deep .kj-button {
+        --kj-button-fg: var(--ink);
+        --kj-button-bg: var(--panel-3);
+        --kj-button-border-color: var(--hair-2);
+      }
+      kj-button.pane-act:hover {
+        --kj-button-bg: var(--panel-3);
+        --kj-button-fg: var(--ink);
+      }
+    `,
+  ],
 })
 export class SidebarComponent {
   readonly ui = inject(UiStore);
@@ -104,6 +154,8 @@ export class SidebarComponent {
   readonly openTicketCount = computed(
     () => this.ticketsStore.all().filter((t) => t.status !== "done").length,
   );
+  /** The backlog tab is the active one — drives the NavRow's active skin. */
+  readonly backlogActive = computed(() => this.ui.activeTabKind() === "backlog");
 
   agentsFor(projectId: string): Agent[] {
     const q = this.ui.query().toLowerCase();

@@ -116,7 +116,7 @@ describe("RuntimeRowComponent", () => {
   it("missing: shows the locate editor with 'Use this path'", () => {
     const { el } = mount(det({ status: "missing" }));
     expect(el.querySelector(".set-rt-input")).not.toBeNull();
-    expect(el.querySelector(".btn.primary")?.textContent).toContain("Use this path");
+    expect(el.querySelector('kj-button[kjVariant="default"]')?.textContent).toContain("Use this path");
   });
 
   it("verify success: persists toolPath + folds in the detection + closes editor", async () => {

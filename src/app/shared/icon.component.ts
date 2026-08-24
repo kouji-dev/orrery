@@ -138,27 +138,37 @@ const LUCIDE: Record<string, LucideIconData> = {
   volume: Volume2,
 };
 
+/** Type-relative icon steps; see the --ico-* scale in styles.css. */
+export type IconSize = "xs" | "sm" | "md" | "lg" | "xl";
+
 @Component({
   selector: "app-icon",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [LucideAngularModule],
-  host: { style: "display:inline-flex;line-height:0", "[style.color]": "color() || null" },
+  host: {
+    style: "display:inline-flex;line-height:0",
+    "[style.color]": "color() || null",
+    "[style.--ico]": "dim()",
+  },
   template: `
-    <lucide-angular [img]="icon()" [size]="dim()" [strokeWidth]="1.8" style="display:block" />
+    <lucide-angular [img]="icon()" [size]="NOMINAL" [strokeWidth]="1.8" style="display:block" />
   `,
 })
 export class IconComponent {
   readonly name = input.required<string>();
-  readonly size = input<"sm" | "lg" | "md">("md");
-  /** optional explicit pixel size, overrides `size` */
-  readonly px = input<number | null>(null);
+  readonly size = input<IconSize>("md");
   readonly color = input<string | null>(null);
+
+  /**
+   * lucide writes width/height as SVG attributes; the real size comes from the
+   * `app-icon svg` rule in styles.css reading `--ico`. This nominal value only
+   * has to be large enough that nothing depends on it.
+   */
+  protected readonly NOMINAL = 24;
 
   // Unknown names fall back to the ellipsis glyph (the old map fell back to "dots").
   readonly icon = computed<LucideIconData>(() => LUCIDE[this.name()] ?? Ellipsis);
-  readonly dim = computed(() => {
-    const p = this.px();
-    if (p != null) return p;
-    return this.size() === "sm" ? 13 : this.size() === "lg" ? 18 : 15;
-  });
+
+  /** Resolved CSS length for `--ico`: an em token from the size scale. */
+  readonly dim = computed(() => `var(--ico-${this.size()})`);
 }
