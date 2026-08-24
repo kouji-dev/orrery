@@ -30,7 +30,11 @@ import { KjBadgeComponent } from "@kouji-ui/components";
   `,
 })
 export class ShaChipComponent {
-  readonly sha = input.required<string>();
+  /** The commit sha. NOT `input.required`: a required signal input read from a
+   *  computed during creation throws NG0950 under raw vitest JIT — the same
+   *  constraint that keeps several components on @Input() decorators. Every
+   *  call site binds it; the empty default only affects that test environment. */
+  readonly sha = input<string>("");
   /** When true the sha text is rendered in muted ink (var(--ink-3)). */
   readonly dim = input<boolean>(false);
 

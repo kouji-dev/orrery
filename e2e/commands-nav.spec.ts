@@ -120,7 +120,7 @@ test("Ctrl+Shift+F opens find-in-files with scope + toggles once an agent exists
   await expect(find.locator("input")).toBeVisible();
 
   // control row: live Find/Replace seg (B3.2), Aa/W/.* toggles, scope select
-  const replaceTab = find.getByRole("button", { name: "Replace" });
+  const replaceTab = find.getByRole("tab", { name: "Replace" });
   await expect(replaceTab).toBeEnabled();
   await expect(find.getByRole("button", { name: "Aa" })).toBeVisible();
   await expect(find.getByRole("button", { name: ".*" })).toBeVisible();
@@ -129,10 +129,10 @@ test("Ctrl+Shift+F opens find-in-files with scope + toggles once an agent exists
 
   // switching to Replace reveals the replacement row + apply button
   await replaceTab.click();
-  await expect(find.getByPlaceholder(/Replacement/)).toBeVisible();
+  await expect(find.locator('input[placeholder^="Replacement"]')).toBeVisible();
   await expect(find.getByRole("button", { name: /^Replace \d/ })).toBeDisabled();
-  await find.getByRole("button", { name: "Find", exact: true }).click();
-  await expect(find.getByPlaceholder(/Replacement/)).toHaveCount(0);
+  await find.getByRole("tab", { name: "Find", exact: true }).click();
+  await expect(find.locator('input[placeholder^="Replacement"]')).toHaveCount(0);
 
   // idle empty-state hint before a query
   await expect(find).toContainText("results stream in as files are scanned");

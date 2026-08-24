@@ -154,7 +154,7 @@ describe("SettingsModal sections render", () => {
     expect(s.el.textContent).toContain("Native OS notifications");
     expect(s.el.querySelectorAll(".set-row.dis")).toHaveLength(0);
 
-    click(s.fixture, s.el.querySelector(".set-tgl")); // master off
+    click(s.fixture, s.el.querySelector(".set-tgl button")); // master off (the switch is kouji's inner button)
     expect(s.store.settings().osNotifications).toBe(false);
     // 4 event rows + Play sound + Cue & volume stay rendered but disabled
     expect(s.el.querySelectorAll(".set-row.dis")).toHaveLength(6);
@@ -171,7 +171,7 @@ describe("SettingsModal dirty rows + footer", () => {
     expect(s.store.settings().channel).toBe("beta");
     expect(s.el.querySelector(".set-reset")).not.toBeNull();
     expect(s.el.querySelector(".set-warn")).not.toBeNull(); // beta warn chip
-    expect(byText(s.el, "button.reset-all", "Reset all to defaults")).not.toBeNull();
+    expect(byText(s.el, ".reset-all", "Reset all to defaults")).not.toBeNull();
 
     click(s.fixture, s.el.querySelector(".set-reset"));
     expect(s.store.settings().channel).toBe("stable");
@@ -183,7 +183,7 @@ describe("SettingsModal dirty rows + footer", () => {
   it("Reset all restores every default", async () => {
     const s = await setup({ channel: "beta", autoResume: true, volume: 10 });
     expect(s.store.anyDirty()).toBe(true);
-    click(s.fixture, byText(s.el, "button.reset-all", "Reset all"));
+    click(s.fixture, byText(s.el, ".reset-all", "Reset all"));
     expect(s.store.anyDirty()).toBe(false);
     expect(s.store.settings().channel).toBe("stable");
     expect(s.store.settings().volume).toBe(70);
@@ -209,7 +209,7 @@ describe("SettingsModal danger confirm (Everything)", () => {
     const s = await setup();
     navTo(s, "Permissions");
     click(s.fixture, byText(s.el.querySelector(".set-seg") as HTMLElement, "button", "Everything"));
-    click(s.fixture, s.el.querySelector(".set-btn-danger"));
+    click(s.fixture, byText(s.el.querySelector(".set-danger-act") as HTMLElement, "button", "Everything"));
     expect(s.el.querySelector(".set-danger")).toBeNull();
     expect(s.store.settings().autoApprove["claude"]).toBe("everything");
   });

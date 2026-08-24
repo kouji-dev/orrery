@@ -50,7 +50,7 @@ test("files tree keeps its viewport and scroll offset through a rescan", async (
   await page.waitForSelector("app-top-bar");
   await page.evaluate(seedAgent("e2e-sp1", "e2e-scroll-tree"));
   await page.evaluate(ui(`.openAgent("e2e-sp1")`));
-  await page.locator("app-right-panel").getByRole("button", { name: "Files" }).click();
+  await page.locator("app-right-panel").getByRole("tab", { name: "Files" }).click();
   await expect(page.locator("app-file-tree")).toBeVisible();
 
   await page.evaluate(seedTree("e2e-sp1", 80));

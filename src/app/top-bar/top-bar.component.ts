@@ -94,7 +94,7 @@ import { KjButtonComponent, KjKbdComponent } from "@kouji-ui/components";
           >
             @if (active) {
               <!-- design/app.html: 2px --ui-ind indicator pinned to the tab's top edge -->
-              <span style="position:absolute;left:0;right:0;top:0;height:2px;background:var(--ui-ind)"></span>
+              <span style="position:absolute;left:0;right:0;top:0;height:var(--sp-1);background:var(--ui-ind)"></span>
             }
             @if (dz === 'before') {
               <span style="position:absolute;left:-1px;top:4px;bottom:4px;width:3px;border-radius:2px;background:var(--ui-fill)"></span>

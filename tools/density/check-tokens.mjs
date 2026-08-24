@@ -25,6 +25,33 @@ const ALLOW_PX = new Set(["0px", "1px", "999px"]);
 // Documented exceptions: { file: <substring>, value: <substring> }. Bespoke
 // structural heights that intentionally stay fixed go here (populated in sweep).
 export const ALLOWLIST = [
+  // ---- recipes that moved into styles.css during the type-system sweep ----
+  // .fab svg mirrors its 19px SVG viewport (was tweaks-panel's .tweak-fab).
+  { file: "styles.css", value: "19px" },
+  // The version pill is a fixed 17px badge with a 5px gutter between version,
+  // divider and channel tag (design/app.html:4229-4235) — deliberately slimmer
+  // than any control-height token. Skin moved here from version-badge.
+  { file: "styles.css", value: "17px" },
+  { file: "styles.css", value: "5px" },
+  // Its 1x9px hairline divider is drawn geometry, not spacing.
+  { file: "version-badge.component.ts", value: "9px" },
+
+  // ---- design-exact geometry copied from the mockup ----
+  // The update toast is pixel-specified in design/app.html:11512-11526: a
+  // 13/14/16px padding box with 14px and 7px gutters. These are one bespoke
+  // card's proportions, not steps on the spacing scale.
+  { file: "update-toast.component.ts", value: "13px" },
+  { file: "update-toast.component.ts", value: "14px" },
+  { file: "update-toast.component.ts", value: "16px" },
+  { file: "update-toast.component.ts", value: "7px" },
+  // Rail count bubble: a 13px circle with 3px gutters that overlaps the icon
+  // corner (design/app.html:4711). Scaling it detaches it from the glyph.
+  { file: "compact-rail.component.ts", value: "13px" },
+  { file: "compact-rail.component.ts", value: "3px" },
+  // NavRow current-row bar: 2.5px is a hairline-plus, deliberately between
+  // --sp-1 (2px) and --sp-2 (4px) (design/app.html:4576).
+  { file: "sidebar.component.ts", value: "2.5px" },
+
   // .rail-btn is a compact sidebar icon button whose square 38×38 size is a
   // deliberate visual design constant — not a control height token.
   { file: "styles.css", value: "38px" },

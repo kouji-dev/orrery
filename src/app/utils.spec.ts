@@ -173,7 +173,7 @@ function appendPtyTailReference(prev: string[], chunk: string, max = 60): string
         break;
       case "H":
       case "f": {
-        const [r, c] = params.split("");
+        const [r, c] = params.split(";");
         row = r ? Math.max(0, parseInt(r, 10) - 1) : 0;
         col = c ? Math.max(0, parseInt(c, 10) - 1) : 0;
         ensureRow();

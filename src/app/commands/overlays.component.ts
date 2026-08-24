@@ -18,7 +18,8 @@ import { fzSegments, OverlayShellComponent } from "./overlay-shell.component";
 import { RecentFilesService } from "./recent-files.service";
 import { FindInFilesComponent } from "./find-in-files.component";
 import { SearchEverywhereComponent } from "./search-everywhere.component";
-import { KjBadgeComponent, KjCommandGroupComponent, KjCommandItemComponent, KjCommandPaletteComponent, KjCommandPaletteFooter, KjKbdComponent } from "@kouji-ui/components";
+import { KjBadgeComponent, KjCommandGroupComponent, KjCommandEmptyComponent,
+  KjCommandItemComponent, KjCommandPaletteComponent, KjCommandPaletteFooter, KjKbdComponent } from "@kouji-ui/components";
 
 // ------------------------------------------------------------ command palette
 /**
@@ -158,7 +159,7 @@ export class CommandPaletteComponent {
 @Component({
   selector: "app-recent-files-overlay",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, KjKbdComponent, KjCommandPaletteComponent, KjCommandItemComponent, KjCommandPaletteFooter, KjBadgeComponent],
+  imports: [IconComponent, KjKbdComponent, KjCommandPaletteComponent, KjCommandItemComponent, KjCommandEmptyComponent, KjCommandPaletteFooter, KjBadgeComponent],
   template: `
     <kj-command-palette
       class="orr-palette orr-palette-narrow"
@@ -173,6 +174,11 @@ export class CommandPaletteComponent {
       (kjValueChange)="active.set($event)"
       (kjActivate)="pick($event.value)"
     >
+      @if (!items().length) {
+        <!-- the palette owns the empty slot; the hand-rolled div this replaced
+             carried the copy the e2e asserts on -->
+        <kj-command-empty>no files opened yet</kj-command-empty>
+      }
       @for (it of items(); track it.key) {
         <kj-command-item [kjValue]="it.key">
           <app-icon name="file" size="sm" color="var(--ink-3)" />

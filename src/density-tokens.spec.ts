@@ -29,12 +29,18 @@ describe("density token engine", () => {
     }
   });
 
-  it("anchors the ramp on --fs-sm at 16px, with --fs-ui/--fs-tree as aliases", () => {
-    // One reference size, three names: --fs-sm is what 165 call sites use, and
-    // --fs-ui (the <body> default) / --fs-tree must not drift away from it.
+  it("anchors the ramp on --fs-sm at 16px, and the UI baseline one step below", () => {
+    // --fs-sm is still the ramp's 16px reference. The BASELINE is not: the call
+    // sites settled that argument — 251 of ~407 explicit font-sizes asked for
+    // something smaller than a 16px default, and the winners were 14 and 13. So
+    // --fs-ui / --fs-tree (what <body> and the trees actually use) alias
+    // --fs-xs, and the ~170 declarations that existed only to undo the old
+    // default are gone. 16 stays available as --fs-sm for the places that mean it.
     expect(css).toMatch(/--fs-sm:\s*round\(calc\(16px \* var\(--fs-scale\)\)/);
-    expect(css).toMatch(/--fs-ui:\s*var\(--fs-sm\)/);
-    expect(css).toMatch(/--fs-tree:\s*var\(--fs-sm\)/);
+    expect(css).toMatch(/--fs-ui:\s*var\(--fs-xs\)/);
+    expect(css).toMatch(/--fs-tree:\s*var\(--fs-xs\)/);
+    // and the body default must BE that baseline, not the reference step
+    expect(css).toMatch(/body\s*\{[^}]*font-size:\s*var\(--fs-ui\)/);
   });
 
   it("exposes code-surface metrics for Monaco + xterm", () => {

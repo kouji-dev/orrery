@@ -65,7 +65,7 @@ test("tree and flat rows share one density-derived height", async ({ page }) => 
   for (const h of treeHeights) expect(Math.abs(h - (rowH as number))).toBeLessThanOrEqual(1);
 
   // flat mode: same rows, same height — dir/rename info inline, not stacked
-  await page.getByRole("button", { name: "Flat" }).click();
+  await page.getByRole("tab", { name: "Flat" }).click();
   const flatHeights = await rowHeights(page);
   expect(flatHeights).toHaveLength(3);
   for (const h of flatHeights) expect(Math.abs(h - (rowH as number))).toBeLessThanOrEqual(1);

@@ -243,7 +243,7 @@ import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent 
         align-items: center;
         gap: var(--sp-3);
         max-width: round(calc(150px * var(--density)), 1px);
-        padding: 3px 5px 3px 8px;
+        padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-4);
         border: 1px solid transparent;
         border-radius: var(--r-sm);
         font-family: var(--font-mono);

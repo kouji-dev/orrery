@@ -720,7 +720,7 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
    The tray, the chip and the selected state are kouji's pills tabs now
    (--kj-tab-* knobs in styles.css). What is Settings-specific: its size step
    and the danger tint on "everything". */
-.set-seg{--kj-tab-padding-x:var(--sp-6);--kj-tab-}
+.set-seg{--kj-tab-padding-x:var(--sp-6);--kj-tab-font-size:var(--fs-body);}
 .set-seg .kj-tab svg{width:var(--sp-6);height:var(--sp-6);}
 .set-seg .kj-tab[aria-selected="true"] svg{color:var(--ui-ink);}
 .set-seg .kj-tab.dgr[aria-selected="true"]{color:var(--set-danger);

@@ -111,23 +111,26 @@ test("every spacing + height token lands on a whole pixel", async ({ page }) => 
   }
 });
 
-test("--fs-sm is the 16px reference, with --fs-ui/--fs-tree aliased to it", async ({ page }) => {
+test("--fs-sm is the 16px reference; the UI baseline is one step below it", async ({ page }) => {
   await page.goto("/");
-  const names = ["--fs-sm", "--fs-ui", "--fs-tree"];
+  const names = ["--fs-sm", "--fs-xs", "--fs-ui", "--fs-tree"];
 
   const regular = await page.evaluate(tokens("regular", names));
   expect(regular["--fs-sm"]).toBe(16);
-  // Aliases, not near-duplicates — they must not be able to drift apart.
-  expect(regular["--fs-ui"]).toBe(regular["--fs-sm"]);
-  expect(regular["--fs-tree"]).toBe(regular["--fs-sm"]);
+  // The ramp still anchors on 16, but the app is not written at 16: --fs-ui
+  // (the <body> default) and --fs-tree alias --fs-xs, one step down. The call
+  // sites decided it — most explicit sizes used to be smaller than the default,
+  // so the default was being undone rather than used.
+  expect(regular["--fs-xs"]).toBe(14);
+  expect(regular["--fs-ui"]).toBe(regular["--fs-xs"]);
+  expect(regular["--fs-tree"]).toBe(regular["--fs-xs"]);
 
-  const compact = await page.evaluate(tokens("compact", names));
-  const comfy = await page.evaluate(tokens("comfy", names));
-  expect(compact["--fs-sm"]).toBe(14);   // 16 * 0.875
-  expect(comfy["--fs-sm"]).toBe(18);     // 16 * 1.125
-  for (const d of [compact, comfy]) {
-    expect(d["--fs-ui"]).toBe(d["--fs-sm"]);
-    expect(d["--fs-tree"]).toBe(d["--fs-sm"]);
+  // and the alias must hold at every density, not just the regular one
+  for (const step of ["compact", "comfy"] as const) {
+    const d = await page.evaluate(tokens(step, names));
+    expect(d["--fs-ui"]).toBe(d["--fs-xs"]);
+    expect(d["--fs-tree"]).toBe(d["--fs-xs"]);
+    expect(d["--fs-xs"]).toBeLessThan(d["--fs-sm"]);
   }
 });
 

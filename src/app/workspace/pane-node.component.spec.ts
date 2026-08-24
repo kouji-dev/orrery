@@ -102,8 +102,14 @@ describe("PaneNodeComponent header actions", () => {
     f.detectChanges();
     return f;
   }
+  // <kj-button> carries the title on its HOST (its inner <button> is kouji's).
+  // Native tooltips still resolve — the browser walks up for `title` — but a
+  // `button[title]` selector no longer matches, so accept either shape and
+  // return the element that owns the title and the (click) listener.
   const btn = (f: { nativeElement: HTMLElement }, title: string) =>
-    f.nativeElement.querySelector<HTMLButtonElement>(`button[title^="${title}"]`);
+    f.nativeElement.querySelector<HTMLElement>(
+      `kj-button[title^="${title}"], button[title^="${title}"]`,
+    );
 
   beforeEach(() => {
     vi.clearAllMocks();

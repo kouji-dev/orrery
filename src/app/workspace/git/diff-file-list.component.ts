@@ -330,10 +330,13 @@ export class DiffFileListComponent {
     const m = this.menu();
     if (!m) return;
     const path = m.file.path.replace(/\\/g, "/");
+    // dismiss first, like every other row action (toOs): the confirmation has
+    // already been given, so the menu has nothing left to say — and a failed
+    // delete reports through the flash, not by leaving the menu hanging open.
+    this.closeMenu();
     try {
       await this.bridge.invoke(Commands.FileDelete, { id: this.agent().id, path });
       this.edits.close(this.agent().id, path);
-      this.closeMenu();
     } catch (e) {
       this.ui.flash(msgOf(e));
     }

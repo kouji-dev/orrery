@@ -26,7 +26,7 @@ async function openGitTab(page: Page, id: string, name: string): Promise<void> {
   await page.waitForSelector("app-top-bar");
   await page.evaluate(seedAgent(id, name));
   await page.evaluate(ui(`.openAgent("${id}")`));
-  await page.locator("app-right-panel").getByRole("button", { name: "Git" }).click();
+  await page.locator("app-right-panel").getByRole("tab", { name: "Git" }).click();
 }
 
 test("git tab renders dual-path split buttons for commit / push / rebase / merge", async ({ page }) => {
@@ -44,7 +44,9 @@ test("merge dropdown offers the AI variant with NO cost chrome (kill switch off)
   const merge = page.locator("app-git-action-button", { hasText: "Merge" });
 
   await merge.locator(".caret").click();
-  const menu = merge.locator(".menu");
+  // the dropdown is <kj-dropdown-menu-content>: portalled to the overlay
+  // container, so it is NOT inside app-git-action-button any more
+  const menu = page.locator("kj-dropdown-menu-content.menu:visible");
   await expect(menu).toBeVisible();
   await expect(menu).toContainText("AI path");
   await expect(menu).not.toContainText("spends tokens");
@@ -86,5 +88,5 @@ test("a long Changes list scrolls inside its cap — commit controls stay visibl
   expect(overflows).toBe(true);
   // and the commit controls below it are still on screen without scrolling
   await expect(page.getByRole("button", { name: /^Commit all/ })).toBeInViewport();
-  await expect(page.getByPlaceholder("commit message…")).toBeInViewport();
+  await expect(page.locator(`input[placeholder="commit message…"]`)).toBeInViewport();
 });

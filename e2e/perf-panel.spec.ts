@@ -33,7 +33,9 @@ test("Resources tab activates without a backend (empty tree state, no crash)", a
   await page.locator(".dvc-fab").click();
   const tab = page.locator(".dvc-tab", { hasText: "Resources" });
   await tab.click();
-  await expect(tab).toHaveClass(/on/);
+  // the dev-console tabs are <kj-button [kjPressed]> now — active state is
+  // aria-pressed on the inner button, not an `.on` class on the host
+  await expect(tab.locator("button")).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".dvcon")).toBeVisible(); // still alive after the failed poll
   await expect(page.locator(".dvcon")).toContainText("No process tree yet");
 });

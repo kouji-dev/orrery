@@ -54,11 +54,12 @@ test("Ctrl+Shift+G toggles the dock on Git Graph; closed by default", async ({ p
   await expect(dock).toHaveCount(1);
 
   // git panels first in the tab strip
-  await expect(dock.getByRole("button", { name: "Git Graph" })).toBeVisible();
-  await expect(dock.getByRole("button", { name: "Branches" })).toBeVisible();
-  await expect(dock.getByRole("button", { name: "Local History" })).toBeVisible();
-  // the active tab carries the accent underline
-  await expect(dock.locator(".kj-tab-strip button", { hasText: "Git Graph" }).locator(".tab-ind")).toHaveCount(1);
+  await expect(dock.getByRole("tab", { name: "Git Graph" })).toBeVisible();
+  await expect(dock.getByRole("tab", { name: "Branches" })).toBeVisible();
+  await expect(dock.getByRole("tab", { name: "Local History" })).toBeVisible();
+  // the strip is <kj-tabs> now — the active tab is the aria-selected one, and
+  // kouji draws the underline from it (no hand-rolled .tab-ind span)
+  await expect(dock.getByRole("tab", { name: "Git Graph" })).toHaveAttribute("aria-selected", "true");
   // no agents yet → the graph panel asks for a worktree scope (no fake rows)
   await expect(dock.locator("app-commit-graph-panel")).toContainText("select a worktree");
 
@@ -70,6 +71,7 @@ test("Ctrl+Shift+G toggles the dock on Git Graph; closed by default", async ({ p
 test("the palette lists and runs the tool-window commands", async ({ page }) => {
   await ready(page);
   await page.keyboard.press("Control+Shift+P");
+  await expect(page.locator("app-command-palette input")).toBeVisible();
   await page.keyboard.type("commit graph");
   await expect(page.locator("app-command-palette")).toContainText("Show Commit Graph");
   await page.keyboard.press("Enter");
@@ -83,12 +85,12 @@ test("graph panel: real scope, filter chrome, and the B4.1 path filter disabled"
 
   // scoped to the seeded worktree: filter row renders; commits fetch rejects
   // (no backend) → honest empty state, never fabricated rows
-  await expect(panel.getByPlaceholder("Filter by message or sha…")).toBeVisible();
+  await expect(panel.locator(`input[placeholder="Filter by message or sha…"]`)).toBeVisible();
   await expect(panel).toContainText("no commits on this branch yet");
   await expect(panel).toContainText("shift-click two commits");
 
   // the B4.1 note lives on the <kj-input>'s wrapper, not on the native input
-  const path = panel.getByPlaceholder("path…");
+  const path = panel.locator(`input[placeholder="path…"]`);
   await expect(path).toBeDisabled();
   await expect(panel.getByTitle(/B4\.1/)).toBeVisible();
 
@@ -101,7 +103,7 @@ test("graph panel: real scope, filter chrome, and the B4.1 path filter disabled"
 
 test("branches panel: live A3.2 chrome with honest no-backend states", async ({ page }) => {
   await openSeeded(page);
-  await page.locator("app-tool-window").getByRole("button", { name: "Branches" }).click();
+  await page.locator("app-tool-window").getByRole("tab", { name: "Branches" }).click();
   const panel = page.locator("app-branches-panel");
 
   // REAL data: detected project branches + the seeded worktree branch
@@ -120,7 +122,7 @@ test("branches panel: live A3.2 chrome with honest no-backend states", async ({ 
   // live ops: New branch stays disabled until a name is typed, then enables
   const newBranch = panel.getByRole("button", { name: "New branch" }).first();
   await expect(newBranch).toBeDisabled();
-  await panel.getByPlaceholder("new branch name…").fill("feat-e2e");
+  await panel.locator(`input[placeholder="new branch name…"]`).fill("feat-e2e");
   await expect(newBranch).toBeEnabled();
 
   // row ops are enabled buttons now (invokes reject backend-side — no fake ok)
@@ -129,13 +131,14 @@ test("branches panel: live A3.2 chrome with honest no-backend states", async ({ 
   // Delete opens a <kj-confirm-popup> — its content is portalled out of the
   // panel, so the confirm chrome is asserted at page scope
   await panel.getByRole("button", { name: "Delete" }).first().click();
-  await expect(page.getByText(/delete .+\?/)).toBeVisible();
+  // every row owns a (closed) popup, so match the OPEN one, not the first
+  await expect(page.locator("kj-confirm-popup-message:visible")).toHaveText(/delete .+\?/);
   await page.getByRole("button", { name: "Cancel" }).first().click();
 });
 
 test("local history panel: live B4.4 chrome with an honest empty timeline", async ({ page }) => {
   await openSeeded(page);
-  await page.locator("app-tool-window").getByRole("button", { name: "Local History" }).click();
+  await page.locator("app-tool-window").getByRole("tab", { name: "Local History" }).click();
   const panel = page.locator("app-local-history-panel");
 
   // backend absent → the timeline load fails to an honest empty state

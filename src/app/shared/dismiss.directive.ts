@@ -20,6 +20,15 @@ export class DismissDirective {
   readonly appDismiss = output<void>();
 
   onDocMousedown(e: MouseEvent) {
-    if (!this.el.nativeElement.contains(e.target as Node)) this.appDismiss.emit();
+    const t = e.target as HTMLElement | null;
+    if (this.el.nativeElement.contains(t)) return;
+    // kouji portals its floating panels (confirm popups, dropdown menus,
+    // selects) into body > .kj-overlay-container. One opened from INSIDE this
+    // host is logically part of it: dismissing on its mousedown destroys the
+    // panel — and the projected content that owns the handler — before the
+    // click lands. That is why the file list's Delete confirm silently did
+    // nothing: the menu (and with it the confirm popup) was gone by mouseup.
+    if (t?.closest(".kj-overlay-container")) return;
+    this.appDismiss.emit();
   }
 }

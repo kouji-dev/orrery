@@ -54,10 +54,10 @@ test("Raw/Preview toggle swaps between the editor and the rendered document", as
   await openMd(page);
   await expect(page.locator(".md-body")).toBeVisible();
 
-  await page.getByRole("button", { name: "Raw", exact: true }).click();
+  await page.getByRole("tab", { name: "Raw", exact: true }).click();
   await expect(page.locator(".md-body")).toHaveCount(0);
   await expect(page.locator("app-monaco-file-editor")).toBeVisible();
 
-  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.getByRole("tab", { name: "Preview", exact: true }).click();
   await expect(page.locator(".md-body h1", { hasText: "Guide Title" })).toBeVisible();
 });

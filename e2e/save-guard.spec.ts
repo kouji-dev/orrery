@@ -67,16 +67,18 @@ test("Autosave is an opt-in setting under Agent defaults", async ({ page }) => {
   await page.goto("/");
   await page.waitForSelector("app-top-bar");
   await page.keyboard.press("Control+Shift+P");
+  await expect(page.locator("app-command-palette input")).toBeVisible();
   await page.keyboard.type("settings");
   await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: "Agent defaults" }).click();
+  await page.locator(".set-nav-item", { hasText: "Agent defaults" }).click();
 
   const row = page.locator("app-set-row", { hasText: "Autosave edits" });
   await expect(row).toBeVisible();
   await expect(row).toContainText("Ctrl+S still saves on demand");
 
-  // the row control is kouji's <kj-toggle> (a button with aria-pressed) now
-  await row.getByRole("button", { name: "Autosave edits" }).click();
+  // the row control is kouji's <kj-toggle>: a display:contents host wrapping a
+  // real <button aria-pressed> — click the button, the host has no box
+  await row.locator(".set-tgl button").click();
   const on = await page.evaluate(
     `window.ng.getComponent(document.querySelector("app-top-bar")).settings.settings().autosave`,
   );

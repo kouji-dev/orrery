@@ -26,7 +26,7 @@ async function openFilesTab(page: Page): Promise<void> {
   await page.waitForSelector("app-top-bar");
   await page.evaluate(seedAgent("e2e-ft1", "e2e-tree"));
   await page.evaluate(ui(`.openAgent("e2e-ft1")`));
-  await page.locator("app-right-panel").getByRole("button", { name: "Files" }).click();
+  await page.locator("app-right-panel").getByRole("tab", { name: "Files" }).click();
   await expect(page.locator("app-file-tree")).toBeVisible();
 }
 

@@ -13,9 +13,13 @@ async function openKeymap(page: Page): Promise<void> {
   await page.goto("/");
   await page.waitForSelector("app-top-bar");
   await page.keyboard.press("Control+Shift+P");
+  // wait for the palette to actually mount before typing — a blind type/Enter
+  // races the first keystroke against bootstrap and silently runs nothing
+  await expect(page.locator("app-command-palette input")).toBeVisible();
   await page.keyboard.type("settings");
   await page.keyboard.press("Enter");
-  await page.getByRole("button", { name: "Keymap" }).click();
+  // the left nav is a <kj-list> of <kj-list-item>, not buttons
+  await page.locator(".set-nav-item", { hasText: "Keymap" }).click();
 }
 
 test("keymap lists commands by group with their default bindings", async ({ page }) => {
