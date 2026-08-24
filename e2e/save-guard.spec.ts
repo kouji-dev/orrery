@@ -69,6 +69,10 @@ test("Autosave is an opt-in setting under Agent defaults", async ({ page }) => {
   await page.keyboard.press("Control+Shift+P");
   await expect(page.locator("app-command-palette input")).toBeVisible();
   await page.keyboard.type("settings");
+  // Enter runs whatever row is HIGHLIGHTED — wait for the palette to settle on
+  // one, or a loaded machine can press Enter between the query landing and the
+  // list re-rendering under it.
+  await expect(page.locator(".kj-command-item[data-active]")).toHaveCount(1);
   await page.keyboard.press("Enter");
   await page.locator(".set-nav-item", { hasText: "Agent defaults" }).click();
 

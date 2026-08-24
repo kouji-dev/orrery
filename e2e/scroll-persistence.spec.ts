@@ -144,10 +144,11 @@ test("diff tab keeps its selected file and scroll after switching tabs and back"
   await page.locator(".diff-file", { hasText: "b.ts" }).click();
   await expect(page.locator(".diff-head-path")).toContainText("src/b.ts");
 
-  // scroll the Monaco diff once it's live
-  await expect(page.locator("app-unified-code .monaco-diff-editor")).toBeVisible();
+  // scroll the Monaco diff once it's live (the editor arrives as a lazy chunk —
+  // under a loaded machine the first mount takes well past the default 5s poll)
+  await expect(page.locator("app-unified-code .monaco-diff-editor")).toBeVisible({ timeout: 30_000 });
   await expect
-    .poll(() => page.evaluate(diffEditor(`.getModifiedEditor().getScrollHeight()`)))
+    .poll(() => page.evaluate(diffEditor(`.getModifiedEditor().getScrollHeight()`)), { timeout: 15_000 })
     .toBeGreaterThan(1000);
   await page.evaluate(diffEditor(`.getModifiedEditor().setScrollTop(800)`));
 
@@ -158,9 +159,9 @@ test("diff tab keeps its selected file and scroll after switching tabs and back"
 
   // the opened file survives, and the diff restores its scroll position
   await expect(page.locator(".diff-head-path")).toContainText("src/b.ts");
-  await expect(page.locator("app-unified-code .monaco-diff-editor")).toBeVisible();
+  await expect(page.locator("app-unified-code .monaco-diff-editor")).toBeVisible({ timeout: 30_000 });
   await expect
-    .poll(() => page.evaluate(diffEditor(`.getModifiedEditor().getScrollTop()`)))
+    .poll(() => page.evaluate(diffEditor(`.getModifiedEditor().getScrollTop()`)), { timeout: 15_000 })
     .toBeGreaterThan(600);
 });
 

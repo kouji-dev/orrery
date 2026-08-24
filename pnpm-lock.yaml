@@ -31,10 +31,10 @@ importers:
         version: 22.1.3(@angular/common@22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(@angular/platform-browser@22.1.3(@angular/common@22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2)))(rxjs@7.8.2)
       '@kouji-ui/components':
         specifier: ^0.7.0
-        version: 0.7.0(a0c1426847c98e097e8132dfca5b5e6e)
+        version: 0.7.0(462670bd3697a86d6a141096730a19dc)
       '@kouji-ui/core':
-        specifier: ^0.6.0
-        version: 0.6.0(4ef55405ef1e4324ae544342a352ae27)
+        specifier: ^0.6.2
+        version: 0.6.2(4ef55405ef1e4324ae544342a352ae27)
       '@kouji-ui/themes':
         specifier: ^0.1.1
         version: 0.1.1
@@ -936,8 +936,8 @@ packages:
       lexical:
         optional: true
 
-  '@kouji-ui/core@0.6.0':
-    resolution: {integrity: sha512-58wvwjcVRR3ou15uTY/PqcgeYIzAkdRvuUtT+Q3108WMVMq/VjrlcTAFceYDBkAY+8UdnaUUXxuUoJSGaN0fRQ==}
+  '@kouji-ui/core@0.6.2':
+    resolution: {integrity: sha512-gkbpA1G9MSSXzkE1WYucDVz8YkSay2mUMNl2NUr6NuE0fYiMd9iG075JcFURWxyC/uyC+y/7QP88DhsxVFp2cg==}
     peerDependencies:
       '@angular/cdk': ^22.0.0
       '@angular/common': ^22.0.0
@@ -4290,13 +4290,13 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@kouji-ui/components@0.7.0(a0c1426847c98e097e8132dfca5b5e6e)':
+  '@kouji-ui/components@0.7.0(462670bd3697a86d6a141096730a19dc)':
     dependencies:
       '@angular/cdk': 22.1.3(@angular/common@22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(@angular/platform-browser@22.1.3(@angular/common@22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2)))(rxjs@7.8.2)
       '@angular/common': 22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2)
       '@angular/core': 22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2)
       '@angular/forms': 22.1.3(@angular/common@22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(@angular/platform-browser@22.1.3(@angular/common@22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2)))(rxjs@7.8.2)
-      '@kouji-ui/core': 0.6.0(4ef55405ef1e4324ae544342a352ae27)
+      '@kouji-ui/core': 0.6.2(4ef55405ef1e4324ae544342a352ae27)
       '@tanstack/virtual-core': 3.17.8
       lucide-static: 1.33.0
       rxjs: 7.8.2
@@ -4311,7 +4311,7 @@ snapshots:
       '@lexical/selection': 0.45.0
       lexical: 0.45.0
 
-  '@kouji-ui/core@0.6.0(4ef55405ef1e4324ae544342a352ae27)':
+  '@kouji-ui/core@0.6.2(4ef55405ef1e4324ae544342a352ae27)':
     dependencies:
       '@angular/cdk': 22.1.3(@angular/common@22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(@angular/platform-browser@22.1.3(@angular/common@22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2)))(rxjs@7.8.2)
       '@angular/common': 22.1.3(@angular/core@22.1.3(@angular/compiler@22.1.3)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2)

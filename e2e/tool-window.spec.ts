@@ -74,6 +74,10 @@ test("the palette lists and runs the tool-window commands", async ({ page }) => 
   await expect(page.locator("app-command-palette input")).toBeVisible();
   await page.keyboard.type("commit graph");
   await expect(page.locator("app-command-palette")).toContainText("Show Commit Graph");
+  // Enter runs whatever row is HIGHLIGHTED — wait for the palette to settle on
+  // one, or a loaded machine can press Enter between the query landing and the
+  // list re-rendering under it.
+  await expect(page.locator(".kj-command-item[data-active]")).toHaveCount(1);
   await page.keyboard.press("Enter");
   await expect(page.locator("app-tool-window")).toHaveCount(1);
   await expect(page.locator("app-commit-graph-panel")).toHaveCount(1);

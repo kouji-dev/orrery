@@ -63,6 +63,9 @@ test("clicking + opens the composer; saving renders the card and arms send-revie
   // real press-release on the glyph (the attachment listens on editor
   // mousedown in the glyph margin + window mouseup)
   await plus.hover();
+  // the glyph is hover-driven: confirm it survived the pointer move onto it
+  // before pressing, or a slow repaint swallows the mousedown
+  await expect(plus).toBeVisible();
   await page.mouse.down();
   await page.mouse.up();
 
