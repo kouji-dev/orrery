@@ -418,12 +418,12 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                 <app-set-row [wide]="true" [dirty]="s.defaultTool !== D.defaultTool" (reset)="store.set({ defaultTool: D.defaultTool })">
                   <ng-container row-label>Default tool</ng-container>
                   <ng-container row-help>Used when you spawn without picking one. Pick an agent to configure its model, effort and executable path below.</ng-container>
-                  <div class="set-tools">
+                  <div class="tool-tiles">
                     @for (tl of tools; track tl.id) {
                       @let e = runtime.detection(tl.id);
                       @let runnable = e?.status === 'ok';
                       @let on = s.defaultTool === tl.id;
-                      <kj-button kjVariant="ghost" class="set-tool"
+                      <kj-button kjVariant="ghost" class="tool-tile set-tool"
                         [class.on]="on" [class.warn]="on && !runnable" [class.off]="!runnable && !on"
                         [title]="runnable ? e?.path : (e?.status === 'error' ? 'Found but can’t run — set its path below' : 'Not installed — locate it below')"
                         (click)="store.set({ defaultTool: tl.id })">
@@ -740,35 +740,29 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 .set-upd-bar .kj-progress-bar{width:100%;}
 
 /* ── tool select grid (agent default tool) ── */
-/* auto-fit, NOT repeat(4,1fr): a grid item's min-width is auto, so a 1fr
-   track cannot shrink below its content. At a larger --fs-scale the tool names
-   outgrew their quarter-share, the tracks pushed the grid past .set-body — which
-   is overflow-x:hidden — and the 4th tile was simply cut off with no scrollbar.
-   Wrapping to fewer columns keeps every tile whole and readable; minmax(0,…) on
-   the floor plus the truncation below stops it re-appearing at extreme scales. */
-.set-tools{display:grid;gap:var(--sp-4);width:100%;
-  /* the floor is in ch, so it grows with the TYPE: when the names no longer
-     fit four across, auto-fit drops to three or two and every tile stays
-     whole, instead of four cramped tiles truncating their labels. */
-  grid-template-columns:repeat(auto-fit,minmax(14ch,1fr));}
-.set-tool .kj-button{min-width:0;}
-.set-tool .tn,.set-tool .ts{max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.set-tool .kj-button{position:relative;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:var(--sp-4);
-  height:auto;padding:var(--sp-5) var(--sp-5) var(--sp-5);border-radius:11px;border:1px solid var(--hair);background:var(--panel-2);
-  color:var(--ink-3);cursor:pointer;transition:all .13s;text-align:left;box-shadow:none;width:100%;
+/* The grid and the tile itself are the shared .tool-tiles / .tool-tile recipe
+   in styles.css — the spawn modal's Agent field is the same control. What is
+   left here is only what makes THIS call site different, and each difference
+   is a knob the recipe reads, never a competing selector: a component
+   stylesheet's order against styles.css is not guaranteed, so an override that
+   ties on specificity would win or lose by build luck. */
+.set-tool{
+  --tile-align:flex-start;
+  --tile-text-align:left;
+  --tile-radius:11px;
   /* DELIBERATE EXCEPTION: the tool tiles stay mono. They read as machine
      identities (claude / codex / gemini + their binaries), not as chrome, so
      they keep the data typeface even though the rest of the dialog is UI. */
-  font-family:var(--font-mono);}
-.set-tool .kj-button:hover{border-color:var(--hair-2);color:var(--ink-2);transform:translateY(-1px);}
-.set-tool.off .kj-button:hover{border-color:var(--hair);color:var(--ink-3);transform:none;}
-.set-tool.on .kj-button{color:var(--ink);border-color:var(--ui-line);
-  background:var(--ui-sel);}
+  --tile-font:var(--font-mono);}
+.set-tool.on{--tile-fg:var(--ink);--tile-border:var(--ui-line);--tile-bg:var(--ui-sel);}
+/* an unavailable tool does not lift or brighten under the cursor — nothing
+   would happen if you clicked it */
+.set-tool.off{--tile-lift:0px;--tile-fg-hover:var(--ink-3);--tile-border-hover:var(--hair);}
 .set-tool.off .kj-button{opacity:.5;}
-.set-tool.warn .kj-button{color:var(--ink);border-color:color-mix(in oklch,var(--set-amber),transparent 50%);
-  background:color-mix(in oklch,var(--set-amber),transparent 90%);}
+.set-tool.warn{--tile-fg:var(--ink);
+  --tile-border:color-mix(in oklch,var(--set-amber),transparent 50%);
+  --tile-bg:color-mix(in oklch,var(--set-amber),transparent 90%);}
 .set-tool.warn .pick{background:var(--set-amber);}
-.set-tool .tn{font-weight:var(--fw-medium);}
 .set-tool .ts{font-size:var(--fs-meta);color:var(--ink-4);display:flex;align-items:center;gap:var(--sp-2);}
 .set-tool .pick{position:absolute;top:9px;right:9px;width:var(--sp-7);height:var(--sp-7);border-radius:50%;
   display:grid;place-items:center;background:var(--ui-fill);color:var(--ui-on-fill);}

@@ -1,6 +1,6 @@
 import { Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { By } from "@angular/platform-browser";
-import { SelectComponent } from "../shared/select.component";
+import { SelectComponent, SelectGroup } from "../shared/select.component";
 import { ComponentFixture, TestBed } from "@angular/core/testing";
 import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -275,18 +275,29 @@ describe("SpawnModal — Ticket field", () => {
     expect(ui.spawnTicketId()).toBeNull();
   });
 
-  it("Dispatch path: the rendered Ticket <select> reflects the dispatched ticket (not None)", () => {
-    const { fixture } = setup({ tickets: [TICKET_TODO, TICKET_INPROG], spawnTicketId: "t1" });
-    const selects = Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll("select"),
-    ) as HTMLSelectElement[];
-    // the Ticket select is the one whose first option is the "None" sentinel
-    const ticketSelect = selects.find((s) => s.options[0]?.textContent?.includes("None"))!;
-    expect(ticketSelect).toBeTruthy();
-    // Regression: the option must be marked selected as it renders — relying on
-    // the <select>'s [value] alone fails because options render after it.
-    expect(ticketSelect.value).toBe("t1");
-    expect(ticketSelect.selectedOptions[0]?.textContent).toContain("Fix the login bug");
+  /* The Ticket field is an <app-select> now, not a native <select>: the To do /
+     In progress split that <optgroup> carried rides in as option GROUPS. Under
+     raw vitest JIT the control's signal inputs are inert, so what is asserted
+     here is the model it is fed; that the trigger then paints the ticket TITLE
+     rather than its id is asserted in e2e (spawn-dialog.spec.ts). */
+  it("Dispatch path: the Ticket options carry the dispatched ticket under its status group", () => {
+    const { cmp } = setup({ tickets: [TICKET_TODO, TICKET_INPROG], spawnTicketId: "t1" });
+    const opts = cmp.ticketOptions();
+    // the "None" escape hatch stays loose at the top, before any group. Its
+    // value is a sentinel, not "" — kouji paints its placeholder over an empty
+    // value, which would have printed "Select…" where the row's label belongs.
+    expect(opts[0]).toEqual({ value: "__none__", label: "None — start from scratch" });
+    const groups = opts.filter((o) => "options" in o) as SelectGroup[];
+    expect(groups.map((g) => g.label)).toEqual(["To do", "In progress"]);
+    // the dispatched id resolves to a LABEL — the half that printed a raw id
+    expect(groups[0].options).toContainEqual({ value: "t1", label: "Fix the login bug" });
+    expect(cmp.ticketId()).toBe("t1");
+  });
+
+  it("contributes no group for a status with no open tickets", () => {
+    const { cmp } = setup({ tickets: [TICKET_TODO] });
+    const groups = cmp.ticketOptions().filter((o) => "options" in o) as SelectGroup[];
+    expect(groups.map((g) => g.label)).toEqual(["To do"]);
   });
 
   it("openTicketsTodo lists only todo tickets", () => {
@@ -329,11 +340,15 @@ describe("SpawnModal — source branch", () => {
    *     that half of the old test now belongs in e2e, where the real control runs.
    *   - its OUTPUT works fine, so emitting valueChange still exercises the real
    *     binding path: control -> (valueChange) -> branch.set -> submit payload.
-   *  Identified by template order (project, branch, model), asserted below so a
-   *  template reshuffle fails loudly instead of silently testing the wrong one. */
+   *  Identified by template order (project, branch, ticket, model), asserted
+   *  below so a template reshuffle fails loudly instead of silently testing the
+   *  wrong one. */
   function branchPicker(fixture: ComponentFixture<SpawnModalComponent>) {
     const selects = fixture.debugElement.queryAll(By.directive(SelectComponent));
-    expect(selects, "spawn modal renders project + branch + model pickers").toHaveLength(3);
+    expect(
+      selects,
+      "spawn modal renders project + branch + ticket + model pickers",
+    ).toHaveLength(4);
     return selects[1].componentInstance as SelectComponent;
   }
 
@@ -361,7 +376,7 @@ describe("SpawnModal — source branch", () => {
     const { fixture, cmp, spawn } = setup({ project: { branches, defaultBranch: "main" } });
     expect(branchPicker(fixture)).toBeTruthy(); // the picker is rendered and bound
     // NOTE: the DOM-driven half of this regression now lives in e2e
-    // (spawn-branch.spec.ts). Under raw vitest JIT the modal's bindings to
+    // (spawn-dialog.spec.ts). Under raw vitest JIT the modal's bindings to
     // <app-select> are inert — neither its inputs nor its outputs are wired —
     // so a click on the real control cannot be simulated here. What IS still
     // worth guarding at this level is the second half: a non-default branch

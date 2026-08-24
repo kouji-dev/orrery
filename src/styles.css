@@ -839,6 +839,22 @@ kj-button.menu-item,
   padding: var(--sp-2) var(--sp-3);
 }
 
+/* The glyph that opens a MODAL's header: a tinted rounded square, not a bare
+   icon — it gives the title something to sit against and carries the modal's
+   accent. Add project painted it inline from the project's own colour; Spawn
+   agent had shipped the bare icon and read as a different kind of dialog for
+   it. One recipe, tinted by --head-accent (any colour, including a token). */
+.head-icon {
+  flex: none;
+  width: var(--sp-9);
+  height: var(--sp-9);
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklch, var(--head-accent, var(--ui-ink)), transparent 82%);
+  border: 1px solid color-mix(in oklch, var(--head-accent, var(--ui-ink)), transparent 55%);
+}
+
 /* Master-detail split: fixed side column + fluid main. The width is a var so
    a resizable host (file-history) can drive it without restating the grid. */
 .split-pane {
@@ -1918,6 +1934,86 @@ app-select .kj-select {
   min-width: 0;
 }
 
+/* ---------- agent tool tiles ----------
+   The stacked square that picks an agent: the tool's glyph over its name.
+   Two call sites — the spawn modal's Agent field and Settings → Default agent
+   — so it is one recipe here rather than a copy in each.
+
+   It has to be restated on kouji's own `.kj-button`: that element is
+   `display:inline-flex; align-items:center` with a `--kj-button-justify` knob
+   but no direction knob, so a tile built from it renders as a ROW (glyph
+   beside name) unless the column is put back. `.kj-button` carries no Angular
+   scope attribute — same reason app-select is stated globally above.
+
+   Every difference between the two call sites is a CUSTOM PROPERTY, never a
+   competing selector: settings' tile is left-aligned, mono and 11px-round,
+   spawn's is centred, and both carry selection states. Set on the tile host,
+   the value inherits into `.kj-button`, so no override ever has to out-specify
+   this block — which it could not reliably do, since a component stylesheet's
+   order against this file is not guaranteed. */
+.tool-tiles {
+  display: grid;
+  gap: var(--sp-4);
+  width: 100%;
+  /* Default: auto-fit, NOT repeat(4, 1fr). A grid item's min-width is auto, so
+     a 1fr track cannot shrink below its content — at a larger --fs-scale the
+     tool names outgrew their quarter-share, the tracks pushed the grid past its
+     clipping parent, and the 4th tile was cut off with no scrollbar. The floor
+     is in ch so it grows with the TYPE: the grid drops to three or two WHOLE
+     tiles rather than showing four truncated ones.
+
+     A call site that must keep ONE row sets --tile-cols to a fixed track list.
+     Use minmax(0, 1fr), never a bare 1fr: the zero floor is what lets a track
+     shrink under its content, and the ellipsis on .tn / .ts below is what makes
+     that survivable — the two go together, or the overflow comes back. */
+  grid-template-columns: var(--tile-cols, repeat(auto-fit, minmax(var(--tile-floor, 14ch), 1fr)));
+}
+.tool-tile .kj-button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: var(--tile-align, center);
+  justify-content: flex-start;
+  gap: var(--tile-gap, var(--sp-4));
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  padding: var(--tile-pad, var(--sp-5));
+  border: 1px solid var(--tile-border, var(--hair));
+  border-radius: var(--tile-radius, var(--r-md));
+  background: var(--tile-bg, var(--panel-2));
+  color: var(--tile-fg, var(--ink-3));
+  font-family: var(--tile-font, inherit);
+  /* kouji's button types at --kj-text-sm; naming the app's own baseline keeps
+     a tile on the ramp instead of on kouji's */
+  font-size: var(--tile-font-size, var(--fs-body));
+  text-align: var(--tile-text-align, center);
+  box-shadow: none;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+/* Hover falls back THROUGH the state knob, so a tile that has painted itself
+   selected keeps that border and ink under the cursor instead of reverting to
+   the neutral hover; only an unstyled tile picks up --hair-2 / --ink-2. */
+.tool-tile .kj-button:hover {
+  border-color: var(--tile-border-hover, var(--tile-border, var(--hair-2)));
+  color: var(--tile-fg-hover, var(--tile-fg, var(--ink-2)));
+  transform: translateY(var(--tile-lift, -1px));
+}
+/* Text lines ellipsize rather than widening their track — the grid floor above
+   only holds while the content agrees to be clipped. */
+.tool-tile .tn,
+.tool-tile .ts {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-tile .tn {
+  font-weight: var(--fw-medium);
+}
+
 /* ---------- kj-textarea defaults ----------
    kouji declares the --kj-textarea-* knobs ON the inner .kj-textarea, so a
    host-level custom property never reaches them — which is why two components
@@ -1930,7 +2026,13 @@ kj-textarea .kj-textarea {
   --kj-textarea-border-color: var(--hair);
   --kj-textarea-radius: var(--r-sm);
   --kj-textarea-font: var(--font-mono);
-  --kj-textarea-font-size: var(--fs-sm);
+  /* --fs-body, not --fs-sm: the ramp above renamed --fs-sm to the 16px
+     REFERENCE, and this call site kept asking for it under its old "small"
+     meaning — so every textarea in the app typed a step larger than the input
+     sitting next to it (the spawn modal's Initial prompt against its Name
+     field made it obvious). The knob also drives ::placeholder, which only
+     overrides colour, so both come back to the baseline together. */
+  --kj-textarea-font-size: var(--fs-body);
   --kj-textarea-line-height: 1.5;
   --kj-textarea-padding-x: var(--sp-5);
   --kj-textarea-padding-y: var(--sp-3);
@@ -2233,6 +2335,16 @@ app-version-badge .tag .kj-badge {
   pointer-events: auto;
   position: relative;
   z-index: 1;
+}
+/* …but only a MODAL panel gets the viewport cap. kouji's portalled popup
+   panels (.kj-select-content, .kj-popover-content, …) land in this same
+   wrapper and ship their own `max-height` inside `@layer kj.component`; this
+   file is unlayered, so an unconditional `max-height: 100%` here silently beat
+   it and a listbox grew to the full viewport instead of scrolling inside its
+   own panel — which is what a repo's long branch list did to the spawn
+   modal's Source branch picker. Modal panels are the app's own component
+   hosts and carry no kj-* class, so that is the line between the two. */
+.kj-overlay-wrapper > *:not(kj-backdrop):not([class*="kj-"]) {
   max-height: 100%;
   min-height: 0;
 }
