@@ -100,14 +100,17 @@ test("action-bar buttons are content-sized; the message input takes the slack", 
   expect(commit!.width).toBeLessThan(260);
 });
 
-test("the dropdown rides the fixed menu panel: fully inside the viewport, ABOVE a bottom-docked caret", async ({ page }) => {
+test("the dropdown is a portalled kj menu: fully inside the viewport, ABOVE a bottom-docked caret", async ({ page }) => {
   await openActionBar(page, "e2e-g6", "e2e-clip", 2);
   const merge = page.locator("app-git-action-bar app-git-action-button", { hasText: "Merge" });
-  const caret = await merge.locator(".caret").boundingBox();
+  // the caret is a <kj-button> HOST (display:contents, no box of its own) —
+  // measure the inner painted button instead
+  const caret = await merge.locator(".caret .kj-button").boundingBox();
   await merge.locator(".caret").click();
-  const panel = merge.locator(".menu-panel");
+  // kouji portals the menu content out of the button, to the overlay container
+  const panel = page.locator("kj-dropdown-menu-content.menu:visible");
   await expect(panel).toBeVisible();
-  // let the .rise entry animation finish — boundingBox mid-transform lies
+  // let the entry animation finish — boundingBox mid-transform lies
   await page.waitForTimeout(400);
   const box = await panel.boundingBox();
   const viewport = page.viewportSize()!;
@@ -118,7 +121,7 @@ test("the dropdown rides the fixed menu panel: fully inside the viewport, ABOVE 
   if (caret!.y + caret!.height + box!.height > viewport.height - 8) {
     expect(box!.y + box!.height).toBeLessThanOrEqual(caret!.y);
   }
-  // caret click toggles closed (the panel's own dismissal must not re-open it)
+  // caret click toggles closed (the menu's own dismissal must not re-open it)
   await merge.locator(".caret").click();
   await expect(panel).toHaveCount(0);
 });

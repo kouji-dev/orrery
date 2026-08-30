@@ -51,7 +51,9 @@ test("the terminal pane is a plain shell session on the main worktree", async ({
   await expect(pane.locator("app-terminal")).toBeVisible();
   await expect(pane.locator("app-terminal")).toContainText("C:/e2e"); // session header = repo root
   // play button reads as a shell control, not an agent run control
-  await expect(pane.locator("button[title='Open shell']")).toBeVisible();
+  // the play control is a <kj-button> host since the kouji migration — the
+  // title rides the host element, not an inner native button
+  await expect(pane.locator("[title='Open shell']").first()).toBeVisible();
 });
 
 test("the diff pane shows main's working changes with the action bar (no rebase/merge)", async ({ page }) => {

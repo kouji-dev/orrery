@@ -99,7 +99,8 @@ test("n is inert while typing in an input", async ({ page }) => {
 test("the bell dropdown offers Work the queue; it opens the peek", async ({ page }) => {
   await boot(page);
   await page.evaluate(seedPermission("e2e-pk1", "alpha", "ls"));
-  await page.locator("app-notification-center button[title='Notifications']").click();
+  // the bell is a <kj-button> host since the kouji migration — title on the host
+  await page.locator("app-notification-center [title='Notifications']").first().click();
   await page.getByRole("button", { name: /Work the queue/ }).click();
   await expect(page.locator("app-peek-overlay [role=\"dialog\"]")).toBeVisible();
 });

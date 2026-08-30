@@ -132,10 +132,12 @@ export class SidebarFilesComponent {
   readonly projKey = projectRootKey;
 
   /** What the section follows when the user hasn't overridden: the active
-   *  tab's scoped agent, else the first project's main worktree. */
+   *  tab's scoped agent, else the first project's main worktree. The v2
+   *  project pseudo-agent (id === projectId) maps to the `proj:` ROOT key —
+   *  its raw id would read as an agent root and the chip would show "—". */
   private readonly followKey = computed<string | null>(() => {
     const ag = this.runtime.activeAgent();
-    if (ag) return ag.id;
+    if (ag) return ag.id === ag.projectId ? projectRootKey(ag.projectId) : ag.id;
     const first = this.projects.all()[0];
     return first ? projectRootKey(first.id) : null;
   });
@@ -167,14 +169,13 @@ export class SidebarFilesComponent {
     return this.rootProject() ? "main" : "—";
   });
 
-  // "loading" only counts before the FIRST scan lands: watcher re-scans keep
-  // the previous rows on screen, so surfacing them as loading just flashes
-  // "scanning…" on every worktree event (the flicker storm while an agent runs).
+  // Watcher re-scans are SILENT store-side (no loading flip — see
+  // AgentWorkStore.loadTree), so a loading status here is always a manual
+  // refresh or the first scan: honest moments to show "scanning…".
   readonly treeLoading = computed(() => {
     const key = this.rootKey();
     if (!key) return false;
-    const t = this.work.treeFor(key);
-    return t.status === "loading" && !t.data.length;
+    return this.work.treeFor(key).status === "loading";
   });
 
   readonly height = computed(() => this.ui.sidebarFilesH() ?? FILES_SECTION_DEFAULT_H);

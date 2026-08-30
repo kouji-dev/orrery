@@ -87,27 +87,14 @@ test("clicking + opens the composer; saving renders the card and arms send-revie
   await expect(send).toContainText("1");
 });
 
-test("diff header carries agent-level actions: commit (AI), rebase (AI), native merge", async ({ page }) => {
+test("git actions live in the docked action bar, not the diff header (v2 one home per verb)", async ({ page }) => {
   await openDiff(page);
+  // the header only READS — every Act verb moved to the bar under the diff
   const head = page.locator(".diff-head");
-  const buttons = head.locator("app-git-action-button");
-  await expect(buttons).toHaveCount(3);
+  await expect(head.locator("app-git-action-button")).toHaveCount(0);
+  const bar = page.locator("app-git-action-bar");
+  await expect(bar.locator("app-git-action-button", { hasText: "Commit" })).toHaveCount(1);
 
-  // commit + rebase are aiOnly — no inline estimate while the cost switch is off
-  const commit = buttons.filter({ hasText: "Commit" }).first();
-  await expect(commit.locator(".est-inline")).toHaveCount(0);
-  const rebase = buttons.filter({ hasText: "Rebase onto" }).first();
-  await expect(rebase.locator(".est-inline")).toHaveCount(0);
-
-  // merge: primary press is native; the AI variant row renders without a price
-  const merge = buttons.filter({ hasText: "Merge" }).first();
-  await merge.locator(".caret").click();
-  // the dropdown content is portalled out of app-git-action-button
-  const row = page.locator("kj-dropdown-menu-content.menu:visible kj-button.row", { hasText: "Merge with AI" });
-  await expect(row).toBeVisible();
-  await expect(row.locator(".row-est")).toHaveCount(0);
-  await page.keyboard.press("Escape");
-
-  // send review still lives beside them
+  // send review still lives in the header
   await expect(head.locator("app-send-review-button")).toHaveCount(1);
 });

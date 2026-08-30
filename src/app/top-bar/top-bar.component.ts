@@ -62,7 +62,7 @@ import { mix } from "../utils";
 
       <!-- tabs (empty area drags the window). Overflowing tabs scroll sideways —
            the scrollbar is hidden (this is the titlebar) and the wheel pans. -->
-      <div class="scroll-hide" data-tauri-drag-region (wheel)="onTabWheel($event)" style="display:flex;align-items:stretch;flex:1;min-width:0;overflow-x:auto">
+      <div class="tab-strip scroll-hide" data-tauri-drag-region (wheel)="onTabWheel($event)" style="display:flex;align-items:stretch;flex:1;min-width:0;overflow-x:auto">
         @for (tab of ui.tabs(); track tab.id) {
           @let isOrch = tab.kind === 'orchestrator';
           @let active = ui.activeTab() === tab.id;
