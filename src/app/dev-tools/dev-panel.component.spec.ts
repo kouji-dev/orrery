@@ -93,17 +93,16 @@ function setup(rows: PerfRow[] = [], metrics: SystemMetrics | null = null, tree:
 }
 
 describe("DevPanelComponent open gate", () => {
-  it("open() is callable from the template and toggles the panel", () => {
+  it("the store's open signal toggles the panel (launcher lives in the status bar now)", () => {
     const fixture = setup();
     const el: HTMLElement = fixture.nativeElement;
     expect(el.querySelector(".dvcon")).toBeNull();
 
-    (el.querySelector(".dvc-fab") as HTMLButtonElement).click();
+    fixture.componentInstance.open.set(true);
     fixture.detectChanges();
-    expect(fixture.componentInstance.open()).toBe(true);
     expect(el.querySelector(".dvcon")).not.toBeNull();
 
-    (el.querySelector(".dvc-fab") as HTMLButtonElement).click();
+    fixture.componentInstance.open.set(false);
     fixture.detectChanges();
     expect(el.querySelector(".dvcon")).toBeNull();
   });
@@ -187,7 +186,7 @@ describe("DevPanelComponent resources tab (merged tree)", () => {
 
   async function openResources(fixture: ComponentFixture<DevPanelComponent>): Promise<HTMLElement> {
     const el: HTMLElement = fixture.nativeElement;
-    (el.querySelector(".dvc-fab") as HTMLButtonElement).click();
+    fixture.componentInstance.open.set(true);
     fixture.detectChanges();
     (Array.from(el.querySelectorAll(".dvc-tab")).find((b) => b.textContent?.includes("Resources")) as HTMLButtonElement).click();
     fixture.detectChanges();
@@ -239,11 +238,11 @@ describe("DevPanelComponent resources tab (merged tree)", () => {
 });
 
 describe("DevPanelComponent alert badge + ungated perf", () => {
-  it("badges the FAB with the count of breaching commands, hidden when clean", () => {
+  it("alertCount counts breaching commands for the status-bar chip, zero when clean", () => {
     const clean = setup([row({ cmd: "ok", calls10s: 5, avgRt: 9 })]);
-    // the FAB count is <kj-overlay-badge>, which renders .kj-overlay-badge
-    // only while it has a value (kjHidden drops the span entirely)
-    expect((clean.nativeElement as HTMLElement).querySelector(".kj-overlay-badge")).toBeNull();
+    // the count now feeds the STATUS-BAR Dev chip (via DevPanelStore) — the
+    // FAB and its <kj-overlay-badge> are gone with the anchor rail
+    expect(clean.componentInstance.alertCount()).toBe(0);
     TestBed.resetTestingModule();
     resetTerminalSchedulerForTests();
 
@@ -252,14 +251,13 @@ describe("DevPanelComponent alert badge + ungated perf", () => {
       row({ cmd: "erring", calls10s: 3, avgRt: 8, errPct: 1.2 }),
       row({ cmd: "frozen", calls10s: 0, avgRt: 500, stale: true }), // stale rows don't alert
     ]);
-    const badge = (bad.nativeElement as HTMLElement).querySelector(".kj-overlay-badge");
-    expect(badge?.textContent?.trim()).toBe("2");
+    expect(bad.componentInstance.alertCount()).toBe(2);
   });
 
   it("perf row expand and the recent-calls feed render without a dev-tier gate", () => {
     const fixture = setup([row({ cmd: "agent_input", calls10s: 4, avgRt: 9, recent: [{ ts: Date.now(), ms: 9, ok: true }] })]);
     const el: HTMLElement = fixture.nativeElement;
-    (el.querySelector(".dvc-fab") as HTMLButtonElement).click();
+    fixture.componentInstance.open.set(true);
     fixture.detectChanges();
 
     expect(el.querySelector(".dvc-feed")).not.toBeNull(); // feed: previously dev-only
