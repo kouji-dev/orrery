@@ -148,10 +148,12 @@ export class AgentRuntimeService {
       }
     });
     // Lazy: first time an agent becomes the active/scoped one, load its tree +
-    // first commits page (no-ops when already loaded).
-    effect(() => {
+    // first commits page (no-ops when already loaded). The active agent is on
+    // screen by definition, so its work data stays pinned against LRU eviction.
+    effect((onCleanup) => {
       const ag = this.activeAgent();
       if (!ag) return;
+      onCleanup(this.work.pin(ag.id));
       this.work.ensureTree(ag.id);
       this.work.ensureCommits(ag.id);
     });

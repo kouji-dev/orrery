@@ -180,6 +180,12 @@ export class SidebarFilesComponent {
   readonly height = computed(() => this.ui.sidebarFilesH() ?? FILES_SECTION_DEFAULT_H);
 
   constructor() {
+    // Pin the displayed root while the section is expanded — a visible tree
+    // must never be LRU-evicted (see AgentWorkStore.pin).
+    effect((onCleanup) => {
+      const key = this.rootKey();
+      if (key && !this.ui.sidebarFilesCollapsed()) onCleanup(this.work.pin(key));
+    });
     // Lazy: load the tree the first time a root becomes current (agent roots
     // are usually warm already — AgentRuntimeService ensures the active one).
     effect(() => {

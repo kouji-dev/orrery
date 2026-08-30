@@ -448,6 +448,12 @@ export class DiffViewComponent {
   private dragStartW = 0;
 
   constructor() {
+    // Pin the displayed agent's work data while this view is on screen — a
+    // visible key must never be LRU-evicted (eviction blanked the list, the
+    // idle-reload below repopulated it, and the cycle flashed forever).
+    effect((onCleanup) => {
+      onCleanup(this.work.pin(this.agentId()));
+    });
     // Load the changed-file list when it was never requested for this agent —
     // real agents are warmed by AgentRuntimeService on activation, but the v2
     // project pseudo-agent has no watcher/activation path, so the diff view

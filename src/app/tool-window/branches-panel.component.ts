@@ -146,9 +146,9 @@ import { SelectComponent } from "../shared/select.component";
                 } @else {
                   <div style="margin-left:auto;display:flex;gap:var(--sp-1)">
                     @if (!b.current && agent()) {
-                      <button class="btn br-op" [title]="'diff ' + b.name + ' against ' + current() + ' — file list + per-file diffs in the center'" (click)="compare(b.name)">
-                        <app-icon name="diff" size="sm" />Diff
-                      </button>
+                      <kj-button kjVariant="toolbar" [title]="'diff ' + b.name + ' against ' + current() + ' — file list + per-file diffs in the center'" (click)="compare(b.name)">
+                        <app-icon size="md" name="diff" />Diff
+                      </kj-button>
                     }
                     @if (!b.current) {
                       <kj-button kjVariant="toolbar" [kjDisabled]="store.busy() || held || !agent()" [title]="checkoutTitle(b)" (click)="checkout(p.id, b.name)">

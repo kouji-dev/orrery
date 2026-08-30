@@ -14,6 +14,7 @@ import { ProjectActionsService } from "../projects/project-actions.service";
 import { EstimateInput } from "../cost/estimate.service";
 import { IconComponent } from "../shared/icon.component";
 import { GitActionButtonComponent } from "../shared/git/git-action-button.component";
+import { KjButtonComponent } from "@kouji-ui/components";
 
 /**
  * v2 git action bar — every Act verb docked directly under the diff it judges
@@ -26,7 +27,7 @@ import { GitActionButtonComponent } from "../shared/git/git-action-button.compon
 @Component({
   selector: "app-git-action-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, GitActionButtonComponent],
+  imports: [IconComponent, GitActionButtonComponent, KjButtonComponent],
   template: `
     @let ag = agent();
     @let dirty = changes().length > 0;
@@ -42,18 +43,19 @@ import { GitActionButtonComponent } from "../shared/git/git-action-button.compon
         class="gab-msg"
         style="flex:1;min-width:round(calc(150px * var(--density)), 1px);height:var(--ctl-h);padding:0 var(--sp-5);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);outline:none"
       />
-      <button
-        class="btn ghost-hair"
-        [disabled]="!dirty"
+      <kj-button
+        kjVariant="outline"
+        kjSize="xs"
+        [kjDisabled]="!dirty"
         (click)="toggleStaged()"
         title="Stage / unstage the working tree"
-        [style.background]="dirty && staged() ? 'var(--ui-sel)' : null"
-        [style.border-color]="dirty && staged() ? 'var(--ui-line)' : null"
-        [style.color]="dirty && staged() ? 'var(--ink)' : null"
+        [style.--kj-button-bg]="dirty && staged() ? 'var(--ui-sel)' : null"
+        [style.--kj-button-border-color]="dirty && staged() ? 'var(--ui-line)' : null"
+        [style.--kj-button-fg]="dirty && staged() ? 'var(--ink)' : null"
       >
         <app-icon name="stage" size="sm" [color]="dirty && staged() ? 'var(--ui-ink)' : null" />
         {{ dirty ? (staged() ? 'Staged all · ' + changes().length : 'Unstaged') : 'Stage all' }}
-      </button>
+      </kj-button>
       <app-git-action-button
         label="Commit"
         icon="commit"
@@ -66,10 +68,10 @@ import { GitActionButtonComponent } from "../shared/git/git-action-button.compon
         (native)="commit()"
         (ai)="agentActions.aiAction(ag.id, 'commit')"
       />
-      <button class="btn ghost-hair" [disabled]="!ahead" (click)="agentActions.pushAgent(ag.id)" title="Push to origin">
+      <kj-button kjVariant="outline" kjSize="xs" [kjDisabled]="!ahead" (click)="agentActions.pushAgent(ag.id)" title="Push to origin">
         <app-icon name="push" size="sm" />Push
-        @if (ahead) { <span class="chip tnum" style="font-size:var(--fs-3xs);padding:0 var(--sp-3)">{{ ag.commits }}↑</span> }
-      </button>
+        @if (ahead) { <span class="chip tnum" style="font-size:var(--fs-badge);padding:0 var(--sp-3)">{{ ag.commits }}↑</span> }
+      </kj-button>
       <!-- rebase/merge are branch-integration verbs — a project tab (the v2
            "shell" pseudo-agent) IS the base branch, so they hide there -->
       @if (ag.tool !== 'shell') {
@@ -98,9 +100,9 @@ import { GitActionButtonComponent } from "../shared/git/git-action-button.compon
         />
       }
       <span style="width:1px;height:var(--sp-8);background:var(--hair);margin:0 var(--sp-1);flex:none"></span>
-      <button class="btn ghost-hair" [disabled]="!dirty" (click)="discard()" style="color:var(--st-blocked)">
+      <kj-button kjVariant="danger" kjSize="xs" [kjDisabled]="!dirty" (click)="discard()">
         <app-icon name="discard" size="sm" />Discard
-      </button>
+      </kj-button>
     </div>
   `,
   styles: [`.gab-msg:focus { border-color: var(--ui-focus) !important; }`],

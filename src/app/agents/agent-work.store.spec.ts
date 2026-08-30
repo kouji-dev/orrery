@@ -114,7 +114,7 @@ describe("AgentWorkStore", () => {
   });
 
   it("LRU eviction keeps totals; dropTotals (agent removal) removes them", () => {
-    for (const id of ["a1", "a2", "a3", "a4", "a5"]) store.applyScan(id, [file("x", 1, 1)], "h", true);
+    for (const id of ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]) store.applyScan(id, [file("x", 1, 1)], "h", true);
     // a1 was evicted from the heavy maps…
     expect(store.changesFor("a1").status).toBe("idle");
     // …but its sidebar counters survive
@@ -130,14 +130,32 @@ describe("AgentWorkStore", () => {
     expect(invokes.length).toBe(0);
   });
 
-  it("applyScan reloads tree only when previously loaded", async () => {
+  it("applyScan reloads tree only when loaded AND the file set (or HEAD) changed", async () => {
     store.applyScan("a", [], "h1");
     expect(invokes.length).toBe(0); // tree idle → no pull
     store.ensureTree("a");
     resolvers.shift()!([]);
     await Promise.resolve();
+    // identical set + same head (a reveal rescan): the tree cannot differ → no reload
     store.applyScan("a", [], "h1");
+    expect(invokes.map((i) => i.cmd)).toEqual([Commands.AgentTree]);
+    // a file entered the change set → reload
+    store.applyScan("a", [file("x", 1, 0)], "h1");
     expect(invokes.map((i) => i.cmd)).toEqual([Commands.AgentTree, Commands.AgentTree]);
+    resolvers.shift()!([]);
+    await Promise.resolve();
+    // same set again but HEAD moved (commit/checkout) → reload
+    store.applyScan("a", [file("x", 1, 0)], "h2");
+    expect(invokes.filter((i) => i.cmd === Commands.AgentTree).length).toBe(3);
+  });
+
+  it("a watcher tree reload is silent — no loading flip on the live entry", async () => {
+    store.ensureTree("a");
+    resolvers.shift()!([]);
+    await Promise.resolve();
+    expect(store.treeFor("a").status).toBe("ready");
+    store.applyScan("a", [file("x", 1, 0)], "h1"); // set changed → silent reload in flight
+    expect(store.treeFor("a").status).toBe("ready"); // never shows loading mid-scan
   });
 
   it("applyScan refreshes commits only on a HEAD move, and only when loaded", async () => {
@@ -160,27 +178,55 @@ describe("AgentWorkStore", () => {
     expect(store.changesFor("a").data[0].path).toBe("pushed");
   });
 
-  // ---- A0.6 LRU eviction: keep the last 4 agents touched ----
+  // ---- A0.6 pin-aware LRU: pinned keys never evict; last 6 unpinned kept ----
 
-  it("evicts the least-recently-touched agent beyond the 4-agent cap", () => {
+  it("evicts the least-recently-touched key beyond the 6-key cap", () => {
     const file: AgentFile = { path: "x", add: 1, del: 0, state: "M" };
-    for (const id of ["a1", "a2", "a3", "a4"]) store.applyScan(id, [file], "h");
+    for (const id of ["a1", "a2", "a3", "a4", "a5", "a6"]) store.applyScan(id, [file], "h");
     expect(store.changesFor("a1").status).toBe("ready");
 
-    store.applyScan("a5", [file], "h"); // 5th agent → a1 evicted
+    store.applyScan("a7", [file], "h"); // 7th key → a1 evicted
     expect(store.changesFor("a1").status).toBe("idle");
-    for (const id of ["a2", "a3", "a4", "a5"]) {
+    for (const id of ["a2", "a3", "a4", "a5", "a6", "a7"]) {
       expect(store.changesFor(id).status).toBe("ready");
     }
   });
 
-  it("touching an old agent protects it from eviction (true LRU, not FIFO)", () => {
+  it("touching an old key protects it from eviction (true LRU, not FIFO)", () => {
     const file: AgentFile = { path: "x", add: 1, del: 0, state: "M" };
-    for (const id of ["a1", "a2", "a3", "a4"]) store.applyScan(id, [file], "h");
+    for (const id of ["a1", "a2", "a3", "a4", "a5", "a6"]) store.applyScan(id, [file], "h");
     store.applyScan("a1", [file], "h"); // a1 becomes most recent
-    store.applyScan("a5", [file], "h"); // now a2 is the oldest → evicted
+    store.applyScan("a7", [file], "h"); // now a2 is the oldest → evicted
     expect(store.changesFor("a1").status).toBe("ready");
     expect(store.changesFor("a2").status).toBe("idle");
+  });
+
+  it("a pinned key is never evicted, and does not consume the unpinned budget", () => {
+    const file: AgentFile = { path: "x", add: 1, del: 0, state: "M" };
+    store.applyScan("vis", [file], "h");
+    const release = store.pin("vis");
+    // 6 more keys fill the unpinned budget; a 7th evicts the oldest UNPINNED
+    for (const id of ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]) store.applyScan(id, [file], "h");
+    expect(store.changesFor("vis").status).toBe("ready"); // pinned survives
+    expect(store.changesFor("a1").status).toBe("idle"); // oldest unpinned went instead
+    // released, vis is oldest unpinned → next touch beyond budget evicts it
+    release();
+    store.applyScan("a8", [file], "h");
+    expect(store.changesFor("vis").status).toBe("idle");
+  });
+
+  it("pins are refcounted; releasing one of two keeps the key pinned", () => {
+    const file: AgentFile = { path: "x", add: 1, del: 0, state: "M" };
+    store.applyScan("vis", [file], "h");
+    const r1 = store.pin("vis");
+    const r2 = store.pin("vis");
+    r1();
+    r1(); // double-release is a no-op — must not free r2's pin
+    for (const id of ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]) store.applyScan(id, [file], "h");
+    expect(store.changesFor("vis").status).toBe("ready");
+    r2();
+    for (const id of ["a8", "a9"]) store.applyScan(id, [file], "h");
+    expect(store.changesFor("vis").status).toBe("idle");
   });
 
   // ---- anti-flash contract: identical scans re-render nothing ----
@@ -233,7 +279,7 @@ describe("AgentWorkStore", () => {
 
   it("evicted entries reload lazily — eviction is free by design", async () => {
     const file: AgentFile = { path: "x", add: 1, del: 0, state: "M" };
-    for (const id of ["a1", "a2", "a3", "a4", "a5"]) store.applyScan(id, [file], "h");
+    for (const id of ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]) store.applyScan(id, [file], "h");
     expect(store.changesFor("a1").status).toBe("idle"); // evicted
     store.loadChanges("a1"); // reveal → normal lazy pull
     resolvers.shift()!([file]);

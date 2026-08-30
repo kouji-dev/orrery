@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from "@angular/core";
 import { Agent, Project } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { AgentWorkStore } from "../agents/agent-work.store";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { pseudoProjectAgent } from "../projects/pseudo-agent";
 import { IconComponent } from "../shared/icon.component";
@@ -121,8 +122,18 @@ export class ToolWindowComponent {
   readonly tw = inject(ToolWindowStore);
   readonly projects = inject(ProjectActionsService);
   readonly runtime = inject(AgentRuntimeService);
+  private readonly work = inject(AgentWorkStore);
 
   readonly panels = TOOL_PANELS;
+
+  constructor() {
+    // Pin the scoped worktree's data while a dock panel shows it — a visible
+    // key must never be LRU-evicted (see AgentWorkStore.pin).
+    effect((onCleanup) => {
+      const id = this.agent()?.id;
+      if (id && this.tw.panel() !== null) onCleanup(this.work.pin(id));
+    });
+  }
 
   // ---- dock height (design: 36vh clamped to [240, 420], drag-resizable) ----
   // The preference lives in the store (persisted with the workspace); null =

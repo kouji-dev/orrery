@@ -16,6 +16,7 @@ import { EditsStore } from "../../stores/edits.store";
 import { ScrollStateService } from "../../workspace/scroll-state.service";
 import { UiStore } from "../../ui/ui.store";
 import { IconComponent } from "../../shared/icon.component";
+import { KjButtonComponent } from "@kouji-ui/components";
 import { MenuPanelComponent } from "../../context-menu/menu-panel.component";
 import { revealLabelFor } from "../../utils";
 
@@ -39,7 +40,7 @@ function msgOf(e: unknown): string {
 @Component({
   selector: "app-sidebar-file-tree",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, MenuPanelComponent, ScrollingModule],
+  imports: [IconComponent, MenuPanelComponent, ScrollingModule, KjButtonComponent],
   template: `
     <!-- root-scoped context menu anywhere in the panel — empty space below the
          rows included. Row handlers stop propagation, so node menus win. -->
@@ -104,8 +105,8 @@ function msgOf(e: unknown): string {
           @case ("delete") {
             <div class="menu-label">Delete <b>{{ m.node?.name }}</b>{{ m.node?.isDir ? ' and its contents' : '' }}?</div>
             <div class="menu-row">
-              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
-              <button class="btn ghost-hair danger" (click)="confirmDelete()">Delete</button>
+              <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
+              <kj-button kjVariant="danger" (click)="confirmDelete()">Delete</kj-button>
             </div>
           }
           @default {
@@ -119,8 +120,8 @@ function msgOf(e: unknown): string {
               spellcheck="false"
             />
             <div class="menu-row">
-              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
-              <button class="btn primary" [disabled]="!nameInput().trim()" (click)="commit()">OK</button>
+              <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
+              <kj-button kjVariant="default" [kjDisabled]="!nameInput().trim()" (click)="commit()">OK</kj-button>
             </div>
           }
         }

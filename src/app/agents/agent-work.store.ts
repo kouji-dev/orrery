@@ -15,10 +15,13 @@ function sameJson(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** Why 4: entries reload lazily by design — eviction is free (A0.6). Four
- *  covers the agents a user actively flips between; beyond that the keyed
- *  maps only grow for the process lifetime. */
-const MAX_AGENTS = 4;
+/** Cache budget for UNPINNED keys (A0.6 rework): pinned keys (a live consumer
+ *  on screen) are never evicted, and the 6 most-recently-active unpinned keys
+ *  keep their last data so a reopened pane paints its previous state instantly
+ *  instead of an empty frame. Only keys beyond both tiers are dropped. Why 6:
+ *  covers the panes a user flips between in a v2 session (agents + project
+ *  pseudo-ids + `proj:` sidebar roots all share this budget). */
+const MAX_RECENT = 6;
 
 export type CommitsEntry = Loadable<Commit[]> & { hasMore: boolean };
 
@@ -63,19 +66,43 @@ export class AgentWorkStore {
   private treesGen: Record<string, number> = {};
   // last pushed HEAD oid per agent — commits refresh only when it moves
   private lastHead: Record<string, string | null> = {};
+  // last pushed changed-file set (state:path fingerprint) — the tree reloads
+  // only when this or HEAD differs (see applyScan)
+  private lastPaths: Record<string, string> = {};
 
-  // ---- LRU agent eviction (A0.6) ----
-  /** Agent ids in touch order, most recent LAST. Data landing for a 5th agent
-   *  disposes the least-recently-touched one's entries (they reload lazily —
-   *  a watcher push or reopen repopulates them). */
+  // ---- pin-aware LRU eviction (A0.6 rework) ----
+  /** Keys in touch order, most recent LAST. Eviction skips pinned keys and
+   *  keeps the MAX_RECENT most recent unpinned ones (their last data stays
+   *  on screen when the pane is reopened); older unpinned keys are dropped. */
   private touched: string[] = [];
+  /** Refcounted pins — a key with any live on-screen consumer (diff view,
+   *  sidebar files root, tool-window scope) is never evicted. Eviction of a
+   *  VISIBLE key was the flicker storm: dispose blanked the pane, its
+   *  ensure-on-idle effect reloaded, the reload's touch evicted the next
+   *  visible key, and the surfaces rotated empty→full forever. */
+  private pins = new Map<string, number>();
+
+  /** Pin `key` while a component displays it. Returns the release fn — call it
+   *  on destroy (idiomatic: `effect((onCleanup) => onCleanup(work.pin(id)))`). */
+  pin(key: string): () => void {
+    this.pins.set(key, (this.pins.get(key) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return; // double-release must not free another pinner's pin
+      released = true;
+      const n = (this.pins.get(key) ?? 1) - 1;
+      if (n <= 0) this.pins.delete(key);
+      else this.pins.set(key, n);
+    };
+  }
 
   private touch(id: string): void {
     const i = this.touched.indexOf(id);
     if (i >= 0) this.touched.splice(i, 1);
     this.touched.push(id);
-    while (this.touched.length > MAX_AGENTS) {
-      this.dispose(this.touched[0]); // dispose() also drops it from `touched`
+    const unpinned = this.touched.filter((k) => !this.pins.has(k));
+    for (let over = unpinned.length - MAX_RECENT, j = 0; over > 0; over--, j++) {
+      this.dispose(unpinned[j]); // oldest unpinned first; dispose also drops it from `touched`
     }
   }
 
@@ -187,14 +214,17 @@ export class AgentWorkStore {
     if (this.treeFor(id).status !== "idle") return;
     this.loadTree(id);
   }
-  /** Forced reload (file-tree refresh button; watcher path once loaded). */
-  loadTree(id: string): void {
+  /** Forced reload (file-tree refresh button; watcher path once loaded).
+   *  `silent` (the watcher path) skips the intermediate `loading` patch: the
+   *  fresh rows adopt in place and an unchanged tree renders NOTHING — the
+   *  loading flip double-rendered every consumer once per scan. */
+  loadTree(id: string, silent = false): void {
     this.touch(id);
     const gen = (this.treesGen[id] ?? 0) + 1;
     this.treesGen[id] = gen;
     const prev = this.treeFor(id);
     const root = rootOf(id);
-    this.patch(this.treesMap, id, { status: "loading", data: prev.data });
+    if (!silent) this.patch(this.treesMap, id, { status: "loading", data: prev.data });
     void this.bridge
       .invoke<FileNode[]>(root.cmdTree, { id: root.id })
       .then((nodes) => {
@@ -256,9 +286,17 @@ export class AgentWorkStore {
       this.patch(this.totalsMap, id, next);
     }
     const moved = id in this.lastHead && this.lastHead[id] !== head;
+    // The tree lists ALL files, so it can only differ when the CHANGED-FILE
+    // set differs (create/delete/rename land in git status) or HEAD moved
+    // (checkout/commit swaps tracked content). A scan that alters neither —
+    // reveal rescans, count-only deltas inside already-changed files — must
+    // not reload it: that was one refresh per push, visible as tree churn.
+    const pathsFp = changes.map((f) => `${f.state}:${f.path}`).sort().join("\n");
+    const fileSetChanged = this.lastPaths[id] === undefined || this.lastPaths[id] !== pathsFp;
+    this.lastPaths[id] = pathsFp;
     this.lastHead[id] = head;
     if (moved) this.refreshCommits(id);
-    if (this.treeFor(id).status !== "idle") this.loadTree(id);
+    if ((fileSetChanged || moved) && this.treeFor(id).status !== "idle") this.loadTree(id, true);
   }
 
   /** Agent REMOVED (not merely LRU-evicted): its sidebar counters go too. */
@@ -286,6 +324,7 @@ export class AgentWorkStore {
     delete this.commitsGen[id];
     delete this.treesGen[id];
     delete this.lastHead[id];
+    delete this.lastPaths[id];
   }
 
   /** Single-key update — untouched ids keep their entry references. */
