@@ -32,7 +32,7 @@ export interface AppCommand {
   run: () => void;
 }
 
-export type OverlayKind = "palette" | "search" | "recent" | "goto" | "find";
+export type OverlayKind = "palette" | "search" | "recent" | "goto" | "find" | "peek";
 export interface OverlayState {
   kind: OverlayKind;
   /** Initial Search-Everywhere tab (e.g. "files" for Go to File). */
@@ -116,7 +116,6 @@ export class CommandRegistryService {
     const tabKind = this.ui.activeTabKind();
     const fileLeaf = this.activeFileLeaf();
     const anyRunning = this.agentActions.anyRunning();
-    const rightPanel = this.ui.tweaks().rightPanel;
     const theme = this.ui.tweaks().theme;
     const dirtyCount = this.edits.dirtyKeys().size;
     const keymap = this.settings.settings().keymap;
@@ -132,6 +131,10 @@ export class CommandRegistryService {
       c({ id: "recent.files", label: "Recent Files", group: "Navigate", icon: "clock", kbd: "Ctrl+e", run: () => this.open("recent") }),
       c({ id: "goto.line", label: "Go to Line…", group: "Navigate", icon: "enter", kbd: "Ctrl+l", enabled: !!fileLeaf, run: () => this.open("goto") }),
       c({ id: "goto.file", label: "Go to File…", group: "Navigate", icon: "file", kbd: "Ctrl+Shift+o", enabled: !!ag, run: () => this.open("search", "files") }),
+      // v2 peek overlay: opens OVER the workspace (never replaces the tab).
+      // Guard: 'n' while the queue is already open belongs to its own next/prev
+      // handling — re-opening would recreate the component and reset the index.
+      c({ id: "queue.peek", label: "Needs You — Unblock Queue", group: "Navigate", icon: "bell", kbd: "n", run: () => { if (this.overlay()?.kind !== "peek") this.open("peek"); } }),
       c({ id: "view.orchestrator", label: "Open Orchestrator", group: "Navigate", icon: "grid", run: () => this.ui.selectTab("orchestrator") }),
       c({ id: "view.backlog", label: "Open Backlog", group: "Navigate", icon: "archive", run: () => this.ui.openBacklog() }),
       c({
@@ -169,6 +172,12 @@ export class CommandRegistryService {
       c({ id: "agent.delete", label: "Delete Worktree", group: "Agents", icon: "trash", danger: true, enabled: !!ag, run: () => ag && this.ui.openDeleteWorktree(ag.id) }),
       c({ id: "ticket.new", label: "New Ticket", group: "Agents", icon: "plus", run: () => this.ui.openTicketDraft() }),
       c({ id: "project.add", label: "Add Project…", group: "Agents", icon: "folderOpen", run: () => this.ui.openAddProject() }),
+      // v2 project tab: the main worktree as a workspace (shell + diff + files)
+      c({
+        id: "project.workspace", label: "Open Project Workspace", group: "Agents", icon: "columns",
+        enabled: this.projects.all().length > 0,
+        run: () => this.ui.openProject(ag?.projectId ?? this.projects.all()[0].id),
+      }),
 
       // ---- workspace ----
       c({
@@ -179,7 +188,6 @@ export class CommandRegistryService {
         enabled: !!fileLeaf?.activeFile || dirtyCount > 0,
         run: () => void this.saver.saveAll(),
       }),
-      c({ id: "ws.rightPanel", label: (rightPanel ? "Hide" : "Show") + " Right Panel", group: "Workspace", icon: "panelLeft", run: () => this.ui.setTweak("rightPanel", !this.ui.tweaks().rightPanel) }),
       c({ id: "ws.sidebar", label: "Toggle Compact Sidebar", group: "Workspace", icon: "columns", run: () => this.ui.toggleSidebarCompact() }),
       c({ id: "ws.theme", label: `Switch to ${theme === "dark" ? "Light" : "Dark"} Theme`, group: "Workspace", icon: theme === "dark" ? "sun" : "moon", run: () => this.ui.toggleTheme() }),
 

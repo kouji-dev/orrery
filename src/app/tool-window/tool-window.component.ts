@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@a
 import { Agent, Project } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
+import { pseudoProjectAgent } from "../projects/pseudo-agent";
 import { IconComponent } from "../shared/icon.component";
 import { BranchesPanelComponent } from "./branches-panel.component";
 import { CommitGraphPanelComponent } from "./commit-graph-panel.component";
@@ -74,7 +75,7 @@ import { SelectComponent } from "../shared/select.component";
     <div style="flex:1;min-height:0;display:flex;flex-direction:column;background:var(--panel)">
       @switch (tw.panel()) {
         @case ('graph') { <app-commit-graph-panel [agent]="agent()" [project]="project()" /> }
-        @case ('branches') { <app-branches-panel [agent]="agent()" [project]="project()" [agents]="projAgents()" /> }
+        @case ('branches') { <app-branches-panel [agent]="realAgent()" [project]="project()" [agents]="projAgents()" /> }
         @case ('history') { <app-local-history-panel [agent]="agent()" /> }
       }
     </div>
@@ -124,7 +125,13 @@ export class ToolWindowComponent {
   readonly panels = TOOL_PANELS;
 
   // ---- dock height (design: 36vh clamped to [240, 420], drag-resizable) ----
-  readonly h = signal(Math.round(Math.min(420, Math.max(240, window.innerHeight * 0.36))));
+  // The preference lives in the store (persisted with the workspace); null =
+  // the default. Always clamped so a restored value fits the current window.
+  readonly h = computed(() => {
+    const saved = this.tw.height();
+    const def = Math.round(Math.min(420, Math.max(240, window.innerHeight * 0.36)));
+    return saved == null ? def : Math.max(160, Math.min(window.innerHeight - 200, saved));
+  });
 
   onGripDown(e: MouseEvent): void {
     e.preventDefault();
@@ -132,7 +139,7 @@ export class ToolWindowComponent {
     const startH = this.h();
     const move = (ev: MouseEvent) => {
       const next = startH + (startY - ev.clientY);
-      this.h.set(Math.max(160, Math.min(window.innerHeight - 200, next)));
+      this.tw.height.set(Math.max(160, Math.min(window.innerHeight - 200, next)));
     };
     const up = () => {
       window.removeEventListener("mousemove", move);
@@ -171,13 +178,30 @@ export class ToolWindowComponent {
 
   readonly projectOptions = computed(() => this.projects.all().map((p) => ({ value: p.id, label: p.name })));
 
+  /** The scoped project's MAIN checkout as a pseudo-agent (id = project id) —
+   *  the worktree select offers it first, so a project tab's focus resolves to
+   *  the checkout itself rather than falling back to some agent worktree. */
+  readonly mainPseudo = computed<Agent | null>(() => {
+    const p = this.project();
+    return p ? pseudoProjectAgent(p, this.runtime.shellRunning(p.id)) : null;
+  });
+
+  /** Options for the worktree select: the main checkout, then agent worktrees. */
+  readonly scopeAgents = computed<Agent[]>(() => {
+    const ps = this.mainPseudo();
+    return ps ? [ps, ...this.projAgents()] : this.projAgents();
+  });
+
   readonly agentOptions = computed(() => {
-    const list = this.projAgents();
-    return list.length ? list.map((a) => ({ value: a.id, label: a.name })) : [{ value: "", label: "no worktrees" }];
+    const pid = this.project()?.id;
+    const list = this.scopeAgents();
+    return list.length
+      ? list.map((a) => ({ value: a.id, label: a.id === pid ? "checkout · " + a.branch : a.name }))
+      : [{ value: "", label: "no worktrees" }];
   });
 
   readonly agent = computed<Agent | null>(() => {
-    const list = this.projAgents();
+    const list = this.scopeAgents();
     const ex = this.explicit();
     return (
       (ex.agentId ? list.find((a) => a.id === ex.agentId) : undefined) ??
@@ -185,6 +209,13 @@ export class ToolWindowComponent {
       list[0] ??
       null
     );
+  });
+
+  /** The scoped agent for panels that treat "no agent" as the project checkout
+   *  (branches): the pseudo maps back to null there. */
+  readonly realAgent = computed<Agent | null>(() => {
+    const ag = this.agent();
+    return ag && ag.id !== this.project()?.id ? ag : null;
   });
 
   /** An explicit scope is set and it diverges from the focused agent. */

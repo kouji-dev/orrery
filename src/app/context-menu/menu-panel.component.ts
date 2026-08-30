@@ -47,7 +47,8 @@ import { DismissDirective } from "../shared/dismiss.directive";
       #box
       class="menu-panel rise"
       [style.left.px]="pos().x"
-      [style.top.px]="pos().y"
+      [style.top.px]="pos().bottom == null ? pos().y : null"
+      [style.bottom.px]="pos().bottom"
       (appDismiss)="closed.emit()"
       (mousedown)="$event.stopPropagation()"
       (contextmenu)="$event.preventDefault()"
@@ -59,12 +60,24 @@ import { DismissDirective } from "../shared/dismiss.directive";
 export class MenuPanelComponent {
   readonly x = input.required<number>();
   readonly y = input.required<number>();
+  /** 'left' (default): x is the panel's left edge. 'right': x is its RIGHT
+   *  edge — for dropdowns anchored to a control's right side. */
+  readonly alignX = input<"left" | "right">("left");
+  /** Dropup anchor: when the panel would overflow the viewport bottom, place
+   *  its BOTTOM at this y (the anchor's top) instead of clamping over it. */
+  readonly flipY = input<number | null>(null);
   /** Outside mousedown or Escape — the OWNER closes (it holds the open state). */
   readonly closed = output<void>();
 
   /** Panel position — re-seeds from the requested click point whenever the
-   *  menu re-anchors, then the clamp below nudges it into the viewport. */
-  readonly pos = linkedSignal<{ x: number; y: number }>(() => ({ x: this.x(), y: this.y() }));
+   *  menu re-anchors, then the clamp below nudges it into the viewport.
+   *  bottom != null = dropup: pinned via CSS `bottom` so late content growth
+   *  (font settle, async rows) keeps the panel's bottom on the anchor. */
+  readonly pos = linkedSignal<{ x: number; y: number; bottom: number | null }>(() => ({
+    x: this.x(),
+    y: this.y(),
+    bottom: null,
+  }));
   private box = viewChild.required<ElementRef<HTMLDivElement>>("box");
 
   constructor() {
@@ -72,12 +85,19 @@ export class MenuPanelComponent {
     afterRenderEffect(() => {
       const el = this.box().nativeElement;
       const r = el.getBoundingClientRect();
-      let nx = this.x(),
-        ny = this.y();
+      let nx = this.alignX() === "right" ? this.x() - r.width : this.x();
+      let ny = this.y();
+      let bottom: number | null = null;
+      if (ny + r.height > window.innerHeight - 8) {
+        const fy = this.flipY();
+        // dropup when the caller gave an anchor top; plain clamp otherwise
+        if (fy != null) bottom = window.innerHeight - fy;
+        else ny = window.innerHeight - r.height - 8;
+      }
       if (nx + r.width > window.innerWidth - 8) nx = window.innerWidth - r.width - 8;
-      if (ny + r.height > window.innerHeight - 8) ny = window.innerHeight - r.height - 8;
+      if (nx < 8) nx = 8;
       const cur = this.pos();
-      if (cur.x !== nx || cur.y !== ny) this.pos.set({ x: nx, y: ny });
+      if (cur.x !== nx || cur.y !== ny || cur.bottom !== bottom) this.pos.set({ x: nx, y: ny, bottom });
     });
   }
 }

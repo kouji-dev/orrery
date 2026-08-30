@@ -383,6 +383,36 @@ pub fn agent_start<R: Runtime>(
     })
 }
 
+/// v2 project tabs: launch the user's default shell in the project's MAIN
+/// worktree, keyed by the PROJECT id — input/resize/snapshot/interest reuse
+/// the agent PTY commands (they only touch the runtime's proc map).
+#[tauri::command(async)]
+pub fn shell_start<R: Runtime>(
+    app: AppHandle<R>,
+    rt: State<'_, RuntimeService>,
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    rows: u16,
+    cols: u16,
+) -> AppResult<()> {
+    crate::perf::timed("shell_start", || {
+        // resolves via the project pseudo record → worktree = the repo root
+        let rec = svc.get(id)?;
+        rt.start_shell(app, id, std::path::Path::new(&rec.worktree), rows, cols)
+            .map_err(AppError::Other)
+    })
+}
+
+/// Stop a project tab's shell session (no agent-table update — the shell is
+/// not a stored agent).
+#[tauri::command(async)]
+pub fn shell_stop(rt: State<'_, RuntimeService>, id: Uuid) -> AppResult<()> {
+    crate::perf::timed("shell_stop", || {
+        rt.stop(id);
+        Ok(())
+    })
+}
+
 /// Stop the agent's running process and mark it idle.
 #[tauri::command(async)]
 pub fn agent_stop<R: Runtime>(

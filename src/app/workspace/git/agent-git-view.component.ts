@@ -9,8 +9,8 @@ import { KjButtonComponent } from "@kouji-ui/components";
 
 /**
  * Center "Diff tab" dispatcher: when a {@link GitView} is active for an agent
- * (the user picked a commit / range / file-history from the right-panel commit
- * history), this renders the matching read-only inspection view in place of the
+ * (the user picked a commit / range / file-history from the graph panel),
+ * this renders the matching read-only inspection view in place of the
  * working-tree diff. A back button clears the view (→ working changes).
  */
 @Component({

@@ -649,8 +649,50 @@ impl AgentService {
                     ticket_id,
                 })
             }
-            None => Err(AgentError::NotFound(id.to_string()).into()),
+            None => self.project_pseudo_record(id),
         }
+    }
+
+    /// v2 project tabs: a PROJECT id resolves to a pseudo agent record rooted
+    /// at the repo's MAIN worktree, so every worktree-scoped command (tree,
+    /// changes, diff, blame, file CRUD, search, commits, shell PTY) works on
+    /// the project checkout with zero per-command special-casing. Nothing is
+    /// written to the agents table and `list()`/watchers never see it — this
+    /// is a read-time view, not a stored agent.
+    fn project_pseudo_record(&self, id: Uuid) -> AppResult<AgentRecord> {
+        let row: Option<(String, String)> = {
+            let c = self.db.lock().unwrap();
+            c.query_row(
+                "SELECT name, path FROM projects WHERE id = ?1",
+                [id.to_string()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(DbError::Sqlite)?
+        };
+        let Some((name, path)) = row else {
+            return Err(AgentError::NotFound(id.to_string()).into());
+        };
+        let branch = self
+            .git
+            .head_branch(Path::new(&path))
+            .unwrap_or_else(|| "main".into());
+        Ok(AgentRecord {
+            id,
+            project_id: id,
+            tool: "shell".into(),
+            model: String::new(),
+            effort: None,
+            name,
+            task: String::new(),
+            status: "idle".into(),
+            branch: branch.clone(),
+            worktree: path,
+            base: branch,
+            started: false,
+            session_id: None,
+            ticket_id: None,
+        })
     }
 }
 

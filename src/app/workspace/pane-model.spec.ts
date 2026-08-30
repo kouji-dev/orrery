@@ -5,8 +5,10 @@ import {
   group,
   leaf,
   openFileInLeaf,
+  openFilePreviewInLeaf,
   PaneLeaf,
   PaneNode,
+  pinFileInLeaf,
   setAgentView,
 } from "./pane-model";
 
@@ -122,3 +124,63 @@ describe("file tabs in a leaf", () => {
     expect(firstLeafOf(root, "zz")).toBeNull();
   });
 });
+
+// ---- v2 preview vs pinned file tabs ----
+describe("preview file tabs (v2)", () => {
+  it("a preview open replaces the previous preview tab", () => {
+    const l = leaf("a1", "terminal");
+    let root: PaneNode = l;
+    root = openFilePreviewInLeaf(root, l.id, "a.ts");
+    root = openFilePreviewInLeaf(root, l.id, "b.ts");
+    const lf = leaves(root)[0];
+    expect(lf.files).toEqual(["b.ts"]); // a.ts's tab was replaced
+    expect(lf.previewFile).toBe("b.ts");
+    expect(lf.activeFile).toBe("b.ts");
+    expect(lf.view).toBe("file");
+  });
+
+  it("pinning keeps the tab through the next preview", () => {
+    const l = leaf("a1", "terminal");
+    let root: PaneNode = l;
+    root = openFilePreviewInLeaf(root, l.id, "a.ts");
+    root = pinFileInLeaf(root, l.id, "a.ts");
+    root = openFilePreviewInLeaf(root, l.id, "b.ts");
+    const lf = leaves(root)[0];
+    expect(lf.files).toEqual(["a.ts", "b.ts"]); // pinned a.ts survives
+    expect(lf.previewFile).toBe("b.ts");
+  });
+
+  it("a pinned open of the preview path upgrades it in place", () => {
+    const l = leaf("a1", "terminal");
+    let root: PaneNode = l;
+    root = openFilePreviewInLeaf(root, l.id, "a.ts");
+    root = openFileInLeaf(root, l.id, "a.ts");
+    const lf = leaves(root)[0];
+    expect(lf.files).toEqual(["a.ts"]);
+    expect(lf.previewFile).toBeNull();
+  });
+
+  it("previewing an already-pinned path just activates it", () => {
+    const l = leaf("a1", "terminal");
+    let root: PaneNode = l;
+    root = openFileInLeaf(root, l.id, "a.ts");
+    root = openFileInLeaf(root, l.id, "b.ts");
+    root = openFilePreviewInLeaf(root, l.id, "a.ts");
+    const lf = leaves(root)[0];
+    expect(lf.files).toEqual(["a.ts", "b.ts"]); // no tab churn
+    expect(lf.activeFile).toBe("a.ts");
+    expect(lf.previewFile ?? null).toBeNull();
+  });
+
+  it("closing the preview clears the preview marker", () => {
+    const l = leaf("a1", "terminal");
+    let root: PaneNode = l;
+    root = openFilePreviewInLeaf(root, l.id, "a.ts");
+    root = closeFileInLeaf(root, l.id, "a.ts");
+    const lf = leaves(root)[0];
+    expect(lf.files).toEqual([]);
+    expect(lf.previewFile ?? null).toBeNull();
+    expect(lf.view).toBe("terminal");
+  });
+});
+

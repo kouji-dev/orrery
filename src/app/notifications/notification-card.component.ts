@@ -17,7 +17,7 @@ interface Presentation {
 }
 
 /** One agent notification + its per-kind actions. Shared by the bell dropdown
- *  and the right-panel inbox so both render the same real feed.
+ *  and any future inbox surface so all render the same real feed.
  *
  *  Rendering is ADAPTIVE — the layout is derived from the notification's content
  *  (not just its kind) so each gives the best context:

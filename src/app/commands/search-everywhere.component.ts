@@ -16,6 +16,7 @@ import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { TicketsStore } from "../stores/tickets.store";
+import { ToolWindowStore } from "../tool-window/tool-window.store";
 import { UiStore } from "../ui/ui.store";
 import { fileDir, fileName, langTag } from "../utils";
 import { AgentStatus } from "../models";
@@ -157,6 +158,7 @@ export class SearchEverywhereComponent {
   private tickets = inject(TicketsStore);
   private files = inject(WorkspaceFilesService);
   private ui = inject(UiStore);
+  private toolWindow = inject(ToolWindowStore);
 
   readonly initialTab = input<string>("commands");
   readonly tabs = TABS;
@@ -366,9 +368,9 @@ export class SearchEverywhereComponent {
   });
 
   private openGitTabFor(agentId: string | null): void {
-    // branches live in the right panel's Git tab — surface it for the agent
+    // v2: branches live in the bottom tool window — surface it for the agent
     if (agentId) this.ui.openAgent(agentId);
-    if (!this.ui.tweaks().rightPanel) this.ui.setTweak("rightPanel", true);
+    this.toolWindow.open("branches");
   }
 
   onInput(e: Event) {

@@ -28,6 +28,10 @@ export const Commands = {
   ProjectRemove: 'project_remove',
   ProjectDetectGit: 'project_detect_git',
   ProjectCommits: 'project_commits',
+  /** Repo-root file tree / lazy dir expand — the project-scoped twins of
+   *  AgentTree/AgentDir, rooted at the main worktree. */
+  ProjectTree: 'project_tree',
+  ProjectDir: 'project_dir',
   AgentList: 'agent_list',
   AgentSpawn: 'agent_spawn',
   AgentUpdate: 'agent_update',
@@ -45,6 +49,10 @@ export const Commands = {
   AgentWatch: 'agent_watch',
   AgentStart: 'agent_start',
   AgentStop: 'agent_stop',
+  /** v2 project tabs: the user's default shell in the project's MAIN worktree,
+   *  keyed by the PROJECT id (input/resize/snapshot reuse the agent commands). */
+  ShellStart: 'shell_start',
+  ShellStop: 'shell_stop',
   AgentInput: 'agent_input',
   AgentAllow: 'agent_allow',
   AgentDeny: 'agent_deny',

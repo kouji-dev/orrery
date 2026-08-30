@@ -1,6 +1,7 @@
 import { effect, inject, Injectable, signal } from "@angular/core";
 import { BRIDGE, Commands } from "../data-source/bridge";
 import { GitView, Tab } from "../models";
+import { ToolPanelKind, ToolWindowStore } from "../tool-window/tool-window.store";
 import { UiStore, WorkspaceLayout } from "../ui/ui.store";
 import { PaneNode } from "../workspace/pane-model";
 import { ScrollSnapshot, ScrollStateService } from "../workspace/scroll-state.service";
@@ -21,8 +22,17 @@ export interface WorkspaceDoc {
   paneRoots: Record<string, PaneNode>;
   gitViews: Record<string, GitView | null>;
   diffSelections: Record<string, string | null>;
+  diffDirOpen: Record<string, Record<string, boolean>>;
+  diffTreeMode: boolean;
   diffListWidth: number | null;
   sidebarCompact: boolean;
+  sidebarFilesH: number | null;
+  sidebarFilesCollapsed: boolean;
+  filesRootOverride: Record<string, string>;
+  /** Bottom dock (v2): the open panel (null = the collapsed graph strip) and
+   *  the user-resized height (null = default). */
+  toolWindowPanel: ToolPanelKind | null;
+  toolWindowH: number | null;
   scroll: ScrollSnapshot;
   /** One-shot: agents with a live terminal when "Install & relaunch" ran. */
   updateResume: { at: number; resume: string[] } | null;
@@ -51,6 +61,7 @@ export class WorkspaceStore {
   private readonly bridge = inject(BRIDGE);
   private readonly ui = inject(UiStore);
   private readonly scroll = inject(ScrollStateService);
+  private readonly toolWindow = inject(ToolWindowStore);
 
   /** Gate for the persist effect — nothing writes until hydration applied. */
   private readonly loaded = signal(false);
@@ -153,6 +164,8 @@ export class WorkspaceStore {
     if (!doc) return;
     this.ui.restoreWorkspace(doc as WorkspaceLayout);
     this.scroll.hydrate(doc.scroll);
+    this.toolWindow.panel.set(doc.toolWindowPanel ?? null);
+    this.toolWindow.height.set(doc.toolWindowH ?? null);
     // one-shot drain: a fresh resume list continues those terminals this
     // launch; stale or absent → nothing. Either way it does not persist back.
     const r = doc.updateResume;
@@ -173,8 +186,15 @@ export class WorkspaceStore {
       paneRoots: this.ui.paneRoots(),
       gitViews: this.ui.gitViews(),
       diffSelections: this.ui.diffSelections(),
+      diffDirOpen: this.ui.diffDirOpen(),
+      diffTreeMode: this.ui.diffTreeMode(),
       diffListWidth: this.ui.diffListWidth(),
       sidebarCompact: this.ui.sidebarCompact(),
+      sidebarFilesH: this.ui.sidebarFilesH(),
+      sidebarFilesCollapsed: this.ui.sidebarFilesCollapsed(),
+      filesRootOverride: this.ui.filesRootOverride(),
+      toolWindowPanel: this.toolWindow.panel(),
+      toolWindowH: this.toolWindow.height(),
       scroll: (this.scroll.rev(), this.scroll.snapshot()),
       updateResume: this.updateResume(),
     };

@@ -53,11 +53,6 @@ import { SelectComponent } from "../shared/select.component";
             </kj-tab-list>
           </kj-tabs>
         </div>
-        <div class="tweak-row">
-          <span class="tweak-label">Right panel</span>
-          <kj-toggle appearance="switch" size="sm" ariaLabel="Right panel" [pressed]="t.rightPanel" (pressedChange)="ui.setTweak('rightPanel', $event)" />
-        </div>
-
         <!-- Orchestrator -->
         <div class="up tweak-section">Orchestrator</div>
         <div class="tweak-row">

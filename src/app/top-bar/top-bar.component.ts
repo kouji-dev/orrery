@@ -1,12 +1,8 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
-  ElementRef,
-  afterNextRender,
   inject,
   signal,
-  viewChild,
 } from "@angular/core";
 import { Agent, MenuItem, Tab } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
@@ -27,6 +23,7 @@ import { WindowControlsComponent } from "./window-controls.component";
 import { VersionBadgeComponent } from "../shared/version-badge.component";
 import { TicketsStore } from "../stores/tickets.store";
 import { KjButtonComponent, KjKbdComponent } from "@kouji-ui/components";
+import { mix } from "../utils";
 
 @Component({
   selector: "app-top-bar",
@@ -115,6 +112,16 @@ import { KjButtonComponent, KjKbdComponent } from "@kouji-ui/components";
             } @else if (tab.kind === 'ticket') {
               <app-icon name="file" size="sm" [color]="active ? 'var(--ui-ink)' : null" />
               <span class="trunc" style="max-width: round(calc(140px * var(--density)), 1px)">{{ ticketTabLabel(tab) }}</span>
+            } @else if (tab.kind === 'project') {
+              <!-- v2 project tab: project chip where an agent tab has a status dot -->
+              @let pp = projects.projectOf(tab.projectId ?? '');
+              @if (pp) {
+                <span [style.background]="mixc(pp.color, 82)" [style.border]="'1px solid ' + mixc(pp.color, 62)" style="width:var(--sp-7);height:var(--sp-7);flex:none;border-radius:4px;display:grid;place-items:center">
+                  <app-icon [name]="pp.icon" size="sm" [color]="pp.color" />
+                </span>
+              }
+              <span>{{ pp?.name ?? 'project' }}</span>
+              <span class="chip tnum" style="padding:0 var(--sp-3)">{{ pp?.branch ?? 'main' }}</span>
             } @else if (isGroup) {
               <app-icon name="columns" size="sm" [color]="active ? 'var(--ui-ink)' : 'var(--ink-3)'" />
               <span style="display:flex;gap:var(--sp-1)">
@@ -126,7 +133,7 @@ import { KjButtonComponent, KjKbdComponent } from "@kouji-ui/components";
               @if (proj) {
                 <span [style.background]="proj.color" [title]="proj.name" style="width:var(--sp-3);height:var(--sp-3);border-radius:2px;flex:none"></span>
               }
-              <span>{{ tas[0] ? tas[0].name : tab.id }}</span>
+              <span>{{ tas[0] ? tas[0].name : '…' }}</span>
             }
 
             @if (!isOrch && tab.kind !== 'backlog') {
@@ -162,9 +169,9 @@ import { KjButtonComponent, KjKbdComponent } from "@kouji-ui/components";
 
       <div class="vdiv"></div>
 
-      <!-- right group: its measured width is mirrored into --right-w (see below) so
-           the right panel column lines up exactly under this cluster -->
-      <div #rightGroup style="display:flex;align-items:stretch;flex:none">
+      <!-- right group: right-aligned to the window edge (v2 — the right panel
+           is gone, so nothing mirrors this cluster's width anymore) -->
+      <div style="display:flex;align-items:stretch;flex:none;margin-left:auto">
         <!-- actions: notifications, then a factorized segmented pill
              (run/pause · theme · settings) — one shared border, icon-only -->
         <div style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);flex:none">
@@ -288,32 +295,11 @@ export class TopBarComponent {
   /** One <kj-kbd> per key — kouji renders each key as its own chip and puts
    *  any separator between them, rather than one chip holding "Shift Shift". */
   readonly searchKeys = this.searchKbd.split(/\s+/).filter(Boolean);
+  readonly mixc = mix;
 
   // tab drag state: which tab is being dragged + the live drop zone on a target.
   readonly dragId = signal<string | null>(null);
   readonly drop = signal<{ id: string; zone: "merge" | "before" | "after" } | null>(null);
-
-  // The right-side action cluster (Run all + notification + theme + window
-  // controls). Its live width is mirrored into the global --right-w so the right
-  // panel column is always exactly as wide as this cluster — they read as one
-  // column. A ResizeObserver keeps it correct across font swaps / label changes.
-  private readonly rightGroup = viewChild<ElementRef<HTMLElement>>("rightGroup");
-
-  constructor() {
-    const destroyRef = inject(DestroyRef);
-    afterNextRender(() => {
-      const el = this.rightGroup()?.nativeElement;
-      if (!el || typeof ResizeObserver === "undefined") return;
-      const apply = () => {
-        const w = Math.round(el.getBoundingClientRect().width);
-        if (w > 0) document.documentElement.style.setProperty("--right-w", `${w}px`);
-      };
-      apply();
-      const ro = new ResizeObserver(apply);
-      ro.observe(el);
-      destroyRef.onDestroy(() => ro.disconnect());
-    });
-  }
 
   /** Vertical wheel pans the tab strip sideways (trackpad deltaX already works natively). */
   onTabWheel(e: WheelEvent) {

@@ -105,6 +105,39 @@ pub async fn project_detect_git(svc: State<'_, ProjectService>, path: String) ->
     .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))?
 }
 
+/// Repo-root file tree (source recursed, ignored dirs as lazy stubs) — the
+/// project-scoped twin of `agent_tree`, rooted at the main worktree.
+/// Blocking pool: walks up to 10k fs entries.
+#[tauri::command]
+pub async fn project_tree(
+    svc: State<'_, ProjectService>,
+    id: Uuid,
+) -> AppResult<Vec<crate::fs::FileNode>> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("project_tree", || {
+            let path = svc.path_of(id)?;
+            Ok(crate::fs::tree(std::path::Path::new(&path)))
+        })
+    })
+    .await
+    .map_err(|e| crate::core::errors::AppError::Other(format!("join: {e}")))?
+}
+
+/// One directory's immediate children under the repo root — the project-scoped
+/// twin of `agent_dir`, used to lazily expand an unloaded folder.
+#[tauri::command(async)]
+pub fn project_dir(
+    svc: State<'_, ProjectService>,
+    id: Uuid,
+    path: String,
+) -> AppResult<Vec<crate::fs::FileNode>> {
+    crate::perf::timed("project_dir", || {
+        let root = svc.path_of(id)?;
+        Ok(crate::fs::list_dir(std::path::Path::new(&root), &path))
+    })
+}
+
 /// Blocking pool: revwalk + per-commit tree diff.
 #[tauri::command]
 pub async fn project_commits(

@@ -121,10 +121,13 @@ export interface GitActionAiEvent {
   `,
   styles: [
     `
+      /* Content-sized by default: the action bar's message input takes the
+         slack, so stretching every split button just made them all huge. A
+         call site that wants fill can still set flex on the element. */
       :host {
         display: flex;
         min-width: 0;
-        flex: 1;
+        flex: none;
       }
       .split {
         display: flex;
@@ -203,6 +206,26 @@ export class GitActionButtonComponent {
 
   /** Variant id awaiting its confirming second click (confirm-above guard). */
   readonly confirming = signal<string | null>(null);
+
+  toggle(e: MouseEvent): void {
+    if (this.open()) {
+      this.closeMenu();
+      return;
+    }
+    const split = (e.currentTarget as HTMLElement).closest(".split");
+    const r = (split ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
+    this.menuAt.set({
+      x: this.menuAlign() === "left" ? r.left : r.right,
+      y: r.bottom + 5,
+      flipY: r.top - 5,
+    });
+    this.open.set(true);
+  }
+
+  closeMenu(): void {
+    this.open.set(false);
+    this.confirming.set(null);
+  }
 
   readonly tok = fmtTok;
   readonly usd = fmtUsd;

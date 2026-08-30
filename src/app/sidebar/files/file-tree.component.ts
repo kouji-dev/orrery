@@ -8,33 +8,16 @@ import {
   input,
   signal,
 } from "@angular/core";
-import { Agent, FileNode, Project } from "../models";
-import { AgentWorkStore } from "../agents/agent-work.store";
-import { BRIDGE, Commands } from "../data-source/bridge";
-import { DragService } from "../shared/drag.service";
-import { EditsStore } from "../stores/edits.store";
-import { ScrollStateService } from "../workspace/scroll-state.service";
-import { tokenPx } from "../ui/density";
-import { UiStore } from "../ui/ui.store";
-import { IconComponent } from "../shared/icon.component";
-import { MenuPanelComponent } from "../context-menu/menu-panel.component";
-import { revealLabelFor } from "../utils";
-import {
-  KjBadgeComponent,
-  KjButtonComponent,
-  KjConfirmPopupActionComponent,
-  KjConfirmPopupActionsComponent,
-  KjConfirmPopupCancelComponent,
-  KjConfirmPopupComponent,
-  KjConfirmPopupContentComponent,
-  KjConfirmPopupMessageComponent,
-  KjConfirmPopupTriggerComponent,
-  KjDividerComponent,
-  KjEmptyStateComponent,
-  KjEmptyStateDescriptionComponent,
-  KjEmptyStateIconComponent,
-  KjSkeletonComponent,
-} from "@kouji-ui/components";
+import { FileNode } from "../../models";
+import { AgentWorkStore } from "../../agents/agent-work.store";
+import { BRIDGE, Commands } from "../../data-source/bridge";
+import { DragService } from "../../shared/drag.service";
+import { EditsStore } from "../../stores/edits.store";
+import { ScrollStateService } from "../../workspace/scroll-state.service";
+import { UiStore } from "../../ui/ui.store";
+import { IconComponent } from "../../shared/icon.component";
+import { MenuPanelComponent } from "../../context-menu/menu-panel.component";
+import { revealLabelFor } from "../../utils";
 
 interface FlatRow {
   node: FileNode;
@@ -45,8 +28,16 @@ function msgOf(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/**
+ * The sidebar files tree (v2): a QUIET navigation tree — name, chevron, muted
+ * type glyph, and a small modified dot. No ± counts or state letters; those
+ * belong to the center's changed-file list. Rooted at any worktree via
+ * `rootKey` (an agent id, or `proj:<id>` for a repo's main worktree — see
+ * AgentWorkStore). File CRUD / drag / open are agent-root features for now
+ * (the backend file commands are agent-scoped until project tabs land).
+ */
 @Component({
-  selector: "app-file-tree",
+  selector: "app-sidebar-file-tree",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     IconComponent,
@@ -68,18 +59,9 @@ function msgOf(e: unknown): string {
     KjSkeletonComponent,
   ],
   template: `
-    @let ag = agent();
-    <!-- root-scoped context menu anywhere in the panel — header, empty space
-         below the rows, or the empty/loading states. Row handlers stop
-         propagation, so node-scoped menus still win on the rows themselves. -->
+    <!-- root-scoped context menu anywhere in the panel — empty space below the
+         rows included. Row handlers stop propagation, so node menus win. -->
     <div (contextmenu)="onContext($event, null)" style="display:flex;flex-direction:column;min-height:0;flex:1">
-      <div class="pane-head tight">
-        <app-icon name="folder" size="sm" [color]="project() ? project()!.color : 'var(--ui-ink)'" />
-        <span class="trunc" style="flex:1;color:var(--ink-2)" [title]="ag.worktree">{{ wtName(ag.worktree) }}</span>
-        @if (loading()) { <span class="tnum" style="font-size:var(--fs-meta);color:var(--ink-4);flex:none">scanning…</span> }
-        <kj-button kjSize="icon" kjVariant="ghost" (click)="refresh()" [kjDisabled]="loading()" title="Rescan worktree"><app-icon size="sm" name="refresh" /></kj-button>
-      </div>
-
       @if (rows().length) {
         <!-- virtualized: only visible rows are rendered. Data wins over the
              loading flag so background watcher scans never unmount the
@@ -87,29 +69,30 @@ function msgOf(e: unknown): string {
         <cdk-virtual-scroll-viewport [itemSize]="rowH()" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y">
           <div
             *cdkVirtualFor="let row of rows(); trackBy: trackPath"
-            (click)="onRow(row.node)"
+            (click)="onRow(row.node, $event)"
+            (dblclick)="onRowDbl(row.node)"
             (contextmenu)="onContext($event, row.node)"
             [attr.draggable]="row.node.isDir ? null : 'true'"
             (dragstart)="onDragStart($event, row.node)"
             (dragend)="dragSvc.end()"
-            [style.padding-left.px]="indentFor(row)"
+            [style.padding-left.px]="8 + row.depth * 13"
+            [title]="row.node.isDir ? null : row.node.path + ' — click: preview · double-click: pin · Alt+click: split'"
             style="height:var(--sp-9);display:flex;align-items:center;gap:var(--sp-3);cursor:pointer;padding-right:var(--sp-4);border-radius:5px"
           >
             @if (row.node.isDir) {
-              <app-icon size="md" [name]="isOpen(row.node) ? 'chevronD' : 'chevron'" color="var(--ink-4)" />
-              <app-icon size="lg" [name]="isOpen(row.node) ? 'folderOpen' : 'folder'" [color]="row.node.ignored ? 'var(--ink-4)' : 'var(--ui-ink)'" />
+              <app-icon [name]="isOpen(row.node) ? 'chevronD' : 'chevron'" size="sm" color="var(--ink-4)" />
+              <app-icon [name]="isOpen(row.node) ? 'folderOpen' : 'folder'" size="sm" color="var(--ink-4)" />
             } @else {
-              <app-icon size="md" name="file" [color]="stateOf(row.node.path) ? stateInk(stateOf(row.node.path)!) : 'var(--ink-4)'" />
+              <span style="width:11px;flex:none"></span>
+              <app-icon name="file" size="sm" color="var(--ink-4)" />
             }
             <span
               [style.color]="row.node.ignored ? 'var(--ink-4)' : row.node.isDir ? 'var(--ink-2)' : 'var(--ink-3)'"
               [style.opacity]="row.node.ignored ? 0.7 : 1"
-              class="trunc"
+              style="flex:1;min-width:0;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
             >{{ row.node.name }}</span>
-            @if (row.node.ignored) {
-              <kj-badge style="margin-left:auto;font-size:var(--fs-badge);padding:0 var(--sp-2);color:var(--ink-4)">ignored</kj-badge>
-            } @else if (!row.node.isDir && stateOf(row.node.path); as st) {
-              <span class="tnum" [style.color]="stateInk(st)" style="margin-left:auto;flex:none;font-size:var(--fs-meta);font-weight:var(--fw-strong);padding-left:var(--sp-3)">{{ st }}</span>
+            @if (!row.node.isDir && isModified(row.node.path)) {
+              <span title="modified in this worktree" style="width:var(--sp-2);height:var(--sp-2);border-radius:50%;background:var(--vcs-modified);flex:none;margin-right:var(--sp-1)"></span>
             }
           </div>
         </cdk-virtual-scroll-viewport>
@@ -125,7 +108,7 @@ function msgOf(e: unknown): string {
       }
     </div>
 
-    <!-- context menu: file CRUD (B1.1) — shared menu chrome -->
+    <!-- context menu: file CRUD (B1.1) — shared menu chrome; agent roots only -->
     @if (menu(); as m) {
       <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
         @switch (menuMode()) {
@@ -172,7 +155,7 @@ function msgOf(e: unknown): string {
     }
   `,
 })
-export class FileTreeComponent {
+export class SidebarFileTreeComponent {
   private work = inject(AgentWorkStore);
   private ui = inject(UiStore);
 
@@ -204,8 +187,20 @@ export class FileTreeComponent {
   private scroll = inject(ScrollStateService);
   private host = inject(ElementRef<HTMLElement>);
   readonly dragSvc = inject(DragService);
-  readonly agent = input.required<Agent>();
-  readonly project = input<Project | undefined>(undefined);
+
+  /** Root the tree is rooted at: an agent id or `proj:<projectId>`. */
+  readonly rootKey = input.required<string>();
+  /** The agent id when the root is an agent worktree, else null. */
+  readonly agentId = computed<string | null>(() =>
+    this.rootKey().startsWith("proj:") ? null : this.rootKey(),
+  );
+  /** The project id when the root is a main worktree, else null. */
+  readonly projectId = computed<string | null>(() =>
+    this.rootKey().startsWith("proj:") ? this.rootKey().slice(5) : null,
+  );
+  /** The uuid backend commands take — agent id, or the project id (the backend
+   *  resolves a project id to a pseudo record rooted at the repo root). */
+  readonly workId = computed<string>(() => this.agentId() ?? this.projectId()!);
 
   // ----- context-menu file CRUD (B1.1) -----
   readonly menu = signal<{ x: number; y: number; node: FileNode | null } | null>(null);
@@ -272,7 +267,7 @@ export class FileTreeComponent {
     const name = this.nameInput().trim();
     if (!m || !name) return;
     const mode = this.menuMode();
-    const id = this.agent().id;
+    const id = this.workId();
     try {
       if (mode === "rename") {
         const from = m.node!.path.replace(/\\/g, "/");
@@ -286,10 +281,10 @@ export class FileTreeComponent {
         const path = base ? `${base}/${name}` : name;
         const cmd = mode === "create-dir" ? Commands.DirCreate : Commands.FileCreate;
         await this.bridge.invoke(cmd, { id, path });
-        if (mode === "create-file") this.ui.openFileInWorkspace(id, path);
+        if (mode === "create-file") this.openInWorkspace(path);
       }
       this.closeMenu();
-      this.work.loadTree(id);
+      this.work.loadTree(this.rootKey());
     } catch (e) {
       this.ui.flash(e instanceof Error ? e.message : String(e));
     }
@@ -310,52 +305,43 @@ export class FileTreeComponent {
   }
 
   private toOs(command: string, node: FileNode, failed: string): void {
+    const id = this.workId();
     const path = node.path.replace(/\\/g, "/");
     this.closeMenu();
     void this.bridge
-      .invoke(command, { id: this.agent().id, path })
+      .invoke(command, { id, path })
       .catch((e: unknown) => this.ui.flash(`${failed} ${node.name}: ${msgOf(e)}`));
   }
 
   async confirmDelete(): Promise<void> {
     const m = this.menu();
     if (!m?.node) return;
-    const id = this.agent().id;
+    const id = this.workId();
     try {
       const path = m.node.path.replace(/\\/g, "/");
       await this.bridge.invoke(Commands.FileDelete, { id, path });
       this.edits.close(id, path);
       this.scroll.clear(id, path);
       this.closeMenu();
-      this.work.loadTree(id);
+      this.work.loadTree(this.rootKey());
     } catch (e) {
       this.ui.flash(e instanceof Error ? e.message : String(e));
     }
   }
 
-  readonly nodes = computed<FileNode[]>(() => this.work.treeFor(this.agent().id).data);
-  readonly loading = computed(() => this.work.treeFor(this.agent().id).status === "loading");
+  readonly nodes = computed<FileNode[]>(() => this.work.treeFor(this.rootKey()).data);
+  readonly loading = computed(() => this.work.treeFor(this.rootKey()).status === "loading");
   readonly openMap = signal<Record<string, boolean>>({});
 
-  // git status by (normalized) path → mark changed files in the tree with A/M/D
-  readonly stateMap = computed<Record<string, string>>(() => {
-    const map: Record<string, string> = {};
-    for (const f of this.work.changesFor(this.agent().id).data) {
-      map[f.path.replace(/\\/g, "/")] = f.state;
-    }
-    return map;
+  // changed paths of the AGENT root → the quiet modified dot. Project roots
+  // have no per-file change feed yet (arrives with project tabs) — no dots.
+  readonly changedSet = computed<Set<string>>(() => {
+    const id = this.agentId();
+    if (!id) return new Set();
+    return new Set(this.work.changesFor(id).data.map((f) => f.path.replace(/\\/g, "/")));
   });
-  stateOf(path: string): string | undefined {
-    return this.stateMap()[path.replace(/\\/g, "/")];
-  }
-  stateInk(state: string): string {
-    return state === "A"
-      ? "var(--vcs-added)"
-      : state === "D"
-        ? "var(--vcs-deleted)"
-        : state === "R"
-          ? "var(--vcs-renamed)"
-          : "var(--vcs-modified)";
+  isModified(path: string): boolean {
+    return this.changedSet().has(path.replace(/\\/g, "/"));
   }
 
   // flatten the open tree into the list of visible rows (depth carries indentation)
@@ -378,19 +364,46 @@ export class FileTreeComponent {
   isOpen(node: FileNode): boolean {
     return this.openMap()[node.path] === true;
   }
-  // dirs expand/collapse; files open in the agent's workspace (closable file tab)
-  onRow(node: FileNode) {
+  // dirs expand/collapse; files open in the root's workspace. v2 semantics:
+  // single click = PREVIEW tab (italic — the next preview replaces it),
+  // double click = pinned, ⌥click = pinned into a fresh split (the diff stays
+  // visible in the other leaf).
+  onRow(node: FileNode, e?: MouseEvent) {
     if (node.isDir) {
       this.toggle(node);
       return;
     }
-    this.ui.openFileInWorkspace(this.agent().id, node.path);
+    if (e?.altKey) {
+      this.ensureTab();
+      this.ui.openFileInSplitWorkspace(this.workId(), node.path);
+      return;
+    }
+    this.ensureTab();
+    this.ui.openFilePreviewInWorkspace(this.workId(), node.path);
+  }
+
+  /** Double-click pins the file (upright tab that previews never replace). */
+  onRowDbl(node: FileNode) {
+    if (node.isDir) return;
+    this.openInWorkspace(node.path);
+  }
+
+  /** A main root opens in the PROJECT tab — create it on first use (v2). */
+  private ensureTab(): void {
+    const pid = this.projectId();
+    if (pid) this.ui.openProject(pid);
+  }
+
+  /** Open a file PINNED at this root. */
+  private openInWorkspace(path: string): void {
+    this.ensureTab();
+    this.ui.openFileInWorkspace(this.workId(), path);
   }
   toggle(node: FileNode) {
     if (!node.isDir) return;
     const isOpen = this.isOpen(node);
     if (!isOpen && node.children === null) {
-      this.work.expandDir(this.agent().id, node.path); // lazy-load stub folders
+      this.work.expandDir(this.rootKey(), node.path); // lazy-load stub folders
     }
     this.openMap.update((m) => ({ ...m, [node.path]: !isOpen }));
   }
@@ -398,16 +411,8 @@ export class FileTreeComponent {
   /** Drag a file row toward a prompt / terminal (B1.5). */
   onDragStart(e: DragEvent, node: FileNode): void {
     if (node.isDir) return;
-    this.dragSvc.start({ kind: "file", agentId: this.agent().id, relPath: node.path });
+    this.dragSvc.start({ kind: "file", agentId: this.workId(), relPath: node.path });
     e.dataTransfer?.setData("text/plain", node.path);
     if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
-  }
-
-  wtName(path: string): string {
-    return path.replace(/\\/g, "/").split("/").pop() || path;
-  }
-  /** Manual fallback: re-scan this agent's worktree file tree. */
-  refresh() {
-    this.work.loadTree(this.agent().id);
   }
 }

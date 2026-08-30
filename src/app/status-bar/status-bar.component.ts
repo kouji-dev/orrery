@@ -5,6 +5,7 @@ import {
   inject,
 } from "@angular/core";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { CommandRegistryService } from "../commands/command-registry.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -13,7 +14,7 @@ import { CostStore } from "../metrics/cost.store";
 import { TelemetryStore } from "../metrics/telemetry.store";
 import { DevPanelStore } from "../dev-tools/dev-panel.store";
 import { VersionBadgeComponent } from "../shared/version-badge.component";
-import { SettingsStore } from "../settings/settings.store";
+import { SettingsStore, worktreeRootLabel } from "../settings/settings.store";
 import { DiagnosticsService } from "../shared/diagnostics.service";
 import { ToolWindowStore } from "../tool-window/tool-window.store";
 import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
@@ -31,12 +32,16 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
         >{{ running() }} running
       </span>
       @if (blocked() > 0) {
-        <span
-          style="display:flex;gap:var(--sp-3);align-items:center;color:var(--st-blocked)"
+        <button
+          type="button"
+          class="sb-link"
+          (click)="openQueue()"
+          title="Work the unblock queue · N"
+          style="color:var(--st-blocked)"
         >
           <span class="dot" style="background:var(--st-blocked)"></span
           >{{ blocked() }} need attention
-        </span>
+        </button>
       }
       <span class="tnum"
         >{{ projects.all().length }} projects ·
@@ -44,7 +49,7 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
       >
       <span style="display:flex;gap:var(--sp-2)"
         ><app-icon size="md" name="folder" />{{
-          ui.worktreeRoot
+          worktreeRoot()
         }}</span
       >
 
@@ -205,6 +210,14 @@ export class StatusBarComponent {
   readonly cost = inject(CostStore);
   readonly devPanel = inject(DevPanelStore);
   readonly settings = inject(SettingsStore);
+  private readonly registry = inject(CommandRegistryService);
+  /** Effective worktree root (settings override, else the app-data default). */
+  readonly worktreeRoot = computed(() => worktreeRootLabel(this.settings.settings()));
+
+  /** "N need attention" → the v2 peek queue, never a tab switch. */
+  openQueue(): void {
+    this.registry.open("peek");
+  }
   readonly diag = inject(DiagnosticsService);
   readonly telemetry = inject(TelemetryStore);
   readonly toolWindow = inject(ToolWindowStore);

@@ -16,7 +16,6 @@ import { FileDropService } from '../shared/file-drop.service';
 import { UiStore } from '../ui/ui.store';
 import { OverviewComponent } from '../overview/overview.component';
 import { BacklogComponent } from '../backlog/backlog.component';
-import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { SidebarComponent } from '../sidebar/sidebar.component';
 import { CompactRailComponent } from '../sidebar/compact-rail.component';
 import { StatusBarComponent } from '../status-bar/status-bar.component';
@@ -26,6 +25,7 @@ import { DevPanelComponent } from '../dev-tools/dev-panel.component';
 import { PaneManagerComponent } from '../workspace/pane-manager.component';
 import { TicketPageComponent } from '../backlog/ticket-page.component';
 import { ToolWindowComponent } from '../tool-window/tool-window.component';
+import { GraphStripComponent } from '../tool-window/graph-strip.component';
 import { ToolWindowStore } from '../tool-window/tool-window.store';
 
 declare const ngDevMode: boolean | undefined;
@@ -41,7 +41,6 @@ declare const ngDevMode: boolean | undefined;
     BacklogComponent,
     PaneManagerComponent,
     TicketPageComponent,
-    RightPanelComponent,
     StatusBarComponent,
     UpdateToastComponent,
     ContextMenuComponent,
@@ -49,6 +48,7 @@ declare const ngDevMode: boolean | undefined;
     DevPanelComponent,
     CommandOverlaysComponent,
     ToolWindowComponent,
+    GraphStripComponent,
   ],
   template: `
     <div class="shell">
@@ -56,7 +56,6 @@ declare const ngDevMode: boolean | undefined;
 
       <div
         class="workspace"
-        [class.no-right]="!ui.tweaks().rightPanel"
         [class.compact]="ui.sidebarCompact()"
       >
         @if (ui.sidebarCompact()) {
@@ -78,12 +77,11 @@ declare const ngDevMode: boolean | undefined;
           }
           @if (toolWindow.panel()) {
             <app-tool-window />
+          } @else {
+            <!-- v2: collapsed graph strip — history stays one click away -->
+            <app-graph-strip />
           }
         </div>
-
-        @if (ui.tweaks().rightPanel) {
-          <app-right-panel />
-        }
       </div>
 
       <app-status-bar />

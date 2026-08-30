@@ -182,18 +182,6 @@ impl RuntimeService {
             return Err("worktree not found".into());
         }
 
-        // open the PTY at the UI terminal's actual size so the agent's TUI is not
-        // truncated; fall back to a sane default when the caller doesn't know it yet.
-        let pty = native_pty_system();
-        let pair = pty
-            .openpty(PtySize {
-                rows: if rows > 0 { rows } else { 30 },
-                cols: if cols > 0 { cols } else { 120 },
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|e| e.to_string())?;
-
         let cmd = tool_command(
             &agent.tool,
             &agent.task,
@@ -240,6 +228,68 @@ impl RuntimeService {
             }
         }
 
+        // A0.3: tools without a usable permission hook (gemini) get a heuristics
+        // tee — decided here (tool knowledge), executed in the shared pipeline.
+        let with_heuristics = adapters::adapter_for(&agent.tool)
+            .map(|a| a.pty_status_fallback())
+            .unwrap_or(false);
+        self.spawn_session(app, id, cmd, rows, cols, with_heuristics)
+    }
+
+    /// v2 project tabs: launch the user's DEFAULT SHELL in a project's main
+    /// worktree over the same PTY pipeline agents use — same mux/scrollback/
+    /// interest plumbing, keyed by the PROJECT's uuid, so `agent_input`,
+    /// `agent_resize`, `runtime_snapshot` and the interest set all just work.
+    /// No hooks, no heuristics tee — a plain interactive shell.
+    pub fn start_shell<R: Runtime>(
+        &self,
+        app: AppHandle<R>,
+        id: Uuid,
+        cwd: &Path,
+        rows: u16,
+        cols: u16,
+    ) -> Result<(), String> {
+        if self.is_running(id) {
+            return Ok(());
+        }
+        if !cwd.is_dir() {
+            return Err("project folder not found".into());
+        }
+        let mut cmd = resolve_program_command(default_shell_command());
+        cmd.cwd(cwd);
+        cmd.env_remove("NO_COLOR");
+        cmd.env_remove("NODE_DISABLE_COLORS");
+        if cmd.get_env("TERM").is_none() {
+            cmd.env("TERM", "xterm-256color");
+        }
+        cmd.env("COLORTERM", "truecolor");
+        self.spawn_session(app, id, cmd, rows, cols, false)
+    }
+
+    /// The shared PTY pipeline: open the PTY, spawn `cmd`, wire the batcher →
+    /// {scrollback ring, optional heuristics tee, global mux} threads, register
+    /// the proc, and start the WAIT thread that emits `agent://exit` once.
+    fn spawn_session<R: Runtime>(
+        &self,
+        app: AppHandle<R>,
+        id: Uuid,
+        cmd: CommandBuilder,
+        rows: u16,
+        cols: u16,
+        with_heuristics: bool,
+    ) -> Result<(), String> {
+        // open the PTY at the UI terminal's actual size so the child's TUI is not
+        // truncated; fall back to a sane default when the caller doesn't know it yet.
+        let pty = native_pty_system();
+        let pair = pty
+            .openpty(PtySize {
+                rows: if rows > 0 { rows } else { 30 },
+                cols: if cols > 0 { cols } else { 120 },
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| e.to_string())?;
+
         let mut child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
@@ -280,10 +330,7 @@ impl RuntimeService {
         // heuristics tee — a per-agent thread that folds the same chunks and
         // emits `agent://pty-status` on state transitions, replacing the
         // renderer-side PTY parsing (which a `none`-mode agent would starve).
-        let heur_tx = if adapters::adapter_for(&agent.tool)
-            .map(|a| a.pty_status_fallback())
-            .unwrap_or(false)
-        {
+        let heur_tx = if with_heuristics {
             let (tx, rx) = std::sync::mpsc::channel::<String>();
             let heur_app = app.clone();
             let heur_id = id.to_string();
@@ -580,6 +627,23 @@ fn apply_program_override(cmd: CommandBuilder, program: Option<&str>) -> Command
         out.arg(a);
     }
     out
+}
+
+/// The user's default interactive shell (v2 project tabs): PowerShell on
+/// Windows (pwsh 7 when on PATH, else Windows PowerShell), `$SHELL` (or
+/// /bin/sh) elsewhere. `resolve_program_command` resolves argv[0] on Windows.
+fn default_shell_command() -> CommandBuilder {
+    #[cfg(windows)]
+    {
+        let has_pwsh = std::env::var_os("PATH").is_some_and(|paths| {
+            std::env::split_paths(&paths).any(|dir| dir.join("pwsh.exe").is_file())
+        });
+        CommandBuilder::new(if has_pwsh { "pwsh.exe" } else { "powershell.exe" })
+    }
+    #[cfg(not(windows))]
+    {
+        CommandBuilder::new(std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into()))
+    }
 }
 
 fn tool_command(

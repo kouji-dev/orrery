@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { Agent, Project } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
+import { pseudoProjectAgent } from "../projects/pseudo-agent";
 import { DragService } from "../shared/drag.service";
 import { UiStore } from "../ui/ui.store";
 import { PaneNodeComponent } from "./pane-node.component";
@@ -14,6 +15,7 @@ import {
   openFileInLeaf,
   PaneCtx,
   patchLeaf,
+  pinFileInLeaf,
   PaneView,
   removeLeaf,
   setRatio,
@@ -52,13 +54,24 @@ export class PaneManagerComponent implements PaneCtx {
 
   readonly root = computed(() => this.ui.paneRoots()[this.tabId()]);
 
+  /** v2: when this tab is a PROJECT tab, its pane tree references the project
+   *  pseudo-agent (leaf agentId = project id) — synthesize it so every pane
+   *  component receives a real-shaped Agent. */
+  private readonly projectPseudo = computed<Agent | null>(() => {
+    const tab = this.ui.tabs().find((t) => t.id === this.tabId());
+    if (tab?.kind !== "project" || !tab.projectId) return null;
+    const p = this.projectActions.all().find((pr) => pr.id === tab.projectId);
+    return p ? pseudoProjectAgent(p, this.runtime.shellRunning(p.id)) : null;
+  });
+
   // a sidebar agent / tab dragged over a pane: which pane + which side it'd land.
   // (a WritableSignal also satisfies the PaneCtx `dropTarget()` accessor.)
   readonly dropTarget = signal<{ paneId: string; side: DropSide } | null>(null);
 
   // ----- PaneCtx surface (read by the recursive node) -----
   agents(): Agent[] {
-    return this.runtime.agents();
+    const pseudo = this.projectPseudo();
+    return pseudo ? [...this.runtime.agents(), pseudo] : this.runtime.agents();
   }
   projects(): Project[] {
     return this.projectActions.all();
@@ -90,6 +103,9 @@ export class PaneManagerComponent implements PaneCtx {
   onFileClose(leafId: string, path: string) {
     this.ui.setRoot(this.tabId(), (r) => closeFileInLeaf(r, leafId, path));
   }
+  onFilePin(leafId: string, path: string) {
+    this.ui.setRoot(this.tabId(), (r) => pinFileInLeaf(r, leafId, path));
+  }
   onRatio(splitId: string, ratio: number) {
     this.ui.setRoot(this.tabId(), (r) => setRatio(r, splitId, ratio));
   }
@@ -117,8 +133,11 @@ export class PaneManagerComponent implements PaneCtx {
   }
 
   /** A sensible agent to drop into a freshly-split pane: an unused running agent,
-   *  else any unused agent, else the first one. */
+   *  else any unused agent, else the first one. A project tab splits into its
+   *  own pseudo-agent (same worktree, another view of it). */
   private pickNextAgent(): string | null {
+    const pseudo = this.projectPseudo();
+    if (pseudo) return pseudo.id;
     const r = this.root();
     const used = new Set(r ? treeAgentIds(r) : []);
     const all = this.agents();

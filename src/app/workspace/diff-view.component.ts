@@ -8,13 +8,8 @@ import {
   signal,
 } from "@angular/core";
 import { Agent, AgentFile, BlameIntern, BlameLine, FileDiff, hydrateBlame } from "../models";
-import { AgentActionsService } from "../agents/agent-actions.service";
-import { EstimateInput } from "../cost/estimate.service";
 import { IconComponent } from "../shared/icon.component";
-import { GitActionButtonComponent } from "../shared/git/git-action-button.component";
-import { StateBadgeComponent } from "../shared/git/state-badge.component";
-import { AddDelComponent } from "../shared/git/add-del.component";
-import { ProjectActionsService } from "../projects/project-actions.service";
+import { GitActionBarComponent } from "./git-action-bar.component";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
@@ -24,7 +19,9 @@ import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
 import { DiffStats } from "./review/chunk-stats";
-import { KjBadgeComponent, KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
+import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
+import { StateBadgeComponent } from "../shared/git/state-badge.component";
+import { AddDelComponent } from "../shared/git/add-del.component";
 
 const LIST_MIN = 160; // px — narrowest the file-list panel may get
 const LIST_MAX = 520; // px — widest before the diff body is too cramped
@@ -33,8 +30,9 @@ const LIST_DEFAULT = 300;
 @Component({
   selector: "app-diff-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionButtonComponent, StateBadgeComponent, AddDelComponent, KjButtonComponent, KjBadgeComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
+  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionBarComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, StateBadgeComponent, AddDelComponent],
   template: `
+    <div style="flex:1;display:flex;flex-direction:column;min-height:0;min-width:0">
     <div
       class="diff-grid"
       [class.resizing]="dragging()"
@@ -46,7 +44,7 @@ const LIST_DEFAULT = 300;
           <span class="up" style="color:var(--ink-3)">Changed · {{ changes().length }}</span>
           <!-- tree / flat toggle -->
           <kj-tabs variant="pills" class="tabs-xs" style="margin-left:auto"
-                   [value]="treeMode() ? 'tree' : 'flat'" (valueChange)="treeMode.set($event === 'tree')">
+                   [value]="treeMode() ? 'tree' : 'flat'" (valueChange)="setTreeMode($event === 'tree')">
             <kj-tab-list aria-label="File list layout">
               <kj-tab value="tree" title="Tree view"><app-icon size="md" name="graph" [color]="treeMode() ? 'var(--ui-ink)' : null" />Tree</kj-tab>
               <kj-tab value="flat" title="Flattened view"><app-icon size="md" name="dots" [color]="!treeMode() ? 'var(--ui-ink)' : null" />Flat</kj-tab>
@@ -63,9 +61,24 @@ const LIST_DEFAULT = 300;
           @for (row of treeRows(); track row.path) {
             @if (row.dir) {
               <div class="diff-dir" (click)="toggleDir(row.path)" [style.padding-left.px]="8 + row.depth * 13">
-                <app-icon size="md" [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" color="var(--ink-4)" />
-                <app-icon size="lg" [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" color="var(--ink-4)" />
-                <span class="trunc" style="font-size:var(--fs-meta);color:var(--ink-3)">{{ row.name }}</span>
+                <app-icon [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" size="sm" color="var(--ink-4)" />
+                <app-icon [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" size="sm" color="var(--ink-4)" />
+                <!-- uniform-state folders read like their files: a fully-deleted
+                     folder is dim + strikethrough (never red — locked rule), a
+                     fully-new / moved one carries the A / R chip -->
+                <span
+                  [style.color]="row.state === 'D' ? 'var(--ink-4)' : 'var(--ink-3)'"
+                  [style.text-decoration]="row.state === 'D' ? 'line-through' : 'none'"
+                  [style.opacity]="row.state === 'D' ? 0.7 : 1"
+                  style="font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                >{{ row.name }}</span>
+                @if (row.state) {
+                  <span [style.color]="stateInk(row.state)" [style.background]="stateBg(row.state)" class="state-chip">{{ row.state }}</span>
+                }
+                <span class="tnum counts-chip" style="opacity:0.75">
+                  <span style="color:var(--code-add-ink)">+{{ row.add }}</span>
+                  @if ((row.del ?? 0) > 0) { <span style="color:var(--code-del-ink)">−{{ row.del }}</span> }
+                </span>
               </div>
             } @else {
               <div
@@ -150,45 +163,11 @@ const LIST_DEFAULT = 300;
               Annotate
             </kj-button>
             <app-send-review-button [agent]="agent().id" [agentName]="agent().name" />
-            <!-- agent-level git actions on the review surface (A4 dual-path,
-                 design agent-git.jsx adapted to the split-button contract).
-                 Native commit (message box) lives in the Git tab; HERE commit is
-                 the AI variant — you just reviewed the diff, the model writes
-                 the message. Merge's primary press is the free native path. -->
-            <app-git-action-button
-              style="align-self:flex-start"
-              label="Commit"
-              icon="commit"
-              [small]="true"
-              [aiOnly]="true"
-              [estimateInput]="commitEstimate()"
-              [variants]="[{ id: 'commit', label: 'Commit with AI (write the message)', op: 'commit', icon: 'sparkles' }]"
-              (ai)="agentActions.aiAction(agent().id, 'commit')"
-            />
-            <app-git-action-button
-              style="align-self:flex-start"
-              [label]="'Rebase onto ' + baseBranch()"
-              icon="sparkles"
-              [small]="true"
-              [aiOnly]="true"
-              [estimateInput]="rebaseEstimate()"
-              [variants]="[{ id: 'rebase', label: 'Rebase with AI', icon: 'sparkles' }]"
-              (ai)="agentActions.aiAction(agent().id, 'rebase')"
-            />
-            <app-git-action-button
-              style="align-self:flex-start"
-              [label]="'Merge ' + baseBranch()"
-              icon="branch"
-              [small]="true"
-              [title]="'Merge ' + baseBranch() + ' into ' + agent().branch + ' · native'"
-              [estimateInput]="mergeEstimate()"
-              [variants]="[{ id: 'merge', label: 'Merge with AI (agent resolves conflicts)', icon: 'sparkles' }]"
-              (native)="agentActions.mergeAgent(agent().id, baseBranch())"
-              (ai)="agentActions.aiAction(agent().id, 'merge')"
-            />
-            @if (langLabel()) {
-              <kj-badge class="tnum" style="align-self:flex-start">{{ langLabel() }}</kj-badge>
-            }
+          }
+          <!-- git ACTIONS live in the action bar docked under the diff (v2) —
+               one home per verb; this header only reads. -->
+          @if (current() && langLabel()) {
+            <span class="chip tnum" style="align-self:flex-start;font-size:var(--fs-2xs)">{{ langLabel() }}</span>
           }
         </div>
 
@@ -205,6 +184,10 @@ const LIST_DEFAULT = 300;
         }
       </div>
     </div>
+
+    <!-- v2: every Act verb docked directly under the diff it judges -->
+    <app-git-action-bar [agent]="agent()" />
+    </div>
   `,
   styles: [
     `
@@ -212,7 +195,6 @@ const LIST_DEFAULT = 300;
         flex: 1;
         display: grid;
         min-height: 0;
-        height: 100%;
       }
       /* while dragging, kill the iframe/text selection + pointer noise */
       .diff-grid.resizing {
@@ -236,6 +218,17 @@ const LIST_DEFAULT = 300;
       .diff-dir {
         padding: 0 var(--sp-4);
       }
+      .diff-file .state-chip,
+      .diff-dir .state-chip {
+        flex: none;
+        width: var(--sp-6);
+        height: var(--sp-6);
+        border-radius: 3px;
+        display: grid;
+        place-items: center;
+        font-size: var(--fs-2xs);
+        font-weight: 700;
+      }
       .diff-file .fname {
         flex: 0 1 auto;
         }
@@ -243,6 +236,23 @@ const LIST_DEFAULT = 300;
         flex: 1 1 auto;
         font-size: var(--fs-meta);
         color: var(--ink-4);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .diff-file .counts-chip,
+      .diff-dir .counts-chip {
+        font-size: var(--fs-2xs);
+        display: flex;
+        gap: var(--sp-2);
+        flex: none;
+        margin-left: auto;
+      }
+      .diff-file:hover:not(.sel) {
+        background: var(--panel-2);
+      }
+      .diff-file.sel {
+        background: var(--panel-3);
       }
 
       /* ----- resizer handle ----- */
@@ -321,37 +331,8 @@ export class DiffViewComponent {
   private agents = inject(AgentsStore);
   private work = inject(AgentWorkStore);
   private ui = inject(UiStore);
-  readonly agentActions = inject(AgentActionsService);
-  private projects = inject(ProjectActionsService);
   readonly agent = input.required<Agent>();
 
-  // ---- agent-level git actions on the review surface (A4.3 estimates) ----
-  readonly baseBranch = computed(
-    () => this.projects.projectOf(this.agent().projectId)?.branch ?? "main",
-  );
-  // Why *40: status carries line counts, not bytes — 40 bytes/line is the same
-  // conservative envelope the Git tab uses (a cost ENVELOPE, not an invoice).
-  private readonly estDiffBytes = computed(() =>
-    this.changes().reduce((a, f) => a + (f.add + f.del) * 40, 0),
-  );
-  readonly commitEstimate = computed<EstimateInput>(() => ({
-    op: "commit",
-    files: this.changes().length,
-    diffBytes: this.estDiffBytes(),
-    model: this.agent().model,
-  }));
-  readonly rebaseEstimate = computed<EstimateInput>(() => ({
-    op: "rebase",
-    files: this.changes().length,
-    diffBytes: this.estDiffBytes(),
-    model: this.agent().model,
-  }));
-  readonly mergeEstimate = computed<EstimateInput>(() => ({
-    op: "merge",
-    files: this.changes().length,
-    diffBytes: this.estDiffBytes(),
-    model: this.agent().model,
-  }));
   // selection by PATH (works across both flat + tree views); treeMode toggles
   // them. Selection lives in UiStore keyed by agent — the pane destroys this
   // component on tab switch, so a local signal would forget the opened file.
@@ -359,7 +340,12 @@ export class DiffViewComponent {
   select(path: string): void {
     this.ui.setDiffSelection(this.agentId(), path);
   }
-  readonly treeMode = signal(true);
+  // Tree/Flat preference — global like diffListWidth, persisted with the
+  // workspace (a component-local signal would reset on every tab switch).
+  readonly treeMode = computed(() => this.ui.diffTreeMode());
+  setTreeMode(on: boolean): void {
+    this.ui.diffTreeMode.set(on);
+  }
 
   readonly fname = fileName;
   readonly fdir = fileDir;
@@ -379,15 +365,19 @@ export class DiffViewComponent {
   });
   // nested folder tree of the changed files, for the "Tree" view
   readonly diffTree = computed<DiffNode[]>(() => buildDiffTree(this.changes()));
-  // collapsed folders (path → false); default: folders are OPEN
-  readonly dirOpen = signal<Record<string, boolean>>({});
+  // collapsed folders (path → false); default: folders are OPEN. Lives in
+  // UiStore keyed by agent (persisted with the workspace) — the pane destroys
+  // this component on every tab switch, so local state would reset each time.
+  readonly dirOpen = computed<Record<string, boolean>>(() =>
+    this.ui.diffDirOpenFor(this.agentId()),
+  );
   // the visible rows: walk the tree, skipping children of collapsed folders
   readonly treeRows = computed<DiffRow[]>(() => {
     const open = this.dirOpen();
     const out: DiffRow[] = [];
     const walk = (nodes: DiffNode[], depth: number) => {
       for (const n of nodes) {
-        out.push({ dir: n.dir, name: n.name, path: n.path, depth, file: n.file });
+        out.push({ dir: n.dir, name: n.name, path: n.path, depth, file: n.file, state: n.state, add: n.add, del: n.del });
         if (n.dir && open[n.path] !== false) walk(n.children, depth + 1);
       }
     };
@@ -398,7 +388,7 @@ export class DiffViewComponent {
     return this.dirOpen()[path] !== false;
   }
   toggleDir(path: string) {
-    this.dirOpen.update((m) => ({ ...m, [path]: !(m[path] !== false) }));
+    this.ui.toggleDiffDir(this.agentId(), path);
   }
   /** Manual fallback: re-fetch this agent's changed files — the diff effect then
    *  reloads the selected file's content. */
@@ -408,6 +398,9 @@ export class DiffViewComponent {
   readonly diff = signal<FileDiff | null>(null);
   readonly loading = signal(false);
   private gen = 0;
+  /** agent:path the last load ran for — a change means a real SWITCH (reset
+   *  header chrome); an equal key is a silent background refresh. */
+  private loadedKey: string | null = null;
 
   // ----- annotate (blame) -----
   private bridge = inject(BRIDGE);
@@ -455,26 +448,52 @@ export class DiffViewComponent {
   private dragStartW = 0;
 
   constructor() {
+    // Load the changed-file list when it was never requested for this agent —
+    // real agents are warmed by AgentRuntimeService on activation, but the v2
+    // project pseudo-agent has no watcher/activation path, so the diff view
+    // itself triggers the first scan (a no-op for already-loaded entries).
+    effect(() => {
+      const id = this.agentId();
+      if (this.work.changesFor(id).status === "idle") this.work.loadChanges(id);
+    });
+
     // Load the diff for the selected file (superseded on rapid changes).
     // Triggers: agent switch (id), selection change, or a refreshed changes
     // entry (push/pull → new file objects = content may differ). Reading the
     // id (not agent()) keeps runtime overlay patches from re-fetching the
     // diff when nothing changed.
+    //
+    // SILENT same-file refresh: watcher scans re-create the file objects on
+    // every worktree event, so this effect re-fires constantly while an agent
+    // works. Resetting stats/loading each time flashed the whole header once
+    // per scan — now that chrome churns only when the agent/file actually
+    // SWITCHED; a background refresh just refetches and lets the value-equal
+    // diff signals swallow no-op results.
     effect(() => {
       const id = this.agentId();
       const f = this.current();
-      this.stats.set(null); // stale counts must not survive a file switch
+      // Every landed scan bumps this — the file entries themselves keep their
+      // references when a scan changes no ± counts, yet the CONTENT may still
+      // differ (an edit inside an already-modified line), so the refetch must
+      // key on the scan, not on row identity.
+      this.work.scanSeqFor(id);
+      const key = f ? id + ":" + f.path : null;
+      const switched = key !== this.loadedKey;
+      this.loadedKey = key;
+      if (switched) this.stats.set(null); // stale counts must not survive a file switch
       if (!f) {
         this.diff.set(null);
         return;
       }
       const g = ++this.gen;
-      this.loading.set(true);
+      if (switched) this.loading.set(true);
       void this.agents
         .diff(id, f.path, f.oldPath)
         .then((d) => {
           if (this.gen === g) {
-            this.diff.set(d);
+            // identical content keeps the object — a no-op refresh renders nothing
+            const cur = this.diff();
+            if (!cur || cur.old !== d.old || cur.new !== d.new) this.diff.set(d);
             this.loading.set(false);
           }
         })
@@ -569,6 +588,11 @@ interface DiffRow {
   path: string;
   depth: number;
   file?: AgentFile;
+  /** Dirs: the uniform descendant state (A/D/R/M) — undefined when mixed. */
+  state?: string;
+  /** Dirs: aggregate line counts over every descendant file. */
+  add?: number;
+  del?: number;
 }
 interface DiffNode {
   dir: boolean;
@@ -576,11 +600,16 @@ interface DiffNode {
   path: string;
   file?: AgentFile;
   children: DiffNode[];
+  state?: string;
+  add?: number;
+  del?: number;
 }
 
 // Dirs first then files, alphabetical at each level. File leaves carry their
-// AgentFile for state/counts. The component flattens this respecting per-folder
-// open state (collapsible).
+// AgentFile for state/counts; dir nodes carry the AGGREGATE — total ±lines and,
+// when every descendant shares one state, that state (a fully-deleted folder
+// reads as deleted, a fully-new one as added, a moved one as renamed). The
+// component flattens this respecting per-folder open state (collapsible).
 function buildDiffTree(files: AgentFile[]): DiffNode[] {
   const root: DiffNode = { dir: true, name: "", path: "", children: [] };
   const dirAt = new Map<string, DiffNode>([["", root]]);
@@ -605,5 +634,28 @@ function buildDiffTree(files: AgentFile[]): DiffNode[] {
     for (const n of nodes) if (n.dir) sortRec(n.children);
   };
   sortRec(root.children);
+  aggregateRec(root.children);
   return root.children;
+}
+
+/** Bottom-up dir aggregation: ±line sums plus the uniform state (or none). */
+function aggregateRec(nodes: DiffNode[]): void {
+  for (const n of nodes) {
+    if (!n.dir) continue;
+    aggregateRec(n.children);
+    let add = 0;
+    let del = 0;
+    let state: string | undefined;
+    let uniform = true;
+    for (const c of n.children) {
+      add += c.dir ? (c.add ?? 0) : (c.file?.add ?? 0);
+      del += c.dir ? (c.del ?? 0) : (c.file?.del ?? 0);
+      const cs = c.dir ? c.state : c.file?.state;
+      if (state === undefined) state = cs;
+      if (cs === undefined || cs !== state) uniform = false;
+    }
+    n.add = add;
+    n.del = del;
+    n.state = uniform ? state : undefined;
+  }
 }

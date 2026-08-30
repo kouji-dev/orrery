@@ -25,7 +25,7 @@ const ui = (expr: string) =>
 // ---- 1. tree stays mounted through a background rescan ----
 
 const seedTree = (id: string, count: number) => `(() => {
-  const tree = window.ng.getComponent(document.querySelector("app-file-tree"));
+  const tree = window.ng.getComponent(document.querySelector("app-sidebar-file-tree"));
   const nodes = Array.from({ length: ${count} }, (_, i) => ({
     name: "file-" + String(i).padStart(3, "0") + ".ts",
     path: "src/file-" + String(i).padStart(3, "0") + ".ts",
@@ -36,7 +36,7 @@ const seedTree = (id: string, count: number) => `(() => {
 
 /** Watcher-scan shape: AgentTree hangs → the store sits in "loading". */
 const startHangingRescan = (id: string) => `(() => {
-  const tree = window.ng.getComponent(document.querySelector("app-file-tree"));
+  const tree = window.ng.getComponent(document.querySelector("app-sidebar-file-tree"));
   const work = tree["work"];
   const bridge = work["bridge"];
   const orig = bridge.invoke.bind(bridge);
@@ -50,11 +50,10 @@ test("files tree keeps its viewport and scroll offset through a rescan", async (
   await page.waitForSelector("app-top-bar");
   await page.evaluate(seedAgent("e2e-sp1", "e2e-scroll-tree"));
   await page.evaluate(ui(`.openAgent("e2e-sp1")`));
-  await page.locator("app-right-panel").getByRole("tab", { name: "Files" }).click();
-  await expect(page.locator("app-file-tree")).toBeVisible();
+  await expect(page.locator("app-sidebar-file-tree")).toBeVisible();
 
   await page.evaluate(seedTree("e2e-sp1", 80));
-  const viewport = page.locator("app-file-tree cdk-virtual-scroll-viewport");
+  const viewport = page.locator("app-sidebar-file-tree cdk-virtual-scroll-viewport");
   await expect(viewport).toBeVisible();
 
   await viewport.evaluate((el) => (el.scrollTop = 400));
@@ -64,7 +63,8 @@ test("files tree keeps its viewport and scroll offset through a rescan", async (
 
   // loading is live (header chip) but the body must not swap to the scanning
   // placeholder — the viewport stays mounted with its offset intact
-  await expect(page.locator("app-file-tree .tnum", { hasText: "scanning…" })).toBeVisible();
+  // the scanning hint lives in the files-section header now (v2)
+  await expect(page.locator("app-sidebar-files .tnum", { hasText: "scanning…" })).toBeVisible();
   await expect(viewport).toBeVisible();
   await expect(page.getByText("scanning worktree…")).toHaveCount(0);
   expect(await viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(300);

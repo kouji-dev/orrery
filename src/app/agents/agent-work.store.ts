@@ -8,12 +8,30 @@ export const COMMITS_PAGE = 10;
 const IDLE: Loadable<never[]> = { status: "idle", data: [] };
 const IDLE_COMMITS = { ...IDLE, hasMore: false };
 
+/** Structural equality via JSON — rows are plain backend DTOs (stable key
+ *  order from serde), and even the file TREE stringifies in well under a
+ *  millisecond at sidebar scale. */
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** Why 4: entries reload lazily by design — eviction is free (A0.6). Four
  *  covers the agents a user actively flips between; beyond that the keyed
  *  maps only grow for the process lifetime. */
 const MAX_AGENTS = 4;
 
 export type CommitsEntry = Loadable<Commit[]> & { hasMore: boolean };
+
+/** Tree-root key: a plain agent id, or `proj:<projectId>` for a repo's main
+ *  worktree (the sidebar files section's root chip can point at either). */
+export function projectRootKey(projectId: string): string {
+  return `proj:${projectId}`;
+}
+function rootOf(key: string): { cmdTree: string; cmdDir: string; id: string } {
+  return key.startsWith("proj:")
+    ? { cmdTree: Commands.ProjectTree, cmdDir: Commands.ProjectDir, id: key.slice(5) }
+    : { cmdTree: Commands.AgentTree, cmdDir: Commands.AgentDir, id: key };
+}
 
 /**
  * Per-agent worktree data (git status / branch commits / file tree) as keyed
@@ -29,6 +47,11 @@ export class AgentWorkStore {
   private readonly changesMap = signal<Record<string, Loadable<AgentFile[]>>>({});
   private readonly commitsMap = signal<Record<string, CommitsEntry>>({});
   private readonly treesMap = signal<Record<string, Loadable<FileNode[]>>>({});
+  /** Monotonic per-agent scan counter — bumps on every landed scan, EVEN when
+   *  the file list was structurally identical (content may still differ, e.g.
+   *  an edit that keeps ± counts). The diff view keys its silent refetch on
+   *  this instead of file-object identity, so a no-op scan re-renders nothing. */
+  private readonly scanSeqMap = signal<Record<string, number>>({});
   /** Sidebar counters: 3 numbers per agent, SEPARATE from the LRU'd file lists
    *  above — every agent row shows counters, so eviction must never touch them. */
   private readonly totalsMap = signal<Record<string, { add: number; del: number; files: number }>>({});
@@ -58,6 +81,10 @@ export class AgentWorkStore {
 
   changesFor(id: string): Loadable<AgentFile[]> {
     return this.changesMap()[id] ?? IDLE;
+  }
+  /** See scanSeqMap — the diff view's refetch trigger. */
+  scanSeqFor(id: string): number {
+    return this.scanSeqMap()[id] ?? 0;
   }
   /** Sidebar counters — null until the init pass (or a full scan) supplied them. */
   totalsFor(id: string): { add: number; del: number; files: number } | null {
@@ -102,7 +129,8 @@ export class AgentWorkStore {
       .invoke<AgentFile[]>(Commands.AgentChanges, { id })
       .then((files) => {
         if (this.changesGen[id] !== gen) return;
-        this.patch(this.changesMap, id, { status: "ready", data: files });
+        this.adoptReady(this.changesMap, id, files);
+        this.bumpScan(id);
       })
       .catch(() => {
         if (this.changesGen[id] !== gen) return;
@@ -153,6 +181,8 @@ export class AgentWorkStore {
   }
 
   // ---- file tree (lazy; reloaded on watcher events once loaded) ----
+  // Keyed by ROOT key: a plain agent id, or `proj:<id>` (see projectRootKey) —
+  // the same Loadable map / LRU / generation guards serve both root kinds.
   ensureTree(id: string): void {
     if (this.treeFor(id).status !== "idle") return;
     this.loadTree(id);
@@ -163,12 +193,13 @@ export class AgentWorkStore {
     const gen = (this.treesGen[id] ?? 0) + 1;
     this.treesGen[id] = gen;
     const prev = this.treeFor(id);
+    const root = rootOf(id);
     this.patch(this.treesMap, id, { status: "loading", data: prev.data });
     void this.bridge
-      .invoke<FileNode[]>(Commands.AgentTree, { id })
+      .invoke<FileNode[]>(root.cmdTree, { id: root.id })
       .then((nodes) => {
         if (this.treesGen[id] !== gen) return;
-        this.patch(this.treesMap, id, { status: "ready", data: nodes });
+        this.adoptReady(this.treesMap, id, nodes);
       })
       .catch(() => {
         if (this.treesGen[id] !== gen) return;
@@ -177,7 +208,8 @@ export class AgentWorkStore {
   }
   /** Lazily expand one unloaded dir: splice its children into the loaded tree. */
   expandDir(id: string, path: string): void {
-    void this.bridge.invoke<FileNode[]>(Commands.AgentDir, { id, path }).then((kids) => {
+    const root = rootOf(id);
+    void this.bridge.invoke<FileNode[]>(root.cmdDir, { id: root.id, path }).then((kids) => {
       const cur = this.treeFor(id);
       if (cur.status === "idle") return;
       const splice = (list: FileNode[]): FileNode[] =>
@@ -199,20 +231,29 @@ export class AgentWorkStore {
     this.touch(id);
     // supersede any in-flight pull so its late resolve can't stomp fresher push data
     this.changesGen[id] = (this.changesGen[id] ?? 0) + 1;
-    this.patch(this.changesMap, id, { status: "ready", data: changes });
-    if (countsFull) {
-      this.patch(this.totalsMap, id, {
-        add: changes.reduce((s, f) => s + f.add, 0),
-        del: changes.reduce((s, f) => s + f.del, 0),
-        files: changes.length,
+    // counts-only scans zero add/del — showing that would blank every ± chip
+    // in the diff list until the next full push, so carry the previous counts
+    // forward per path (an unchanged file SET then adopts as a full no-op).
+    let adopted = changes;
+    if (!countsFull) {
+      const byPath = new Map(this.changesFor(id).data.map((f) => [f.path, f]));
+      adopted = changes.map((f) => {
+        const p = byPath.get(f.path);
+        return p && f.add === 0 && f.del === 0 ? { ...f, add: p.add, del: p.del } : f;
       });
-    } else {
-      const cur = this.totalsMap()[id];
-      this.patch(this.totalsMap, id, {
-        add: cur?.add ?? 0,
-        del: cur?.del ?? 0,
-        files: changes.length,
-      });
+    }
+    this.adoptReady(this.changesMap, id, adopted);
+    this.bumpScan(id);
+    const cur = this.totalsMap()[id];
+    const next = countsFull
+      ? {
+          add: changes.reduce((s, f) => s + f.add, 0),
+          del: changes.reduce((s, f) => s + f.del, 0),
+          files: changes.length,
+        }
+      : { add: cur?.add ?? 0, del: cur?.del ?? 0, files: changes.length };
+    if (!cur || cur.add !== next.add || cur.del !== next.del || cur.files !== next.files) {
+      this.patch(this.totalsMap, id, next);
     }
     const moved = id in this.lastHead && this.lastHead[id] !== head;
     this.lastHead[id] = head;
@@ -250,5 +291,24 @@ export class AgentWorkStore {
   /** Single-key update — untouched ids keep their entry references. */
   private patch<T>(map: WritableSignal<Record<string, T>>, id: string, entry: T): void {
     map.update((m) => ({ ...m, [id]: entry }));
+  }
+
+  /** Anti-flash adopt: when the fresh rows structurally equal the current
+   *  entry's, keep the ENTRY reference untouched (no signal write at all) —
+   *  watcher re-scans that changed nothing then re-render nothing. Only a
+   *  real difference (or a status transition) replaces the entry. */
+  private adoptReady<T>(
+    map: WritableSignal<Record<string, Loadable<T[]>>>,
+    id: string,
+    data: T[],
+  ): void {
+    const prev = map()[id];
+    if (prev && prev.status === "ready" && sameJson(prev.data, data)) return;
+    const keep = prev && sameJson(prev.data, data) ? prev.data : data;
+    this.patch(map, id, { status: "ready", data: keep });
+  }
+
+  private bumpScan(id: string): void {
+    this.patch(this.scanSeqMap, id, (this.scanSeqMap()[id] ?? 0) + 1);
   }
 }

@@ -3,6 +3,7 @@ import { TestBed } from "@angular/core/testing";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PaneNodeComponent } from "./pane-node.component";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { BRIDGE } from "../data-source/bridge";
 import { DiagnosticsService } from "../shared/diagnostics.service";
 import { EditsStore } from "../stores/edits.store";
@@ -65,6 +66,7 @@ function makeCtx(agents: Agent[]): PaneCtx {
     onView: vi.fn(),
     onFileSelect: vi.fn(),
     onFileClose: vi.fn(),
+    onFilePin: vi.fn(),
     onRatio: vi.fn(),
     onFocus: vi.fn(),
     dropTarget: () => null,
@@ -94,6 +96,15 @@ describe("PaneNodeComponent header actions", () => {
     closeMenu: () => (menuState = null),
   };
   const bridge = { invoke: vi.fn().mockResolvedValue(undefined) };
+  // v2 shell surface only — the real service subscribes to bridge events the
+  // mock bridge doesn't provide. shellState false = an exited shell (no
+  // auto-open effect firing in these header tests).
+  const runtime = {
+    shellState: () => false as boolean | undefined,
+    shellRunning: () => false,
+    startShell: vi.fn(),
+    stopShell: vi.fn(),
+  };
 
   function render(agent: Agent) {
     const f = TestBed.createComponent(PaneNodeComponent);
@@ -119,6 +130,7 @@ describe("PaneNodeComponent header actions", () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: AgentActionsService, useValue: actions },
+        { provide: AgentRuntimeService, useValue: runtime },
         { provide: DiagnosticsService, useValue: diagnostics },
         { provide: UiStore, useValue: ui },
         { provide: BRIDGE, useValue: bridge },

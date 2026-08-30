@@ -145,6 +145,11 @@ import { SelectComponent } from "../shared/select.component";
                   <kj-button kjVariant="toolbar" (click)="renameFor.set(null)">Cancel</kj-button>
                 } @else {
                   <div style="margin-left:auto;display:flex;gap:var(--sp-1)">
+                    @if (!b.current && agent()) {
+                      <button class="btn br-op" [title]="'diff ' + b.name + ' against ' + current() + ' — file list + per-file diffs in the center'" (click)="compare(b.name)">
+                        <app-icon name="diff" size="sm" />Diff
+                      </button>
+                    }
                     @if (!b.current) {
                       <kj-button kjVariant="toolbar" [kjDisabled]="store.busy() || held || !agent()" [title]="checkoutTitle(b)" (click)="checkout(p.id, b.name)">
                         <app-icon size="md" name="enter" />Checkout
@@ -300,6 +305,14 @@ export class BranchesPanelComponent {
   mergeIn(branch: string): void {
     const ag = this.agent();
     if (ag) this.agentActions.mergeAgent(ag.id, branch);
+  }
+
+  /** Open the center range-inspection view diffing `branch` against the scoped
+   *  worktree's branch — the backend revparses refs, so branch names work as
+   *  range boundaries (tree-to-tree, oldest tip → newest tip). */
+  compare(branch: string): void {
+    const ag = this.agent();
+    if (ag) this.ui.setGitView(ag.id, { kind: "range", shas: [branch, ag.branch] });
   }
 
   startRename(name: string): void {

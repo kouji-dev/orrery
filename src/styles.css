@@ -415,19 +415,14 @@ app-root {
   overflow: hidden;
 }
 
+/* v2: no right panel — sidebar + center only, the diff body gets the width */
 .workspace {
   display: grid;
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--right-w);
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
-.workspace.no-right {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-}
 .workspace.compact {
-  grid-template-columns: 54px minmax(0, 1fr) var(--right-w);
-}
-.workspace.compact.no-right {
   grid-template-columns: 54px minmax(0, 1fr);
 }
 
@@ -438,7 +433,6 @@ app-top-bar,
 app-status-bar,
 app-sidebar,
 app-compact-rail,
-app-right-panel,
 app-overview,
 app-pane-manager,
 app-backlog,
@@ -446,11 +440,7 @@ app-ticket-page,
 app-pane-node,
 app-diff-view,
 app-terminal,
-app-files-tab,
-app-inbox-tab,
-app-git-tab,
-app-file-tree,
-app-empty-state {
+app-sidebar-file-tree {
   display: contents;
 }
 app-grid-view,

@@ -194,6 +194,14 @@ export class AgentsStore {
   stop(id: string): Promise<void> {
     return this.bridge.invoke(Commands.AgentStop, { id });
   }
+  /** v2 project tabs: launch/stop the plain shell in the project's MAIN
+   *  worktree (keyed by the project id — input/resize/snapshot are shared). */
+  startShell(id: string, rows: number, cols: number): Promise<void> {
+    return this.bridge.invoke(Commands.ShellStart, { id, rows, cols });
+  }
+  stopShell(id: string): Promise<void> {
+    return this.bridge.invoke(Commands.ShellStop, { id });
+  }
   /** Forward terminal keystrokes into the agent's PTY stdin. */
   input(id: string, data: string): Promise<void> {
     return this.bridge.invoke(Commands.AgentInput, { id, data });

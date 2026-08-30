@@ -75,6 +75,12 @@ export function effectiveEffort(s: Settings, tool: string): string {
   return s.toolEffort[tool] ?? settingsMapDefault("toolEffort", tool) ?? "";
 }
 
+/** Display label for the effective worktree root ("" = the backend ctor
+ *  default under app data — shown as a readable stand-in, not a fake path). */
+export function worktreeRootLabel(s: Settings): string {
+  return s.worktreeRoot || "app data/worktrees";
+}
+
 function deepEq(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;

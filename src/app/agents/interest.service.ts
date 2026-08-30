@@ -92,9 +92,10 @@ export class InterestService {
     const kind = this.ui.activeTabKind();
     const root = this.ui.paneRoots()[tab];
     return {
-      // Pane leaves only count when an agent tab is the ACTIVE one — a
-      // background tab's terminals are not on screen.
-      paneAgents: kind === "agent" && root ? paneLeafViews(root) : [],
+      // Pane leaves only count when an agent (or v2 project) tab is the ACTIVE
+      // one — a background tab's terminals are not on screen. Project tabs ride
+      // the same path: their shell PTY is keyed by the project id.
+      paneAgents: (kind === "agent" || kind === "project") && root ? paneLeafViews(root) : [],
       // Mini-preview cards only exist on the orchestrator (overview) tab.
       overviewAgentIds:
         kind === "orchestrator" ? [...this.visibleCards()] : [],

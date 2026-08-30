@@ -183,6 +183,54 @@ describe("AgentWorkStore", () => {
     expect(store.changesFor("a2").status).toBe("idle");
   });
 
+  // ---- anti-flash contract: identical scans re-render nothing ----
+
+  it("an identical re-scan keeps the changes ENTRY reference (no signal write)", () => {
+    store.applyScan("a", [file("x", 1, 2)], "h1", true);
+    const before = store.changesFor("a");
+    store.applyScan("a", [file("x", 1, 2)], "h1", true);
+    expect(store.changesFor("a")).toBe(before);
+  });
+
+  it("every landed scan bumps scanSeq, identical or not — the diff refetch trigger", () => {
+    expect(store.scanSeqFor("a")).toBe(0);
+    store.applyScan("a", [file("x", 1, 2)], "h1", true);
+    store.applyScan("a", [file("x", 1, 2)], "h1", true);
+    expect(store.scanSeqFor("a")).toBe(2);
+  });
+
+  it("a real change replaces the entry as before", () => {
+    store.applyScan("a", [file("x", 1, 2)], "h1", true);
+    const before = store.changesFor("a");
+    store.applyScan("a", [file("x", 3, 2)], "h1", true);
+    expect(store.changesFor("a")).not.toBe(before);
+    expect(store.changesFor("a").data[0].add).toBe(3);
+  });
+
+  it("a counts-only scan carries previous per-file ± forward (no zeroed chips)", () => {
+    store.applyScan("a", [file("x", 5, 3)], "h1", true);
+    const before = store.changesFor("a");
+    // unchanged file set arriving counts-only adopts as a full no-op…
+    store.applyScan("a", [file("x", 0, 0)], "h1", false);
+    expect(store.changesFor("a")).toBe(before);
+    // …and a NEW file still lands, with the old file's counts intact
+    store.applyScan("a", [file("x", 0, 0), file("y", 0, 0)], "h1", false);
+    const rows = store.changesFor("a").data;
+    expect(rows.find((f) => f.path === "x")).toMatchObject({ add: 5, del: 3 });
+    expect(rows.find((f) => f.path === "y")).toMatchObject({ add: 0, del: 0 });
+  });
+
+  it("an identical tree reload keeps the DATA reference (rows stay identical)", async () => {
+    store.ensureTree("a");
+    resolvers.shift()!([{ path: "src", name: "src", isDir: true }]);
+    await Promise.resolve();
+    const before = store.treeFor("a").data;
+    store.loadTree("a"); // watcher path: forced reload (status does cycle)
+    resolvers.shift()!([{ path: "src", name: "src", isDir: true }]);
+    await Promise.resolve();
+    expect(store.treeFor("a").data).toBe(before);
+  });
+
   it("evicted entries reload lazily — eviction is free by design", async () => {
     const file: AgentFile = { path: "x", add: 1, del: 0, state: "M" };
     for (const id of ["a1", "a2", "a3", "a4", "a5"]) store.applyScan(id, [file], "h");
