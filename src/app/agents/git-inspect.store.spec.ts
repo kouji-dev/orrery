@@ -177,35 +177,35 @@ describe("GitInspectStore", () => {
   });
 
   // -------------------------------------------------------------------------
-  // A0.6 LRU eviction: keep the last 4 agents touched
+  // A0.6 LRU eviction: keep the last 6 agents touched (matches AgentWorkStore)
   // -------------------------------------------------------------------------
-  it("evicts the least-recently-touched agent's entries beyond 4 agents", async () => {
+  it("evicts the least-recently-touched agent's entries beyond 6 agents", async () => {
     const files: CommitFile[] = [{ path: "x.ts", state: "A", add: 1, del: 0 }];
-    for (const id of ["a1", "a2", "a3", "a4"]) {
+    for (const id of ["a1", "a2", "a3", "a4", "a5", "a6"]) {
       store.loadCommitFiles(id, "sha");
       resolveFn!(files);
       await flush();
     }
     expect(store.commitFilesFor("a1", "sha").status).toBe("ready");
 
-    store.loadCommitFiles("a5", "sha"); // 5th agent → a1 evicted
+    store.loadCommitFiles("a7", "sha"); // 7th agent → a1 evicted
     resolveFn!(files);
     await flush();
     expect(store.commitFilesFor("a1", "sha").status).toBe("idle");
-    for (const id of ["a2", "a3", "a4", "a5"]) {
+    for (const id of ["a2", "a3", "a4", "a5", "a6", "a7"]) {
       expect(store.commitFilesFor(id, "sha").status).toBe("ready");
     }
   });
 
   it("re-touching an agent protects it from eviction (LRU, not FIFO)", async () => {
     const files: CommitFile[] = [{ path: "x.ts", state: "A", add: 1, del: 0 }];
-    for (const id of ["a1", "a2", "a3", "a4"]) {
+    for (const id of ["a1", "a2", "a3", "a4", "a5", "a6"]) {
       store.loadCommitFiles(id, "sha");
       resolveFn!(files);
       await flush();
     }
     store.loadBlame("a1", "f.ts"); // a1 becomes most recent (different map)
-    store.loadCommitFiles("a5", "sha"); // a2 is now oldest → evicted
+    store.loadCommitFiles("a7", "sha"); // a2 is now oldest → evicted
     resolveFn!(files);
     await flush();
     expect(store.commitFilesFor("a1", "sha").status).toBe("ready");

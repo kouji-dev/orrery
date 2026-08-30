@@ -5,6 +5,7 @@ import {
   inject,
 } from "@angular/core";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { CommandRegistryService } from "../commands/command-registry.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -13,7 +14,7 @@ import { CostStore } from "../metrics/cost.store";
 import { TelemetryStore } from "../metrics/telemetry.store";
 import { DevPanelStore } from "../dev-tools/dev-panel.store";
 import { VersionBadgeComponent } from "../shared/version-badge.component";
-import { SettingsStore } from "../settings/settings.store";
+import { SettingsStore, worktreeRootLabel } from "../settings/settings.store";
 import { DiagnosticsService } from "../shared/diagnostics.service";
 import { ToolWindowStore } from "../tool-window/tool-window.store";
 import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
@@ -31,12 +32,16 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
         >{{ running() }} running
       </span>
       @if (blocked() > 0) {
-        <span
-          style="display:flex;gap:var(--sp-3);align-items:center;color:var(--st-blocked)"
+        <button
+          type="button"
+          class="sb-link"
+          (click)="openQueue()"
+          title="Work the unblock queue · N"
+          style="color:var(--st-blocked)"
         >
           <span class="dot" style="background:var(--st-blocked)"></span
           >{{ blocked() }} need attention
-        </span>
+        </button>
       }
       <span class="tnum"
         >{{ projects.all().length }} projects ·
@@ -44,7 +49,7 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
       >
       <span style="display:flex;gap:var(--sp-2)"
         ><app-icon size="md" name="folder" />{{
-          ui.worktreeRoot
+          worktreeRoot()
         }}</span
       >
 
@@ -80,11 +85,6 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
       <!-- open the rolling diagnostics log file -->
       <button kjButton type="button" class="sb-link" [style.margin-left]="ui.toast() || telemetry.traceActive() ? null : 'auto'" (click)="diag.openLog()" title="Open log file">
         <app-icon size="md" name="file" />logs
-      </button>
-
-      <!-- app version + channel tag (DEV / BETA) → opens the release changelog -->
-      <button kjButton type="button" class="sb-link" (click)="settings.openWhatsNew()" title="View release changelog">
-        <app-version-badge variant="chip" class="tnum" />
       </button>
 
       <!-- total Claude cost (ccusage); hover → rich kouji tooltip. hidden when unavailable -->
@@ -145,6 +145,40 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
           ></span>
         </span>
       </button>
+
+      <!-- design orrery-v2 sb-dev-slot: the FAB rail is gone — Tweaks and the
+           Dev console launch from HERE, between the mem/cpu readout and the
+           version badge. data-dismiss-ignore keeps a chip's mousedown from
+           light-dismissing the very panel it is about to toggle. -->
+      <button kjButton
+        type="button"
+        class="sb-chip"
+        data-dismiss-ignore
+        [class.on]="ui.tweaksOpen()"
+        (click)="ui.tweaksOpen.set(!ui.tweaksOpen())"
+        title="Tweaks — theme, layout, motion"
+      >
+        <app-icon size="md" name="spark" />Tweaks
+      </button>
+      <button kjButton
+        type="button"
+        class="sb-chip"
+        data-dismiss-ignore
+        [class.on]="devPanel.open()"
+        (click)="devPanel.toggle()"
+        [title]="devPanel.alertCount() ? 'Dev console · ' + devPanel.alertCount() + ' perf alert' + (devPanel.alertCount() > 1 ? 's' : '') : 'Dev console'"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:round(calc(11px * var(--density)), 1px);height:round(calc(11px * var(--density)), 1px)"><path d="M3 12h3l2.5-6 4 13 3-9 1.5 2H21" /></svg>
+        Dev
+        @if (devPanel.alertCount()) {
+          <span class="sb-alertct tnum">{{ devPanel.alertCount() }}</span>
+        }
+      </button>
+
+      <!-- app version + channel tag (DEV / BETA) → opens the release changelog -->
+      <button kjButton type="button" class="sb-link" (click)="settings.openWhatsNew()" title="View release changelog">
+        <app-version-badge variant="chip" class="tnum" />
+      </button>
     </footer>
   `,
   styles: [
@@ -154,6 +188,46 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
       }
       .gauge:hover {
         color: var(--ink-2) !important;
+      }
+      /* dvc-chip (design orrery-v2): the footer launchers read as CONTROLS —
+         a bordered pill on the sunken panel tone, not quiet footer text. */
+      .sb-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-3);
+        padding: round(calc(2px * var(--density)), 1px) round(calc(7px * var(--density)), 1px);
+        border-radius: 999px;
+        border: 1px solid var(--hair);
+        background: var(--panel-2);
+        color: var(--ink-2);
+        cursor: pointer;
+        flex: none;
+        white-space: nowrap;
+        font-family: inherit;
+        font-size: var(--fs-badge);
+        transition: color 0.12s, border-color 0.12s;
+      }
+      .sb-chip:hover {
+        color: var(--ink);
+        border-color: var(--hair-2);
+      }
+      .sb-chip.on {
+        color: var(--ui-ink);
+        border-color: var(--ui-line);
+      }
+      /* dvc-chipct (design orrery-v2): the Dev chip's red perf-alert pill */
+      .sb-alertct {
+        display: inline-grid;
+        place-items: center;
+        min-width: round(calc(15px * var(--density)), 1px);
+        height: round(calc(14px * var(--density)), 1px);
+        padding: 0 var(--sp-2);
+        border-radius: 999px;
+        background: var(--sem-del);
+        color: var(--on-solid);
+        font-size: var(--fs-micro);
+        font-weight: var(--fw-strong);
+        line-height: 1;
       }
       .sb-link {
         display: flex;
@@ -205,6 +279,14 @@ export class StatusBarComponent {
   readonly cost = inject(CostStore);
   readonly devPanel = inject(DevPanelStore);
   readonly settings = inject(SettingsStore);
+  private readonly registry = inject(CommandRegistryService);
+  /** Effective worktree root (settings override, else the app-data default). */
+  readonly worktreeRoot = computed(() => worktreeRootLabel(this.settings.settings()));
+
+  /** "N need attention" → the v2 peek queue, never a tab switch. */
+  openQueue(): void {
+    this.registry.open("peek");
+  }
   readonly diag = inject(DiagnosticsService);
   readonly telemetry = inject(TelemetryStore);
   readonly toolWindow = inject(ToolWindowStore);

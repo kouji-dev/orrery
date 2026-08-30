@@ -11,7 +11,9 @@ import { NotificationAlertService } from "../notifications/notification-alert.se
 import { SettingsStore } from "../settings/settings.store";
 import { NotificationStore } from "../stores/notifications.store";
 import { AgentsStore } from "../stores/agents.store";
+import { ProjectsStore } from "../stores/projects.store";
 import { WorkspaceStore } from "../stores/workspace.store";
+import { pseudoProjectAgent } from "../projects/pseudo-agent";
 import { AgentWorkStore } from "./agent-work.store";
 import { TerminalService } from "../terminal.service";
 import { UiStore } from "../ui/ui.store";
@@ -30,6 +32,7 @@ import { AgentPtyStatusPayload } from "../data-source/bridge";
 @Injectable({ providedIn: "root" })
 export class AgentRuntimeService {
   private agentsStore = inject(AgentsStore);
+  private projectsStore = inject(ProjectsStore);
   private work = inject(AgentWorkStore);
   private terminals = inject(TerminalService);
   private ui = inject(UiStore);
@@ -75,6 +78,9 @@ export class AgentRuntimeService {
   // The agent the rest of the shell is "scoped" to: the focused pane's agent
   // within the active tab (a tab may tile several agents). Drives the sidebar
   // highlight and the right panel. Falls back to the tab's first agent.
+  // A project tab's leaf agentId IS the project id (v2 pseudo-agent) — resolve
+  // it to the synthesized pseudo so scope-followers (tool window, graph strip,
+  // sidebar files) land on the MAIN worktree instead of an unrelated fallback.
   readonly activeAgent = computed<Agent | null>(() => {
     const tab = this.ui.activeTab();
     if (tab === "orchestrator") return null;
@@ -84,7 +90,10 @@ export class AgentRuntimeService {
     if (!ids.length) return null;
     const scope = this.ui.scopeAgentId();
     const id = scope && ids.includes(scope) ? scope : ids[0];
-    return this.agents().find((a) => a.id === id) ?? null;
+    const found = this.agents().find((a) => a.id === id);
+    if (found) return found;
+    const p = this.projectsStore.all().find((pr) => pr.id === id);
+    return p ? pseudoProjectAgent(p, this.shellRunning(p.id)) : null;
   });
 
   // real liveness tracking (when launched, last output)
@@ -139,10 +148,12 @@ export class AgentRuntimeService {
       }
     });
     // Lazy: first time an agent becomes the active/scoped one, load its tree +
-    // first commits page (no-ops when already loaded).
-    effect(() => {
+    // first commits page (no-ops when already loaded). The active agent is on
+    // screen by definition, so its work data stays pinned against LRU eviction.
+    effect((onCleanup) => {
       const ag = this.activeAgent();
       if (!ag) return;
+      onCleanup(this.work.pin(ag.id));
       this.work.ensureTree(ag.id);
       this.work.ensureCommits(ag.id);
     });
@@ -391,6 +402,33 @@ export class AgentRuntimeService {
     void this.agentsStore.stop(id).catch(() => {});
   }
 
+  // ---- v2 project shells (plain shell in the MAIN worktree, keyed by the
+  //      project id — the pseudo-agent's run state, see pseudoProjectAgent) ----
+  private readonly shellsRunning = signal<Record<string, boolean>>({});
+  shellRunning(projectId: string): boolean {
+    return !!this.shellsRunning()[projectId];
+  }
+  /** undefined = never launched this session · true = live · false = exited.
+   *  The distinction gates auto-open: a first-shown project terminal starts
+   *  its shell, a user-stopped one stays stopped. */
+  shellState(projectId: string): boolean | undefined {
+    return this.shellsRunning()[projectId];
+  }
+  startShell(projectId: string) {
+    const sz = this.terminals.size(projectId);
+    this.shellsRunning.update((m) => ({ ...m, [projectId]: true }));
+    void this.agentsStore
+      .startShell(projectId, sz?.rows ?? 0, sz?.cols ?? 0)
+      .then(() => this.terminals.syncSize(projectId))
+      .catch((e: { message?: string }) => {
+        this.shellsRunning.update((m) => ({ ...m, [projectId]: false }));
+        this.ui.flash(e?.message ?? "shell start failed");
+      });
+  }
+  stopShell(projectId: string) {
+    void this.agentsStore.stopShell(projectId).catch(() => {});
+  }
+
   /** Drop all overlay/terminal state for an agent (on removal). */
   dispose(id: string) {
     this.terminals.dispose(id);
@@ -490,6 +528,13 @@ export class AgentRuntimeService {
   }
 
   private onExit(id: string) {
+    // v2 project shell exits ride the same `agent://exit` channel, keyed by
+    // the PROJECT id — flip the pseudo-agent's run flag and stop there.
+    if (this.shellsRunning()[id] !== undefined) {
+      this.shellsRunning.update((m) => ({ ...m, [id]: false }));
+      this.terminals.exit(id);
+      return;
+    }
     // Why: like the output path, exit can land after removeAgent (mux drain
     // ordering) — patching the overlay / pushing the tail below would recreate
     // (and leak) runtime entries for a disposed agent.

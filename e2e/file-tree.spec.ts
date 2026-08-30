@@ -1,11 +1,12 @@
 import { expect, Page, test } from "@playwright/test";
 
 /**
- * E2E for the file-tree context menu (B1.1 CRUD): the root-scoped menu opens
- * from ANY right-click inside the panel — header, empty space, empty state —
- * not only on file/folder rows.
+ * E2E for the file-tree context menu (B1.1 CRUD) — v2: the tree lives in the
+ * SIDEBAR files section (the right-panel Files tab is gone). The root-scoped
+ * menu opens from ANY right-click inside the tree — empty space and empty
+ * state included, not only on file/folder rows.
  *
- * Backend-free: the tree scan invoke rejects, so the panel shows its honest
+ * Backend-free: the tree scan invoke rejects, so the tree shows its honest
  * "empty worktree" state — exactly the empty-space case the menu must serve.
  */
 
@@ -13,7 +14,7 @@ const seedAgent = (id: string, name: string) => `(() => {
   const bar = window.ng.getComponent(document.querySelector("app-top-bar"));
   bar.agentActions["agentsStore"]["store"].upsert({
     id: "${id}", projectId: "p-e2e", tool: "claude", model: "m", name: "${name}",
-    task: "", status: "idle", branch: "agent/${name}", worktree: "", base: "main",
+    task: "", status: "idle", branch: "agent/${name}", worktree: "C:/wt/${name}", base: "main",
     commits: 0, elapsed: 0, progress: 0, pending: [],
   });
 })()`;
@@ -21,18 +22,17 @@ const seedAgent = (id: string, name: string) => `(() => {
 const ui = (expr: string) =>
   `window.ng.getComponent(document.querySelector("app-top-bar")).ui${expr}`;
 
-async function openFilesTab(page: Page): Promise<void> {
+async function openAgentTree(page: Page): Promise<void> {
   await page.goto("/");
   await page.waitForSelector("app-top-bar");
   await page.evaluate(seedAgent("e2e-ft1", "e2e-tree"));
   await page.evaluate(ui(`.openAgent("e2e-ft1")`));
-  await page.locator("app-right-panel").getByRole("tab", { name: "Files" }).click();
-  await expect(page.locator("app-file-tree")).toBeVisible();
+  await expect(page.locator("app-sidebar-file-tree")).toBeVisible();
 }
 
-test("right-clicking empty panel space opens the root-scoped CRUD menu", async ({ page }) => {
-  await openFilesTab(page);
-  await page.locator("app-file-tree").click({ button: "right" });
+test("right-clicking empty tree space opens the root-scoped CRUD menu", async ({ page }) => {
+  await openAgentTree(page);
+  await page.locator("app-sidebar-file-tree").click({ button: "right" });
 
   const menu = page.locator(".menu-panel");
   await expect(menu).toBeVisible();
@@ -71,7 +71,8 @@ test("sidebar agent rows show change counters from the dedicated totals map", as
 test("sidebar: right-clicking empty projects space opens the panel menu", async ({ page }) => {
   await page.goto("/");
   await page.waitForSelector("app-top-bar");
-  await page.locator("app-sidebar .scroll-y").click({ button: "right" });
+  // the agents section is the sidebar's first scroll area (the files tree below has its own)
+  await page.locator("app-sidebar .scroll-y").first().click({ button: "right" });
   const menu = page.locator("app-context-menu");
   await expect(menu.getByText("Add Project…")).toBeVisible();
   await expect(menu.getByText("Spawn Agent…")).toBeVisible();
@@ -80,8 +81,8 @@ test("sidebar: right-clicking empty projects space opens the panel menu", async 
 });
 
 test("New File… from the empty-space menu targets the worktree root", async ({ page }) => {
-  await openFilesTab(page);
-  await page.locator("app-file-tree").click({ button: "right" });
+  await openAgentTree(page);
+  await page.locator("app-sidebar-file-tree").click({ button: "right" });
   await page.locator(".menu-panel").getByRole("button", { name: "New File…" }).click();
   await expect(page.locator(".menu-panel")).toContainText("New file in worktree root");
   await expect(page.locator(".menu-input")).toBeVisible();

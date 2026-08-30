@@ -1,5 +1,5 @@
 import { computed, effect, Injectable, signal } from "@angular/core";
-import { AGENT_TOOLS, ORG, WORKTREE_ROOT } from "../data";
+import { AGENT_TOOLS, ORG } from "../data";
 import { ContextMenuState, GitView, MenuItem, Tab, Tweaks, VizMode } from "../models";
 import {
   dropAgent,
@@ -7,9 +7,11 @@ import {
   group,
   leaf,
   openFileInLeaf,
+  openFilePreviewInLeaf,
   PaneNode,
   PaneView,
   setAgentView,
+  splitLeaf,
   syncPaneSeq,
   treeAgentIds,
 } from "../workspace/pane-model";
@@ -18,7 +20,6 @@ const TWEAK_DEFAULTS: Tweaks = {
   theme: "dark",
   density: "regular",
   defaultViz: "grid",
-  rightPanel: true,
   motion: true,
 };
 
@@ -31,8 +32,13 @@ export interface WorkspaceLayout {
   paneRoots: Record<string, PaneNode>;
   gitViews?: Record<string, GitView | null>;
   diffSelections?: Record<string, string | null>;
+  diffDirOpen?: Record<string, Record<string, boolean>>;
+  diffTreeMode?: boolean;
   diffListWidth?: number | null;
   sidebarCompact?: boolean;
+  sidebarFilesH?: number | null;
+  sidebarFilesCollapsed?: boolean;
+  filesRootOverride?: Record<string, string>;
 }
 
 const TWEAKS_KEY = "orrery.tweaks";
@@ -65,7 +71,7 @@ export class UiStore {
   readonly scopeAgentId = signal<string | null>(null);
 
   // Active git-inspection view per agent (commit / range / file-history). Set
-  // when the user picks from the right-panel commit history; the agent's diff
+  // when the user picks a commit from the graph panel; the agent's diff
   // pane renders it in place of the working-tree diff. null = working changes.
   // Public: the WorkspaceStore persists/hydrates it.
   readonly gitViews = signal<Record<string, GitView | null>>({});
@@ -88,6 +94,25 @@ export class UiStore {
   // switch — component-local selection would reset to the first changed file.
   // Public: the WorkspaceStore persists/hydrates it.
   readonly diffSelections = signal<Record<string, string | null>>({});
+
+  // Folder open state of the diff tree, per agent (path → false = collapsed;
+  // absent = open, the default). Same reasoning as diffSelections: the pane
+  // destroys the diff view on tab switch, so this must outlive the component.
+  // Public: the WorkspaceStore persists/hydrates it.
+  readonly diffDirOpen = signal<Record<string, Record<string, boolean>>>({});
+  diffDirOpenFor(agentId: string): Record<string, boolean> {
+    return this.diffDirOpen()[agentId] ?? {};
+  }
+  toggleDiffDir(agentId: string, path: string): void {
+    this.diffDirOpen.update((m) => {
+      const cur = m[agentId] ?? {};
+      return { ...m, [agentId]: { ...cur, [path]: !(cur[path] !== false) } };
+    });
+  }
+
+  // Tree vs Flat mode of the diff file list — a global view preference like
+  // diffListWidth. Public: the WorkspaceStore persists/hydrates it.
+  readonly diffTreeMode = signal(true);
 
   // Width of the diff panel's file list (px), user-resized via the separator.
   // null = the view's default. Global (not per agent) — a width preference,
@@ -124,12 +149,15 @@ export class UiStore {
   readonly query = signal<string>("");
   readonly toast = signal<string>("");
 
+  /** Tweaks panel visibility — toggled by its status-bar chip (design
+   *  orrery-v2: the FAB rail is gone, the launcher lives in the footer). */
+  readonly tweaksOpen = signal(false);
+
   readonly spawning = signal<{ project: string | null } | null>(null);
   readonly addingProject = signal<boolean>(false);
   readonly contextMenu = signal<ContextMenuState | null>(null);
 
   readonly org = ORG;
-  readonly worktreeRoot = WORKTREE_ROOT;
   readonly tools = AGENT_TOOLS;
 
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -150,8 +178,13 @@ export class UiStore {
     this.scopeAgentId.set(ws.scopeAgentId ?? null);
     this.gitViews.set(ws.gitViews ?? {});
     this.diffSelections.set(ws.diffSelections ?? {});
+    this.diffDirOpen.set(ws.diffDirOpen ?? {});
+    this.diffTreeMode.set(ws.diffTreeMode ?? true);
     this.diffListWidth.set(ws.diffListWidth ?? null);
     this.sidebarCompact.set(ws.sidebarCompact ?? false);
+    this.sidebarFilesH.set(ws.sidebarFilesH ?? null);
+    this.sidebarFilesCollapsed.set(ws.sidebarFilesCollapsed ?? false);
+    this.filesRootOverride.set(ws.filesRootOverride ?? {});
     // fresh ids must not collide with restored "tabN"/"paneN" ids
     for (const t of ws.tabs) {
       const m = /^tab(\d+)$/.exec(t.id);
@@ -226,6 +259,26 @@ export class UiStore {
     this.tabs.update((prev) => [...prev, { id, kind: "agent" }]);
     this.activeTab.set(id);
   }
+  /** v2: open (or focus) a project's workspace tab — the same pane tree as an
+   *  agent tab, rooted at the MAIN worktree via the project pseudo-agent (the
+   *  leaf's agentId IS the project id). */
+  openProject(projectId: string, pane?: string) {
+    const existing = this.tabs().find((t) => t.kind === "project" && t.projectId === projectId);
+    if (existing) {
+      this.activeTab.set(existing.id);
+      if (pane !== undefined) {
+        const view: PaneView = pane === "diff" ? "diff" : "terminal";
+        this.paneRoots.update((m) => ({ ...m, [existing.id]: setAgentView(m[existing.id], projectId, view) }));
+      }
+      return;
+    }
+    const id = this.newTabId();
+    const view: PaneView = pane === "diff" ? "diff" : "terminal";
+    this.paneRoots.update((m) => ({ ...m, [id]: leaf(projectId, view) }));
+    this.tabs.update((prev) => [...prev, { id, kind: "project", projectId }]);
+    this.activeTab.set(id);
+  }
+
   selectTab(id: string) {
     this.activeTab.set(id);
     const root = this.paneRoots()[id];
@@ -392,10 +445,44 @@ export class UiStore {
     this.sidebarCompact.update((v) => !v);
   }
 
-  // ---- right-panel file tree → open the file as a tab INSIDE the agent's pane ----
+  // ---- sidebar files section (v2) ----
+  // Height (px) of the files section, user-resized via the split handle;
+  // null = the section's default. Public: WorkspaceStore persists/hydrates.
+  readonly sidebarFilesH = signal<number | null>(null);
+  /** Files section collapsed to its header strip alone. */
+  readonly sidebarFilesCollapsed = signal(false);
+  /** Explicit root-chip pick per tab (tabId → root key). Absent = the section
+   *  follows the tab's own scope. Public: WorkspaceStore persists/hydrates. */
+  readonly filesRootOverride = signal<Record<string, string>>({});
+  setFilesRootOverride(tabId: string, rootKey: string | null): void {
+    this.filesRootOverride.update((m) => {
+      if (rootKey === null) {
+        if (!(tabId in m)) return m;
+        const { [tabId]: _drop, ...rest } = m;
+        return rest;
+      }
+      return { ...m, [tabId]: rootKey };
+    });
+  }
+
+  // ---- sidebar file tree → open the file as a tab INSIDE the agent's pane ----
   // Each file gets its own closable tab in the pane's file strip; re-opening an
   // already-open file just re-activates its tab.
   openFileInWorkspace(agentId: string, path: string) {
+    this.openFileVia(agentId, path, openFileInLeaf);
+  }
+
+  /** v2 preview open (sidebar single-click): the file lands as the leaf's
+   *  italic PREVIEW tab — the next preview replaces it; pinning keeps it. */
+  openFilePreviewInWorkspace(agentId: string, path: string) {
+    this.openFileVia(agentId, path, openFilePreviewInLeaf);
+  }
+
+  private openFileVia(
+    agentId: string,
+    path: string,
+    open: (n: PaneNode, leafId: string, path: string) => PaneNode,
+  ) {
     this.openAgent(agentId); // ensure the agent's tab exists + is active (keeps its view)
     const tabId = this.activeTab();
     this.paneRoots.update((m) => {
@@ -403,7 +490,23 @@ export class UiStore {
       if (!root) return m;
       const leafId = firstLeafOf(root, agentId);
       if (!leafId) return m;
-      return { ...m, [tabId]: openFileInLeaf(root, leafId, path) };
+      return { ...m, [tabId]: open(root, leafId, path) };
+    });
+  }
+
+  /** v2 ⌥-click: open the file PINNED in a fresh split beside the agent's
+   *  first leaf — the diff (or whatever the leaf showed) stays visible. */
+  openFileInSplitWorkspace(agentId: string, path: string) {
+    this.openAgent(agentId);
+    const tabId = this.activeTab();
+    this.paneRoots.update((m) => {
+      const root = m[tabId];
+      if (!root) return m;
+      const leafId = firstLeafOf(root, agentId);
+      if (!leafId) return m;
+      const nl = leaf(agentId, "terminal");
+      const split = splitLeaf(root, leafId, "v", nl);
+      return { ...m, [tabId]: openFileInLeaf(split, nl.id, path) };
     });
   }
 

@@ -36,6 +36,11 @@ export class ProjectsStore {
   byId(id: string): Project | undefined {
     return this.all().find((p) => p.id === id);
   }
+  /** Re-run project_list — the backend re-enriches git state (branches, head,
+   *  default branch) from disk at read time, so this IS the branch refresh. */
+  reload(): Promise<void> {
+    return this.facade.load();
+  }
   // ---- mutations: invoke only; the store updates from project:// events (single source of truth) ----
   async create(req: {
     name: string;

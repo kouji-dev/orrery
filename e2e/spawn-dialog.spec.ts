@@ -215,6 +215,48 @@ test("Reasoning effort marks the chosen level as selected", async ({ page }) => 
       `window.ng.getComponent(document.querySelector("app-spawn-modal")).effort()`,
     ),
   ).toBe(label);
-  const paint = await chosen().evaluate((el) => getComputedStyle(el).backgroundColor);
-  expect(paint).not.toBe("rgba(0, 0, 0, 0)");
+  // poll: kouji adopts its constructable component sheets asynchronously, so
+  // right after the click the pill can still be un-themed for a frame or two
+  await expect
+    .poll(() => chosen().evaluate((el) => getComputedStyle(el).backgroundColor), { timeout: 3000 })
+    .not.toBe("rgba(0, 0, 0, 0)");
+});
+
+test("opening the dialog kicks off a branch refresh", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForSelector("app-top-bar");
+  await page.evaluate(seed);
+  // spy the refresh path BEFORE the modal mounts — its constructor calls it
+  await page.evaluate(
+    bar(`.projects.refresh = () => { window.__refreshed = true; return Promise.resolve(); }`),
+  );
+  await page.evaluate(bar(`.ui.openSpawn(null)`));
+  await page.waitForSelector("app-spawn-modal", { state: "attached" });
+  expect(await page.evaluate(`window.__refreshed === true`)).toBe(true);
+});
+
+test("the refresh button re-reads branches and keeps a still-valid selection", async ({ page }) => {
+  await openSpawn(page);
+  const refresh = page.locator('app-spawn-modal button[title="Refresh branches from disk"]');
+  await expect(refresh).toBeVisible();
+  await expect(refresh).toBeEnabled();
+
+  // a branch appears on disk while the dialog is open: refresh() re-enriches
+  // the project record (simulated by upserting the store, as project_list does)
+  await page.evaluate(
+    bar(`.projects.refresh = () => {
+      const b = window.ng.getComponent(document.querySelector("app-top-bar"));
+      const store = b.projects["projectsStore"]["store"];
+      const p = store.all().find((x) => x.id === "7f3a91c4-2b5e-4d18-9a06-c1e8f4b7d302");
+      store.upsert({ ...p, branches: [...p.branches, "feat/created-outside"] });
+      return Promise.resolve();
+    }`),
+  );
+  await refresh.click();
+
+  // the selection survives (main still exists) and the new branch is offered
+  const trigger = picker(page, 1);
+  await expect(trigger).toHaveText(/main/);
+  await trigger.click();
+  await expect(panel(page).getByRole("option", { name: "feat/created-outside" })).toBeVisible();
 });

@@ -93,6 +93,12 @@ import { KjDividerComponent } from "@kouji-ui/components";
         }
       </div>
 
+      <!-- files section (v2) collapses to one folder icon on the rail -->
+      <kj-divider style="--kj-divider-color:var(--hair);--kj-divider-spacing:var(--sp-2)" />
+      <button kjButton class="rail-btn" (click)="expandFiles()" title="Files — expand sidebar">
+        <app-icon name="folderOpen" size="sm" color="var(--ink-3)" />
+      </button>
+
       <kj-divider style="--kj-divider-color:var(--hair);--kj-divider-spacing:var(--sp-2)" />
       <button kjButton class="rail-btn" (click)="ui.openAddProject()" title="Add project">
         <app-icon name="folder" size="sm" color="var(--ink-3)" />
@@ -168,6 +174,12 @@ export class CompactRailComponent {
   );
   /** The backlog tab is the active one — drives the rail item's active skin. */
   readonly backlogActive = computed(() => this.ui.activeTabKind() === "backlog");
+
+  /** Rail folder icon: restore the full sidebar with the files section open. */
+  expandFiles(): void {
+    this.ui.sidebarFilesCollapsed.set(false);
+    this.ui.toggleSidebarCompact();
+  }
 
   readonly mix = mix;
   readonly hover = signal<{ id: string; top: number } | null>(null);

@@ -83,9 +83,9 @@ test("topbar Search Everywhere button opens the overlay", async ({ page }) => {
   await ready(page);
   const btn = page.locator("app-top-bar .tb-search");
   await expect(btn).toBeVisible();
-  // kbd chip shows the double-shift label (Windows-first: "Shift Shift")
+  // kbd chip advertises the PRIMARY binding — Ctrl+K (double-Shift stays as alt)
   // the chip is kouji's <kj-kbd> since the shared-primitive migration
-  await expect(btn.locator("kj-kbd").first()).toContainText("Shift");
+  await expect(btn.locator("kj-kbd").first()).toContainText("Ctrl+K");
   await btn.click();
   const se = page.locator("app-search-everywhere");
   // host is a 0×0 inline box — assert the inner input, which has a real box
@@ -94,7 +94,7 @@ test("topbar Search Everywhere button opens the overlay", async ({ page }) => {
   await expect(se).toHaveCount(0);
 });
 
-test("Ctrl+K opens Search Everywhere (kbdAlt of double-Shift)", async ({ page }) => {
+test("Ctrl+K opens Search Everywhere (the primary binding)", async ({ page }) => {
   await ready(page);
   await page.keyboard.press("Control+K");
   const se = page.locator("app-search-everywhere");

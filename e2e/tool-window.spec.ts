@@ -116,6 +116,11 @@ test("branches panel: live A3.2 chrome with honest no-backend states", async ({ 
   await page.locator("app-tool-window").getByRole("tab", { name: "Branches" }).click();
   const panel = page.locator("app-branches-panel");
 
+  // the scope select leads with the MAIN checkout now — pick the seeded agent
+  // worktree, since checkout/merge row ops need an agent target
+  await page.locator("app-tool-window kj-tabs app-select").last().locator(".kj-select-trigger").click();
+  await page.getByRole("option", { name: "e2e-tw", exact: true }).click();
+
   // REAL data: detected project branches + the seeded worktree branch
   // (backend absent → the native detail load fails, names fall back)
   await expect(panel).toContainText("Branches · e2e-proj");

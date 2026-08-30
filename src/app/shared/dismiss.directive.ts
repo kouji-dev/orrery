@@ -29,6 +29,10 @@ export class DismissDirective {
     // click lands. That is why the file list's Delete confirm silently did
     // nothing: the menu (and with it the confirm popup) was gone by mouseup.
     if (t?.closest(".kj-overlay-container")) return;
+    // A remote toggle (e.g. the status-bar Tweaks/Dev chips) marks itself
+    // [data-dismiss-ignore]: its mousedown must not dismiss the panel it
+    // toggles, or the click that follows would instantly reopen it.
+    if (t?.closest("[data-dismiss-ignore]")) return;
     this.appDismiss.emit();
   }
 }

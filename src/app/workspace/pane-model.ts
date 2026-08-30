@@ -14,6 +14,10 @@ export interface PaneLeaf {
   files?: string[];
   /** The file rendered when `view === "file"`. */
   activeFile?: string | null;
+  /** v2 preview tab: at most ONE of `files` is a preview (italic tab) — the
+   *  next preview replaces it; pinning (double-click / edit) clears this.
+   *  Absent on older persisted docs = every tab pinned (additive key). */
+  previewFile?: string | null;
 }
 export interface PaneSplit {
   type: "split";
@@ -146,7 +150,8 @@ export function firstLeafOf(node: PaneNode, agentId: string): string | null {
   return firstLeafOf(node.a, agentId) ?? firstLeafOf(node.b, agentId);
 }
 
-/** Open `path` as a file tab in leaf `id` (dedup) and make it the active view. */
+/** Open `path` as a PINNED file tab in leaf `id` (dedup) and make it the
+ *  active view. Opening pinned also pins an existing preview of that path. */
 export function openFileInLeaf(node: PaneNode, id: string, path: string): PaneNode {
   if (node.type === "leaf") {
     if (node.id !== id) return node;
@@ -156,9 +161,49 @@ export function openFileInLeaf(node: PaneNode, id: string, path: string): PaneNo
       files: files.includes(path) ? files : [...files, path],
       activeFile: path,
       view: "file",
+      previewFile: node.previewFile === path ? null : node.previewFile,
     };
   }
   return { ...node, a: openFileInLeaf(node.a, id, path), b: openFileInLeaf(node.b, id, path) };
+}
+
+/** v2: open `path` as the leaf's PREVIEW tab — replacing the previous preview
+ *  (its tab closes) unless it was pinned meanwhile. Opening a path that is
+ *  already a pinned tab just activates it. */
+export function openFilePreviewInLeaf(node: PaneNode, id: string, path: string): PaneNode {
+  if (node.type === "leaf") {
+    if (node.id !== id) return node;
+    const files = node.files ?? [];
+    if (files.includes(path)) {
+      // already open (pinned or the current preview) — just activate
+      return { ...node, activeFile: path, view: "file" };
+    }
+    const prev = node.previewFile ?? null;
+    const kept = prev ? files.filter((f) => f !== prev) : files;
+    return {
+      ...node,
+      files: [...kept, path],
+      activeFile: path,
+      view: "file",
+      previewFile: path,
+    };
+  }
+  return {
+    ...node,
+    a: openFilePreviewInLeaf(node.a, id, path),
+    b: openFilePreviewInLeaf(node.b, id, path),
+  };
+}
+
+/** v2: pin the leaf's preview tab (double-click / Enter / an edit) — the tab
+ *  goes upright and stops being replaceable. No-op when `path` isn't the
+ *  preview. */
+export function pinFileInLeaf(node: PaneNode, id: string, path: string): PaneNode {
+  if (node.type === "leaf") {
+    if (node.id !== id || node.previewFile !== path) return node;
+    return { ...node, previewFile: null };
+  }
+  return { ...node, a: pinFileInLeaf(node.a, id, path), b: pinFileInLeaf(node.b, id, path) };
 }
 
 /** Close the file tab `path` in leaf `id`. If it was active, its neighbor takes
@@ -170,13 +215,15 @@ export function closeFileInLeaf(node: PaneNode, id: string, path: string): PaneN
     const idx = files.indexOf(path);
     if (idx === -1) return node;
     const next = files.filter((f) => f !== path);
-    if (node.activeFile !== path) return { ...node, files: next };
+    const preview = node.previewFile === path ? null : node.previewFile;
+    if (node.activeFile !== path) return { ...node, files: next, previewFile: preview };
     const neighbor = next[Math.min(idx, next.length - 1)] ?? null;
     return {
       ...node,
       files: next,
       activeFile: neighbor,
       view: neighbor ? "file" : node.view === "file" ? "terminal" : node.view,
+      previewFile: preview,
     };
   }
   return { ...node, a: closeFileInLeaf(node.a, id, path), b: closeFileInLeaf(node.b, id, path) };
@@ -222,6 +269,8 @@ export interface PaneCtx {
   onView(leafId: string, view: PaneView): void;
   onFileSelect(leafId: string, path: string): void;
   onFileClose(leafId: string, path: string): void;
+  /** v2: pin the leaf's preview tab (double-click on the tab / an edit). */
+  onFilePin(leafId: string, path: string): void;
   onRatio(splitId: string, ratio: number): void;
   onFocus(leafId: string): void;
   // drag-and-drop: a sidebar agent / tab dragged over a pane. dropTarget() is the

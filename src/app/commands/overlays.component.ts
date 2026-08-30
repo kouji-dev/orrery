@@ -9,6 +9,7 @@ import {
   viewChild,
 } from "@angular/core";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { PeekOverlayComponent } from "../notifications/peek-overlay.component";
 import { IconComponent } from "../shared/icon.component";
 import { fileDir, fileName } from "../utils";
 import { CommandRegistryService } from "./command-registry.service";
@@ -343,6 +344,7 @@ export class GotoLineOverlayComponent {
     GotoLineOverlayComponent,
     SearchEverywhereComponent,
     FindInFilesComponent,
+    PeekOverlayComponent,
   ],
   template: `
     @switch (registry.overlay()?.kind) {
@@ -351,6 +353,7 @@ export class GotoLineOverlayComponent {
       @case ('recent') { <app-recent-files-overlay /> }
       @case ('goto') { <app-goto-line-overlay /> }
       @case ('find') { <app-find-in-files /> }
+      @case ('peek') { <app-peek-overlay /> }
     }
   `,
 })

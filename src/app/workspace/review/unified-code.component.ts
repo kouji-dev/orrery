@@ -88,11 +88,34 @@ export class UnifiedCodeComponent {
   /** agent:file the LIVE diff editor was built for — inputs may already point
    *  at the next file by teardown time, so the save key is captured at mount. */
   private mountedKey: { agent: string; file: string } | null = null;
+  /** Document the live editor renders — while it matches the inputs, content
+   *  updates go through updateInPlace() instead of a rebuild. */
+  private builtFor: { agent: string; file: string; mode: string; lang: string } | null = null;
 
   constructor() {
-    // Rebuild when content, language, or view mode changes (theme is global).
+    // Content/document changes: same document (agent+file+mode+lang) with a
+    // live editor updates the MODELS IN PLACE — no teardown, no "loading…"
+    // frame, scroll and comment widgets survive. Watcher-scan refreshes while
+    // an agent writes hit this path once per landed change; the full rebuild
+    // is only for a real document switch (different file/mode/lang).
     effect(() => {
-      void this.render(this.oldText(), this.newText(), this.view(), this.lang());
+      const oldText = this.oldText();
+      const newText = this.newText();
+      const mode = this.view();
+      const lang = this.lang();
+      const doc = { agent: this.agent(), file: this.file(), mode, lang };
+      if (
+        this.builtFor &&
+        this.builtFor.agent === doc.agent &&
+        this.builtFor.file === doc.file &&
+        this.builtFor.mode === mode &&
+        this.builtFor.lang === lang &&
+        (this.diffEditor || this.editor)
+      ) {
+        this.updateInPlace(oldText, newText);
+        return;
+      }
+      void this.render(oldText, newText, mode, lang, doc);
     });
     // Theme switch restyles every live Monaco editor in place.
     // Density switch → push the new code metrics into whichever editor is live.
@@ -142,11 +165,27 @@ export class UnifiedCodeComponent {
     return this.diffEditor ? this.diffEditor.getModifiedEditor() : this.editor;
   }
 
+  /** Same-document content refresh: swap model text without touching the
+   *  editor. Value-guarded — an identical refetch writes nothing at all. */
+  private updateInPlace(oldText: string, newText: string): void {
+    if (this.diffEditor) {
+      const m = this.diffEditor.getModel();
+      if (m) {
+        if (m.original.getValue() !== oldText) m.original.setValue(oldText);
+        if (m.modified.getValue() !== newText) m.modified.setValue(newText);
+      }
+    } else if (this.editor) {
+      const m = this.editor.getModel();
+      if (m && m.getValue() !== newText) m.setValue(newText);
+    }
+  }
+
   private teardown(): void {
     if (this.diffEditor && this.mountedKey) {
       this.scroll.saveDiffView(this.mountedKey.agent, this.mountedKey.file, this.diffEditor.saveViewState());
     }
     this.mountedKey = null;
+    this.builtFor = null;
     this.unregisterCap?.();
     this.unregisterCap = null;
     this.api?.dispose();
@@ -166,6 +205,7 @@ export class UnifiedCodeComponent {
     newText: string,
     mode: "diff" | "file",
     lang: string,
+    doc?: { agent: string; file: string; mode: string; lang: string },
   ): Promise<void> {
     const token = ++this.renderToken;
     const el = this.host().nativeElement;
@@ -225,7 +265,9 @@ export class UnifiedCodeComponent {
         this.subs.push(
           diff.onDidUpdateDiff(() => {
             if (this.diffEditor !== diff) return;
-            this.stats.emit(lineChangeStats(diff.getLineChanges() ?? [], oldText, newText));
+            // read the LIVE inputs — in-place refreshes reuse this editor, so
+            // the mount-time closure texts can be stale by the time this fires
+            this.stats.emit(lineChangeStats(diff.getLineChanges() ?? [], this.oldText(), this.newText()));
           }),
         );
         this.api = attachReviewComments(monaco, diff.getModifiedEditor(), this.commentHost());
@@ -245,6 +287,7 @@ export class UnifiedCodeComponent {
         this.teardown();
         el.textContent = newText;
       });
+      this.builtFor = doc ?? { agent: this.agent(), file: this.file(), mode, lang };
       this.viewGen.update((n) => n + 1);
     } catch (e) {
       console.warn("[unified-code] editor build failed, showing plain text", e);

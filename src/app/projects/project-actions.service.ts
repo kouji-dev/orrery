@@ -34,6 +34,11 @@ export class ProjectActionsService {
     return this.all().find((p) => p.id === id);
   }
 
+  /** Re-read every project from disk (branches, head, default branch). */
+  refresh(): Promise<void> {
+    return this.projectsStore.reload();
+  }
+
   /** Pull real git log for every project and merge into one feed (newest first). */
   async refreshCommits(projectIds: string[]) {
     const lists = await Promise.all(
@@ -101,6 +106,13 @@ export class ProjectActionsService {
         accent: "var(--ui-ink)",
         onClick: () => this.ui.spawning.set({ project: id }),
       },
+      {
+        // v2 project tab: pane tree + plain shell rooted at the MAIN worktree
+        label: "Open project workspace",
+        icon: "columns",
+        disabled: !p.folderExists,
+        onClick: () => this.ui.openProject(id),
+      },
       { sep: true },
       {
         label: "Pull latest",
@@ -117,7 +129,8 @@ export class ProjectActionsService {
         label: "Open in terminal",
         icon: "terminal",
         disabled: !p.folderExists,
-        onClick: () => this.ui.flash("opened terminal · " + p.path),
+        // v2: a REAL shell now — the project tab's terminal pane
+        onClick: () => this.ui.openProject(id, "terminal"),
       },
       { label: "Copy path", icon: "dup", onClick: () => this.ui.flash(p.path) },
       p.folderExists

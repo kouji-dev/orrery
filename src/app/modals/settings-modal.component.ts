@@ -16,7 +16,7 @@ import { AutoApprovePolicy, CostRate, SettingsEvents } from "../models";
 import { COST_FEATURES_ENABLED } from "../cost/cost-flags";
 import { DEFAULT_RATES } from "../cost/estimate.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
-import { AppCommand, CommandRegistryService } from "../commands/command-registry.service";
+import { AppCommand, CommandRegistryService, terminalDefaultOf } from "../commands/command-registry.service";
 import { bindingFromEvent, kbdLabel } from "../commands/fuzzy";
 import { DiagnosticsService } from "../shared/diagnostics.service";
 import {
@@ -127,6 +127,25 @@ export class SetRowComponent {
   @Input() dirty = false;
   @Output() readonly reset = new EventEmitter<void>();
 }
+
+/** Well-known meanings of chords INSIDE a terminal (shell readline, common
+ *  TUIs like Claude Code) — advisory hints for the keymap's tty toggle.
+ *  Curated: a PTY program's real bindings cannot be detected from outside. */
+const TUI_BINDINGS: Record<string, string> = {
+  "ctrl+k": "the shell (readline: kill to end of line)",
+  "ctrl+e": "the shell (readline: end of line)",
+  "ctrl+a": "the shell (readline: start of line)",
+  "ctrl+l": "the shell (clear screen)",
+  "ctrl+r": "the shell (history search) and Claude Code (transcript)",
+  "ctrl+w": "the shell (readline: kill word)",
+  "ctrl+u": "the shell (readline: kill line)",
+  "ctrl+b": "Claude Code (background the running task)",
+  "ctrl+o": "Claude Code (verbose output)",
+  "ctrl+s": "the terminal (XOFF flow control)",
+  "ctrl+c": "the shell (SIGINT)",
+  "ctrl+d": "the shell (EOF)",
+  "ctrl+z": "the shell (SIGTSTP)",
+};
 
 const SECTIONS: ReadonlyArray<{ id: SettingsSection; label: string; icon: string }> = [
   { id: "updates", label: "Updates", icon: "refresh" },
@@ -514,15 +533,27 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                 <div class="set-grp">
                   <h3 class="up set-grp-h">{{ grp.name }}</h3>
                   @for (cmd of grp.commands; track cmd.id) {
-                    <app-set-row [dirty]="!!s.keymap[cmd.id]" (reset)="store.setKeymapEntry(cmd.id, null)">
+                    <app-set-row [dirty]="!!s.keymap[cmd.id] || s.keymapTerminal[cmd.id] !== undefined" (reset)="resetKeymapRow(cmd.id)">
                       <ng-container row-label>{{ cmd.label }}</ng-container>
                       <ng-container row-help>
                         @if (capturing() === cmd.id) {
                           press the new chord — Esc cancels, Backspace unbinds
                         } @else if (conflictOf(cmd)) {
                           also bound to "{{ conflictOf(cmd) }}"
+                        } @else if (cmd.terminal && ttyConflict(cmd)) {
+                          in terminals this steals {{ kbdChip(cmd.kbd!) }} from {{ ttyConflict(cmd) }}
                         }
                       </ng-container>
+                      @if (cmd.kbd) {
+                        <kj-button kjVariant="outline" class="set-tty"
+                          (click)="toggleTerminal(cmd)"
+                          [style.--kj-button-fg]="cmd.terminal ? 'var(--ui-ink)' : 'var(--ink-4)'"
+                          [style.--kj-button-border-color]="cmd.terminal ? 'var(--ui-line)' : null"
+                          [title]="cmd.terminal
+                            ? 'Fires inside a focused terminal (stolen from the shell/TUI) — click to hand it back'
+                            : 'Flows to the shell/TUI inside a terminal — click to make it fire in the app instead'"
+                        ><app-icon name="terminal" size="sm" />tty</kj-button>
+                      }
                       <kj-button kjVariant="outline" class="set-kbd"
                         (click)="startCapture(cmd.id)"
                         [style.--kj-button-border-color]="capturing() === cmd.id ? 'var(--ui-focus)' : conflictOf(cmd) ? 'var(--sem-del)' : null"
@@ -881,6 +912,25 @@ export class SettingsModalComponent {
     }
     return [...groups.values()];
   });
+
+  /** Toggle "fires inside a terminal"; landing back on the default clears the
+   *  override so the row's dirty dot means what it says. */
+  toggleTerminal(cmd: AppCommand): void {
+    const next = !cmd.terminal;
+    this.store.setKeymapTerminal(cmd.id, next === terminalDefaultOf(cmd) ? null : next);
+  }
+
+  resetKeymapRow(id: string): void {
+    this.store.setKeymapEntry(id, null);
+    this.store.setKeymapTerminal(id, null);
+  }
+
+  /** Advisory: what a stolen chord means to the program INSIDE the terminal.
+   *  Curated, not detected — we cannot know what a PTY program really binds;
+   *  this table names the well-known collisions so the toggle is informed. */
+  ttyConflict(cmd: AppCommand): string | null {
+    return TUI_BINDINGS[cmd.kbd?.toLowerCase() ?? ""] ?? null;
+  }
 
   /** Another command sharing this one's effective binding, for the warn hint. */
   conflictOf(cmd: AppCommand): string | null {

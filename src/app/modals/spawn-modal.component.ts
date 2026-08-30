@@ -14,7 +14,7 @@ import { Agent, AgentTool, Project, Ticket } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
-import { effectiveEffort, effectiveModel, SettingsStore } from "../settings/settings.store";
+import { effectiveEffort, effectiveModel, SettingsStore, worktreeRootLabel } from "../settings/settings.store";
 import { TicketsStore } from "../stores/tickets.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -120,7 +120,18 @@ function slugName(title: string): string {
               <div class="trunc" style="font-size:var(--fs-meta);color:var(--ink-4);margin-top:var(--sp-3)">{{ proj.path }}</div>
             </div>
             <div style="flex:1">
-              <label class="field-label">Source branch</label>
+              <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3)">
+                <label class="field-label" style="margin-bottom:0">Source branch</label>
+                <button
+                  class="pane-btn"
+                  title="Refresh branches from disk"
+                  [disabled]="branchesBusy()"
+                  (click)="refreshBranches()"
+                  style="margin-left:auto"
+                >
+                  <app-icon name="refresh" size="sm" />
+                </button>
+              </div>
               <app-select [value]="branch()" [options]="proj.branches ?? []" (valueChange)="branch.set($event)" />
               @if (!proj.branches?.length) {
                 <div style="font-size:var(--fs-meta);color:var(--st-blocked);margin-top:var(--sp-3)">no branch found — project git is not initialized</div>
@@ -243,7 +254,7 @@ function slugName(title: string): string {
         </div>
 
         <div style="padding:var(--sp-6) var(--sp-7);border-top:1px solid var(--hair);display:flex;align-items:center;gap:var(--sp-4);flex:none">
-          <span class="trunc" style="color:var(--ink-4)">→ {{ ui.worktreeRoot }}/{{ proj.id }}-…</span>
+          <span class="trunc" style="color:var(--ink-4)">→ {{ worktreeDest() }}</span>
           <kj-button class="spawn-cancel" kjVariant="outline" (click)="ui.closeSpawn()">Cancel</kj-button>
           <kj-button kjVariant="outline" [kjDisabled]="!name().trim() || !branch()" (click)="submit(false)"><app-icon name="plus" size="sm" />Create</kj-button>
           <kj-button kjVariant="default" [kjDisabled]="!name().trim() || !branch()" (click)="submit(true)"><app-icon name="bolt" size="sm" />Spawn</kj-button>
@@ -357,12 +368,38 @@ export class SpawnModalComponent {
   readonly worktreePreview = computed(
     () => this.name().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "—",
   );
+  /** Full destination path preview: effective root (settings) + name slug —
+   *  mirrors the backend's flat `<root>/<slug>` layout. */
+  readonly worktreeDest = computed(
+    () => `${worktreeRootLabel(this.settingsStore.settings())}/${this.worktreePreview()}`,
+  );
 
   readonly model = signal<string>(this.prefillModel(this.currentTool()));
   readonly effort = signal<string | null>(this.prefillEffort(this.currentTool()));
   // Pre-select the repo's default branch (origin/HEAD → main/master → HEAD);
   // fall back to the first branch in the list when no default resolves.
   readonly branch = signal<string>(this.defaultBranchFor(this.project()));
+
+  /** A branch refresh is in flight (opening the dialog runs one too). */
+  readonly branchesBusy = signal(false);
+
+  /** Re-read the projects from disk so the branch list reflects branches
+   *  created since the last load; keeps the selection when it still exists. */
+  async refreshBranches(): Promise<void> {
+    if (this.branchesBusy()) return;
+    this.branchesBusy.set(true);
+    try {
+      await this.projects.refresh();
+      const proj = this.project();
+      if (!proj.branches?.includes(this.branch())) {
+        this.branch.set(this.defaultBranchFor(proj));
+      }
+    } catch {
+      /* backend unavailable — keep the stale list */
+    } finally {
+      this.branchesBusy.set(false);
+    }
+  }
 
   /** Open tickets (todo + inprogress), same-project first, then rest. */
   private readonly openTickets = computed<Ticket[]>(() => {
@@ -431,6 +468,10 @@ export class SpawnModalComponent {
     // Esc / outside-click close the overlay, not the store — clear the flag on
     // teardown so the two can never drift.
     inject(DestroyRef).onDestroy(() => this.ui.closeSpawn());
+
+    // Opening the dialog refreshes the branch lists — branches created since
+    // the last project load (by agents, or outside the app) must be offerable.
+    void this.refreshBranches();
 
     // Consume the dispatch ticket id (set by ui.dispatchTicket) and clear it
     // so it doesn't leak into subsequent manual spawns.

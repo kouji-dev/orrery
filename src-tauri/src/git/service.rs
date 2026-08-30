@@ -453,6 +453,16 @@ impl GitService {
         Ok(())
     }
 
+    /// HEAD branch shorthand of the checkout at `path` (None when the dir is
+    /// not a repo, or HEAD is detached/unborn). Used by the v2 project pseudo
+    /// record so a project tab reports the branch main is actually on.
+    pub fn head_branch(&self, path: &Path) -> Option<String> {
+        let repo = Repository::open(path).ok()?;
+        repo.head()
+            .ok()
+            .and_then(|h| h.shorthand().ok().map(|s| s.to_string()))
+    }
+
     /// Merge `branch` into the repo's current HEAD (fast-forward when possible).
     ///
     /// On conflict the merge state is KEPT (conflicted index + working tree

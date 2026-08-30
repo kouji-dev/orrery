@@ -115,7 +115,9 @@ export interface Agent {
   id: string;
   projectId: string;
   ticketId?: string;
-  tool: AgentTool["id"];
+  /** "shell" is the v2 project pseudo-agent: a project tab's plain shell in
+   *  the main worktree (never a stored agent — synthesized at render time). */
+  tool: AgentTool["id"] | "shell";
   model: string;
   effort?: string | null;
   name: string;
@@ -242,17 +244,20 @@ export interface Commit {
 
 export interface Tab {
   id: string;
-  // "orchestrator" = the fixed overview tab"agent" = a workspace tab holding a
-  // pane tree (one agent, or several tiled together). Defaults to "agent".
-  kind?: "orchestrator" | "agent" | "backlog" | "ticket";
+  // "orchestrator" = the fixed overview tab; "agent" = a workspace tab holding a
+  // pane tree (one agent, or several tiled together); "project" (v2) = the same
+  // pane tree rooted at a project's MAIN worktree — an agent is just a worktree
+  // with a process attached, and a project tab is that worktree with a plain
+  // shell. Defaults to "agent".
+  kind?: "orchestrator" | "agent" | "backlog" | "ticket" | "project";
   ticketId?: string;
+  projectId?: string;
 }
 
 export interface Tweaks {
   theme: "dark" | "light";
   density: "compact" | "regular" | "comfy";
   defaultViz: VizMode;
-  rightPanel: boolean;
   motion: boolean;
 }
 
@@ -429,6 +434,10 @@ export interface Settings {
   /** User keybinding overrides: command id → binding ("Ctrl+Shift+p").
    *  Absent id = the command's built-in default binding. */
   keymap: Record<string, string>;
+  /** Per-command "fires inside a focused terminal" override (the steal list).
+   *  Absent id = the default: Ctrl/Mod+Shift chords and Search Everywhere
+   *  steal; every other chord flows to the PTY untouched. */
+  keymapTerminal: Record<string, boolean>;
   /** Per-tool permission policy. Absent key = "off" (the tool's own flow). */
   autoApprove: Record<string, AutoApprovePolicy>;
   /** Permission prompts raise a native toast even when the app is unfocused. */

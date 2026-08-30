@@ -27,7 +27,7 @@ const seedTreeAndSpy = (id: string) => `(() => {
     status: "ready",
     data: [{ name: "report.html", path: "docs/report.html", isDir: false, children: null, ignored: false }],
   });
-  const tree = window.ng.getComponent(document.querySelector("app-file-tree"));
+  const tree = window.ng.getComponent(document.querySelector("app-sidebar-file-tree"));
   const bridge = tree["bridge"];
   window.__calls = [];
   bridge.invoke = (command, args) => {
@@ -43,15 +43,14 @@ async function openTreeWithFile(page: Page): Promise<void> {
   await page.evaluate(
     `window.ng.getComponent(document.querySelector("app-top-bar")).ui.openAgent("e2e-os1")`,
   );
-  await page.locator("app-right-panel").getByRole("tab", { name: "Files" }).click();
-  await expect(page.locator("app-file-tree")).toBeVisible();
+  await expect(page.locator("app-sidebar-file-tree")).toBeVisible();
   await page.evaluate(seedTreeAndSpy("e2e-os1"));
-  await expect(page.locator("app-file-tree")).toContainText("report.html");
+  await expect(page.locator("app-sidebar-file-tree")).toContainText("report.html");
 }
 
 test("Open in Default App sends the file to the OS handler, worktree-relative", async ({ page }) => {
   await openTreeWithFile(page);
-  await page.locator("app-file-tree").getByText("report.html").click({ button: "right" });
+  await page.locator("app-sidebar-file-tree").getByText("report.html").click({ button: "right" });
 
   const menu = page.locator(".menu-panel");
   await expect(menu.getByRole("button", { name: "Open in Default App" })).toBeVisible();
@@ -66,7 +65,7 @@ test("Open in Default App sends the file to the OS handler, worktree-relative", 
 
 test("Reveal shows the file in the platform's own file manager", async ({ page }) => {
   await openTreeWithFile(page);
-  await page.locator("app-file-tree").getByText("report.html").click({ button: "right" });
+  await page.locator("app-sidebar-file-tree").getByText("report.html").click({ button: "right" });
 
   // the label names the actual OS file manager (Explorer / Finder / generic)
   const reveal = page.locator(".menu-panel button", { hasText: /^Reveal in / });
@@ -83,7 +82,7 @@ test("the OS actions are node-scoped — the empty-space menu does not offer the
 }) => {
   await openTreeWithFile(page);
   // right-click the panel header, not a row → root-scoped menu
-  await page.locator("app-file-tree").locator("div").first().click({ button: "right" });
+  await page.locator("app-sidebar-file-tree").locator("div").first().click({ button: "right" });
 
   const menu = page.locator(".menu-panel");
   await expect(menu.getByRole("button", { name: "New File…" })).toBeVisible();

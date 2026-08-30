@@ -53,7 +53,7 @@ function toOption(o: string | SelectOption): SelectOption {
   imports: [KjOptionComponent, KjSelectComponent],
   template: `
     <kj-select
-      kjSize="sm"
+      [kjSize]="size()"
       [placeholder]="placeholder()"
       [value]="value()"
       (valueChange)="valueChange.emit($any($event))"
@@ -95,6 +95,9 @@ export class SelectComponent {
   readonly value = input<string>("");
   readonly options = input<(string | SelectOption | SelectGroup)[]>([]);
   readonly placeholder = input<string>("Select…");
+  /** kouji size step. `sm` is the app's default control; `xs` is for selects
+   *  riding inside a toolbar/tab strip, where a full control fills the row. */
+  readonly size = input<"xs" | "sm" | "md" | "lg">("sm");
   readonly valueChange = output<string>();
 
   /** One ungrouped run per contiguous stretch of loose options, so a list that

@@ -11,6 +11,7 @@ import {
 } from "@angular/core";
 import { Agent } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
+import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { EditsStore } from "../stores/edits.store";
 import { ScrollStateService } from "./scroll-state.service";
 import { DiagnosticsService } from "../shared/diagnostics.service";
@@ -105,9 +106,11 @@ import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent 
                   class="file-tab"
                   [class.on]="onf"
                   [class.dirty]="dirty"
-                  [title]="f + (dirty ? ' — unsaved changes' : '')"
+                  [class.preview]="lf.previewFile === f"
+                  [title]="f + (dirty ? ' — unsaved changes' : '') + (lf.previewFile === f ? ' — preview (double-click to pin)' : '')"
                   [attr.data-path]="f"
                   (click)="$event.stopPropagation(); ctx().onFileSelect(lf.id, f)"
+                  (dblclick)="$event.stopPropagation(); ctx().onFilePin(lf.id, f)"
                   (contextmenu)="onFileTabContext($event, lf, f)"
                 >
                   <app-icon size="md" name="file" [color]="onf ? 'var(--ui-ink)' : 'var(--ink-4)'" />
@@ -259,6 +262,16 @@ import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent 
         background: var(--panel-3);
         border-color: var(--hair);
       }
+      .file-tab .fn {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* v2 preview tab — italic until pinned (double-click / an edit) */
+      .file-tab.preview .fn {
+        font-style: italic;
+      }
       /* close × — hidden until the tab is hovered or active */
       .file-tab .fx {
         flex: none;
@@ -387,6 +400,7 @@ export class PaneNodeComponent {
   private host = inject(ElementRef<HTMLElement>);
   private drag = inject(DragService);
   private agentActions = inject(AgentActionsService);
+  private runtime = inject(AgentRuntimeService);
   private edits = inject(EditsStore);
   private scroll = inject(ScrollStateService);
   private saver = inject(FileSaveService);
@@ -397,6 +411,29 @@ export class PaneNodeComponent {
   private fileStrip = viewChild<ElementRef<HTMLElement>>("fileStrip");
 
   constructor() {
+    // v2 project tabs: auto-open the shell the FIRST time the project
+    // terminal pane shows (shellState undefined = never launched). A shell
+    // the user stopped (false) stays stopped until they press play again.
+    effect(() => {
+      const lf = this.asLeaf();
+      const ag = this.agent();
+      if (
+        lf?.view === "terminal" &&
+        ag?.tool === "shell" &&
+        this.runtime.shellState(ag.id) === undefined
+      ) {
+        this.runtime.startShell(ag.id);
+      }
+    });
+    // v2: an EDIT pins the preview tab — a modified buffer must never be
+    // silently replaced by the next preview.
+    effect(() => {
+      const lf = this.asLeaf();
+      const preview = lf?.previewFile;
+      if (lf && preview && this.isDirty(lf, preview)) {
+        this.ctx().onFilePin(lf.id, preview);
+      }
+    });
     // keep the active file tab visible — a newly opened file lands at the END
     // of an overflowing strip, which would otherwise scroll out of sight
     effect(() => {
@@ -462,9 +499,16 @@ export class PaneNodeComponent {
     return STATUS_META[status as keyof typeof STATUS_META]?.color ?? "var(--ink-3)";
   }
   toggleRun(ag: Agent) {
+    // v2 project pseudo-agent: play/pause drives the plain shell, not a tool
+    if (ag.tool === "shell") {
+      if (ag.status === "running") this.runtime.stopShell(ag.id);
+      else this.runtime.startShell(ag.id);
+      return;
+    }
     this.agentActions.toggleRun(ag);
   }
   runTitle(ag: Agent): string {
+    if (ag.tool === "shell") return ag.status === "running" ? "Stop shell" : "Open shell";
     return ag.status === "running" ? "Pause agent" : ag.started ? "Resume agent" : "Start agent";
   }
   // Continue the captured CLI session (claude --resume <id>, codex resume <id>, …)
@@ -473,7 +517,9 @@ export class PaneNodeComponent {
     this.agentActions.act(id, "continueSession");
   }
   agentsOf(projectId: string): Agent[] {
-    return this.ctx().agents().filter((a) => a.projectId === projectId);
+    // pseudo project-agents never appear in the assign picker — they belong to
+    // their project tab, not to arbitrary panes
+    return this.ctx().agents().filter((a) => a.projectId === projectId && a.tool !== "shell");
   }
 
   // ----- dirty file tabs: indicator + guarded close (B1.1) -----

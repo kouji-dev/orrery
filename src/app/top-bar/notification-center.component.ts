@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
+import { CommandRegistryService } from "../commands/command-registry.service";
 import { NotificationService } from "../notifications/notification.service";
 import { NotificationCardComponent } from "../notifications/notification-card.component";
 import { IconComponent } from "../shared/icon.component";
@@ -29,10 +30,16 @@ import { KjPopoverContent, KjPopoverTrigger } from "@kouji-ui/core";
         <div
           style="width: round(calc(344px * var(--density)), 1px);max-height:64vh;display:flex;flex-direction:column;background:var(--panel);border-radius:var(--r-md);overflow:hidden"
         >
-          <div class="pane-head" style="justify-content:space-between">
+          <div class="pane-head" style="gap:var(--sp-3)">
             <span class="up" style="color:var(--ink-2)">Notifications</span>
+            @if (unread()) {
+              <!-- v2: the ACT path — the peek queue opens over the workspace -->
+              <kj-button kjVariant="outline" style="margin-left:auto;color:var(--ui-ink)" (click)="np.controller.close(); workQueue()" title="Walk the pending queue · N">
+                <app-icon name="bolt" size="sm" />Work the queue · {{ unread() }}
+              </kj-button>
+            }
             @if (items().length) {
-              <kj-button kjVariant="outline" (click)="notifications.clearResolved()">Clear read</kj-button>
+              <kj-button kjVariant="outline" [style.margin-left]="unread() ? null : 'auto'" (click)="notifications.clearResolved()">Clear read</kj-button>
             }
           </div>
 
@@ -50,7 +57,13 @@ import { KjPopoverContent, KjPopoverTrigger } from "@kouji-ui/core";
 })
 export class NotificationCenterComponent {
   readonly notifications = inject(NotificationService);
+  private readonly registry = inject(CommandRegistryService);
 
   readonly unread = this.notifications.unread;
   readonly items = computed(() => this.notifications.all().slice(0, 40));
+
+  /** Open the v2 peek queue over the workspace (the popover closes first). */
+  workQueue(): void {
+    this.registry.open("peek");
+  }
 }

@@ -121,10 +121,13 @@ export interface GitActionAiEvent {
   `,
   styles: [
     `
+      /* Content-sized by default: the action bar's message input takes the
+         slack, so stretching every split button just made them all huge. A
+         call site that wants fill can still set flex on the element. */
       :host {
         display: flex;
         min-width: 0;
-        flex: 1;
+        flex: none;
       }
       .split {
         display: flex;

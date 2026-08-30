@@ -2,7 +2,6 @@
 import { AgentTool, LogLine, Project } from "./models";
 
 export const ORG = "northwind";
-export const WORKTREE_ROOT = "~/.orrery/worktrees";
 
 // ---------- agent tools (CLI coding agents) ----------
 export const AGENT_TOOLS: AgentTool[] = [

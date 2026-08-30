@@ -25,8 +25,13 @@ export const TOOL_PANELS: ToolPanelDef[] = [
  */
 @Injectable({ providedIn: "root" })
 export class ToolWindowStore {
-  /** The open panel, or null when the dock is hidden. Closed by default. */
+  /** The open panel, or null when the dock is hidden. Closed by default.
+   *  Persisted in the WorkspaceDoc (v2) so the dock survives restarts. */
   readonly panel = signal<ToolPanelKind | null>(null);
+
+  /** Dock height (px), user-resized via the grip. null = the default
+   *  (36vh clamped). Persisted in the WorkspaceDoc (v2). */
+  readonly height = signal<number | null>(null);
 
   open(kind: ToolPanelKind): void {
     this.panel.set(kind);

@@ -8,11 +8,12 @@ import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { ProjectGroupComponent } from "./project-group.component";
 import { KjBadgeComponent, KjButtonComponent, KjInputComponent, KjInputGroupAddonComponent, KjInputGroupComponent } from "@kouji-ui/components";
+import { SidebarFilesComponent } from "./files/sidebar-files.component";
 
 @Component({
   selector: "app-sidebar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ProjectGroupComponent, KjButtonComponent, KjBadgeComponent, KjInputComponent, KjInputGroupAddonComponent, KjInputGroupComponent],
+  imports: [IconComponent, ProjectGroupComponent, SidebarFilesComponent, KjButtonComponent, KjBadgeComponent, KjInputComponent, KjInputGroupAddonComponent, KjInputGroupComponent],
   template: `
     <aside style="display:flex;flex-direction:column;min-height:0;background:var(--panel);border-right:1px solid var(--hair)">
       <div style="padding:var(--sp-5) var(--sp-6) var(--sp-4);border-bottom:1px solid var(--hair)">
@@ -72,9 +73,10 @@ import { KjBadgeComponent, KjButtonComponent, KjInputComponent, KjInputGroupAddo
         </kj-input-group>
       </div>
 
-      <!-- empty space below the groups still offers the panel-level actions;
-           project/agent rows stopPropagation via ui.openMenu, so theirs win -->
-      <div class="scroll-y" style="flex:1;padding:var(--sp-3) 0" (contextmenu)="onEmptyContext($event)">
+      <!-- agents section: empty space below the groups still offers the
+           panel-level actions; project/agent rows stopPropagation via
+           ui.openMenu, so theirs win -->
+      <div class="scroll-y" style="flex:1;min-height:0;padding:var(--sp-3) 0" (contextmenu)="onEmptyContext($event)">
         @for (p of projects.all(); track p.id) {
           @let pa = agentsFor(p.id);
           @if (!ui.query() || pa.length) {
@@ -88,6 +90,9 @@ import { KjBadgeComponent, KjButtonComponent, KjInputComponent, KjInputGroupAddo
           }
         }
       </div>
+
+      <!-- files section (v2): the repo tree with its worktree root chip -->
+      <app-sidebar-files />
 
       <div class="sb-foot" style="padding:var(--sp-5);border-top:1px solid var(--hair);display:flex;gap:var(--sp-4)">
         <kj-button kjVariant="outline" (click)="ui.openAddProject()">

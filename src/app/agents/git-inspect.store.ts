@@ -14,10 +14,10 @@ import {
 const IDLE_ARR = <T>(): Loadable<T[]> => ({ status: "idle", data: [] as T[] });
 const IDLE_NULL = <T>(): Loadable<T | null> => ({ status: "idle", data: null });
 
-/** Why 4: entries reload lazily by design — eviction is free (A0.6). Four
- *  covers the agents a user actively flips between; beyond that the keyed
- *  maps only grow for the process lifetime. */
-const MAX_AGENTS = 4;
+/** Why 6: matches AgentWorkStore's MAX_RECENT — the panes a user flips
+ *  between in a v2 session. Entries reload lazily on eviction (A0.6); these
+ *  center-stage inspection views are transient, so no pin tier here (yet). */
+const MAX_AGENTS = 6;
 
 /**
  * Per-agent git inspection data: commit files, file diffs, range diffs, blame,

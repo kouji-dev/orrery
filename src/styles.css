@@ -400,7 +400,7 @@ app-root {
   /* position:relative WITHOUT z-index: stays the containing block for absolute
      descendants but does NOT create a stacking context. A z-index here would trap
      in-shell popovers (e.g. the status-bar resources popover, the workspace
-     dropdown) below the root-level fixed FABs (tweaks/dev anchor-rail, z-index 90;
+     dropdown) below the root-level fixed corner panels (tweaks/dev, z-index 70/91;
      popovers that must beat them, like the resources popover, use 95). The bg
      layers sit at z-index:-1 so the shell still paints above them. */
   position: relative;
@@ -415,19 +415,14 @@ app-root {
   overflow: hidden;
 }
 
+/* v2: no right panel — sidebar + center only, the diff body gets the width */
 .workspace {
   display: grid;
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--right-w);
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
-.workspace.no-right {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-}
 .workspace.compact {
-  grid-template-columns: 54px minmax(0, 1fr) var(--right-w);
-}
-.workspace.compact.no-right {
   grid-template-columns: 54px minmax(0, 1fr);
 }
 
@@ -438,7 +433,6 @@ app-top-bar,
 app-status-bar,
 app-sidebar,
 app-compact-rail,
-app-right-panel,
 app-overview,
 app-pane-manager,
 app-backlog,
@@ -446,11 +440,7 @@ app-ticket-page,
 app-pane-node,
 app-diff-view,
 app-terminal,
-app-files-tab,
-app-inbox-tab,
-app-git-tab,
-app-file-tree,
-app-empty-state {
+app-sidebar-file-tree {
   display: contents;
 }
 app-grid-view,
@@ -1170,7 +1160,7 @@ kj-button.menu-item,
   border-radius: 14px;
   box-shadow: var(--shadow);
   font-family: var(--font-ui);
-  /* grows out of its FAB, which sits below-right of it */
+  /* grows out of its status-bar chip, which sits below-right of it */
   transform-origin: bottom right;
   animation: pop-up 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
@@ -1271,54 +1261,9 @@ kj-button.menu-item,
   background: var(--panel-2);
 }
 
-/* ---------- floating action button (dev console / tweaks rail) ----------
-   Two selectors because the two call sites differ in shape: the tweaks FAB is
-   a native <button kjButton> (so .fab lands on the button itself), the dev FAB
-   is a <kj-button> host, which is display:contents and paints nothing — there
-   the skin has to reach kouji's inner button. The child selector cannot
-   double-apply: a native kjButton button has no inner .kj-button. */
-.fab,
-.fab > .kj-button {
-  position: relative;
-  /* square launcher: width tracks the top-bar height so it stays square as
-     density changes */
-  width: var(--topbar-h);
-  height: var(--topbar-h);
-  border-radius: 13px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  border: 1px solid var(--hair-2);
-  background: linear-gradient(180deg, var(--panel-3), var(--panel));
-  color: var(--ink-2);
-  box-shadow: var(--shadow);
-  transition: transform 0.16s, color 0.16s, border-color 0.16s, box-shadow 0.16s;
-}
-/* The lift is set as a real transform, not the --kj-button-hover-translate
-   knob, because it must work for the native-button call site too. */
-.fab:hover,
-.fab > .kj-button:hover {
-  transform: translateY(-2px);
-  color: var(--ink);
-  border-color: var(--ui-line);
-}
-.fab.on,
-.fab.on > .kj-button {
-  color: var(--ui-ink);
-  border-color: var(--ui-line);
-  box-shadow: var(--shadow);
-}
-.fab svg {
-  width: 19px;
-  height: 19px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .fab:hover,
-  .fab > .kj-button:hover {
-    transform: none;
-  }
-}
+/* The floating action buttons (tweaks / dev console rail) are gone — design
+   orrery-v2 moved their launchers into the status bar's right cluster, and
+   the panels anchor above the footer via .corner-panel. */
 
 /* small square icon button shared by pane headers + sidebar header/popover */
 .pane-btn {
@@ -1833,6 +1778,12 @@ app-icon svg {
   font-family: var(--font-mono);
   --kj-button-justify: center;
   min-width: round(calc(110px * var(--density)), 1px);
+}
+/* keymap row's "fires in terminal" toggle — quiet next to the chord button */
+.set-tty .kj-button {
+  --kj-button-font-size: var(--fs-badge);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 /* Repeated inline knob packs, extracted. Same pattern as .sb-foot below: the

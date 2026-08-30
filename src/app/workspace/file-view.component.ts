@@ -177,6 +177,9 @@ export class FileViewComponent {
   readonly mediaSafeUrl = signal<SafeResourceUrl | null>(null); // pdf (blob: needs trust)
   readonly mediaError = signal<string | null>(null);
   private objectUrl: string | null = null;
+  /** id:path:mime:len:bytes of the media currently shown — scan-echo reloads
+   *  with identical content skip the src swap (see loadMedia). */
+  private lastMediaSig: string | null = null;
 
   /** How this path renders: normal text pipeline, or a binary preview. */
   readonly kind = computed<"text" | "image" | "pdf">(() => {
@@ -207,10 +210,16 @@ export class FileViewComponent {
   private gen = 0;
   private blameGen = 0;
 
+  // Stable key: runtime overlay patches re-create the Agent OBJECT many times
+  // a second while it runs — effects reading agent() directly refire (and
+  // refetched media previews swap their src = visible flashing). The id string
+  // is memoized, so these effects fire only on a real agent switch.
+  private readonly agentId = computed(() => this.agent().id);
+
   constructor() {
     // (re)load when the pane shows a different agent/file
     effect(() => {
-      const id = this.agent().id;
+      const id = this.agentId();
       const path = this.path();
       const prev = this.bodyKey;
       if (prev && (prev.agent !== id || prev.path !== path)) this.saveBodyScroll(prev);
@@ -238,7 +247,7 @@ export class FileViewComponent {
     // Load blame when annotate is on (or file/agent changes while on).
     effect(() => {
       const on = this.annotate();
-      const id = this.agent().id;
+      const id = this.agentId();
       const path = this.path();
       if (!on) {
         this.blame.set([]);
@@ -378,6 +387,11 @@ export class FileViewComponent {
         { id, path },
       );
       if (g !== this.gen) return;
+      // identical bytes (a watcher-scan echo) keep the current URL — swapping
+      // the img/embed src for the same content flashes the preview
+      const sig = `${id}:${path}:${f.mime}:${f.base64.length}:${f.base64}`;
+      if (sig === this.lastMediaSig && (this.mediaDataUrl() || this.mediaSafeUrl())) return;
+      this.lastMediaSig = sig;
       this.dropObjectUrl();
       if (this.kind() === "image") {
         this.mediaDataUrl.set(`data:${f.mime};base64,${f.base64}`);
