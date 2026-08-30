@@ -13,13 +13,13 @@ import { GitActionBarComponent } from "./git-action-bar.component";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
-import { fileDir, fileName, fileStateLabel, isMarkdownPath, langId, langTag } from "../utils";
+import { fileDir, fileName, fileStateLabel, isMarkdownPath, langId, langTag, mix } from "../utils";
 import { UiStore } from "../ui/ui.store";
 import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
 import { DiffStats } from "./review/chunk-stats";
-import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
+import { KjBadgeComponent, KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
 import { StateBadgeComponent } from "../shared/git/state-badge.component";
 import { AddDelComponent } from "../shared/git/add-del.component";
 
@@ -30,7 +30,7 @@ const LIST_DEFAULT = 300;
 @Component({
   selector: "app-diff-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionBarComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, StateBadgeComponent, AddDelComponent],
+  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionBarComponent, KjBadgeComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, StateBadgeComponent, AddDelComponent],
   template: `
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;min-width:0">
     <div
@@ -568,6 +568,16 @@ export class DiffViewComponent {
   openPreview() {
     const f = this.current();
     if (f) this.ui.openFileInWorkspace(this.agent().id, f.path);
+  }
+
+  stateBg(state: string): string {
+    return state === "A"
+      ? mix("var(--vcs-added)", 88)
+      : state === "D"
+        ? "transparent"
+        : state === "R"
+          ? mix("var(--vcs-renamed)", 88)
+          : mix("var(--vcs-modified)", 88);
   }
 
   stateInk(state: string): string {

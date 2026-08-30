@@ -86,7 +86,7 @@ const AGENTS_MIN_ROOM = 320;
           <div (click)="pick.set(false)" style="position:fixed;inset:0;z-index:39"></div>
           <div
             class="rise scroll-y"
-            style="position:absolute;left:var(--sp-5);right:var(--sp-5);top:calc(100% - 2px);z-index:40;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:var(--sp-2);max-height:300px;overflow-y:auto"
+            style="position:absolute;left:var(--sp-5);right:var(--sp-5);top:calc(100% - 2px);z-index:40;background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-md);box-shadow:var(--shadow);padding:var(--sp-2);max-height:round(calc(300px * var(--density)), 1px);overflow-y:auto"
           >
             @for (p of projects.all(); track p.id) {
               <div class="up" style="font-size:var(--fs-3xs);color:var(--ink-4);padding:var(--sp-3) var(--sp-4) var(--sp-1)">{{ p.name }}</div>

@@ -23,7 +23,7 @@ import { IconComponent } from "../shared/icon.component";
     >
       <app-icon name="chevron" size="sm" color="var(--ink-4)" />
       <app-icon name="branch" size="sm" />
-      <span style="color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:none;max-width:280px">{{ branch() }}</span>
+      <span style="color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:none;max-width:round(calc(280px * var(--density)), 1px)">{{ branch() }}</span>
       @if (ag) {
         <span class="tnum">{{ ag.commits }} commit{{ ag.commits === 1 ? '' : 's' }} ahead of {{ base() }}</span>
       } @else {

@@ -181,12 +181,6 @@ export class CompactRailComponent {
     this.ui.toggleSidebarCompact();
   }
 
-  /** Rail folder icon: restore the full sidebar with the files section open. */
-  expandFiles(): void {
-    this.ui.sidebarFilesCollapsed.set(false);
-    this.ui.toggleSidebarCompact();
-  }
-
   readonly mix = mix;
   readonly hover = signal<{ id: string; top: number } | null>(null);
   private timer: ReturnType<typeof setTimeout> | null = null;

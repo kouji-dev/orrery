@@ -39,25 +39,7 @@ function msgOf(e: unknown): string {
 @Component({
   selector: "app-sidebar-file-tree",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    IconComponent,
-    MenuPanelComponent,
-    ScrollingModule,
-    KjButtonComponent,
-    KjDividerComponent,
-    KjBadgeComponent,
-    KjConfirmPopupComponent,
-    KjConfirmPopupTriggerComponent,
-    KjConfirmPopupContentComponent,
-    KjConfirmPopupMessageComponent,
-    KjConfirmPopupActionsComponent,
-    KjConfirmPopupActionComponent,
-    KjConfirmPopupCancelComponent,
-    KjEmptyStateComponent,
-    KjEmptyStateIconComponent,
-    KjEmptyStateDescriptionComponent,
-    KjSkeletonComponent,
-  ],
+  imports: [IconComponent, MenuPanelComponent, ScrollingModule],
   template: `
     <!-- root-scoped context menu anywhere in the panel — empty space below the
          rows included. Row handlers stop propagation, so node menus win. -->
@@ -66,7 +48,7 @@ function msgOf(e: unknown): string {
         <!-- virtualized: only visible rows are rendered. Data wins over the
              loading flag so background watcher scans never unmount the
              viewport (which would drop its scroll offset and flicker). -->
-        <cdk-virtual-scroll-viewport [itemSize]="rowH()" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y">
+        <cdk-virtual-scroll-viewport itemSize="24" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y">
           <div
             *cdkVirtualFor="let row of rows(); trackBy: trackPath"
             (click)="onRow(row.node, $event)"
@@ -83,7 +65,7 @@ function msgOf(e: unknown): string {
               <app-icon [name]="isOpen(row.node) ? 'chevronD' : 'chevron'" size="sm" color="var(--ink-4)" />
               <app-icon [name]="isOpen(row.node) ? 'folderOpen' : 'folder'" size="sm" color="var(--ink-4)" />
             } @else {
-              <span style="width:11px;flex:none"></span>
+              <span style="width:round(calc(11px * var(--density)), 1px);flex:none"></span>
               <app-icon name="file" size="sm" color="var(--ink-4)" />
             }
             <span
@@ -97,14 +79,9 @@ function msgOf(e: unknown): string {
           </div>
         </cdk-virtual-scroll-viewport>
       } @else if (loading()) {
-        <div aria-busy="true" style="padding:var(--sp-4) var(--sp-6)">
-          <kj-skeleton kjSkeletonShape="text-block" [kjLines]="6" />
-        </div>
+        <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">scanning worktree…</div>
       } @else {
-        <kj-empty-state kjSize="sm">
-          <kj-empty-state-icon><app-icon name="folder" size="lg" color="var(--hair-2)" /></kj-empty-state-icon>
-          <kj-empty-state-description>empty worktree</kj-empty-state-description>
-        </kj-empty-state>
+        <div style="padding:var(--sp-4) var(--sp-6);font-size:var(--fs-xs);color:var(--ink-4)">empty worktree</div>
       }
     </div>
 
@@ -113,27 +90,23 @@ function msgOf(e: unknown): string {
       <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
         @switch (menuMode()) {
           @case ("actions") {
-            <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="startInput('create-file')"><app-icon size="md" name="file" />New File…</kj-button>
-            <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="startInput('create-dir')"><app-icon size="md" name="folder" />New Folder…</kj-button>
+            <button class="menu-item" (click)="startInput('create-file')"><app-icon name="file" size="sm" />New File…</button>
+            <button class="menu-item" (click)="startInput('create-dir')"><app-icon name="folder" size="sm" />New Folder…</button>
             @if (m.node) {
-              <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="startRename()"><app-icon size="md" name="rename" />Rename…</kj-button>
-              <kj-divider />
-              <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="openExternal(m.node)"><app-icon size="md" name="ext" />Open in Default App</kj-button>
-              <kj-button kjVariant="ghost" class="menu-item" [kjFullWidth]="true" (click)="reveal(m.node)"><app-icon size="md" name="folderOpen" />{{ revealLabel }}</kj-button>
-              <kj-divider />
-              <kj-confirm-popup [kjDestructive]="true" (kjConfirmed)="confirmDelete()">
-                <kj-confirm-popup-trigger #delTrig="kjConfirmPopupTrigger">
-                  <kj-button kjVariant="danger" class="menu-item" [kjFullWidth]="true"><app-icon size="md" name="trash" />Delete</kj-button>
-                </kj-confirm-popup-trigger>
-                <kj-confirm-popup-content [kjFor]="delTrig">
-                  <kj-confirm-popup-message>Delete <b>{{ m.node.name }}</b>{{ m.node.isDir ? ' and its contents' : '' }}?</kj-confirm-popup-message>
-                  <kj-confirm-popup-actions>
-                    <kj-confirm-popup-cancel><kj-button kjVariant="outline">Cancel</kj-button></kj-confirm-popup-cancel>
-                    <kj-confirm-popup-action><kj-button kjVariant="danger">Delete</kj-button></kj-confirm-popup-action>
-                  </kj-confirm-popup-actions>
-                </kj-confirm-popup-content>
-              </kj-confirm-popup>
+              <button class="menu-item" (click)="startRename()"><app-icon name="rename" size="sm" />Rename…</button>
+              <div class="menu-sep"></div>
+              <button class="menu-item" (click)="openExternal(m.node)"><app-icon name="ext" size="sm" />Open in Default App</button>
+              <button class="menu-item" (click)="reveal(m.node)"><app-icon name="folderOpen" size="sm" />{{ revealLabel }}</button>
+              <div class="menu-sep"></div>
+              <button class="menu-item danger" (click)="menuMode.set('delete')"><app-icon name="trash" size="sm" />Delete</button>
             }
+          }
+          @case ("delete") {
+            <div class="menu-label">Delete <b>{{ m.node?.name }}</b>{{ m.node?.isDir ? ' and its contents' : '' }}?</div>
+            <div class="menu-row">
+              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
+              <button class="btn ghost-hair danger" (click)="confirmDelete()">Delete</button>
+            </div>
           }
           @default {
             <div class="menu-label">{{ inputLabel() }}</div>
@@ -146,8 +119,8 @@ function msgOf(e: unknown): string {
               spellcheck="false"
             />
             <div class="menu-row">
-              <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
-              <kj-button kjVariant="default" [kjDisabled]="!nameInput().trim()" (click)="commit()">OK</kj-button>
+              <button class="btn ghost-hair" (click)="closeMenu()">Cancel</button>
+              <button class="btn primary" [disabled]="!nameInput().trim()" (click)="commit()">OK</button>
             </div>
           }
         }
@@ -158,30 +131,6 @@ function msgOf(e: unknown): string {
 export class SidebarFileTreeComponent {
   private work = inject(AgentWorkStore);
   private ui = inject(UiStore);
-
-  /**
-   * Row height, read from the same `--sp-9` token the row CSS uses. The
-   * viewport previously hardcoded `itemSize="24"`, so at any density other
-   * than regular the virtual scroller's arithmetic drifted from the real row
-   * height and rows misaligned as you scrolled. Recomputed per density switch.
-   */
-  readonly rowH = computed(() => {
-    void this.ui.tweaks().density;
-    return tokenPx("--sp-9", 24);
-  });
-
-  /** Per-depth indent. Tracks the chevron+icon width, hence a spacing token. */
-  readonly indentStep = computed(() => {
-    void this.ui.tweaks().density;
-    return tokenPx("--sp-6", 12);
-  });
-
-  /** Row indent; leaf rows take one extra step to clear the missing twisty. */
-  indentFor(row: FlatRow): number {
-    const step = this.indentStep();
-    return tokenPx("--sp-4", 8) + row.depth * step + (row.node.isDir ? 0 : step);
-  }
-
   private bridge = inject(BRIDGE);
   private edits = inject(EditsStore);
   private scroll = inject(ScrollStateService);
@@ -204,7 +153,7 @@ export class SidebarFileTreeComponent {
 
   // ----- context-menu file CRUD (B1.1) -----
   readonly menu = signal<{ x: number; y: number; node: FileNode | null } | null>(null);
-  readonly menuMode = signal<"actions" | "create-file" | "create-dir" | "rename">("actions");
+  readonly menuMode = signal<"actions" | "create-file" | "create-dir" | "rename" | "delete">("actions");
   readonly nameInput = signal("");
 
   readonly inputLabel = computed(() => {

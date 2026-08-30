@@ -7,6 +7,7 @@ import { AgentDigestEntry, AgentPtyStatusPayload } from "../data-source/bridge";
 import { settingsDefaults, SettingsStore } from "../settings/settings.store";
 import { AgentsStore } from "../stores/agents.store";
 import { NotificationStore } from "../stores/notifications.store";
+import { ProjectsStore } from "../stores/projects.store";
 import { WorkspaceStore } from "../stores/workspace.store";
 import { UiStore } from "../ui/ui.store";
 import { TerminalService } from "../terminal.service";
@@ -98,6 +99,7 @@ function setup(
       provideZonelessChangeDetection(),
       AgentRuntimeService,
       { provide: AgentsStore, useValue: agentsStore },
+      { provide: ProjectsStore, useValue: { all: () => [], byId: () => undefined } },
       { provide: NotificationStore, useValue: notifications },
       { provide: TerminalService, useValue: terminals },
       { provide: SettingsStore, useValue: { settings: signal(settings), ready: () => Promise.resolve(settings) } },

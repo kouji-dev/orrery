@@ -40,7 +40,7 @@ import { GitActionButtonComponent } from "../shared/git/git-action-button.compon
         (keydown)="onMsgKey($event)"
         [style.opacity]="dirty ? 1 : 0.55"
         class="gab-msg"
-        style="flex:1;min-width:150px;height:var(--ctl-h);padding:0 var(--sp-5);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);outline:none"
+        style="flex:1;min-width:round(calc(150px * var(--density)), 1px);height:var(--ctl-h);padding:0 var(--sp-5);background:var(--panel-2);border:1px solid var(--hair);border-radius:var(--r-sm);color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-sm);outline:none"
       />
       <button
         class="btn ghost-hair"

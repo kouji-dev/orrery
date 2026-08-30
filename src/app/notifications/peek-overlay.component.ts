@@ -81,7 +81,7 @@ import { mix } from "../utils";
             <div class="mono" style="background:var(--bg);border:1px solid var(--hair);border-radius:var(--r-sm);padding:var(--sp-3) var(--sp-5);font-size:var(--fs-2xs);line-height:1.75;color:var(--ink-3)">
               @for (l of context(); track $index) {
                 <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                  <span style="display:inline-block;width:12px;color:var(--ink-4)">{{ prefix(l.kind) }}</span>{{ l.text }}
+                  <span style="display:inline-block;width:round(calc(12px * var(--density)), 1px);color:var(--ink-4)">{{ prefix(l.kind) }}</span>{{ l.text }}
                 </div>
               }
             </div>
