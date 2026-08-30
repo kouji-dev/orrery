@@ -149,6 +149,10 @@ export class UiStore {
   readonly query = signal<string>("");
   readonly toast = signal<string>("");
 
+  /** Tweaks panel visibility — toggled by its status-bar chip (design
+   *  orrery-v2: the FAB rail is gone, the launcher lives in the footer). */
+  readonly tweaksOpen = signal(false);
+
   readonly spawning = signal<{ project: string | null } | null>(null);
   readonly addingProject = signal<boolean>(false);
   readonly contextMenu = signal<ContextMenuState | null>(null);

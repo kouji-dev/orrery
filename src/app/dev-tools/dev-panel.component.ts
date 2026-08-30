@@ -37,7 +37,6 @@ import {
   KjEmptyStateDescriptionComponent,
   KjEmptyStateIconComponent,
   KjEmptyStateTitleComponent,
-  KjOverlayBadgeComponent,
   KjProgressBarComponent,
 } from "@kouji-ui/components";
 import { DismissDirective } from "../shared/dismiss.directive";
@@ -69,16 +68,11 @@ type Sort = { key: string; dir: number };
     KjEmptyStateDescriptionComponent,
     KjEmptyStateIconComponent,
     KjEmptyStateTitleComponent,
-    KjOverlayBadgeComponent,
     KjProgressBarComponent,
   ],
   template: `
-    <kj-overlay-badge [kjValue]="alertCount()" [kjHidden]="alertCount() === 0" kjVariant="destructive" [kjDescription]="alertCount() + ' perf alert' + (alertCount() > 1 ? 's' : '')">
-      <kj-button kjVariant="ghost" class="fab dvc-fab" [class.on]="open()" [title]="alertCount() ? 'Dev console · ' + alertCount() + ' perf alert' + (alertCount() > 1 ? 's' : '') : 'Dev console'" kjAriaLabel="Dev console" (click)="open.set(!open())">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3l2.5-6 4 13 3-9 1.5 2H21" /></svg>
-      </kj-button>
-    </kj-overlay-badge>
-
+    <!-- design orrery-v2: the FAB rail is gone — the launcher is the Dev chip
+         in the status bar's right cluster; this component is panel-only. -->
     @if (open()) {
       <section class="corner-panel dvcon" aria-label="Dev console">
         <header class="pane-head dvc-head">
@@ -422,15 +416,14 @@ type Sort = { key: string; dir: number };
   `,
   styles: [
     `
-.dvcon,.dvc-fab{--lat-g:var(--sem-add);--lat-a:var(--sem-attn);--lat-r:var(--sem-del);
+.dvcon{--lat-g:var(--sem-add);--lat-a:var(--sem-attn);--lat-r:var(--sem-del);
   --lat-g-bg:color-mix(in oklch,var(--sem-add),transparent 90%);--lat-a-bg:color-mix(in oklch,var(--sem-attn),transparent 86%);--lat-r-bg:color-mix(in oklch,var(--sem-del),transparent 82%);
   --lat-r-ring:rgba(255,93,122,.4);}
-/* FAB skin, the corner-panel box and its entrance are shared recipes in
-   styles.css (.fab / .corner-panel / @keyframes pop-up) — the copies here and
-   in tweaks-panel were identical down to a second keyframes block under
-   another name. Only the rail slot and the console's own size stay local. */
-.dvcon{bottom:92px;z-index:91;width: round(calc(860px * var(--density)), 1px);max-width:calc(100vw - 32px);
-  max-height:calc(100vh - 148px);display:flex;flex-direction:column;}
+/* The corner-panel box and its entrance are shared recipes in styles.css
+   (.corner-panel / @keyframes pop-up). Anchoring is the design's (orrery-v2):
+   the console pops up from its status-bar chip, right above the footer. */
+.dvcon{right:10px;bottom:calc(var(--statusbar-h) + 10px);z-index:91;width: round(calc(860px * var(--density)), 1px);max-width:calc(100vw - 20px);
+  max-height:calc(100vh - var(--topbar-h) - var(--statusbar-h) - 26px);display:flex;flex-direction:column;}
 .dvcon .dvc-head{gap:var(--sp-5);padding:var(--sp-4) var(--sp-5) var(--sp-4) var(--sp-6);background:linear-gradient(180deg,var(--panel-3),var(--panel));}
 .dvc-brand{display:flex;align-items:center;color:var(--ui-ink);}
 .dvc-tabs{display:flex;gap:var(--sp-1);padding:var(--sp-1);background:var(--panel-2);border:1px solid var(--hair);border-radius:8px;min-width:0;flex:0 1 auto;overflow-x:auto;overflow-y:hidden;}
@@ -676,8 +669,8 @@ export class DevPanelComponent {
     const slow = rows.filter((r) => r.avgRt != null && r.avgRt > 100).length;
     return `${rows.length} commands · ${calls} calls/10s · ${slow} >100ms`;
   });
-  /** Commands currently breaching budget (>100ms avg RT or erroring) — the FAB badge. */
-  readonly alertCount = computed(() => this.perf.rows().filter((r) => !r.stale && (r.errPct > 0 || (r.avgRt != null && r.avgRt > 100))).length);
+  /** Commands currently breaching budget — shared with the status-bar Dev chip. */
+  readonly alertCount = this.panel.alertCount;
   clickPerfSort(k: string) {
     this.sort.update((s) => (s.key === k ? { key: k, dir: -s.dir } : { key: k, dir: k === "cmd" ? 1 : -1 }));
   }

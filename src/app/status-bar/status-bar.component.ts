@@ -87,11 +87,6 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
         <app-icon size="md" name="file" />logs
       </button>
 
-      <!-- app version + channel tag (DEV / BETA) → opens the release changelog -->
-      <button kjButton type="button" class="sb-link" (click)="settings.openWhatsNew()" title="View release changelog">
-        <app-version-badge variant="chip" class="tnum" />
-      </button>
-
       <!-- total Claude cost (ccusage); hover → rich kouji tooltip. hidden when unavailable -->
       @if (cost.cost()?.available) {
         <span
@@ -150,6 +145,40 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
           ></span>
         </span>
       </button>
+
+      <!-- design orrery-v2 sb-dev-slot: the FAB rail is gone — Tweaks and the
+           Dev console launch from HERE, between the mem/cpu readout and the
+           version badge. data-dismiss-ignore keeps a chip's mousedown from
+           light-dismissing the very panel it is about to toggle. -->
+      <button kjButton
+        type="button"
+        class="sb-chip"
+        data-dismiss-ignore
+        [class.on]="ui.tweaksOpen()"
+        (click)="ui.tweaksOpen.set(!ui.tweaksOpen())"
+        title="Tweaks — theme, layout, motion"
+      >
+        <app-icon size="md" name="spark" />Tweaks
+      </button>
+      <button kjButton
+        type="button"
+        class="sb-chip"
+        data-dismiss-ignore
+        [class.on]="devPanel.open()"
+        (click)="devPanel.toggle()"
+        [title]="devPanel.alertCount() ? 'Dev console · ' + devPanel.alertCount() + ' perf alert' + (devPanel.alertCount() > 1 ? 's' : '') : 'Dev console'"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:round(calc(11px * var(--density)), 1px);height:round(calc(11px * var(--density)), 1px)"><path d="M3 12h3l2.5-6 4 13 3-9 1.5 2H21" /></svg>
+        Dev
+        @if (devPanel.alertCount()) {
+          <span class="sb-alertct tnum">{{ devPanel.alertCount() }}</span>
+        }
+      </button>
+
+      <!-- app version + channel tag (DEV / BETA) → opens the release changelog -->
+      <button kjButton type="button" class="sb-link" (click)="settings.openWhatsNew()" title="View release changelog">
+        <app-version-badge variant="chip" class="tnum" />
+      </button>
     </footer>
   `,
   styles: [
@@ -159,6 +188,46 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
       }
       .gauge:hover {
         color: var(--ink-2) !important;
+      }
+      /* dvc-chip (design orrery-v2): the footer launchers read as CONTROLS —
+         a bordered pill on the sunken panel tone, not quiet footer text. */
+      .sb-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-3);
+        padding: round(calc(2px * var(--density)), 1px) round(calc(7px * var(--density)), 1px);
+        border-radius: 999px;
+        border: 1px solid var(--hair);
+        background: var(--panel-2);
+        color: var(--ink-2);
+        cursor: pointer;
+        flex: none;
+        white-space: nowrap;
+        font-family: inherit;
+        font-size: var(--fs-badge);
+        transition: color 0.12s, border-color 0.12s;
+      }
+      .sb-chip:hover {
+        color: var(--ink);
+        border-color: var(--hair-2);
+      }
+      .sb-chip.on {
+        color: var(--ui-ink);
+        border-color: var(--ui-line);
+      }
+      /* dvc-chipct (design orrery-v2): the Dev chip's red perf-alert pill */
+      .sb-alertct {
+        display: inline-grid;
+        place-items: center;
+        min-width: round(calc(15px * var(--density)), 1px);
+        height: round(calc(14px * var(--density)), 1px);
+        padding: 0 var(--sp-2);
+        border-radius: 999px;
+        background: var(--sem-del);
+        color: var(--on-solid);
+        font-size: var(--fs-micro);
+        font-weight: var(--fw-strong);
+        line-height: 1;
       }
       .sb-link {
         display: flex;

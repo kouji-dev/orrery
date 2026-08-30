@@ -16,9 +16,9 @@ async function ready(page: Page): Promise<void> {
   await page.waitForSelector("app-top-bar");
 }
 
-test("dev console FAB opens the panel with the merged tab set (no Processes tab)", async ({ page }) => {
+test("the status-bar Dev chip opens the panel with the merged tab set (no Processes tab)", async ({ page }) => {
   await ready(page);
-  await page.locator(".dvc-fab").click();
+  await page.locator(".sb-chip", { hasText: "Dev" }).click();
   const panel = page.locator(".dvcon");
   await expect(panel).toBeVisible();
 
@@ -30,7 +30,7 @@ test("dev console FAB opens the panel with the merged tab set (no Processes tab)
 
 test("Resources tab activates without a backend (empty tree state, no crash)", async ({ page }) => {
   await ready(page);
-  await page.locator(".dvc-fab").click();
+  await page.locator(".sb-chip", { hasText: "Dev" }).click();
   const tab = page.locator(".dvc-tab", { hasText: "Resources" });
   await tab.click();
   // the dev-console tabs are <kj-button [kjPressed]> now — active state is
@@ -42,7 +42,7 @@ test("Resources tab activates without a backend (empty tree state, no crash)", a
 
 test("Emits tab carries the telemetry privacy contract in its footer", async ({ page }) => {
   await ready(page);
-  await page.locator(".dvc-fab").click();
+  await page.locator(".sb-chip", { hasText: "Dev" }).click();
   await page.locator(".dvc-tab", { hasText: "Emits" }).click();
   // A0.7 non-negotiable, stated in the UI itself
   await expect(page.locator(".dvcon")).toContainText(

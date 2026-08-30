@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { VizMode } from "../models";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -14,11 +14,8 @@ import { SelectComponent } from "../shared/select.component";
   imports: [IconComponent, KjButton, KjToggleComponent, SelectComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     @let t = ui.tweaks();
-    <!-- launcher -->
-    <button kjButton class="fab tweak-fab" [class.on]="open()" (click)="open.set(!open())" title="Tweaks">
-      <app-icon name="spark" />
-    </button>
-
+    <!-- design orrery-v2: the FAB rail is gone — the launcher is the Tweaks
+         chip in the status bar's right cluster; this component is panel-only. -->
     @if (open()) {
       <section class="corner-panel tweak-panel" aria-label="Tweaks">
         <header class="pane-head tweak-head">
@@ -69,13 +66,12 @@ import { SelectComponent } from "../shared/select.component";
   `,
   styles: [
     `
-      /* FAB skin + the corner-panel box and its pop-up entrance are the shared
-         recipes in styles.css (.fab / .corner-panel) — this used to be a
-         byte-for-byte copy of the dev console's, down to a second keyframes
-         block under another name. Only where this panel sits on the rail and
-         how wide it may grow are local. */
+      /* The corner-panel box and its pop-up entrance are the shared recipes in
+         styles.css (.corner-panel). Anchoring is the design's (orrery-v2): the
+         panel pops up from its status-bar chip, right above the footer. */
       .tweak-panel {
-        bottom: 148px;
+        right: 10px;
+        bottom: calc(var(--statusbar-h) + 10px);
         z-index: 70;
         /* min-width, not width: the segmented controls below size from the type
            ramp, so a hard width clipped the third option ("comfy") outright once
@@ -128,7 +124,8 @@ import { SelectComponent } from "../shared/select.component";
 })
 export class TweaksPanelComponent {
   readonly ui = inject(UiStore);
-  readonly open = signal(false);
+  /** Store-lifted: the status-bar chip toggles it from outside this host. */
+  readonly open = this.ui.tweaksOpen;
 
   constructor() {
     // close on Escape / click outside the FAB + panel (both live under this

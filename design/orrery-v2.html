@@ -9770,7 +9770,7 @@ function useTweaks(defaults) {
 function TweaksPanel({ title = 'Tweaks', children }) {
   const [open, setOpen] = React.useState(false);
   const dragRef = React.useRef(null);
-  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const offsetRef = React.useRef({ x: 16, y: 46 }); // default above the status bar, not over it
   const PAD = 16;
 
   const clampToViewport = React.useCallback(() => {
@@ -10125,25 +10125,25 @@ const { useState: useDS, useEffect: useDE, useRef: useDR, useReducer: useDRed } 
 
 // ── scoped styles (all selectors under .dvcon; dv- prefixed to avoid collisions)
 const DVC_STYLE = `
-.dvcon,.dvc-fab{--lat-g:var(--sem-add);--lat-a:var(--sem-attn);--lat-r:var(--sem-del);
+.dvcon{--lat-g:var(--sem-add);--lat-a:var(--sem-attn);--lat-r:var(--sem-del);
   --lat-g-bg:color-mix(in oklch,var(--sem-add),transparent 90%);--lat-a-bg:color-mix(in oklch,var(--sem-attn),transparent 86%);--lat-r-bg:color-mix(in oklch,var(--sem-del),transparent 82%);
   --lat-r-ring:color-mix(in oklch,var(--sem-del),transparent 60%);--dvadd:var(--code-add-ink);--dvdel:var(--code-del-ink);}
 
 
 
 
-.dvc-fab{position:fixed;right:18px;bottom:18px;z-index:90;width:44px;height:44px;border-radius:13px;
-  display:grid;place-items:center;cursor:pointer;border:1px solid var(--hair-2);
-  background:linear-gradient(180deg,var(--panel-3),var(--panel));color:var(--ink-2);
-  box-shadow:var(--shadow);transition:transform .16s,color .16s,border-color .16s,box-shadow .16s;}
-.dvc-fab:hover{transform:translateY(-2px);color:var(--ink);border-color:var(--ui-line);}
-.dvc-fab.on{color:var(--ui-ink);border-color:var(--ui-line);box-shadow:var(--shadow);}
-.dvc-fab svg{width:19px;height:19px;}
-.dvc-fab .dvc-badge{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--lat-r);color:var(--on-solid);font-size: var(--fs-badge);font-weight: var(--fw-strong);line-height:1;display:grid;place-items:center;border:2px solid var(--panel);font-variant-numeric:tabular-nums;animation:dvcpulse 1.8s ease-in-out infinite;}
-@keyframes dvcpulse{0%{box-shadow:0 0 0 0 color-mix(in oklch,var(--sem-del),transparent 50%);}70%{box-shadow:0 0 0 7px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
+/* status-bar chips (dev console + tweaks) — the FAB rail is gone; these live in
+   the footer's right cluster next to the mem/cpu diagnostics (portal → #sb-dev-slot) */
+.dvc-chip{border:none;background:transparent;padding:0;display:inline-flex;align-items:center;gap:5px;flex:none;white-space:nowrap;
+  font-family:inherit;font-size:inherit;color:inherit;cursor:pointer;transition:color .12s;}
+.dvc-chip:hover{color:var(--ink);}
+.dvc-chip.on{color:var(--ui-ink);}
+.dvc-chip svg{width:11px;height:11px;}
+.dvc-chipct{display:inline-grid;place-items:center;min-width:15px;height:14px;padding:0 4px;border-radius:999px;
+  background:var(--sem-del);color:var(--on-solid);font-size: var(--fs-micro);font-weight: var(--fw-strong);line-height:1;font-variant-numeric:tabular-nums;}
 
-.dvcon{position:fixed;right:18px;bottom:74px;z-index:91;width:880px;max-width:calc(100vw - 32px);
-  max-height:calc(100vh - 130px);display:flex;flex-direction:column;overflow:hidden;
+.dvcon{position:fixed;right:10px;bottom:calc(var(--statusbar-h) + 10px);z-index:91;width:880px;max-width:calc(100vw - 20px);
+  max-height:calc(100vh - var(--topbar-h) - var(--statusbar-h) - 26px);display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel);border:1px solid var(--hair-2);border-radius:14px;
   box-shadow:var(--shadow);font-family:var(--font-ui);
   transform-origin:bottom right;animation:dvcin .22s cubic-bezier(.2,.7,.2,1);}
@@ -10447,6 +10447,10 @@ function DevConsole({ agents, projects, channel, loading, ctx }) {
     return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("orrery:devpanel", onOpen); };
   }, []);
 
+  // status-bar mount for the chips — grabbed after the footer commits (re-checked when boot clears)
+  const [slot, setSlot] = useDS(null);
+  useDE(() => { setSlot(document.getElementById("sb-dev-slot")); }, [loading]);
+
   // ctx for the roadmap performance surfaces (process tree · emits · budgets)
   const pctx = Object.assign({ flash: () => {}, isAsleep: () => false, visibleAgentIds: [] }, ctx || {}, { agents, projects });
   const perfBox = { height: "min(430px, 54vh)", display: "flex", flexDirection: "column", minHeight: 0 };
@@ -10523,11 +10527,19 @@ function DevConsole({ agents, projects, channel, loading, ctx }) {
   return (
     <React.Fragment>
       <style>{DVC_STYLE}</style>
-      <button className={"dvc-fab" + (open?" on":"")} title={alertCount?("Dev console · "+alertCount+" perf alert"+(alertCount>1?"s":"")):"Dev console"} aria-label="Dev console"
-        onClick={() => setOpen((o)=>!o)}>
-        {alertCount>0 && <span className="dvc-badge">{alertCount}</span>}
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h3l2.5-6 4 13 3-9 1.5 2H21" /></svg>
-      </button>
+      {slot && ReactDOM.createPortal(<React.Fragment>
+        <button className="dvc-chip" title="Tweaks — theme, layout, motion" aria-label="Tweaks"
+          onClick={() => window.postMessage({ type: "__activate_edit_mode" }, "*")}>
+          <Icon name="spark" size="sm" style={{ width: 11, height: 11 }} />Tweaks
+        </button>
+        <span style={{ color: "var(--ink-4)" }}>·</span>
+        <button className={"dvc-chip" + (open?" on":"")} title={alertCount?("Dev console · "+alertCount+" perf alert"+(alertCount>1?"s":"")):"Dev console"} aria-label="Dev console"
+          onClick={() => setOpen((o)=>!o)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h3l2.5-6 4 13 3-9 1.5 2H21" /></svg>
+          Dev{alertCount>0 && <span className="dvc-chipct">{alertCount}</span>}
+        </button>
+        <span style={{ color: "var(--ink-4)" }}>·</span>
+      </React.Fragment>, slot)}
 
       {open && (
         <section className="dvcon" aria-label="Dev console">
@@ -13562,6 +13574,7 @@ function StatusBar({ agents, projects, toast, build, onShowWhatsNew, onOpenLog, 
             <span style={{ color: "var(--ink-4)" }}>·</span>
           </React.Fragment>
         )}
+        <span id="sb-dev-slot" style={{ display: "contents" }}></span>
         <FootAction title="Release changelog · what’s new" onClick={onShowWhatsNew} gap={6}>
           <span>v{build.version}</span>
           <span className="up" style={{ fontSize: "var(--fs-micro)", fontWeight: "var(--fw-strong)", letterSpacing: "0.1em", color: chColor,

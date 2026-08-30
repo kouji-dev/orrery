@@ -92,10 +92,11 @@ declare const ngDevMode: boolean | undefined;
     <app-update-toast />
     <app-command-overlays />
     <app-context-menu />
-    <div class="anchor-rail">
-      <app-tweaks-panel />
-      <app-dev-panel />
-    </div>
+    <!-- design orrery-v2: panel-only components — their launchers are the
+         Tweaks/Dev chips in the status bar, and each panel anchors itself
+         above the footer (no FAB rail any more). -->
+    <app-tweaks-panel />
+    <app-dev-panel />
   `,
   styles: [
     `
@@ -111,26 +112,6 @@ declare const ngDevMode: boolean | undefined;
         overflow: hidden;
       }
 
-      /* One fixed, bottom-right, vertical flex container for the floating action
-         buttons (Tweaks + DevConsole/Perf). The DevConsole renders in EVERY build
-         with NO tier trimming — feed, row expand, and the Resources tab show in
-         prod too (aggregates live in-memory and the in-app panel is their only
-         surface). The Perf FAB renders last, so it sits at the bottom (the
-         corner) and Tweaks stacks above it. */
-      .anchor-rail {
-        position: fixed;
-        right: 18px;
-        bottom: 36px;
-        z-index: 90;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: var(--sp-6);
-        pointer-events: none;
-      }
-      .anchor-rail > * {
-        pointer-events: auto;
-      }
     `,
   ],
 })

@@ -47,6 +47,7 @@ import { SelectComponent } from "../shared/select.component";
             <app-icon size="md" [name]="p.icon" [color]="p.color" />
             <app-select
               title="Project the panels read from"
+              size="xs"
               [value]="p.id"
               [options]="projectOptions()"
               (valueChange)="pickProject($event)"
@@ -56,6 +57,7 @@ import { SelectComponent } from "../shared/select.component";
         }
         <app-select
           title="Worktree the panel reads from"
+          size="xs"
           [value]="agent()?.id ?? ''"
           [options]="agentOptions()"
           (valueChange)="pickAgent($event)"

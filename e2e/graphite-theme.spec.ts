@@ -36,7 +36,7 @@ test("graphite ramp + fixed accent in dark", async ({ page }) => {
 
 test("light mode uses the paper ramp with its own accent", async ({ page }) => {
   await ready(page);
-  await page.locator("button.tweak-fab[title='Tweaks']").click();
+  await page.locator(".sb-chip", { hasText: "Tweaks" }).click();
   await page.locator(".seg button", { hasText: "light" }).click();
   await expect
     .poll(() => page.evaluate(() => document.documentElement.getAttribute("data-theme")))
