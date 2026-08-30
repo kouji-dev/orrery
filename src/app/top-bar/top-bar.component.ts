@@ -290,8 +290,8 @@ export class TopBarComponent {
   readonly closeGuard = inject(TabCloseGuardService);
   private readonly drag = inject(DragService);
 
-  /** Platform-aware chip label for the Search Everywhere button ("Shift Shift" / ⇧⇧). */
-  readonly searchKbd = kbdLabel("Shift Shift");
+  /** Platform-aware chip label for the Search Everywhere button ("Ctrl+K" / ⌘K). */
+  readonly searchKbd = kbdLabel("Ctrl+k");
   /** One <kj-kbd> per key — kouji renders each key as its own chip and puts
    *  any separator between them, rather than one chip holding "Shift Shift". */
   readonly searchKeys = this.searchKbd.split(/\s+/).filter(Boolean);

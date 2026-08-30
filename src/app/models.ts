@@ -434,6 +434,10 @@ export interface Settings {
   /** User keybinding overrides: command id → binding ("Ctrl+Shift+p").
    *  Absent id = the command's built-in default binding. */
   keymap: Record<string, string>;
+  /** Per-command "fires inside a focused terminal" override (the steal list).
+   *  Absent id = the default: Ctrl/Mod+Shift chords and Search Everywhere
+   *  steal; every other chord flows to the PTY untouched. */
+  keymapTerminal: Record<string, boolean>;
   /** Per-tool permission policy. Absent key = "off" (the tool's own flow). */
   autoApprove: Record<string, AutoApprovePolicy>;
   /** Permission prompts raise a native toast even when the app is unfocused. */

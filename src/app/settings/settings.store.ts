@@ -39,6 +39,7 @@ export function settingsDefaults(): Settings {
     // decision); autosave is the opt-in alternative, not the default.
     autosave: false,
     keymap: {}, // absent id = the command's default binding
+    keymapTerminal: {}, // absent id = default terminal steal-list rule
     autoApprove: {}, // absent tool = "off" (the tool's own flow)
     remoteApproval: true,
     osNotifications: true,
@@ -167,6 +168,7 @@ export class SettingsStore {
       toolEffort: { ...(p.toolEffort ?? {}) },
       toolPath: { ...(p.toolPath ?? {}) },
       keymap: { ...(p.keymap ?? {}) },
+      keymapTerminal: { ...(p.keymapTerminal ?? {}) },
       autoApprove: { ...(p.autoApprove ?? {}) },
       costRates: { ...(p.costRates ?? {}) },
       events: { ...d.events, ...(p.events ?? {}) },
@@ -201,6 +203,17 @@ export class SettingsStore {
       if (binding == null || binding.trim() === "") delete next[commandId];
       else next[commandId] = binding;
       return { ...s, keymap: next };
+    });
+    this.persist();
+  }
+
+  /** Set (or clear, with null) one "fires inside a terminal" override. */
+  setKeymapTerminal(commandId: string, value: boolean | null): void {
+    this.settings.update((s) => {
+      const next = { ...s.keymapTerminal };
+      if (value == null) delete next[commandId];
+      else next[commandId] = value;
+      return { ...s, keymapTerminal: next };
     });
     this.persist();
   }

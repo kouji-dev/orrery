@@ -29,6 +29,13 @@ export interface AppCommand {
   danger?: boolean;
   /** Enablement — computed at registry-build time from live signals. */
   enabled: boolean;
+  /** Effective "fires inside a focused terminal" flag (the steal list). A
+   *  user toggle in Settings → Keymap overrides the default; the default is
+   *  true only for Ctrl/Mod+Shift chords (classic terminal encoding cannot
+   *  even deliver most of them distinctly) and the blessed Search Everywhere.
+   *  Everything else flows to the PTY untouched — the program inside may
+   *  have bindings of its own we cannot know about. */
+  terminal?: boolean;
   run: () => void;
 }
 
@@ -41,6 +48,19 @@ export interface OverlayState {
 
 /** Double-shift window (ms) for Search Everywhere. */
 const DOUBLE_SHIFT_MS = 380;
+
+/** Default steal-list rule (VS Code's `commandsToSkipShell` model): inside a
+ *  terminal only these app chords fire; everything else reaches the PTY —
+ *  the program inside (a shell's readline, Claude Code's own bindings) may
+ *  need any chord, and the two sides must never BOTH execute one keypress. */
+export function terminalDefaultOf(cmd: Pick<AppCommand, "id" | "kbd" | "kbdAlt">): boolean {
+  if (cmd.id === "search.everywhere") return true; // blessed: Ctrl+K
+  const shifted = (b?: string) => {
+    const l = b?.toLowerCase() ?? "";
+    return l.includes("shift+") && (l.includes("ctrl+") || l.includes("mod+"));
+  };
+  return shifted(cmd.kbd) || shifted(cmd.kbdAlt);
+}
 
 /**
  * The command registry + global keybinding dispatcher (roadmap B2.2). Every
@@ -119,6 +139,7 @@ export class CommandRegistryService {
     const theme = this.ui.tweaks().theme;
     const dirtyCount = this.edits.dirtyKeys().size;
     const keymap = this.settings.settings().keymap;
+    const keymapTerminal = this.settings.settings().keymapTerminal;
 
     const c = (
       cmd: Omit<AppCommand, "enabled"> & { enabled?: boolean },
@@ -126,7 +147,7 @@ export class CommandRegistryService {
 
     return [
       // ---- navigate ----
-      c({ id: "search.everywhere", label: "Search Everywhere", group: "Navigate", icon: "search", kbd: "Shift Shift", kbdAlt: "Ctrl+k", run: () => this.open("search") }),
+      c({ id: "search.everywhere", label: "Search Everywhere", group: "Navigate", icon: "search", kbd: "Ctrl+k", kbdAlt: "Shift Shift", run: () => this.open("search") }),
       c({ id: "palette.open", label: "Show All Commands", group: "Navigate", icon: "bolt", kbd: "Ctrl+Shift+p", kbdAlt: "Ctrl+Shift+a", run: () => this.open("palette") }),
       c({ id: "recent.files", label: "Recent Files", group: "Navigate", icon: "clock", kbd: "Ctrl+e", run: () => this.open("recent") }),
       c({ id: "goto.line", label: "Go to Line…", group: "Navigate", icon: "enter", kbd: "Ctrl+l", enabled: !!fileLeaf, run: () => this.open("goto") }),
@@ -200,7 +221,9 @@ export class CommandRegistryService {
       // Applied HERE so the dispatcher, palette chips, Search Everywhere and
       // the Keymap settings rows all see the same effective binding.
       const kbd = keymap[cmd.id];
-      return kbd ? { ...cmd, kbd, kbdAlt: undefined } : cmd;
+      const eff = kbd ? { ...cmd, kbd, kbdAlt: undefined } : cmd;
+      // terminal steal list: user toggle wins, else derive from the binding
+      return { ...eff, terminal: keymapTerminal[cmd.id] ?? terminalDefaultOf(eff) };
     });
   });
 
@@ -220,14 +243,16 @@ export class CommandRegistryService {
     const target = e.target as HTMLElement | null;
     const tag = target?.tagName ?? "";
     const typing = tag === "INPUT" || tag === "TEXTAREA" || !!target?.isContentEditable;
-    // xterm routes keys through a hidden helper textarea — plain-Ctrl chords
-    // (Ctrl+E = readline end-of-line, Ctrl+L = clear) must stay with the shell.
+    // xterm routes keys through a hidden helper textarea — the shell keeps the
+    // TERMINAL_RESERVED plain-Ctrl chords; every other registered binding wins.
     const inTerminal = !!target?.classList?.contains("xterm-helper-textarea");
 
-    // double-shift → Search Everywhere (disabled while typing, like the design)
+    // double-shift → Search Everywhere. Disabled while typing (like the
+    // design) EXCEPT inside a terminal: bare Shift emits no bytes, so it is
+    // the one app chord no PTY program can possibly want — always available.
     if (e.key === "Shift" && !e.ctrlKey && !e.altKey && !e.metaKey) {
       const now = Date.now();
-      if (!typing && this.shiftArmed && now - this.lastShift < DOUBLE_SHIFT_MS) {
+      if ((!typing || inTerminal) && this.shiftArmed && now - this.lastShift < DOUBLE_SHIFT_MS) {
         this.shiftArmed = false;
         e.preventDefault();
         this.open("search");
@@ -250,9 +275,11 @@ export class CommandRegistryService {
       const kbds = [cmd.kbd, cmd.kbdAlt].filter((k): k is string => !!k && k !== "Shift Shift");
       if (!kbds.some((k) => matchBinding(e, k))) continue;
       // while typing, only modifier chords may fire; inside a terminal only
-      // Ctrl+Shift chords may (plain Ctrl belongs to the shell/readline)
+      // steal-listed commands do (cmd.terminal — Settings → Keymap toggle).
+      // The plain return leaves the event untouched, so a non-stolen chord
+      // reaches the PTY exactly as typed: EXCLUSIVE delivery, never both.
       if (typing && !(e.ctrlKey || e.metaKey)) return;
-      if (inTerminal && !(e.shiftKey && (e.ctrlKey || e.metaKey))) return;
+      if (inTerminal && !cmd.terminal) return;
       e.preventDefault();
       e.stopPropagation();
       if (cmd.enabled) cmd.run();
