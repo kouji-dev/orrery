@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
-import { Agent } from "../models";
+import { Agent, Project } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { ProjectActionsService } from "../projects/project-actions.service";
@@ -48,7 +48,13 @@ import { SidebarFilesComponent } from "./files/sidebar-files.component";
           <kj-badge class="tnum">
             <span class="dot running" style="background:var(--st-running);width:var(--sp-3);height:var(--sp-3)"></span>{{ totalRunning() }}/5
           </kj-badge>
-          <kj-button kjSize="icon" class="pane-act kj-push" kjVariant="ghost" (click)="ui.toggleSidebarCompact()" title="Collapse sidebar" kjAriaLabel="Collapse sidebar"
+          <kj-button kjSize="icon" class="pane-act kj-push" kjVariant="ghost" (click)="toggleAll()"
+            [title]="allCollapsed() ? 'Expand all projects' : 'Collapse all projects'"
+            [kjAriaLabel]="allCollapsed() ? 'Expand all projects' : 'Collapse all projects'"
+            style="flex:none;--kj-button-padding-x:var(--sp-1);--kj-button-padding-y:var(--sp-1);--kj-button-height:auto;--kj-button-radius:4px">
+            <app-icon size="sm" [name]="allCollapsed() ? 'chevsDown' : 'chevsUp'" />
+          </kj-button>
+          <kj-button kjSize="icon" class="pane-act" kjVariant="ghost" (click)="ui.toggleSidebarCompact()" title="Collapse sidebar" kjAriaLabel="Collapse sidebar"
             style="flex:none;--kj-button-padding-x:var(--sp-1);--kj-button-padding-y:var(--sp-1);--kj-button-height:auto;--kj-button-radius:4px">
             <app-icon size="sm" name="panelLeft" />
           </kj-button>
@@ -63,7 +69,7 @@ import { SidebarFilesComponent } from "./files/sidebar-files.component";
           <kj-input
             [value]="ui.query()"
             (input)="ui.query.set($any($event.target).value)"
-            placeholder="filter agents…"
+            placeholder="filter projects, agents…"
           />
           @if (ui.query()) {
             <kj-input-group-addon kjPosition="end">
@@ -73,28 +79,9 @@ import { SidebarFilesComponent } from "./files/sidebar-files.component";
         </kj-input-group>
       </div>
 
-      <!-- agents section: empty space below the groups still offers the
-           panel-level actions; project/agent rows stopPropagation via
-           ui.openMenu, so theirs win -->
-      <div class="scroll-y" style="flex:1;min-height:0;padding:var(--sp-3) 0" (contextmenu)="onEmptyContext($event)">
-        @for (p of projects.all(); track p.id) {
-          @let pa = agentsFor(p.id);
-          @if (!ui.query() || pa.length) {
-            <app-project-group
-              [project]="p"
-              [agents]="pa"
-              [activeAgent]="activeAgent()"
-              [collapsed]="!!collapsed()[p.id]"
-              (toggle)="toggle($event)"
-            />
-          }
-        }
-      </div>
-
-      <!-- files section (v2): the repo tree with its worktree root chip -->
-      <app-sidebar-files />
-
-      <div class="sb-foot" style="padding:var(--sp-5);border-top:1px solid var(--hair);display:flex;gap:var(--sp-4)">
+      <!-- panel actions sit ABOVE the list (design/orrery-v2.html): the files
+           section owns the sidebar's bottom edge, so a footer would be buried -->
+      <div class="sb-actions" style="padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--hair);display:flex;gap:var(--sp-4)">
         <kj-button kjVariant="outline" (click)="ui.openAddProject()">
           <app-icon name="folder" size="sm" />Add project
         </kj-button>
@@ -102,6 +89,24 @@ import { SidebarFilesComponent } from "./files/sidebar-files.component";
           <app-icon name="bolt" size="sm" />Agent
         </kj-button>
       </div>
+
+      <!-- agents section: empty space below the groups still offers the
+           panel-level actions; project/agent rows stopPropagation via
+           ui.openMenu, so theirs win -->
+      <div class="scroll-y" style="flex:1;min-height:0;padding:var(--sp-3) 0" (contextmenu)="onEmptyContext($event)">
+        @for (g of groups(); track g.project.id) {
+          <app-project-group
+            [project]="g.project"
+            [agents]="g.agents"
+            [activeAgent]="activeAgent()"
+            [collapsed]="!!collapsed()[g.project.id]"
+            (toggle)="toggle($event)"
+          />
+        }
+      </div>
+
+      <!-- files section (v2): the repo tree with its worktree root chip -->
+      <app-sidebar-files />
     </aside>
   `,
   styles: [
@@ -162,19 +167,62 @@ export class SidebarComponent {
   /** The backlog tab is the active one — drives the NavRow's active skin. */
   readonly backlogActive = computed(() => this.ui.activeTabKind() === "backlog");
 
-  agentsFor(projectId: string): Agent[] {
-    const q = this.ui.query().toLowerCase();
-    return this.runtime
-      .agents()
-      .filter(
-        (a) =>
-          a.projectId === projectId &&
-          (!q || a.name.toLowerCase().includes(q) || a.task.toLowerCase().includes(q)),
+  /**
+   * The filter reads PROJECT-FIRST: a query that hits a project's name keeps
+   * that whole project — every agent under it, even one whose own name/task
+   * misses — so "orrery" means "show me orrery", not "show me nothing".
+   * Projects the query does not name fall back to matching their agents, and
+   * drop out entirely when none match.
+   */
+  readonly groups = computed<{ project: Project; agents: Agent[] }[]>(() => {
+    const q = this.ui.query().trim().toLowerCase();
+    const agents = this.runtime.agents();
+    const byProject = new Map<string, Agent[]>();
+    for (const a of agents) {
+      const list = byProject.get(a.projectId);
+      if (list) list.push(a);
+      else byProject.set(a.projectId, [a]);
+    }
+    const out: { project: Project; agents: Agent[] }[] = [];
+    for (const project of this.projects.all()) {
+      const own = byProject.get(project.id) ?? [];
+      if (!q || project.name.toLowerCase().includes(q)) {
+        out.push({ project, agents: own });
+        continue;
+      }
+      const hits = own.filter(
+        (a) => a.name.toLowerCase().includes(q) || a.task.toLowerCase().includes(q),
       );
-  }
+      if (hits.length) out.push({ project, agents: hits });
+    }
+    return out;
+  });
+
+  /** All *visible* groups collapsed — the button flips to "expand all" there. */
+  readonly allCollapsed = computed(() => {
+    const g = this.groups();
+    return g.length > 0 && g.every((x) => this.collapsed()[x.project.id]);
+  });
 
   toggle(id: string) {
     this.collapsed.update((c) => ({ ...c, [id]: !c[id] }));
+  }
+
+  /** One click folds every visible project away, the next brings them back. */
+  toggleAll(): void {
+    const groups = this.groups();
+    if (this.allCollapsed()) {
+      this.collapsed.update((c) => {
+        const next = { ...c };
+        for (const g of groups) delete next[g.project.id];
+        return next;
+      });
+      return;
+    }
+    this.collapsed.update((c) => ({
+      ...c,
+      ...Object.fromEntries(groups.map((g) => [g.project.id, true])),
+    }));
   }
 
   /** Right-click on empty panel space: the panel-level actions. */
