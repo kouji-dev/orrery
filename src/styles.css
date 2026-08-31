@@ -1786,7 +1786,7 @@ app-icon svg {
   letter-spacing: 0.06em;
 }
 
-/* Repeated inline knob packs, extracted. Same pattern as .sb-foot below: the
+/* Repeated inline knob packs, extracted. Same pattern as .sb-actions below: the
    value is a kouji var, so it can only be set from CSS or an inline style —
    and nine call sites were setting it inline. */
 .kj-center .kj-button {
@@ -2207,11 +2207,11 @@ app-version-badge .tag .kj-badge {
   color: var(--st-blocked);
 }
 
-/* Sidebar footer: "Add project" takes the free space, "Agent" stays its own
+/* Sidebar action bar: "Add project" takes the free space, "Agent" stays its own
    width. flex lives on kouji's inner button because that is the flex item. */
-.sb-foot .kj-button { --kj-button-justify: center; }
-.sb-foot kj-button:first-child .kj-button { flex: 1; min-width: 0; }
-.sb-foot kj-button:last-child .kj-button { flex: none; }
+.sb-actions .kj-button { --kj-button-justify: center; }
+.sb-actions kj-button:first-child .kj-button { flex: 1; min-width: 0; }
+.sb-actions kj-button:last-child .kj-button { flex: none; }
 
 /* Square icon buttons (pane chrome, tab close). kouji's `icon` size gives the
    square; these add the tight radius and hover the old .pane-btn had. */

@@ -2395,6 +2395,8 @@ const ICONS = {
   x: "M6 6l12 12M18 6L6 18",
   chevron: "M9 6l6 6-6 6",
   chevronD: "M6 9l6 6 6-6",
+  chevsUp: "M6 13l6-5 6 5M6 19l6-5 6 5",
+  chevsDown: "M6 5l6 5 6-5M6 11l6 5 6-5",
   folder: "M4 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V7z",
   file: "M7 3h7l5 5v13H7V3z M14 3v5h5",
   clock: "M12 7v5l4 2M12 3a9 9 0 100 18 9 9 0 000-18z",
@@ -4906,6 +4908,8 @@ function NavRow({ icon, label, active, onClick, badge }) {
 function Sidebar({ projects, agents, activeAgent, onOpen, onContext, onProjectContext, onSpawn, onAddProject, query, setQuery, onToggleCompact, loading, onReload, view, onNav, openTicketCount, filesCtx }) {
   const [collapsed, setCollapsed] = useStateS({});
   const toggle = (id) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
+  const allCollapsed = projects.length > 0 && projects.every((p) => collapsed[p.id]);
+  const toggleAll = () => setCollapsed(allCollapsed ? {} : Object.fromEntries(projects.map((p) => [p.id, true])));
 
   const q = query.toLowerCase();
   const matches = (a) => !q || a.name.toLowerCase().includes(q) || a.task.toLowerCase().includes(q);
@@ -4935,6 +4939,9 @@ function Sidebar({ projects, agents, activeAgent, onOpen, onContext, onProjectCo
               <Icon name="refresh" size="sm" style={{ width: 13, height: 13, animation: loading ? "spin 0.8s linear infinite" : "none" }} />
             </button>
           )}
+          <button className="pane-btn" onClick={toggleAll} disabled={loading} title={allCollapsed ? "Expand all projects" : "Collapse all projects"}>
+            <Icon name={allCollapsed ? "chevsDown" : "chevsUp"} size="sm" style={{ width: 13, height: 13 }} />
+          </button>
           <button className="pane-btn" onClick={onToggleCompact} title="Collapse sidebar">
             <Icon name="panelLeft" size="sm" style={{ width: 14, height: 14 }} />
           </button>
@@ -4945,6 +4952,15 @@ function Sidebar({ projects, agents, activeAgent, onOpen, onContext, onProjectCo
             style={{ flex: 1, minWidth: 0, background: "transparent", border: "none", outline: "none", color: "var(--ink)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-meta)" }} />
           {query && <Icon name="x" size="sm" style={{ color: "var(--ink-4)", cursor: "pointer" }} onClick={() => setQuery("")} />}
         </div>
+      </div>
+
+      <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--hair)", display: "flex", gap: 8 }}>
+        <button className="btn ghost-hair" onClick={onAddProject} style={{ flex: 1, justifyContent: "center" }}>
+          <Icon name="folder" size="sm" />Add project
+        </button>
+        <button className="btn primary" onClick={() => onSpawn(null)} title="Spawn agent" style={{ padding: "5px 11px" }}>
+          <Icon name="bolt" size="sm" />Spawn
+        </button>
       </div>
 
       <div className="scroll-y" style={{ flex: 1, padding: "6px 0", minHeight: 80 }}>
@@ -4961,15 +4977,6 @@ function Sidebar({ projects, agents, activeAgent, onOpen, onContext, onProjectCo
 
       {/* v2 — files section: the repo tree lives with the other navigation surface */}
       {filesCtx && !loading && <SidebarFiles {...filesCtx} agents={agents} projects={projects} />}
-
-      <div style={{ padding: 10, borderTop: "1px solid var(--hair)", display: "flex", gap: 8 }}>
-        <button className="btn ghost-hair" onClick={onAddProject} style={{ flex: 1, justifyContent: "center" }}>
-          <Icon name="folder" size="sm" />Add project
-        </button>
-        <button className="btn primary" onClick={() => onSpawn(null)} title="Spawn agent" style={{ padding: "5px 11px" }}>
-          <Icon name="bolt" size="sm" />Spawn
-        </button>
-      </div>
     </aside>
   );
 }

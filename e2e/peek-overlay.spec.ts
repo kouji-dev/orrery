@@ -90,10 +90,10 @@ test("the pending request renders as the shared notification card", async ({ pag
 
 test("n is inert while typing in an input", async ({ page }) => {
   await boot(page);
-  await page.locator("app-sidebar input[placeholder='filter agents…']").click();
+  await page.locator("app-sidebar input[placeholder='filter projects, agents…']").click();
   await page.keyboard.type("n");
   await expect(page.locator("app-peek-overlay")).toHaveCount(0);
-  await expect(page.locator("app-sidebar input[placeholder='filter agents…']")).toHaveValue("n");
+  await expect(page.locator("app-sidebar input[placeholder='filter projects, agents…']")).toHaveValue("n");
 });
 
 test("the bell dropdown offers Work the queue; it opens the peek", async ({ page }) => {
