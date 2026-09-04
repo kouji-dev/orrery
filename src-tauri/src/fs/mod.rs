@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use git2::Repository;
+use crate::git::service::{GitService, IgnoreMatcher};
 
 /// One node in the worktree file tree.
 /// `children: None` = a directory whose contents haven't been loaded yet (lazy stub).
@@ -19,26 +19,26 @@ const NODE_LIMIT: usize = 10_000;
 /// Full tree of a worktree: tracked/source dirs are recursed, gitignored dirs are
 /// listed but left as lazy stubs (`children: None`) so we never walk node_modules.
 pub fn tree(worktree: &Path) -> Vec<FileNode> {
-    let Ok(repo) = Repository::open(worktree) else {
+    let Some(ignore) = GitService::new().ignore_matcher(worktree) else {
         return Vec::new();
     };
-    let workdir = repo.workdir().unwrap_or(worktree).to_path_buf();
+    let workdir = ignore.workdir().to_path_buf();
     let mut count = 0;
-    scan(&repo, &workdir, "", true, &mut count)
+    scan(ignore.as_ref(), &workdir, "", true, &mut count)
 }
 
 /// One level of a directory (lazy expand) — every subdir comes back as a stub.
 pub fn list_dir(worktree: &Path, rel: &str) -> Vec<FileNode> {
-    let Ok(repo) = Repository::open(worktree) else {
+    let Some(ignore) = GitService::new().ignore_matcher(worktree) else {
         return Vec::new();
     };
-    let workdir = repo.workdir().unwrap_or(worktree).to_path_buf();
+    let workdir = ignore.workdir().to_path_buf();
     let mut count = 0;
-    scan(&repo, &workdir, rel, false, &mut count)
+    scan(ignore.as_ref(), &workdir, rel, false, &mut count)
 }
 
 fn scan(
-    repo: &Repository,
+    repo: &dyn IgnoreMatcher,
     workdir: &Path,
     rel: &str,
     recurse: bool,
@@ -69,7 +69,7 @@ fn scan(
         };
         let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
         // git's own ignore logic (nested .gitignore, .git/info/exclude, global)
-        let ignored = repo.is_path_ignored(Path::new(&child_rel)).unwrap_or(false);
+        let ignored = repo.is_ignored(&child_rel);
         *count += 1;
 
         // recurse only into tracked dirs; ignored dirs stay lazy stubs
@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn tree_recurses_source_but_stubs_ignored_dirs() {
         let dir = tempfile::tempdir().unwrap();
-        Repository::init(dir.path()).unwrap();
+        GitService::new().init(dir.path()).unwrap();
         std::fs::create_dir_all(dir.path().join("src")).unwrap();
         std::fs::write(dir.path().join("src/main.rs"), "x").unwrap();
         std::fs::create_dir_all(dir.path().join("node_modules/foo")).unwrap();
@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn tree_excludes_dot_git() {
         let dir = tempfile::tempdir().unwrap();
-        Repository::init(dir.path()).unwrap();
+        GitService::new().init(dir.path()).unwrap();
         std::fs::write(dir.path().join("a.txt"), "x").unwrap();
         let t = tree(dir.path());
         assert!(t.iter().all(|n| n.name != ".git"));

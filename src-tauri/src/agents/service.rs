@@ -6,7 +6,10 @@ use uuid::Uuid;
 
 use crate::core::database::DB;
 use crate::core::errors::{AgentError, AppError, AppResult, DbError};
-use crate::git::service::{remove_dir_all_retry, FileChange, GitService, WorktreeDisposal};
+use crate::git::service::{
+    is_trash_dir, remove_dir_all_retry, rename_retry, trash_path, FileChange, GitService,
+    WorktreeDisposal,
+};
 use crate::projects::model::CommitView;
 use crate::settings::SettingsService;
 
@@ -32,6 +35,12 @@ impl AgentService {
         };
         svc.init_schema();
         svc
+    }
+
+    /// The git handle (shared status cache) for command modules that work on
+    /// an agent's worktree path directly.
+    pub fn git(&self) -> &GitService {
+        &self.git
     }
 
     /// Filesystem-safe worktree name from the agent's (unique-per-project) name.
@@ -77,6 +86,13 @@ impl AgentService {
             return self.worktree_root.clone();
         }
         p
+    }
+
+    /// The root new worktrees currently go under: the configured one when
+    /// usable, else the app-data default (see `effective_worktree_root`).
+    pub fn worktree_root_effective(&self) -> PathBuf {
+        let prefs = self.settings.get().unwrap_or_default();
+        self.effective_worktree_root(&prefs.worktree_root)
     }
 
     fn name_exists_in_project(&self, project_id: Uuid, name: &str) -> AppResult<bool> {
@@ -168,7 +184,9 @@ impl AgentService {
         if req.name.trim().is_empty() {
             return Err(AgentError::Required("name is empty".into()).into());
         }
-        let id = Uuid::new_v4();
+        // The client may pre-pick the id (optimistic placeholder row); a clash
+        // with an existing row fails the INSERT below, which is the right outcome.
+        let id = req.id.unwrap_or_else(Uuid::new_v4);
         // Duplicate names ARE allowed (agents are keyed by their uuid id). When the
         // name is already taken in this project, disambiguate the worktree slug with
         // a short uuid fragment so BOTH the worktree dir and the template-derived
@@ -371,9 +389,14 @@ impl AgentService {
     /// leaves the files, [`DeleteFolder`](WorktreeDisposal::DeleteFolder) erases
     /// them.
     ///
-    /// A failed folder delete aborts the whole removal — the row survives, so
-    /// the agent is still there to retry from — which is why the directory goes
-    /// first, before any git or database state has moved.
+    /// The folder is not deleted in place: it is RENAMED to a `.trash-` sibling
+    /// (one metadata op, milliseconds) and purged on a background thread. A
+    /// worktree full of `node_modules` took tens of seconds to erase on NTFS,
+    /// and the sidebar row could not drop before that finished. A rename fails
+    /// for the same reason a delete would (a handle open somewhere below), so
+    /// the contract is unchanged: a failed move aborts the whole removal — the
+    /// row survives, so the agent is still there to retry from — which is why
+    /// the directory goes first, before any git or database state has moved.
     pub fn remove(
         &self,
         id: Uuid,
@@ -382,6 +405,7 @@ impl AgentService {
     ) -> AppResult<()> {
         let rec = self.record(id).ok();
 
+        let mut trash: Option<PathBuf> = None;
         if disposal == WorktreeDisposal::DeleteFolder {
             if let Some(wt) = rec.as_ref().map(|r| r.worktree.as_str()).filter(|w| !w.is_empty()) {
                 // Deliberately keyed off the RECORDED path rather than git's
@@ -389,8 +413,14 @@ impl AgentService {
                 // without suffixing the worktree name, so find_worktree() can
                 // miss a folder that really exists. Hard delete must not depend
                 // on the two agreeing.
-                remove_dir_all_retry(Path::new(wt))
-                    .map_err(|e| AppError::Other(format!("delete worktree folder '{wt}': {e}")))?;
+                let wt_path = Path::new(wt);
+                if wt_path.exists() {
+                    let aside = trash_path(wt_path);
+                    rename_retry(wt_path, &aside).map_err(|e| {
+                        AppError::Other(format!("delete worktree folder '{wt}': {e}"))
+                    })?;
+                    trash = Some(aside);
+                }
             }
         }
 
@@ -403,14 +433,65 @@ impl AgentService {
                 let _ = self.git.remove_worktree(pp, wt_name, disposal);
             }
         }
-        let c = self.db.lock().unwrap();
-        let n = c
-            .execute("DELETE FROM agents WHERE id = ?1", [id.to_string()])
-            .map_err(DbError::Sqlite)?;
+        let n = {
+            let c = self.db.lock().unwrap();
+            c.execute("DELETE FROM agents WHERE id = ?1", [id.to_string()])
+                .map_err(DbError::Sqlite)?
+        };
         if n == 0 {
             return Err(AgentError::NotFound(id.to_string()).into());
         }
+        if let Some(aside) = trash {
+            Self::purge_in_background(aside);
+        }
         Ok(())
+    }
+
+    /// Erase a moved-aside worktree folder on its own thread. Failure only
+    /// logs: the folder is already out of the way and carries the trash marker,
+    /// so [`sweep_trash`](Self::sweep_trash) retries it on the next launch.
+    fn purge_in_background(aside: PathBuf) {
+        let spawned = std::thread::Builder::new()
+            .name("worktree-trash".into())
+            .spawn(move || {
+                let t0 = std::time::Instant::now();
+                match remove_dir_all_retry(&aside) {
+                    Ok(()) => log::info!(
+                        "purged {} in {:?}",
+                        aside.display(),
+                        t0.elapsed()
+                    ),
+                    Err(e) => log::warn!("purge of {} failed: {e}", aside.display()),
+                }
+            });
+        if let Err(e) = spawned {
+            log::warn!("worktree-trash thread: {e}");
+        }
+    }
+
+    /// Startup recovery: purge every `*.trash-*` folder left in the worktree
+    /// roots (a crash or quit mid-purge). Runs on a background thread so it
+    /// never delays setup; the default root and the configured one are both
+    /// swept because either may hold moved-aside folders.
+    pub fn sweep_trash(&self) {
+        let prefs = self.settings.get().unwrap_or_default();
+        let mut roots = vec![self.worktree_root.clone()];
+        let configured = self.effective_worktree_root(&prefs.worktree_root);
+        if configured != self.worktree_root {
+            roots.push(configured);
+        }
+        let leftovers: Vec<PathBuf> = roots
+            .iter()
+            .filter_map(|root| std::fs::read_dir(root).ok())
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir() && is_trash_dir(p))
+            .collect();
+        for dir in leftovers {
+            log::info!("sweeping leftover worktree trash {}", dir.display());
+            Self::purge_in_background(dir);
+        }
     }
 
     /// Cascade: drop every agent belonging to a project (called when the project is removed).
@@ -795,7 +876,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 mod tests {
     use super::*;
     use rusqlite::Connection;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     // a unique, persistent worktree root per service (tests don't clean it — temp dir)
     fn svc() -> AgentService {
@@ -819,6 +900,7 @@ mod tests {
 
     fn req(project_id: Uuid, name: &str) -> AgentSpawnRequest {
         AgentSpawnRequest {
+            id: None,
             project_id,
             tool: "claude".into(),
             model: "opus".into(),
@@ -828,6 +910,21 @@ mod tests {
             base: "main".into(),
             ticket_id: None,
         }
+    }
+
+    #[test]
+    fn spawn_uses_client_supplied_id() {
+        let s = svc();
+        let id = Uuid::new_v4();
+        let mut r = req(Uuid::new_v4(), "picked");
+        r.id = Some(id);
+        let a = s.spawn(r, &nogit()).unwrap();
+        assert_eq!(a.id, id, "the placeholder id becomes the row id");
+        // a second spawn under the same id must fail, not silently duplicate
+        let mut again = req(Uuid::new_v4(), "picked-2");
+        again.id = Some(id);
+        assert!(s.spawn(again, &nogit()).is_err());
+        assert_eq!(s.list().unwrap().len(), 1);
     }
 
     #[test]
@@ -1044,6 +1141,87 @@ mod tests {
         assert!(!wt.exists(), "folder deleted despite the name mismatch");
 
         std::fs::remove_dir_all(&first.worktree).ok();
+    }
+
+    /// Wait (bounded) for the background purge to erase every trash sibling.
+    fn wait_for_trash_gone(root: &Path) -> bool {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let left = std::fs::read_dir(root)
+                .map(|d| d.flatten().any(|e| is_trash_dir(&e.path())))
+                .unwrap_or(false);
+            if !left {
+                return true;
+            }
+            if std::time::Instant::now() > deadline {
+                return false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
+    /// Hard delete moves the folder aside first (the row can drop at once) and
+    /// the files disappear shortly after, from a background thread.
+    #[test]
+    fn remove_hard_moves_folder_aside_then_purges() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "aside"), &nogit()).unwrap();
+        let wt = PathBuf::from(&a.worktree);
+        std::fs::create_dir_all(wt.join("node_modules/pkg")).unwrap();
+        std::fs::write(wt.join("node_modules/pkg/index.js"), "x").unwrap();
+
+        s.remove(a.id, None, WorktreeDisposal::DeleteFolder).unwrap();
+
+        assert!(!wt.exists(), "the recorded path is gone on return");
+        assert_eq!(s.list().unwrap().len(), 0, "row gone on return");
+        assert!(
+            wait_for_trash_gone(wt.parent().unwrap()),
+            "the trash sibling is purged in the background"
+        );
+    }
+
+    /// A leftover `*.trash-*` folder (crash mid-purge) is swept on the next launch.
+    #[test]
+    fn sweep_trash_removes_leftovers() {
+        let s = svc();
+        let root = s.worktree_root.clone();
+        let leftover = trash_path(&root.join("dead"));
+        std::fs::create_dir_all(leftover.join("deep")).unwrap();
+        std::fs::write(leftover.join("deep/f.txt"), "x").unwrap();
+        let keep = root.join("alive");
+        std::fs::create_dir_all(&keep).unwrap();
+
+        s.sweep_trash();
+
+        assert!(wait_for_trash_gone(&root), "leftover trash purged");
+        assert!(keep.exists(), "a real worktree folder is untouched");
+    }
+
+    /// Windows: a handle held open below the folder makes the rename fail, and
+    /// the removal must abort with the row intact — the same contract the
+    /// in-place delete had, just without the long wait.
+    #[cfg(windows)]
+    #[test]
+    fn remove_hard_locked_folder_aborts() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "locked"), &nogit()).unwrap();
+        let wt = PathBuf::from(&a.worktree);
+        std::fs::create_dir_all(&wt).unwrap();
+        std::fs::write(wt.join("held.txt"), "x").unwrap();
+        // share_mode(0): no other opener may read, write or delete/rename
+        let _held = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(wt.join("held.txt"))
+            .unwrap();
+
+        let err = s.remove(a.id, None, WorktreeDisposal::DeleteFolder);
+        assert!(err.is_err(), "locked folder aborts the removal");
+        assert_eq!(s.list().unwrap().len(), 1, "row survives to retry from");
+        assert!(wt.join("held.txt").exists(), "nothing was moved");
+        drop(_held);
+        std::fs::remove_dir_all(&wt).ok();
     }
 
     /// A worktree that was never created on disk is not an error to hard-delete.

@@ -11,7 +11,7 @@ import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { mix } from "../utils";
 import { KjButton } from "@kouji-ui/core";
-import { KjDividerComponent } from "@kouji-ui/components";
+import { KjDividerComponent, KjSpinnerComponent } from "@kouji-ui/components";
 
 /**
  * Collapsed sidebar: a 54px rail of project icons. Hovering a project pops a
@@ -21,7 +21,7 @@ import { KjDividerComponent } from "@kouji-ui/components";
 @Component({
   selector: "app-compact-rail",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, StatusDotComponent, ToolBadgeComponent, KjButton, KjDividerComponent],
+  imports: [IconComponent, StatusDotComponent, ToolBadgeComponent, KjButton, KjDividerComponent, KjSpinnerComponent],
   template: `
     <aside
       style="display:flex;flex-direction:column;align-items:center;min-height:0;width:54px;background:var(--panel);border-right:1px solid var(--hair);padding:var(--sp-4) 0;gap:var(--sp-2);position:relative"
@@ -138,14 +138,21 @@ import { KjDividerComponent } from "@kouji-ui/components";
             @for (ag of hoverAgents(); track ag.id) {
               <div
                 class="row-hover"
-                draggable="true"
+                [class.pending]="!!ag.transition"
+                [attr.draggable]="ag.transition ? null : 'true'"
                 (dragstart)="drag.start({ kind: 'agent', agentId: ag.id }); $event.dataTransfer!.effectAllowed = 'copy'"
                 (dragend)="drag.end()"
                 (click)="ui.openAgent(ag.id)"
                 (contextmenu)="ui.openMenu($event, agentActions.agentMenu(ag.id))"
                 style="display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-4);border-radius:6px;cursor:pointer"
+                [style.opacity]="ag.transition ? 0.55 : null"
+                [style.pointer-events]="ag.transition ? 'none' : null"
               >
-                <app-status-dot [status]="ag.status" />
+                @if (ag.transition) {
+                  <kj-spinner kjSize="xs" [kjAriaLabel]="ag.transition" />
+                } @else {
+                  <app-status-dot [status]="ag.status" />
+                }
                 <span class="trunc" style="flex:1">{{ ag.name }}</span>
                 @if (needsAgent(ag)) {
                   <span style="width:var(--sp-2);height:var(--sp-2);border-radius:50%;background:var(--st-blocked)"></span>

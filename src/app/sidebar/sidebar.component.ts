@@ -3,6 +3,7 @@ import { Agent, Project } from "../models";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { ProjectActionsService } from "../projects/project-actions.service";
+import { AgentsStore } from "../stores/agents.store";
 import { TicketsStore } from "../stores/tickets.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -148,6 +149,7 @@ export class SidebarComponent {
   readonly ui = inject(UiStore);
   readonly projects = inject(ProjectActionsService);
   readonly runtime = inject(AgentRuntimeService);
+  private readonly agentsStore = inject(AgentsStore);
   private readonly ticketsStore = inject(TicketsStore);
   readonly collapsed = signal<Record<string, boolean>>({});
 
@@ -176,7 +178,10 @@ export class SidebarComponent {
    */
   readonly groups = computed<{ project: Project; agents: Agent[] }[]>(() => {
     const q = this.ui.query().trim().toLowerCase();
-    const agents = this.runtime.agents();
+    // spawn placeholders ride along until agent://created lands under their id
+    const live = this.runtime.agents();
+    const liveIds = new Set(live.map((a) => a.id));
+    const agents = [...live, ...this.agentsStore.pendingAgents().filter((p) => !liveIds.has(p.id))];
     const byProject = new Map<string, Agent[]>();
     for (const a of agents) {
       const list = byProject.get(a.projectId);

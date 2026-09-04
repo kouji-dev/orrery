@@ -100,3 +100,29 @@ describe("AgentsStore multiplexed output", () => {
     ]);
   });
 });
+
+describe("AgentsStore spawn placeholders (instant sidebar feedback)", () => {
+  const placeholder = {
+    id: "ph-1", projectId: "p1", tool: "claude", model: "m", name: "new-agent", task: "",
+    status: "idle", branch: "", worktree: "", base: "main", commits: 0, elapsed: 0, progress: 0,
+    pending: [], transition: "creating",
+  } as const;
+
+  it("spawn threads the client-generated id into the AgentSpawn payload", () => {
+    const { bridge, invokes } = fakeBridge();
+    const store = makeStore(bridge);
+    void store.spawn({ id: "ph-1", projectId: "p1", tool: "claude", model: "m", effort: null, name: "n", task: "", base: "main" });
+    const call = invokes.find((c) => c.command === Commands.AgentSpawn);
+    expect((call?.payload as { req: { id: string } }).req.id).toBe("ph-1");
+  });
+
+  it("placeholders show in pendingAgents but never in all()", () => {
+    const { bridge } = fakeBridge();
+    const store = makeStore(bridge);
+    store.addPlaceholder({ ...placeholder });
+    expect(store.pendingAgents().map((a) => a.id)).toEqual(["ph-1"]);
+    expect(store.all()).toEqual([]);
+    store.dropPlaceholder("ph-1");
+    expect(store.pendingAgents()).toEqual([]);
+  });
+});

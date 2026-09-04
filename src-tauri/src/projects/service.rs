@@ -75,6 +75,11 @@ impl ProjectService {
         }
     }
 
+    /// The git handle, for command modules that act on a project path directly.
+    pub fn git(&self) -> &GitService {
+        &self.git
+    }
+
     pub fn detect_git(&self, path: &str) -> bool {
         self.git.detect(Path::new(path))
     }

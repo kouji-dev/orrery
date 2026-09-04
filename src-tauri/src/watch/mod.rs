@@ -157,30 +157,20 @@ fn dedup_roots(mut roots: Vec<PathBuf>) -> Vec<PathBuf> {
 /// disk (a configured worktreeRoot outside the project folder) get their own
 /// root, so they are covered too. Non-repos key on the path itself.
 fn project_key_and_roots(path: &Path) -> (PathBuf, Vec<PathBuf>) {
-    match git2::Repository::open(path) {
-        Ok(repo) => {
-            let common = repo.commondir().to_path_buf();
+    match crate::git::service::GitService::new().repo_layout(path) {
+        Some(layout) => {
             let mut roots = vec![
                 path.to_path_buf(),
-                repo.path().to_path_buf(),
-                common.clone(),
+                layout.gitdir.clone(),
+                layout.common_dir.clone(),
             ];
-            if let Ok(main) = git2::Repository::open(&common) {
-                if let Some(wd) = main.workdir() {
-                    roots.push(wd.to_path_buf());
-                }
-                if let Ok(names) = main.worktrees() {
-                    for n in names.iter() {
-                        let Ok(Some(n)) = n else { continue };
-                        if let Ok(wt) = main.find_worktree(n) {
-                            roots.push(wt.path().to_path_buf());
-                        }
-                    }
-                }
+            if let Some(wd) = layout.main_workdir {
+                roots.push(wd);
             }
-            (common, dedup_roots(roots))
+            roots.extend(layout.worktrees.into_iter().map(|(_, p)| p));
+            (layout.common_dir, dedup_roots(roots))
         }
-        Err(_) => (path.to_path_buf(), vec![path.to_path_buf()]),
+        None => (path.to_path_buf(), vec![path.to_path_buf()]),
     }
 }
 
@@ -356,10 +346,9 @@ impl WatchService {
         // linked worktree's commits/checkouts touch only `.git/worktrees/<n>/`
         // in the main repo — already handled today; keep routing them here).
         let mut agent_roots = vec![path.clone()];
-        if let Ok(repo) = git2::Repository::open(&path) {
-            let gitdir = repo.path().to_path_buf();
-            if !gitdir.starts_with(&path) {
-                agent_roots.push(gitdir);
+        if let Some(layout) = crate::git::service::GitService::new().repo_layout(&path) {
+            if !layout.gitdir.starts_with(&path) {
+                agent_roots.push(layout.gitdir);
             }
         }
 

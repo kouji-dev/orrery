@@ -143,6 +143,9 @@ export interface Agent {
   blockReason?: string;
   waitReason?: string;
   pending: PendingItem[];
+  /** UI-only: the row is a placeholder for an agent being created, or a live
+   *  agent whose removal is in flight. Never sent by the backend. */
+  transition?: "creating" | "removing";
   // (worktree-scoped transients — file tree / git status / branch commits — live
   // in AgentWorkStore as per-agent Loadable maps, NOT on the Agent record)
 }

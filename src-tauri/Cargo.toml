@@ -33,7 +33,13 @@ log = "0.4.32"
 rusqlite = { version = "0.40.0", features = ["bundled"] }
 uuid = { version = "1.23.2", features = ["v4", "serde"] }
 thiserror = "2.0.18"
-git2 = "0.21.0"
+# gitoxide: the git backend (see git/backend.rs). libgit2 is a test-only oracle below.
+# No network features on purpose — clone/push/fetch/pull stay on the system git CLI.
+gix = { version = "0.87", default-features = false, features = [
+    "max-performance", "parallel", "sha1", "index", "attributes", "excludes", "status",
+    "dirwalk", "blob-diff", "revision", "worktree-mutation", "merge", "blame", "progress-tree",
+] }
+gix-worktree-state = "0.34"
 ignore = "0.4.23"
 # find-in-files (B3.1): ripgrep's engine as a library — no bundled rg binary
 grep-searcher = "0.1"
@@ -77,4 +83,7 @@ webview2-com = "0.38"
 libc = "0.2"
 
 [dev-dependencies]
+# libgit2 is no longer linked into the app: the backend is gitoxide. It stays
+# here as the independent ORACLE the backend tests assert against.
+git2 = "0.21.0"
 tempfile = "3.27.0"
