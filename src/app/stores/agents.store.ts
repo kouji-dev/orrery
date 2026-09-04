@@ -1,4 +1,4 @@
-import { inject, Injectable } from "@angular/core";
+import { computed, inject, Injectable, signal } from "@angular/core";
 import {
   AgentDigestEntry,
   AgentOutputEntry,
@@ -40,6 +40,22 @@ export class AgentsStore {
   readonly all = this.store.all;
   readonly loading = this.store.loading;
 
+  /** Placeholder rows for spawns in flight, keyed by the id the frontend
+   *  generated and sent along. Kept OUT of `all()` on purpose: the runtime
+   *  service watches every id in `all()`, and a placeholder has no worktree
+   *  to watch yet. The sidebar merges them in for display only. */
+  private placeholders = signal<Record<string, Agent>>({});
+  readonly pendingAgents = computed(() => Object.values(this.placeholders()));
+  addPlaceholder(a: Agent) {
+    this.placeholders.update((m) => ({ ...m, [a.id]: a }));
+  }
+  dropPlaceholder(id: string) {
+    this.placeholders.update((m) => {
+      const { [id]: _drop, ...rest } = m;
+      return rest;
+    });
+  }
+
   private facade = bindFacade(this.store, this.bridge, {
     listCommand: Commands.AgentList,
     events: {
@@ -78,6 +94,9 @@ export class AgentsStore {
 
   // ---- mutations: invoke only; the store updates from agent:// events ----
   spawn(req: {
+    /** Client-generated uuid, so the placeholder row and the created agent
+     *  share one id (the backend falls back to its own when absent). */
+    id?: string;
     projectId: string;
     tool: string;
     model: string;

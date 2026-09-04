@@ -93,6 +93,41 @@ test("Source branch scrolls inside its panel instead of filling the viewport", a
   expect(box.client).toBeLessThan(box.viewport / 2);
 });
 
+test("a long source-branch name stays on one line with an ellipsis, and the dialog keeps its width", async ({ page }) => {
+  await openSpawn(page);
+  const long = "feat/" + "a-very-long-branch-name-segment-".repeat(4) + "end";
+  // seed the long branch and select it through the store, like a real click would
+  await page.evaluate(`(() => {
+    const b = window.ng.getComponent(document.querySelector("app-top-bar"));
+    const store = b.projects["projectsStore"]["store"];
+    const p = store.all().find((x) => x.name === "payments-service");
+    store.upsert({ ...p, branches: [...p.branches, ${JSON.stringify(long)}] });
+    window.ng.getComponent(document.querySelector("app-spawn-modal")).branch.set(${JSON.stringify(long)});
+  })()`);
+  const trigger = picker(page, 1);
+  await expect(trigger).toContainText("a-very-long-branch-name-segment");
+  const geom = await trigger.evaluate((el) => {
+    const label = el.querySelector(".kj-select-trigger-label")!;
+    const cs = getComputedStyle(label);
+    const dialog = el.closest(".kj-dialog")!.getBoundingClientRect();
+    return {
+      overflow: cs.textOverflow,
+      wrap: cs.whiteSpace,
+      clipped: label.scrollWidth > label.clientWidth,
+      height: el.getBoundingClientRect().height,
+      dialogW: dialog.width,
+      lineH: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4,
+    };
+  });
+  expect(geom.overflow).toBe("ellipsis");
+  expect(geom.wrap).toBe("nowrap");
+  expect(geom.clipped).toBe(true);
+  // one line: the trigger is nowhere near two lines tall
+  expect(geom.height).toBeLessThan(geom.lineH * 2);
+  // the card did not stretch past its fixed width (540px on the density ramp)
+  expect(geom.dialogW).toBeLessThanOrEqual(560);
+});
+
 test("Ticket is the same kouji picker as Model, with its status groups intact", async ({ page }) => {
   await openSpawn(page);
   // the native <select> it used to be is gone

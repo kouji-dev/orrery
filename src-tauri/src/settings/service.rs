@@ -59,6 +59,28 @@ impl SettingsService {
             .unwrap_or_default())
     }
 
+    /// Read one auxiliary row of the settings table — app bookkeeping that is
+    /// not a user preference (and so stays out of [`Settings`]), keyed by
+    /// module. `None` when the key was never written.
+    pub fn get_kv(&self, key: &str) -> AppResult<Option<String>> {
+        let c = self.db.lock().unwrap();
+        c.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0))
+            .optional()
+            .map_err(|e| DbError::Sqlite(e).into())
+    }
+
+    /// Upsert one auxiliary row (see [`get_kv`](Self::get_kv)).
+    pub fn set_kv(&self, key: &str, value: &str) -> AppResult<()> {
+        let c = self.db.lock().unwrap();
+        c.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            rusqlite::params![key, value],
+        )
+        .map_err(DbError::Sqlite)?;
+        Ok(())
+    }
+
     /// Persist the whole document (upsert the one row).
     pub fn set(&self, settings: &Settings) -> AppResult<()> {
         let json = serde_json::to_string(settings)
@@ -148,5 +170,21 @@ mod tests {
         let got = s.get().unwrap();
         assert_eq!(got.channel, "beta");
         assert_eq!(got.update_policy, "notify", "missing keys default");
+    }
+
+    #[test]
+    fn kv_rows_are_independent_of_the_settings_document() {
+        let db: DB = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        let svc = SettingsService::new(db);
+        assert_eq!(svc.get_kv("defender_exclusion").unwrap(), None);
+        svc.set_kv("defender_exclusion", "{\"state\":\"applied\"}").unwrap();
+        assert_eq!(
+            svc.get_kv("defender_exclusion").unwrap().as_deref(),
+            Some("{\"state\":\"applied\"}")
+        );
+        svc.set_kv("defender_exclusion", "x").unwrap();
+        assert_eq!(svc.get_kv("defender_exclusion").unwrap().as_deref(), Some("x"));
+        // the main document is untouched
+        assert_eq!(svc.get().unwrap(), Settings::default());
     }
 }

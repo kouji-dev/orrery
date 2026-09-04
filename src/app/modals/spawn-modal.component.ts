@@ -114,12 +114,15 @@ function slugName(title: string): string {
         <div class="scroll-y" style="padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-7);flex:1">
           <!-- project + branch -->
           <div style="display:flex;gap:var(--sp-6)">
-            <div style="flex:1">
+            <!-- min-width:0 on both columns: a flex item defaults to
+                 min-width:auto, so a long branch name inside the select would
+                 widen the column past the card instead of being clipped -->
+            <div style="flex:1;min-width:0">
               <label class="field-label">Project</label>
               <app-select [value]="projectId()" [options]="projectOptions()" (valueChange)="setProject($event)" />
               <div class="trunc" style="font-size:var(--fs-meta);color:var(--ink-4);margin-top:var(--sp-3)">{{ proj.path }}</div>
             </div>
-            <div style="flex:1">
+            <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3)">
                 <label class="field-label" style="margin-bottom:0">Source branch</label>
                 <button
@@ -173,7 +176,7 @@ function slugName(title: string): string {
                 placeholder="e.g. fix-login-bug"
               />
             </kj-input-group>
-            <kj-field-help>unique per project · becomes the worktree → <span style="color:var(--ink-3)">{{ worktreePreview() }}</span></kj-field-help>
+            <kj-field-help class="trunc">unique per project · becomes the worktree → <span style="color:var(--ink-3)">{{ worktreePreview() }}</span></kj-field-help>
           </kj-field>
 
           <!-- agent tool -->

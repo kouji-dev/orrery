@@ -8,6 +8,7 @@ mod appicon;
 pub mod cli;
 mod core;
 mod cost;
+mod defender;
 mod fs;
 mod git;
 mod history;
@@ -88,6 +89,9 @@ pub fn run() {
             let ticket_service = TicketService::new(pool.clone());
             let agent_service =
                 AgentService::new(pool, git, worktree_root, settings_service.clone());
+            // A hard delete renames the worktree aside and purges it in the
+            // background; a crash mid-purge leaves a `*.trash-*` sibling behind.
+            agent_service.sweep_trash();
             // Snapshot in-flight agents BEFORE reconciling: reset_running flips
             // them to idle, and the auto-resume flow (agents_interrupted, a
             // one-shot drain) needs to know who was interrupted by the restart.
@@ -134,6 +138,13 @@ pub fn run() {
                     }),
                 );
             }
+            // Windows: make sure the worktree root is excluded from Defender's
+            // real-time scanning (one UAC prompt when it is not yet; see defender.rs).
+            defender::ensure_on_startup(
+                agent_service.clone(),
+                settings_service.clone(),
+                app.package_info().version.to_string(),
+            );
             app.manage(settings_service);
             app.manage(project_service);
             app.manage(ticket_service);

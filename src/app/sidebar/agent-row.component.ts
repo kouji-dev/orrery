@@ -8,18 +8,20 @@ import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
+import { KjSpinnerComponent } from "@kouji-ui/components";
 import { fmtDur } from "../utils";
 
 @Component({
   selector: "app-agent-row",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusDotComponent, ToolBadgeComponent, IconComponent],
+  imports: [StatusDotComponent, ToolBadgeComponent, IconComponent, KjSpinnerComponent],
   template: `
     @let ag = agent();
     <div
       class="agent-row row-hover"
       [class.active]="active()"
-      draggable="true"
+      [class.pending]="!!ag.transition"
+      [attr.draggable]="ag.transition ? null : 'true'"
       (dragstart)="drag.start({ kind: 'agent', agentId: ag.id }); $event.dataTransfer!.effectAllowed = 'copy'"
       (dragend)="drag.end()"
       (click)="ui.openAgent(ag.id)"
@@ -31,7 +33,11 @@ import { fmtDur } from "../utils";
         <span style="position:absolute;left:-8px;top:7px;bottom:7px;width:2.5px;border-radius:3px;background:var(--ui-ind)"></span>
       }
       <div style="display:flex;align-items:center;gap:var(--sp-3)">
-        <app-status-dot [status]="ag.status" />
+        @if (ag.transition) {
+          <kj-spinner kjSize="xs" [kjAriaLabel]="ag.transition" />
+        } @else {
+          <app-status-dot [status]="ag.status" />
+        }
         <span class="trunc" style="color:var(--ink);font-weight:var(--fw-medium)">{{ ag.name }}</span>
         @if (needs()) {
           <span style="width:var(--sp-2);height:var(--sp-2);border-radius:50%;background:var(--st-blocked);flex:none"></span>
@@ -41,7 +47,7 @@ import { fmtDur } from "../utils";
       </div>
       <div style="display:flex;align-items:center;gap:var(--sp-3);padding-left:var(--sp-7)">
         <app-icon size="md" name="branch" color="var(--ink-4)" />
-        <span class="trunc" style="font-size:var(--fs-meta);color:var(--ink-3)">{{ ag.branch.replace('agent/', '') }}</span>
+        <span class="trunc" style="font-size:var(--fs-meta);color:var(--ink-3)">{{ transitionLabel() ?? ag.branch.replace('agent/', '') }}</span>
         @if (tot(); as t) {
           @if (t.files > 0) {
             <span class="tnum" style="margin-left:auto;font-size:var(--fs-meta);display:flex;gap:var(--sp-2);flex:none">
@@ -67,6 +73,15 @@ import { fmtDur } from "../utils";
       .agent-row:not(.active) {
         border: 1px solid transparent;
       }
+      /* a row in transition is read-only: no open, no menu, no drag */
+      .agent-row.pending {
+        opacity: 0.55;
+        pointer-events: none;
+      }
+      .agent-row.pending kj-spinner {
+        display: inline-flex;
+        flex: none;
+      }
     `,
   ],
 })
@@ -87,6 +102,17 @@ export class AgentRowComponent {
    *  scans) — NOT from changesFor, whose entries are LRU-evicted and whose
    *  counts-only background scans would show +0 −0. */
   readonly tot = computed(() => this.work.totalsFor(this.agent().id));
+  /** Branch-line text while the row is a placeholder / being removed. */
+  readonly transitionLabel = computed(() => {
+    switch (this.agent().transition) {
+      case "creating":
+        return "creating worktree…";
+      case "removing":
+        return "removing…";
+      default:
+        return null;
+    }
+  });
   readonly needs = computed(() => {
     const ag = this.agent();
     return (

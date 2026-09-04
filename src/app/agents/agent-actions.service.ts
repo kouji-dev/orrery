@@ -178,10 +178,36 @@ export class AgentActionsService {
     const proj = this.projects.all().find((p) => p.id === req.projectId);
     this.ui.closeSpawn();
 
+    // The worktree checkout behind agent_spawn can take many seconds on a big
+    // repo, so the row shows up NOW as a placeholder under the id we generate
+    // here; agent://created lands under the same id and simply replaces it.
+    const id = crypto.randomUUID();
+    this.agentsStore.addPlaceholder({
+      id,
+      projectId: req.projectId,
+      ...(req.ticketId ? { ticketId: req.ticketId } : {}),
+      tool: req.toolId,
+      model: req.model,
+      effort: req.effort,
+      name,
+      task: req.prompt,
+      status: "idle",
+      branch: "",
+      worktree: "",
+      base: req.branch,
+      started: false,
+      commits: 0,
+      elapsed: 0,
+      progress: 0,
+      pending: [],
+      transition: "creating",
+    });
+
     // round-trip: backend persists the agent + emits agent://created → store upserts it
     let ag: Agent;
     try {
       ag = await this.agentsStore.spawn({
+        id,
         projectId: req.projectId,
         tool: req.toolId,
         model: req.model,
@@ -194,9 +220,10 @@ export class AgentActionsService {
     } catch (e) {
       this.ui.flash((e as { message?: string })?.message ?? "spawn failed");
       return;
+    } finally {
+      this.agentsStore.dropPlaceholder(id);
     }
 
-    const id = ag.id;
     const where = proj ? " in " + proj.name : "";
     if (req.start) {
       // Spawn: open the agent's terminal and launch its process now — its initial
@@ -273,9 +300,12 @@ export class AgentActionsService {
     // backend kills the PTY again inside agent_remove as the hard guarantee.
     if (ag?.status === "running") this.runtime.stopProcess(id);
     this.ui.closeTabsForAgent(id);
+    // the row dims at once; a hard delete can spend seconds on the folder
+    this.runtime.patchRuntime(id, { transition: "removing" });
     try {
       await this.agentsStore.remove(id, hard);
     } catch {
+      this.runtime.patchRuntime(id, { transition: undefined });
       // A hard delete fails as a unit — the backend aborts before touching git
       // or the database — so the agent really is still there in both cases.
       this.ui.flash(

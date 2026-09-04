@@ -10,8 +10,6 @@ use crate::projects::service::ProjectService;
 use crate::runtime::RuntimeService;
 use crate::settings::SettingsService;
 
-// git2 is used directly in the git-inspection commands below
-use git2;
 use crate::tickets::service::TicketService;
 use crate::watch::WatchService;
 
@@ -666,9 +664,7 @@ pub async fn agent_commit_diff(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_commit_diff", || {
             let agent = svc.get(id)?;
-            let repo = git2::Repository::open(&agent.worktree)
-                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
-            crate::git::service::GitService::new().commit_files(&repo, &sha)
+            svc.git().commit_files(std::path::Path::new(&agent.worktree), &sha)
         })
     })
     .await
@@ -687,9 +683,7 @@ pub async fn agent_commit_file_diff(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_commit_file_diff", || {
             let agent = svc.get(id)?;
-            let repo = git2::Repository::open(&agent.worktree)
-                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
-            crate::git::service::GitService::new().commit_file_diff(&repo, &sha, &path)
+            svc.git().commit_file_diff(std::path::Path::new(&agent.worktree), &sha, &path)
         })
     })
     .await
@@ -722,28 +716,17 @@ pub async fn agent_range_files(
                 return Err(AppError::Other("shas must not be empty".into()));
             }
             let agent = svc.get(id)?;
-            let repo = git2::Repository::open(&agent.worktree)
-                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
-            let git = crate::git::service::GitService::new();
+            let wt = std::path::Path::new(&agent.worktree);
 
             // Resolve all shas and sort by commit time (ascending)
             let mut commits: Vec<(i64, String)> = shas
                 .iter()
-                .map(|sha| {
-                    let oid = repo
-                        .revparse_single(sha)
-                        .map_err(|e| AppError::Other(format!("resolve '{sha}': {e}")))?
-                        .id();
-                    let commit = repo
-                        .find_commit(oid)
-                        .map_err(|e| AppError::Other(format!("find '{sha}': {e}")))?;
-                    Ok((commit.time().seconds(), oid.to_string()))
-                })
+                .map(|sha| svc.git().commit_time(wt, sha))
                 .collect::<AppResult<Vec<_>>>()?;
             commits.sort_by_key(|(t, _)| *t);
             let from = commits.first().map(|(_, s)| s.clone()).unwrap();
             let to = commits.last().map(|(_, s)| s.clone()).unwrap();
-            let files = git.range_diff(&repo, &from, &to)?;
+            let files = svc.git().range_diff(wt, &from, &to)?;
             Ok(RangeFiles { files, from, to })
         })
     })
@@ -764,9 +747,7 @@ pub async fn agent_range_file_diff(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_range_file_diff", || {
             let agent = svc.get(id)?;
-            let repo = git2::Repository::open(&agent.worktree)
-                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
-            crate::git::service::GitService::new().range_file_diff(&repo, &from, &to, &path)
+            svc.git().range_file_diff(std::path::Path::new(&agent.worktree), &from, &to, &path)
         })
     })
     .await
@@ -785,9 +766,7 @@ pub async fn agent_blame(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_blame", || {
             let agent = svc.get(id)?;
-            let repo = git2::Repository::open(&agent.worktree)
-                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
-            crate::git::service::GitService::new().blame(&repo, &path, rev.as_deref())
+            svc.git().blame(std::path::Path::new(&agent.worktree), &path, rev.as_deref())
         })
     })
     .await
@@ -807,10 +786,7 @@ pub async fn agent_file_history(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_file_history", || {
             let agent = svc.get(id)?;
-            let repo = git2::Repository::open(&agent.worktree)
-                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
-            crate::git::service::GitService::new().file_history(
-                &repo,
+            svc.git().file_history(std::path::Path::new(&agent.worktree),
                 &path,
                 limit.unwrap_or(100),
                 offset.unwrap_or(0),
@@ -840,9 +816,7 @@ pub async fn agent_working_blame(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_working_blame", || {
             let agent = svc.get(id)?;
-            let repo = git2::Repository::open(&agent.worktree)
-                .map_err(|e| AppError::Other(format!("open repo: {e}")))?;
-            let (old, new) = crate::git::service::GitService::new().working_blame(&repo, &path)?;
+            let (old, new) = svc.git().working_blame(std::path::Path::new(&agent.worktree), &path)?;
             Ok(WorkingBlame { old, new })
         })
     })
@@ -867,8 +841,7 @@ pub async fn agent_merge(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_merge", || {
             let agent = svc.get(id)?;
-            crate::git::service::GitService::new()
-                .merge(std::path::Path::new(&agent.worktree), &branch)
+            svc.git().merge(std::path::Path::new(&agent.worktree), &branch)
         })
     })
     .await
@@ -886,8 +859,7 @@ pub async fn agent_conflicts(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_conflicts", || {
             let agent = svc.get(id)?;
-            crate::git::service::GitService::new()
-                .conflict_files(std::path::Path::new(&agent.worktree))
+            svc.git().conflict_files(std::path::Path::new(&agent.worktree))
         })
     })
     .await
@@ -906,7 +878,7 @@ pub async fn agent_conflict_resolve(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_conflict_resolve", || {
             let agent = svc.get(id)?;
-            crate::git::service::GitService::new().conflict_resolve(
+            svc.git().conflict_resolve(
                 std::path::Path::new(&agent.worktree),
                 &path,
                 &content,
@@ -924,8 +896,7 @@ pub async fn agent_merge_abort(svc: State<'_, AgentService>, id: Uuid) -> AppRes
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_merge_abort", || {
             let agent = svc.get(id)?;
-            crate::git::service::GitService::new()
-                .merge_abort(std::path::Path::new(&agent.worktree))
+            svc.git().merge_abort(std::path::Path::new(&agent.worktree))
         })
     })
     .await
@@ -943,8 +914,7 @@ pub async fn agent_merge_continue(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_merge_continue", || {
             let agent = svc.get(id)?;
-            crate::git::service::GitService::new()
-                .merge_continue(std::path::Path::new(&agent.worktree), message.as_deref())
+            svc.git().merge_continue(std::path::Path::new(&agent.worktree), message.as_deref())
         })
     })
     .await
@@ -961,8 +931,7 @@ pub async fn agent_session_state(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_session_state", || {
             let agent = svc.get(id)?;
-            crate::git::service::GitService::new()
-                .session_state(std::path::Path::new(&agent.worktree))
+            svc.git().session_state(std::path::Path::new(&agent.worktree))
         })
     })
     .await

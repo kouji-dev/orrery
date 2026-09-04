@@ -61,6 +61,11 @@ pub struct Agent {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSpawnRequest {
+    /// Client-chosen id (optional). The sidebar shows a placeholder row under
+    /// this id the moment Create is clicked, so the real row that arrives on
+    /// `agent://created` replaces it in place instead of appearing next to it.
+    #[serde(default)]
+    pub id: Option<Uuid>,
     pub project_id: Uuid,
     pub tool: String,
     pub model: String,
