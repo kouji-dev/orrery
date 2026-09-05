@@ -51,6 +51,19 @@ impl AgentAdapter for ClaudeAdapter {
         }
     }
 
+    // Claude Code has a per-session effort knob: `--effort <level>` with
+    // `low | medium | high | xhigh | max` (per `claude --help`, 2.1.x). Which
+    // levels a given model accepts is the frontend catalog's business (Opus 4.6
+    // / Sonnet 4.6 have no `xhigh`, Haiku none at all); an empty effort adds
+    // nothing so the session runs on Claude Code's own default.
+    fn effort_args(&self, effort: &str) -> Vec<String> {
+        if effort.is_empty() {
+            Vec::new()
+        } else {
+            vec!["--effort".into(), effort.into()]
+        }
+    }
+
     // Claude Code's permission prompt is a numbered/arrow SELECT list, not a
     // literal y/n: "1. Yes  2. Yes, don't ask again  3. No" (verified via the
     // docs — option count varies, e.g. some prompts show "2. Yes, and allow …").

@@ -5,18 +5,23 @@
  * and the bottom CTA band — one implementation, three placements.
  *
  * Baked state (no JS data yet / API failed): primary CTA links the GitHub
- * /releases/latest PAGE in a new tab; the dropdown holds just "All releases".
- * version.js fetches the latest release and calls update(data) on every
- * instance with {tag, exe, msi, dmg} — the CTA then becomes a direct download
- * for the visitor's OS (mac → .dmg, otherwise NSIS -setup.exe) and the dropdown
- * is rebuilt with the OTHER installers.
+ * /releases/latest PAGE in a new tab; the dropdown holds the macOS
+ * "coming soon" row and "All releases". version.js fetches the latest release
+ * and calls update(data) on every instance with {tag, exe, msi, dmg} — the CTA
+ * then becomes a direct download of the NSIS -setup.exe and the dropdown is
+ * rebuilt with the .msi.
+ *
+ * macOS is NOT offered yet: the CTA is the Windows installer for every visitor
+ * (a mac visitor gets the same button — there is nothing else to hand them),
+ * and the dropdown carries a disabled "macOS · coming soon" row so the plan is
+ * visible without a dead link. A .dmg asset in a release is ignored until the
+ * mac build ships; to re-enable, restore the per-OS branch in update().
  *
  * Attributes: size="sm" — nav-sized button, dropdown right-aligned. */
 (function () {
   "use strict";
   var LATEST_PAGE = "https://github.com/kouji-dev/orrery-releases/releases/latest";
   var RELEASES_PAGE = "https://github.com/kouji-dev/orrery-releases/releases";
-  var IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || "") || /Macintosh/.test(navigator.userAgent || "");
 
   var ICONS = {
     win: '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 5.5 10.2 4.5V11H3V5.5ZM10.2 12v6.5L3 17.5V12h7.2ZM11.4 4.3 21 3v8.5h-9.6V4.3ZM21 12.5V21l-9.6-1.3V12.5H21Z"/></svg>',
@@ -40,6 +45,21 @@
     return a;
   }
 
+  /** The disabled macOS row: same layout as a .dl-item, but a <span> — no href,
+   *  no click — flagged aria-disabled so assistive tech reads it as such. */
+  function macSoonItem() {
+    var s = document.createElement("span");
+    s.className = "dl-item soon";
+    s.setAttribute("aria-disabled", "true");
+    s.innerHTML = ICONS.mac; // fixed markup — text attached safely below
+    s.appendChild(document.createTextNode("macOS · Apple Silicon"));
+    var sub = document.createElement("span");
+    sub.className = "dl-item-sub";
+    sub.textContent = "coming soon";
+    s.appendChild(sub);
+    return s;
+  }
+
   function closeAll() {
     var open = document.querySelectorAll(".dl-split.open");
     for (var i = 0; i < open.length; i++) {
@@ -51,8 +71,9 @@
   document.addEventListener("click", closeAll);
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeAll(); });
 
-  var OS_ICON = IS_MAC ? ICONS.mac : ICONS.win;
-  var OS_LABEL = IS_MAC ? "macOS" : "Windows";
+  // Windows is the only installer on offer (see the header note on macOS).
+  var OS_ICON = ICONS.win;
+  var OS_LABEL = "Windows";
 
   class OrreryDownload extends HTMLElement {
     connectedCallback() {
@@ -69,6 +90,7 @@
         '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>' +
         '<div class="dl-menu js-dl-menu"></div>';
       var menu = split.querySelector(".js-dl-menu");
+      menu.appendChild(macSoonItem());
       menu.appendChild(menuItem("gh", "All releases on GitHub", RELEASES_PAGE, { blank: true }));
 
       var arrow = split.querySelector(".js-dl-arrow");
@@ -84,33 +106,21 @@
       this.appendChild(split);
     }
 
-    /** data: {tag, exe, msi, dmg} — installer asset URLs from the latest release. */
+    /** data: {tag, exe, msi, dmg} — installer asset URLs from the latest release.
+     *  `dmg` is deliberately unused while macOS is "coming soon" (header note). */
     update(data) {
       if (!data || !this._split) return;
       var split = this._split;
 
       var menu = split.querySelector(".js-dl-menu");
       menu.textContent = "";
-      if (IS_MAC) {
-        if (data.exe) menu.appendChild(menuItem("win", "Windows installer", data.exe, { sub: ".exe" }));
-        if (data.msi) menu.appendChild(menuItem("win", "Windows installer", data.msi, { sub: ".msi" }));
-      } else {
-        if (data.msi) menu.appendChild(menuItem("win", ".msi installer", data.msi, { sub: "per-machine" }));
-        if (data.dmg) menu.appendChild(menuItem("mac", "macOS · Apple Silicon", data.dmg, { sub: ".dmg" }));
-      }
+      if (data.msi) menu.appendChild(menuItem("win", ".msi installer", data.msi, { sub: "per-machine" }));
+      menu.appendChild(macSoonItem());
       menu.appendChild(menuItem("gh", "All releases on GitHub", RELEASES_PAGE, { blank: true }));
-      if (IS_MAC && data.dmg) {
-        // Unsigned beta build: Gatekeeper quarantines the download until cleared.
-        var hint = document.createElement("div");
-        hint.className = "dl-hint";
-        hint.textContent = "If macOS blocks the app: xattr -cr /Applications/Orrery.app";
-        menu.appendChild(hint);
-      }
 
-      var primary = IS_MAC ? data.dmg : data.exe;
-      if (!primary) return; // no matching asset (e.g. mac before first .dmg release) — baked CTA fallback stands
+      if (!data.exe) return; // no installer asset — baked CTA fallback stands
       var cta = split.querySelector(".js-dl");
-      cta.href = primary;
+      cta.href = data.exe;
       cta.removeAttribute("target"); // direct download: the page stays, the file lands
     }
   }

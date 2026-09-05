@@ -221,8 +221,8 @@ test("the four agent tiles stay on one row", async ({ page }) => {
 
 test("Reasoning effort marks the chosen level as selected", async ({ page }) => {
   await openSpawn(page);
-  // Claude exposes no effort levels — the field only exists for a tool that
-  // does, so pick Codex first (this also covers the tile picker driving it)
+  // pick Codex first so the tile picker driving the tray is covered too (the
+  // per-model behaviour of the tray lives in model-catalog.spec.ts)
   await page.locator("app-spawn-modal .tool-tile", { hasText: "Codex" }).click();
 
   const tabs = page.locator("app-spawn-modal .spawn-seg");

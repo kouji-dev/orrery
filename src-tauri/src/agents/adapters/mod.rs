@@ -228,9 +228,9 @@ pub trait AgentAdapter: Send + Sync {
     }
 
     /// Extra spawn args that set the reasoning EFFORT for this launch. Default:
-    /// NONE — most tools expose no effort flag (claude/cursor/gemini all have
-    /// `effort: false` in the frontend catalog), so the value is ignored. Tools
-    /// with a real effort knob (codex) override this.
+    /// NONE — cursor and gemini expose no effort flag (`effort: false` in the
+    /// frontend catalog), so the value is ignored. Tools with a real effort knob
+    /// (claude's `--effort`, codex's config override) override this.
     fn effort_args(&self, _effort: &str) -> Vec<String> {
         Vec::new()
     }
@@ -1299,11 +1299,21 @@ mod tests {
         }
     }
 
-    // Only codex has a reasoning-effort knob: `--config model_reasoning_effort="<v>"`
-    // (codex parses the value as TOML, hence the quotes). claude/cursor/gemini have
-    // `effort: false` in the catalog and add nothing.
+    // Two tools have a reasoning-effort knob: claude's `--effort <level>` and
+    // codex's `--config model_reasoning_effort=<v>` config override. cursor and
+    // gemini have `effort: false` in the catalog and add nothing.
     #[test]
-    fn effort_args_only_codex_emits_a_flag() {
+    fn effort_args_claude_and_codex_emit_a_flag() {
+        let claude = adapter_for("claude").unwrap();
+        assert_eq!(
+            claude.effort_args("xhigh"),
+            vec!["--effort".to_string(), "xhigh".into()],
+            "claude effort → --effort"
+        );
+        assert!(
+            claude.effort_args("").is_empty(),
+            "claude empty effort adds nothing"
+        );
         let codex = adapter_for("codex").unwrap();
         assert_eq!(
             codex.effort_args("high"),
@@ -1317,7 +1327,7 @@ mod tests {
             codex.effort_args("").is_empty(),
             "codex empty effort adds nothing"
         );
-        for tool in ["claude", "cursor", "gemini"] {
+        for tool in ["cursor", "gemini"] {
             let a = adapter_for(tool).unwrap();
             assert!(
                 a.effort_args("high").is_empty(),

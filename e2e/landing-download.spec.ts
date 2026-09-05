@@ -115,7 +115,14 @@ test("windows visitor: CTAs become direct -setup.exe downloads, dropdown holds t
   await expect(split).toHaveClass(/open/);
   const menu = split.locator(".js-dl-menu");
   await expect(menu.getByText(".msi installer")).toHaveAttribute("href", MSI);
-  await expect(menu.getByText("macOS · Apple Silicon")).toHaveAttribute("href", DMG);
+  // macOS is "coming soon": a disabled row, never a link — even though the
+  // release DOES carry a .dmg asset
+  const mac = menu.locator(".dl-item.soon");
+  await expect(mac).toContainText("macOS · Apple Silicon");
+  await expect(mac).toContainText("coming soon");
+  await expect(mac).toHaveAttribute("aria-disabled", "true");
+  await expect(mac).not.toHaveAttribute("href", /.*/);
+  await expect(menu.locator(`a[href="${DMG}"]`)).toHaveCount(0);
   await expect(menu.getByText("All releases on GitHub")).toHaveAttribute("href", /releases$/);
 
   // Items must actually be hittable (regression: a revealed section once painted
@@ -132,20 +139,21 @@ test("windows visitor: CTAs become direct -setup.exe downloads, dropdown holds t
   await expect(split).not.toHaveClass(/open/);
 });
 
-test("mac visitor: CTAs point at the .dmg with the unsigned-app hint", async ({ page }) => {
+test("mac visitor: no mac build yet — the Windows installer stays the CTA, macOS reads coming soon", async ({ page }) => {
   await open(page, { platform: "MacIntel" });
 
   for (const cta of await page.locator(".js-dl").all()) {
-    await expect(cta).toHaveAttribute("href", DMG);
+    await expect(cta).toHaveAttribute("href", EXE);
     await expect(cta).not.toHaveAttribute("target", "_blank");
   }
-  await expect(page.locator(".js-dl-label").first()).toHaveText("macOS");
+  await expect(page.locator(".js-dl-label").first()).toHaveText("Windows");
 
   const split = page.locator(".dl-split").first();
   await split.locator(".js-dl-arrow").click();
   const menu = split.locator(".js-dl-menu");
-  await expect(menu.getByText("Windows installer", { exact: false }).first()).toHaveAttribute("href", EXE);
-  await expect(menu).toContainText("xattr -cr /Applications/Orrery.app");
+  await expect(menu.locator(".dl-item.soon")).toContainText("coming soon");
+  await expect(menu.locator(`a[href="${DMG}"]`)).toHaveCount(0);
+  await expect(menu).not.toContainText("xattr"); // the Gatekeeper hint went with the .dmg
 });
 
 test("agent chips render via <orrery-agent> with brand icons", async ({ page }) => {
@@ -169,11 +177,13 @@ test("API failure: baked releases-page fallback stays untouched", async ({ page 
     await expect(cta).toHaveAttribute("target", "_blank");
   }
   await expect(page.locator(".js-dl-count")).toBeHidden();
-  // The baked dropdown still opens and offers the releases page.
+  // The baked dropdown still opens and offers the releases page (plus the
+  // static macOS "coming soon" row, which needs no release data).
   const split = page.locator(".dl-split").first();
   await split.locator(".js-dl-arrow").click();
   await expect(split).toHaveClass(/open/);
-  const items = split.locator(".dl-item");
-  await expect(items).toHaveCount(1);
-  await expect(items.first()).toHaveAttribute("href", /releases$/);
+  const links = split.locator("a.dl-item");
+  await expect(links).toHaveCount(1);
+  await expect(links.first()).toHaveAttribute("href", /releases$/);
+  await expect(split.locator(".dl-item.soon")).toContainText("coming soon");
 });

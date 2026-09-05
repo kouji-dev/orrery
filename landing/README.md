@@ -11,7 +11,7 @@ is what ships.
 | `console-mock.js` | Data-driven, faithful static render of the app's "Orchestrator" view (the product showcase). |
 | `agents.js` | `<orrery-agent>` — native custom element rendering an AI-tool brand mark + label (registry-driven; used in the hero orbit and tool strip). New agents = one sprite `<symbol>` in `index.html` + one registry entry. |
 | `dl-button.js` | `<orrery-download>` — native custom element (light DOM) for the split download button + installer dropdown, reused in the nav (`size="sm"`), hero and bottom CTA band. |
-| `version.js` | Resolves the latest release via one GitHub API call, updates `.js-ver` labels and feeds every `<orrery-download>` its direct installer URLs for the visitor's OS (mac → `.dmg`, otherwise `-setup.exe`), falling back to the releases page when offline/rate-limited. |
+| `version.js` | Resolves the latest release via one GitHub API call, updates `.js-ver` labels and feeds every `<orrery-download>` its direct installer URLs (`-setup.exe` CTA, `.msi` in the dropdown; the `.dmg` is passed along but not offered while macOS is "coming soon"), falling back to the releases page when offline/rate-limited. |
 | `changelog.html` | Self-contained changelog page, populated from real Orrery releases (`git log` on `origin/main`). |
 | `404.html` | Branded not-found page listing every URL the site publishes, plus the same links as a markdown block for agents. Render static sites have no custom-404 hook, so this only takes effect if the host ever honours a root `404.html` — see "Agent readiness" below. |
 | `llms.txt` | [llmstxt.org](https://llmstxt.org/) file: what Orrery is, **when an agent should reach for it**, and links to the other machine-readable files. |

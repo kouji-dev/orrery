@@ -72,15 +72,20 @@ import { mix } from "../utils";
           @let dz = drop()?.id === tab.id ? drop()!.zone : null;
           @let proj = !isGroup && tas[0] ? projects.projectOf(tas[0].projectId) : null;
           <div
-            (click)="ui.selectTab(tab.id)"
-            [draggable]="!isOrch"
-            (dragstart)="onDragStart($event, tab)"
-            (dragend)="onDragEnd()"
+            [attr.data-tab-id]="tab.id"
+            [attr.data-tab-kind]="tab.kind ?? 'agent'"
+            (click)="onTabClick(tab.id)"
+            (pointerdown)="onPointerDown($event, tab)"
+            (pointermove)="onPointerMove($event)"
+            (pointerup)="onPointerUp($event)"
+            (pointercancel)="cancelPointerDrag()"
             (dragover)="onDragOver($event, tab)"
             (dragleave)="onDragLeave(tab)"
             (drop)="onDrop($event, tab)"
             (contextmenu)="onTabContext($event, tab)"
             [style.opacity]="dragId() === tab.id ? 0.45 : 1"
+            [style.cursor]="dragId() ? 'grabbing' : 'pointer'"
+            [style.touch-action]="isOrch ? null : 'none'"
             [style.box-shadow]="dz === 'merge' ? 'inset 0 0 0 2px var(--ui-line)' : null"
             [style.background]="active ? 'var(--panel-2)' : (isOrch ? 'var(--panel)' : 'transparent')"
             [style.color]="active ? 'var(--ink)' : 'var(--ink-3)'"
@@ -330,35 +335,104 @@ export class TopBarComponent {
     return tk?.title ? tk.title.slice(0, 30) + (tk.title.length > 30 ? "…" : "") : "Ticket";
   }
 
-  // ----- tab drag-and-drop (group / reorder), + dropping a sidebar agent on a tab -----
-  onDragStart(e: DragEvent, tab: Tab) {
-    if (tab.kind !== "agent") return;
-    this.dragId.set(tab.id);
-    this.drag.start({ kind: "tab", tabId: tab.id, agentId: this.tabAgentIds(tab)[0] ?? null });
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+  // ----- tab drag-and-drop -----
+  // Tab -> tab (reorder / tile) runs on POINTER events, not HTML5 dnd: with
+  // `dragDropEnabled: true` (needed for OS file drops with real paths, see
+  // FileDropService) the Windows webview swallows every HTML5 drag, so
+  // `dragstart` never fires inside the app. Sidebar agent -> tab still arrives
+  // as an HTML5 drop (its payload lives in DragService), so those handlers stay.
+  private pdrag: { tab: Tab; x: number; y: number; live: boolean } | null = null;
+  private suppressClick = false;
+
+  /** Fixed tabs never move and never take a drop: Orchestrator and Backlog. */
+  isFixedTab(tab: Tab): boolean {
+    return tab.kind === "orchestrator" || tab.kind === "backlog";
   }
-  onDragEnd() {
-    this.dragId.set(null);
-    this.drop.set(null);
-    this.drag.end();
-  }
-  onDragOver(e: DragEvent, tab: Tab) {
-    const d = this.drag.payload();
-    if (!d || tab.kind === "orchestrator") return;
-    if (d.kind === "agent") {
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
-      this.drop.set({ id: tab.id, zone: "merge" });
+
+  onTabClick(id: string) {
+    if (this.suppressClick) {
+      this.suppressClick = false;
       return;
     }
-    // tab drag → before / merge / after by cursor x
-    if (d.tabId === tab.id) return;
+    this.ui.selectTab(id);
+  }
+
+  onPointerDown(e: PointerEvent, tab: Tab) {
+    if (e.button !== 0 || tab.kind !== "agent") return;
+    if ((e.target as HTMLElement | null)?.closest(".tab-x")) return;
+    this.pdrag = { tab, x: e.clientX, y: e.clientY, live: false };
+  }
+
+  onPointerMove(e: PointerEvent) {
+    const p = this.pdrag;
+    if (!p) return;
+    if (!p.live) {
+      if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < 5) return;
+      p.live = true;
+      this.dragId.set(p.tab.id);
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    }
+    this.drop.set(this.zoneAt(e.currentTarget as HTMLElement, e.clientX, e.clientY, p.tab.id));
+  }
+
+  onPointerUp(e: PointerEvent) {
+    const p = this.pdrag;
+    if (!p) return;
+    if (p.live) {
+      this.suppressClick = true;
+      const dz = this.zoneAt(e.currentTarget as HTMLElement, e.clientX, e.clientY, p.tab.id);
+      if (dz) this.applyTabDrop(p.tab.id, dz.id, dz.zone);
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    }
+    this.cancelPointerDrag();
+  }
+
+  cancelPointerDrag() {
+    this.pdrag = null;
+    this.dragId.set(null);
+    this.drop.set(null);
+  }
+
+  /** Move `srcId` next to `dstId`, or tile the two when dropped on the middle. */
+  applyTabDrop(srcId: string, dstId: string, zone: "merge" | "before" | "after") {
+    if (zone === "merge") this.ui.mergeTabs(srcId, dstId);
+    else this.ui.reorderTab(srcId, dstId, zone === "before");
+  }
+
+  /**
+   * Which tab (and which third of it) sits under the pointer while a tab is
+   * dragged. Fixed tabs and the dragged tab itself are never targets; only an
+   * agent tab offers the middle "merge" band (tiling into a ticket or project
+   * tab makes no sense), other tabs split before / after at the midline.
+   * Also nudges the strip's scroll when the pointer rides its edges.
+   */
+  zoneAt(from: HTMLElement, x: number, y: number, srcId: string): { id: string; zone: "merge" | "before" | "after" } | null {
+    const strip = from.closest(".tab-strip") as HTMLElement | null;
+    if (!strip) return null;
+    const sr = strip.getBoundingClientRect();
+    if (y < sr.top || y > sr.bottom) return null;
+    if (x < sr.left + 24) strip.scrollLeft -= 12;
+    else if (x > sr.right - 24) strip.scrollLeft += 12;
+    for (const el of Array.from(strip.querySelectorAll<HTMLElement>("[data-tab-id]"))) {
+      const id = el.dataset["tabId"]!;
+      const kind = el.dataset["tabKind"];
+      if (id === srcId || kind === "orchestrator" || kind === "backlog") continue;
+      const r = el.getBoundingClientRect();
+      if (x < r.left || x > r.right) continue;
+      const f = (x - r.left) / r.width;
+      if (kind !== "agent") return { id, zone: f < 0.5 ? "before" : "after" };
+      return { id, zone: f < 0.28 ? "before" : f > 0.72 ? "after" : "merge" };
+    }
+    return null;
+  }
+
+  // sidebar agent row dropped on a tab (HTML5 dnd, payload in DragService)
+  onDragOver(e: DragEvent, tab: Tab) {
+    const d = this.drag.payload();
+    if (!d || d.kind !== "agent" || this.isFixedTab(tab)) return;
     e.preventDefault();
-    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = e.clientX - r.left;
-    const zone = x < r.width * 0.28 ? "before" : x > r.width * 0.72 ? "after" : "merge";
-    this.drop.set({ id: tab.id, zone });
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    this.drop.set({ id: tab.id, zone: "merge" });
   }
   onDragLeave(tab: Tab) {
     this.drop.update((cur) => (cur && cur.id === tab.id ? null : cur));
@@ -366,20 +440,9 @@ export class TopBarComponent {
   onDrop(e: DragEvent, tab: Tab) {
     e.preventDefault();
     const d = this.drag.payload();
-    if (!d) {
-      this.drop.set(null);
-      return;
-    }
-    if (d.kind === "agent" && d.agentId) {
-      this.ui.addAgentToTab(d.agentId, tab.id);
-    } else if (d.kind === "tab" && d.tabId) {
-      const dz = this.drop();
-      if (dz && dz.id === tab.id) {
-        if (dz.zone === "merge") this.ui.mergeTabs(d.tabId, tab.id);
-        else this.ui.reorderTab(d.tabId, tab.id, dz.zone === "before");
-      }
-    }
-    this.onDragEnd();
+    if (d?.kind === "agent" && d.agentId && !this.isFixedTab(tab)) this.ui.addAgentToTab(d.agentId, tab.id);
+    this.drop.set(null);
+    this.drag.end();
   }
 
   onTabContext(e: MouseEvent, tab: Tab) {

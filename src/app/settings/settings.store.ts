@@ -1,5 +1,5 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
-import { AGENT_TOOLS } from "../data";
+import { AGENT_TOOLS, defaultEffortFor, effortLevelsFor } from "../data";
 import { BRIDGE, Commands, Events } from "../data-source/bridge";
 import { Settings, SettingsEvents, UpdateInfo } from "../models";
 import { AgentsStore } from "../stores/agents.store";
@@ -57,23 +57,33 @@ export function settingsDefaults(): Settings {
   };
 }
 
-/** The implicit per-tool default a map override is measured against. */
-export function settingsMapDefault(key: SettingsMapKey, tool: string): string | null {
+/** The implicit per-tool default a map override is measured against. The
+ *  effort default is per MODEL (Haiku takes none, Opus 4.6 no `xhigh`…), so
+ *  `toolEffort` needs the model it's measured for — absent = the tool's first. */
+export function settingsMapDefault(key: SettingsMapKey, tool: string, model?: string): string | null {
   if (key === "autoApprove") return "off";
   if (key === "toolPath") return null; // no implicit default — absent = auto-detect
   const meta = AGENT_TOOLS.find((t) => t.id === tool);
   if (!meta) return null;
-  if (key === "toolModel") return meta.models[0];
-  return meta.effort ? "high" : null; // toolEffort — spawn's hardcoded default
+  if (key === "toolModel") return meta.models[0]?.id ?? null;
+  return defaultEffortFor(meta, model ?? meta.models[0]?.id ?? "");
 }
 
 /** Effective (override-or-default) model for a tool. */
 export function effectiveModel(s: Settings, tool: string): string {
   return s.toolModel[tool] ?? settingsMapDefault("toolModel", tool) ?? "";
 }
-/** Effective (override-or-default) effort for a tool ("" when unsupported). */
+/** Effective effort for a tool ("" when its effective model takes none): the
+ *  override when the effective model accepts it, else that model's default —
+ *  an `xhigh` saved for Opus 5 must not leak onto Opus 4.6. */
 export function effectiveEffort(s: Settings, tool: string): string {
-  return s.toolEffort[tool] ?? settingsMapDefault("toolEffort", tool) ?? "";
+  const meta = AGENT_TOOLS.find((t) => t.id === tool);
+  if (!meta) return "";
+  const model = effectiveModel(s, tool);
+  const levels = effortLevelsFor(meta, model);
+  if (!levels) return "";
+  const override = s.toolEffort[tool];
+  return override && levels.includes(override) ? override : (defaultEffortFor(meta, model) ?? "");
 }
 
 /** Display label for the effective worktree root ("" = the backend ctor
@@ -188,8 +198,8 @@ export class SettingsStore {
       const next: Record<string, string> = { ...s[key] };
       // Absent = the tool's default; an empty string (e.g. cleared toolPath) or a
       // value equal to the default both fall back to absent.
-      if (value == null || value.trim() === "" || value === settingsMapDefault(key, tool))
-        delete next[tool];
+      const dflt = settingsMapDefault(key, tool, key === "toolEffort" ? effectiveModel(s, tool) : undefined);
+      if (value == null || value.trim() === "" || value === dflt) delete next[tool];
       else next[tool] = value;
       return { ...s, [key]: next } as Settings;
     });

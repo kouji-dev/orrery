@@ -47,12 +47,32 @@ export interface FileNode {
   children: FileNode[] | null;
 }
 
+/** One entry of a tool's curated `--model` list. */
+export interface ModelOption {
+  /** The exact value forwarded as `--model`. An alias (`opus`, `fable`…)
+   *  resolves to the tool's latest of that family; a full name
+   *  (`claude-opus-4-6`) pins a version. */
+  id: string;
+  /** Picker label — the human name, versioned when pinned ("Opus 4.6"). */
+  label: string;
+  /** Picker group heading; absent = ungrouped. */
+  group?: string;
+  /** Effort levels THIS model accepts when narrower than the tool's
+   *  (`false` = none: the effort field hides). Absent = the tool's list. */
+  effort?: false | string[];
+  /** Level pre-selected for this model; absent = `high` when offered, else the first. */
+  defaultEffort?: string;
+}
+
 export interface AgentTool {
   id: "claude" | "codex" | "cursor" | "gemini";
   name: string;
   short: string;
   accent: string;
-  models: string[];
+  /** Curated models; the first entry is the spawn default. */
+  models: ModelOption[];
+  /** Effort levels the tool's CLI flag accepts (`false` = no knob at all).
+   *  Also the fallback for a custom model id typed in Settings. */
   effort: false | string[];
 }
 

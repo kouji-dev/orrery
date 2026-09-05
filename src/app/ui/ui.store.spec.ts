@@ -72,3 +72,42 @@ describe("UiStore delete-worktree modal flag", () => {
     expect(ui.deletingWorktree()).toBeNull();
   });
 });
+
+describe("UiStore reorderTab", () => {
+  let ui: UiStore;
+  beforeEach(() => {
+    localStorage.clear();
+    ui = make();
+  });
+  const order = () => ui.tabs().map((t) => t.id);
+  const open = (aid: string) => {
+    ui.openAgent(aid);
+    return ui.activeTab();
+  };
+
+  it("moves an agent tab before / after another agent tab", () => {
+    const a = open("a1");
+    const b = open("a2");
+    const c = open("a3");
+    ui.reorderTab(c, a, true);
+    expect(order()).toEqual(["orchestrator", "backlog", c, a, b]);
+    ui.reorderTab(a, b, false);
+    expect(order()).toEqual(["orchestrator", "backlog", c, b, a]);
+  });
+
+  it("never lets an agent tab land in front of Orchestrator or Backlog", () => {
+    const a = open("a1");
+    const b = open("a2");
+    ui.reorderTab(b, "orchestrator", true);
+    expect(order()).toEqual(["orchestrator", "backlog", b, a]);
+    ui.reorderTab(a, "backlog", true);
+    expect(order()).toEqual(["orchestrator", "backlog", a, b]);
+  });
+
+  it("refuses to move the fixed tabs themselves", () => {
+    const a = open("a1");
+    ui.reorderTab("backlog", a, false);
+    ui.reorderTab("orchestrator", a, false);
+    expect(order()).toEqual(["orchestrator", "backlog", a]);
+  });
+});
