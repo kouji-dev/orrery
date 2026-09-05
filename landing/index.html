@@ -29,7 +29,7 @@
   "description": "Orrery orchestrates Claude Code, Codex, Cursor and Gemini in one native console — each agent on its own git worktree and branch. Dispatch, observe, merge.",
   "url": "https://orrery.kouji.dev/",
   "applicationCategory": "DeveloperApplication",
-  "operatingSystem": "Windows, macOS",
+  "operatingSystem": "Windows",
   "downloadUrl": "https://github.com/kouji-dev/orrery-releases/releases",
   "releaseNotes": "https://orrery.kouji.dev/changelog.html",
   "image": "https://orrery.kouji.dev/og.png",
@@ -188,8 +188,9 @@
   .dl-item:hover{background:var(--panel-3);color:var(--ink);}
   .dl-item svg{flex:none;opacity:.8;}
   .dl-item-sub{margin-left:auto;padding-left:16px;font-size:10.5px;color:var(--ink-4);}
-  .dl-hint{margin:4px 5px 2px;padding:8px 11px 3px;border-top:1px solid var(--hair);
-    font-family:var(--mono);font-size:10.5px;line-height:1.55;color:var(--ink-4);white-space:normal;}
+  /* "coming soon" row: reads as an item, acts as none — no hover, no pointer */
+  .dl-item.soon{cursor:default;color:var(--ink-4);pointer-events:none;}
+  .dl-item.soon svg{opacity:.45;}
   .dl-count{flex-basis:100%;display:flex;justify-content:center;margin-top:6px;}
   .dl-count[hidden]{display:none;}
   .dl-badge{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--ink-2);

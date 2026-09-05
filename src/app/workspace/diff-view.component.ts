@@ -13,8 +13,9 @@ import { GitActionBarComponent } from "./git-action-bar.component";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
-import { fileDir, fileName, fileStateLabel, isMarkdownPath, langId, langTag, mix } from "../utils";
+import { fileDir, fileName, fileStateLabel, isMarkdownPath, langId, langTag, mix, revealLabelFor } from "../utils";
 import { UiStore } from "../ui/ui.store";
+import { MenuPanelComponent } from "../context-menu/menu-panel.component";
 import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
@@ -30,7 +31,7 @@ const LIST_DEFAULT = 300;
 @Component({
   selector: "app-diff-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionBarComponent, KjBadgeComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, StateBadgeComponent, AddDelComponent],
+  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionBarComponent, KjBadgeComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, StateBadgeComponent, AddDelComponent, MenuPanelComponent],
   template: `
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;min-width:0">
     <div
@@ -85,6 +86,7 @@ const LIST_DEFAULT = 300;
                 class="diff-file list-row"
                 [class.sel]="current()?.path === row.path"
                 (click)="select(row.path)"
+                (contextmenu)="onContext($event, row.file!)"
                 [style.padding-left.px]="12 + row.depth * 13"
               >
                 <app-state-badge [state]="row.file!.state" />
@@ -101,6 +103,7 @@ const LIST_DEFAULT = 300;
               class="diff-file list-row"
               [class.sel]="current()?.path === f.path"
               (click)="select(f.path)"
+              (contextmenu)="onContext($event, f)"
             >
               <app-state-badge [state]="f.state" />
               <span [title]="f.state === 'R' && f.oldPath ? ('renamed from ' + f.oldPath) : f.path" class="fname trunc">{{ fname(f.path) }}</span>
@@ -115,6 +118,16 @@ const LIST_DEFAULT = 300;
         }
         </div>
       </div>
+
+      <!-- context menu: OS hand-offs for one changed file, opened from a file
+           row in either view (folders and the header open nothing). A deleted
+           file has nothing on disk to open or show, so both items disable. -->
+      @if (menu(); as m) {
+        <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
+          <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="m.file.state === 'D'" (click)="openExternal(m.file)"><app-icon size="md" name="ext" />Open in Default App</kj-button>
+          <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="m.file.state === 'D'" (click)="reveal(m.file)"><app-icon size="md" name="folderOpen" />{{ revealLabel }}</kj-button>
+        </app-menu-panel>
+      }
 
       <!-- resizable separator: drag to rebalance the file list vs the diff body -->
       <div
@@ -345,6 +358,37 @@ export class DiffViewComponent {
   readonly treeMode = computed(() => this.ui.diffTreeMode());
   setTreeMode(on: boolean): void {
     this.ui.diffTreeMode.set(on);
+  }
+
+  // ----- file-row context menu: the OS hand-offs (open / reveal) -----
+  // Same two commands the commit-diff list and the sidebar file tree ship;
+  // no rename/delete here — a working-tree change is the agent's, and those
+  // edits belong to the file tree (which shows every file, not just changed).
+  readonly menu = signal<{ x: number; y: number; file: AgentFile } | null>(null);
+  readonly revealLabel = revealLabelFor(navigator.userAgent);
+
+  onContext(e: MouseEvent, file: AgentFile): void {
+    e.preventDefault();
+    e.stopPropagation();
+    this.menu.set({ x: e.clientX, y: e.clientY, file });
+  }
+  closeMenu(): void {
+    this.menu.set(null);
+  }
+  openExternal(file: AgentFile): void {
+    this.toOs(Commands.FileOpenExternal, file, "couldn't open");
+  }
+  reveal(file: AgentFile): void {
+    this.toOs(Commands.FileReveal, file, "couldn't reveal");
+  }
+  /** Dismiss first, then hand the worktree-relative path to the OS; a failure
+   *  reports through the flash rather than by leaving the menu hanging open. */
+  private toOs(command: string, file: AgentFile, failed: string): void {
+    const path = file.path.replace(/\\/g, "/");
+    this.closeMenu();
+    void this.bridge
+      .invoke(command, { id: this.agentId(), path })
+      .catch((e: unknown) => this.ui.flash(`${failed} ${fileName(path)}: ${e instanceof Error ? e.message : String(e)}`));
   }
 
   readonly fname = fileName;

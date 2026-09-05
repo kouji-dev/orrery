@@ -119,18 +119,34 @@ function setup(
 }
 
 describe("SpawnModal — settings prefill", () => {
-  it("no saved defaults: keeps the hardcoded claude / first model / no effort", () => {
+  it("no saved defaults: keeps the hardcoded claude / first model / that model's effort", () => {
     const { cmp } = setup();
     expect(cmp.toolId()).toBe("claude");
     expect(cmp.model()).toBe("fable");
-    expect(cmp.effort()).toBeNull();
+    expect(cmp.effort()).toBe("xhigh"); // the fable alias' declared default = Claude Code's own
   });
 
   it("defaultTool prefills the initial tool (with its model + effort defaults)", () => {
     const { cmp } = setup({ settings: { defaultTool: "codex" } });
     expect(cmp.toolId()).toBe("codex");
     expect(cmp.model()).toBe("gpt-5.6-sol"); // curated first model
-    expect(cmp.effort()).toBe("high"); // hardcoded effort default
+    expect(cmp.effort()).toBe("xhigh"); // Sol's declared default
+  });
+
+  it("picking a model re-validates the effort against what THAT model accepts", () => {
+    const { cmp } = setup();
+    cmp.setModel("haiku"); // no effort knob at all
+    expect(cmp.effort()).toBeNull();
+    cmp.setModel("claude-opus-4-6"); // nothing to keep → the model's default
+    expect(cmp.effort()).toBe("high");
+    cmp.effort.set("max");
+    cmp.setModel("claude-opus-5"); // max is offered → kept
+    expect(cmp.effort()).toBe("max");
+    cmp.effort.set("xhigh");
+    cmp.setModel("claude-sonnet-4-6"); // no xhigh on the 4.6 generation → default
+    expect(cmp.effort()).toBe("high");
+    cmp.setModel("my-custom-id"); // a custom id gets the TOOL's full list
+    expect(cmp.effort()).toBe("high");
   });
 
   it("per-tool toolModel/toolEffort overrides win over the curated defaults", () => {
@@ -180,7 +196,15 @@ describe("SpawnModal — settings prefill", () => {
       },
     });
     expect(cmp.model()).toBe("gpt-5.6-sol"); // first curated
-    expect(cmp.effort()).toBe("high");
+    expect(cmp.effort()).toBe("xhigh"); // Sol's own default, not the stale "ultra"
+  });
+
+  it("a saved effort the saved MODEL does not accept falls back to that model's default", () => {
+    const { cmp } = setup({
+      settings: { toolModel: { claude: "claude-opus-4-6" }, toolEffort: { claude: "xhigh" } },
+    });
+    expect(cmp.model()).toBe("claude-opus-4-6");
+    expect(cmp.effort()).toBe("high"); // 4.6 has no xhigh
   });
 });
 

@@ -298,6 +298,43 @@ macro_rules! for_each_backend {
         assert!(bs.contains(&"feature".to_string()), "branches: {bs:?}");
         assert!(bs.len() >= 2, "default branch + feature: {bs:?}");
     }
+    // Picker order (spawn's Source branch): the pinned conventional names
+    // first, then by last USE. "Last use" comes from git's reflogs — a checkout
+    // lands in HEAD's log, a ref move in the branch's own — so the test writes
+    // those entries with explicit times (git2's reflog API) instead of sleeping
+    // its way past the one-second resolution.
+    fn branches_pinned_first_then_by_last_use(b: &dyn GitBackend) {
+        let dir = tempfile::tempdir().unwrap();
+        b.init(dir.path()).unwrap();
+        commit_file(dir.path(), "a.txt", "first");
+        let repo = Repository::open(dir.path()).unwrap();
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        for name in ["gamma", "alpha", "develop", "beta"] {
+            repo.branch(name, &head, false).unwrap();
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let at = |secs: i64| Signature::new("t", "t@t", &git2::Time::new(secs, 0)).unwrap();
+        // beta's ref moved later than the others' creation (a commit on it)…
+        let mut log = repo.reflog("refs/heads/beta").unwrap();
+        log.append(head.id(), &at(now + 100), Some("commit: later work")).unwrap();
+        log.write().unwrap();
+        // …and gamma was checked out later still (HEAD's log, no ref of its own moved)
+        let mut head_log = repo.reflog("HEAD").unwrap();
+        head_log
+            .append(head.id(), &at(now + 200), Some("checkout: moving from main to gamma"))
+            .unwrap();
+        head_log.write().unwrap();
+
+        let bs = b.branches(dir.path());
+        let pos = |n: &str| bs.iter().position(|x| x == n).unwrap_or_else(|| panic!("{n} in {bs:?}"));
+        assert!(pos("develop") < pos("alpha"), "pinned develop leads: {bs:?}");
+        assert!(pos("develop") < pos("gamma"), "pinned develop leads: {bs:?}");
+        assert!(pos("gamma") < pos("beta"), "checked out last → first of the rest: {bs:?}");
+        assert!(pos("beta") < pos("alpha"), "ref moved later than alpha's creation: {bs:?}");
+    }
     fn default_branch_prefers_origin_head(b: &dyn GitBackend) {
         let dir = tempfile::tempdir().unwrap();
         b.init(dir.path()).unwrap();
@@ -1316,6 +1353,7 @@ for_each_backend!(
     status_detects_a_move_as_one_renamed_entry,
     status_reports_modified_and_added,
     lists_local_branches,
+    branches_pinned_first_then_by_last_use,
     default_branch_prefers_origin_head,
     default_branch_prefers_main_over_alphabetical_first,
     default_branch_falls_back_to_head_branch,

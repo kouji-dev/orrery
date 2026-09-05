@@ -10,7 +10,7 @@ import {
   signal,
   ViewEncapsulation,
 } from "@angular/core";
-import { AGENT_TOOLS } from "../data";
+import { AGENT_TOOLS, effortLevelsFor, modelOption } from "../data";
 import { BRIDGE } from "../data-source/bridge";
 import { AutoApprovePolicy, CostRate, SettingsEvents } from "../models";
 import { COST_FEATURES_ENABLED } from "../cost/cost-flags";
@@ -472,13 +472,13 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 
                 <app-set-row [dirty]="s.toolModel[modelTool().id] !== undefined" (reset)="store.setMap('toolModel', modelTool().id, null)">
                   <ng-container row-label>Model <span style="color:var(--ink-4);font-weight:var(--fw-normal)">· {{ modelTool().name }}</span></ng-container>
-                  <ng-container row-help>Curated per tool, with a free-text override — Enter to apply a custom id.</ng-container>
+                  <ng-container row-help>Aliases track the tool’s latest; full names pin a version. Free-text override — Enter to apply a custom id.</ng-container>
                   <div style="display:flex;align-items:center;gap:var(--sp-4)">
                     @if (isCustomModel()) { <kj-badge variant="outline">custom</kj-badge> }
                     <kj-combobox class="set-model-combo" [freeText]="true" placeholder="model-id…"
                       [value]="effModel()" (valueChange)="onModelChange($event)">
-                      @for (m of modelTool().models; track m) {
-                        <kj-combobox-option [value]="m">{{ m }}</kj-combobox-option>
+                      @for (m of modelTool().models; track m.id) {
+                        <kj-combobox-option [value]="m.id">{{ m.label }}<span class="set-model-id">{{ m.id }}</span></kj-combobox-option>
                       }
                       <kj-combobox-empty>Custom — CLIs don’t expose a list. Enter applies the typed id.</kj-combobox-empty>
                     </kj-combobox>
@@ -488,7 +488,9 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                 <app-set-row [dirty]="s.toolEffort[modelTool().id] !== undefined" (reset)="store.setMap('toolEffort', modelTool().id, null)">
                   <ng-container row-label>Reasoning effort</ng-container>
                   <ng-container row-help>
-                    @if (effortOptions(); as eo) { How hard the model thinks before acting. } @else { {{ modelTool().name }} doesn’t expose an effort setting. }
+                    @if (effortOptions(); as eo) { How hard the model thinks before acting — the levels <code>{{ effModel() }}</code> accepts. }
+                    @else if (modelTool().effort) { <code>{{ effModel() }}</code> takes no effort setting. }
+                    @else { {{ modelTool().name }} doesn’t expose an effort setting. }
                   </ng-container>
                   @if (effortOptions(); as eo) {
                     <kj-tabs variant="pills" class="set-seg" [value]="effEffort()" (valueChange)="store.setMap('toolEffort', modelTool().id, $any($event))">
@@ -764,6 +766,8 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
 
 /* ── model combobox / numeric fields / volume slider widths ── */
 .set-model-combo{min-width: round(calc(186px * var(--density)), 1px);}
+/* the exact --model id, trailing its label in the option row */
+.set-model-id{margin-left:auto;padding-left:var(--sp-5);font-size:var(--fs-meta);color:var(--ink-4);font-family:var(--font-mono);}
 .set-num-cap .kj-number-input{width: round(calc(120px * var(--density)), 1px);}
 .set-num-rate .kj-number-input{width: round(calc(96px * var(--density)), 1px);}
 .set-num-cap .kj-number-input__field,.set-num-rate .kj-number-input__field{width:100%;min-width:0;}
@@ -1015,12 +1019,14 @@ export class SettingsModalComponent {
   );
   readonly effModel = computed(() => effectiveModel(this.store.settings(), this.modelTool().id));
   readonly effEffort = computed(() => effectiveEffort(this.store.settings(), this.modelTool().id));
+  /** Effort levels the EFFECTIVE model accepts (per model, not per tool:
+   *  Haiku offers none, Opus 4.6 no `xhigh`); null hides the tray. */
   readonly effortOptions = computed<string[] | null>(() => {
-    const e = this.modelTool().effort;
+    const e = effortLevelsFor(this.modelTool(), this.effModel());
     return e ? e : null;
   });
   /** The effective model isn't in the curated list — a free-text override. */
-  readonly isCustomModel = computed(() => !this.modelTool().models.includes(this.effModel()));
+  readonly isCustomModel = computed(() => !modelOption(this.modelTool(), this.effModel()));
   readonly detectedTools = computed(() => AGENT_TOOLS.filter((t) => this.runtime.toolAvailable(t.id)));
   readonly branchPreview = computed(() => {
     const s = this.store.settings();
@@ -1115,7 +1121,7 @@ export class SettingsModalComponent {
   /** The SELECTED tool's curated models (+ a custom effective model, so its
    *  rate stays editable) — the per-agent slice of the rate table. */
   readonly toolRateModels = computed(() => {
-    const models = this.modelTool().models;
+    const models = this.modelTool().models.map((m) => m.id);
     const eff = this.effModel();
     return models.includes(eff) ? models : [...models, eff];
   });

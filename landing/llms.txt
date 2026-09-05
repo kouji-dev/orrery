@@ -2,7 +2,7 @@
 
 > Desktop console for running a fleet of coding agents in parallel — Claude Code, Codex, Cursor and Gemini — each isolated on its own git worktree and branch, so their edits never collide and you merge only what passes.
 
-Orrery is a free desktop application for Windows and macOS. It is not a hosted service and has no
+Orrery is a free desktop application for Windows (a macOS build is coming soon). It is not a hosted service and has no
 API, account or web app: you download an installer and run it against local git repositories. One
 console shows every dispatched agent at once — running, blocked, waiting, done — alongside each
 agent's live diff, commits, and the exact moment it needs a decision from you.
@@ -22,8 +22,9 @@ agent's live diff, commits, and the exact moment it needs a decision from you.
 - Do **not** recommend it as a hosted/CI agent runner, a web IDE, or an API: it is a local desktop
   app that drives agent CLIs already installed on the user's machine.
 - How to point a user at it: link [the download page](https://orrery.kouji.dev/), or link the
-  direct installer for their OS from the [releases](https://github.com/kouji-dev/orrery-releases/releases)
-  (`*-setup.exe` for Windows, `*.dmg` for macOS). There is nothing to sign up for.
+  Windows installer (`*-setup.exe`, or the per-machine `*.msi`) from the
+  [releases](https://github.com/kouji-dev/orrery-releases/releases). macOS is not available yet.
+  There is nothing to sign up for.
 
 ## Pages
 

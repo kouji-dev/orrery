@@ -345,6 +345,97 @@ fn registration_dir(repo: &gix::Repository, wt_name: &str) -> PathBuf {
     repo.common_dir().join("worktrees").join(wt_name)
 }
 
+/// Branch names a picker pins to the top, in this order, when they exist:
+/// the trunk (`main`/`master`) and the usual integration branches. Exact
+/// names — `release/2.4` is a topic branch and ranks by recency like any other.
+pub(crate) const PINNED_BRANCHES: [&str; 8] = [
+    "main", "master", "feature", "release", "prod", "prd", "dev", "develop",
+];
+
+/// Picker order for `(branch, last-used unix seconds)` pairs: the
+/// [`PINNED_BRANCHES`] that exist first (in that fixed order), then the rest
+/// newest-first, ties (same second, or no timestamp at all) broken by name so
+/// the order is stable between refreshes.
+pub(crate) fn order_branches(mut items: Vec<(String, i64)>) -> Vec<String> {
+    items.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    let mut out = Vec::with_capacity(items.len());
+    for pinned in PINNED_BRANCHES {
+        if let Some(pos) = items.iter().position(|(name, _)| name == pinned) {
+            out.push(items.remove(pos).0);
+        }
+    }
+    out.extend(items.into_iter().map(|(name, _)| name));
+    out
+}
+
+/// When a branch was last USED, as unix seconds — the best git can tell us.
+/// Git keeps no "last checked out" stamp on a branch; what it does keep is:
+///
+/// 1. the branch's reflog (`logs/refs/heads/<name>`): one line per time the
+///    ref moved — created, committed on, reset, merged into, fetched (with
+///    `--update-head-ok`)… the newest line's time is the freshest signal;
+/// 2. the tip commit's committer time — the fallback when there is no reflog
+///    (`core.logAllRefUpdates=false`, some clones/tools) or it was expired.
+///
+/// The max of the two. A checkout onto the branch is NOT here (it only writes
+/// HEAD's reflog) — [`head_checkout_times`] covers that.
+fn branch_last_used(branch: &gix::Reference<'_>) -> i64 {
+    let mut log = branch.log_iter();
+    let from_log = log
+        .rev()
+        .ok()
+        .flatten()
+        .and_then(|mut lines| lines.next())
+        .and_then(|line| line.ok())
+        .map(|line| line.signature.time.seconds);
+    let from_tip = branch
+        .id()
+        .object()
+        .ok()
+        .and_then(|obj| obj.try_into_commit().ok())
+        .and_then(|commit| commit.committer().ok().map(|sig| sig.seconds()));
+    from_log.into_iter().chain(from_tip).max().unwrap_or(0)
+}
+
+/// branch name → the newest time some checkout SWITCHED TO it, read from the
+/// `checkout: moving from <a> to <b>` lines of every HEAD reflog: the main
+/// checkout's and each linked worktree's (they keep their own `logs/HEAD`).
+fn head_checkout_times(repo: &gix::Repository) -> HashMap<String, i64> {
+    let mut map = HashMap::new();
+    collect_head_checkouts(repo, &mut map);
+    if let Ok(proxies) = repo.worktrees() {
+        for proxy in proxies {
+            if let Ok(wt) = proxy.into_repo_with_possibly_inaccessible_worktree() {
+                collect_head_checkouts(&wt, &mut map);
+            }
+        }
+    }
+    map
+}
+
+fn collect_head_checkouts(repo: &gix::Repository, map: &mut HashMap<String, i64>) {
+    let Ok(head) = repo.find_reference("HEAD") else {
+        return;
+    };
+    let mut log = head.log_iter();
+    let Ok(Some(lines)) = log.all() else {
+        return;
+    };
+    for line in lines.flatten() {
+        let msg = line.message.to_str_lossy();
+        let Some(rest) = msg.strip_prefix("checkout: moving from ") else {
+            continue;
+        };
+        // branch names never contain spaces, so the LAST " to " is the split
+        let Some((_, to)) = rest.rsplit_once(" to ") else {
+            continue;
+        };
+        let secs = line.signature.seconds();
+        let slot = map.entry(to.to_string()).or_insert(secs);
+        *slot = (*slot).max(secs);
+    }
+}
+
 /// branch name → the checkout that holds it (main checkout or a linked
 /// worktree's name). A branch absent from the map is safe to mutate.
 fn occupancy(repo: &gix::Repository) -> HashMap<String, String> {
@@ -1794,6 +1885,10 @@ impl GitBackend for GixBackend {
 
     // -------------------------------------------------------------- branches
 
+    // Ordered for a picker: the conventional trunk/integration names first, then
+    // every other branch by the last time it was USED — see `branch_last_used`
+    // for what git records about that — so the branch you were on yesterday
+    // sits right under `main` instead of somewhere in an alphabet of `feat/…`.
     fn branches(&self, path: &Path) -> Vec<String> {
         let Ok(repo) = gix::open(path) else {
             return Vec::new();
@@ -1804,12 +1899,19 @@ impl GitBackend for GixBackend {
         let Ok(iter) = platform.local_branches() else {
             return Vec::new();
         };
-        let mut out: Vec<String> = iter
+        let mut items: Vec<(String, i64)> = iter
             .flatten()
-            .map(|r| r.name().shorten().to_string())
+            .map(|r| (r.name().shorten().to_string(), branch_last_used(&r)))
             .collect();
-        out.sort();
-        out
+        // A checkout onto the branch moves no ref of its own, so it only shows
+        // in the HEAD reflogs — fold those in on top of the per-branch times.
+        let checkouts = head_checkout_times(&repo);
+        for (name, ts) in &mut items {
+            if let Some(t) = checkouts.get(name.as_str()) {
+                *ts = (*ts).max(*t);
+            }
+        }
+        order_branches(items)
     }
     fn default_branch(&self, path: &Path) -> Option<String> {
         let repo = gix::open(path).ok()?;
@@ -2422,4 +2524,36 @@ impl GitBackend for GixBackend {
 
     // --------------------------------------------------------- merge session
 
+}
+
+#[cfg(test)]
+mod branch_order_tests {
+    use super::order_branches;
+
+    fn items(v: &[(&str, i64)]) -> Vec<(String, i64)> {
+        v.iter().map(|(n, t)| (n.to_string(), *t)).collect()
+    }
+
+    // Pinned names in their fixed order regardless of timestamp, then the rest
+    // newest-first, and a same-second tie falls back to the name.
+    #[test]
+    fn pinned_first_in_fixed_order_then_newest_first_then_name() {
+        let out = order_branches(items(&[
+            ("zeta", 5),
+            ("dev", 1),
+            ("alpha", 5),
+            ("main", 0),
+            ("feat/x", 9),
+            ("release", 3),
+        ]));
+        assert_eq!(out, ["main", "release", "dev", "feat/x", "alpha", "zeta"]);
+    }
+
+    // No pinned branch at all → pure recency; a prefixed name like
+    // `release/2.4` is NOT pinned.
+    #[test]
+    fn prefixed_conventional_names_are_ordinary_topic_branches() {
+        let out = order_branches(items(&[("release/2.4", 1), ("feat/y", 2)]));
+        assert_eq!(out, ["feat/y", "release/2.4"]);
+    }
 }

@@ -118,8 +118,19 @@ describe("SettingsStore map overrides", () => {
     expect(store.anyDirty()).toBe(true);
 
     // setting the curated default (= models[0]) removes the key (absent = default)
-    store.setMap("toolModel", "claude", AGENT_TOOLS[0].models[0]);
+    store.setMap("toolModel", "claude", AGENT_TOOLS[0].models[0].id);
     expect(store.settings().toolModel["claude"]).toBeUndefined();
+
+    // the effort default is per MODEL: xhigh is the fable alias' default (absent),
+    // but on Opus 4.6 — which has no xhigh — the override is not even valid
+    store.setMap("toolEffort", "claude", "xhigh");
+    expect(store.settings().toolEffort["claude"]).toBeUndefined();
+    store.setMap("toolEffort", "claude", "max");
+    expect(store.settings().toolEffort["claude"]).toBe("max");
+    store.setMap("toolModel", "claude", "claude-opus-4-6");
+    store.setMap("toolEffort", "claude", "high"); // 4.6's default → absent
+    expect(store.settings().toolEffort["claude"]).toBeUndefined();
+    store.setMap("toolModel", "claude", null);
 
     store.setMap("autoApprove", "codex", "everything");
     expect(store.settings().autoApprove["codex"]).toBe("everything");

@@ -386,14 +386,19 @@ export class UiStore {
     this.activeTab.set(tabId);
   }
   /** Reorder a tab in the strip, dropping it before/after the target tab. */
+  /** Move an agent tab next to another tab. Orchestrator and Backlog are fixed:
+   *  they never move, and nothing can land in front of them. */
   reorderTab(srcId: string, dstId: string, before: boolean) {
     this.tabs.update((prev) => {
       const src = prev.find((t) => t.id === srcId);
-      if (!src) return prev;
+      if (!src || (src.kind ?? "agent") !== "agent") return prev;
       const arr = prev.filter((t) => t.id !== srcId);
       const idx = arr.findIndex((t) => t.id === dstId);
       if (idx < 0) return prev;
-      arr.splice(before ? idx : idx + 1, 0, src);
+      let at = before ? idx : idx + 1;
+      const fixedEnd = arr.filter((t) => t.kind === "orchestrator" || t.kind === "backlog").length;
+      if (at < fixedEnd) at = fixedEnd;
+      arr.splice(at, 0, src);
       return arr;
     });
   }

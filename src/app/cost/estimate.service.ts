@@ -34,14 +34,28 @@ export interface EstimateInput {
  *  per model id — rates change faster than releases, so the table is
  *  user-editable rather than hardcoded truth. */
 export const DEFAULT_RATES: Record<string, CostRate> = {
-  "opus-4.6": { in: 15, out: 75 },
-  "sonnet-4.6": { in: 3, out: 15 },
-  "haiku-4.6": { in: 0.8, out: 4 },
+  // Claude — first-party API list prices; the aliases carry the rate of the
+  // model they resolve to today (fable → Fable 5.1, opus → Opus 5…)
+  fable: { in: 10, out: 50 },
+  opus: { in: 5, out: 25 },
+  sonnet: { in: 2, out: 10 },
+  haiku: { in: 1, out: 5 },
+  "claude-fable-5-1": { in: 10, out: 50 },
+  "claude-fable-5": { in: 10, out: 50 },
+  "claude-opus-5": { in: 5, out: 25 },
+  "claude-opus-4-8": { in: 5, out: 25 },
+  "claude-opus-4-7": { in: 5, out: 25 },
+  "claude-opus-4-6": { in: 5, out: 25 },
+  "claude-sonnet-5": { in: 2, out: 10 },
+  "claude-sonnet-4-6": { in: 3, out: 15 },
+  "claude-haiku-4-5": { in: 1, out: 5 },
+  // Codex / Cursor / Gemini — unlisted ids fall to `default`
   "gpt-5.3-codex": { in: 2.5, out: 10 },
-  "o5-mini": { in: 1.1, out: 4.4 },
   "composer-2": { in: 1.5, out: 6 },
-  "gemini-3-pro": { in: 2, out: 12 },
-  "gemini-3-flash": { in: 0.3, out: 1.2 },
+  "gemini-3-pro-preview": { in: 2, out: 12 },
+  "gemini-3-flash-preview": { in: 0.3, out: 1.2 },
+  "gemini-2.5-pro": { in: 1.25, out: 10 },
+  "gemini-2.5-flash": { in: 0.3, out: 2.5 },
   default: { in: 3, out: 15 },
 };
 

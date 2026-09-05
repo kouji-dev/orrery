@@ -1,36 +1,91 @@
 // Orrery mock data — multi-project, multi-agent git orchestration
-import { AgentTool, LogLine, Project } from "./models";
+import { AgentTool, LogLine, ModelOption, Project } from "./models";
 
 export const ORG = "northwind";
 
 // ---------- agent tools (CLI coding agents) ----------
+// Each tool's `--model` vocabulary, curated: ALIASES first where the CLI has
+// them (they resolve to the tool's latest and never go stale — the first entry
+// is the spawn default), then PINNED versions for workflows that must not
+// drift under them. Effort: the tool-level list is what the CLI flag accepts
+// (and the fallback for a custom id typed in Settings); a model narrows it
+// when it takes fewer levels (Opus 4.6 has no `xhigh`) or none (Haiku).
+const m = (id: string, label: string, group: string, extra: Partial<ModelOption> = {}): ModelOption => ({
+  id,
+  label,
+  group,
+  ...extra,
+});
+
+/** `claude --effort` levels (2.1.x); `xhigh` is Claude Code's own default. */
+const CLAUDE_EFFORT = ["low", "medium", "high", "xhigh", "max"];
+/** Opus 4.6 / Sonnet 4.6 predate `xhigh` (it arrived with Opus 4.7). */
+const CLAUDE_EFFORT_46 = ["low", "medium", "high", "max"];
+const CLAUDE_XHIGH = { defaultEffort: "xhigh" };
+/** codex `--config model_reasoning_effort=…`; `max` is Sol-only. */
+const CODEX_EFFORT = ["low", "medium", "high", "xhigh"];
+
 export const AGENT_TOOLS: AgentTool[] = [
   {
     id: "claude",
     name: "Claude Code",
     short: "claude",
     accent: "var(--tool-claude)",
-    // aliases (not dated IDs) so they always resolve to the latest — fable is
-    // Fable 5 (claude-fable-5), opus is 4.8 today. First entry = spawn default.
-    models: ["fable", "opus", "sonnet", "haiku"],
-    effort: false,
+    models: [
+      // `claude --model` aliases → the latest of each family
+      m("fable", "Fable (latest)", "Latest", CLAUDE_XHIGH),
+      m("opus", "Opus (latest)", "Latest", CLAUDE_XHIGH),
+      m("sonnet", "Sonnet (latest)", "Latest", CLAUDE_XHIGH),
+      m("haiku", "Haiku (latest)", "Latest", { effort: false }),
+      // full names pin a version
+      m("claude-fable-5-1", "Fable 5.1", "Pinned versions", CLAUDE_XHIGH),
+      m("claude-fable-5", "Fable 5", "Pinned versions", CLAUDE_XHIGH),
+      m("claude-opus-5", "Opus 5", "Pinned versions", CLAUDE_XHIGH),
+      m("claude-opus-4-8", "Opus 4.8", "Pinned versions", CLAUDE_XHIGH),
+      m("claude-opus-4-7", "Opus 4.7", "Pinned versions", CLAUDE_XHIGH),
+      m("claude-opus-4-6", "Opus 4.6", "Pinned versions", { effort: CLAUDE_EFFORT_46 }),
+      m("claude-sonnet-5", "Sonnet 5", "Pinned versions", CLAUDE_XHIGH),
+      m("claude-sonnet-4-6", "Sonnet 4.6", "Pinned versions", { effort: CLAUDE_EFFORT_46 }),
+      m("claude-haiku-4-5", "Haiku 4.5", "Pinned versions", { effort: false }),
+    ],
+    effort: CLAUDE_EFFORT,
   },
   {
     id: "codex",
     name: "Codex",
     short: "codex",
     accent: "var(--tool-codex)",
-    // gpt-5.6 tier (Sol = flagship/CLI default, Terra = balanced, Luna = fast)
-    // GA July 2026; gpt-5.5 kept for pinned workflows
-    models: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
-    effort: ["low", "medium", "high", "xhigh"],
+    models: [
+      // gpt-5.6 tiers (GA July 2026): Sol = flagship / CLI default, Terra =
+      // balanced, Luna = volume — each ships tuned to its own effort
+      m("gpt-5.6-sol", "GPT-5.6 Sol", "GPT-5.6", { effort: [...CODEX_EFFORT, "max"], defaultEffort: "xhigh" }),
+      m("gpt-5.6-terra", "GPT-5.6 Terra", "GPT-5.6", { defaultEffort: "high" }),
+      m("gpt-5.6-luna", "GPT-5.6 Luna", "GPT-5.6", { defaultEffort: "medium" }),
+      m("gpt-5.5", "GPT-5.5", "Pinned versions"),
+      m("gpt-5.4", "GPT-5.4", "Pinned versions"),
+      m("gpt-5.3-codex", "GPT-5.3 Codex", "Pinned versions"),
+    ],
+    effort: CODEX_EFFORT,
   },
   {
     id: "cursor",
     name: "Cursor",
     short: "cursor",
     accent: "var(--tool-cursor)",
-    models: ["composer-2.5", "composer-2", "auto"],
+    // cursor-agent takes any slug of the account's model pool; no effort flag
+    models: [
+      m("composer-2.5", "Composer 2.5", "Cursor"),
+      m("composer-2.5-fast", "Composer 2.5 Fast", "Cursor"),
+      m("composer-2", "Composer 2", "Cursor"),
+      m("auto", "Auto", "Cursor"),
+      m("claude-fable-5.1", "Claude Fable 5.1", "Frontier"),
+      m("claude-opus-5", "Claude Opus 5", "Frontier"),
+      m("claude-sonnet-5", "Claude Sonnet 5", "Frontier"),
+      m("gpt-5.6-sol", "GPT-5.6 Sol", "Frontier"),
+      m("gpt-5.5", "GPT-5.5", "Frontier"),
+      m("gemini-3.1-pro", "Gemini 3.1 Pro", "Frontier"),
+      m("grok-4.6", "Grok 4.6", "Frontier"),
+    ],
     effort: false,
   },
   {
@@ -38,10 +93,41 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: "Gemini",
     short: "gemini",
     accent: "var(--tool-gemini)",
-    models: ["gemini-3-pro", "gemini-3-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash"],
+    // gemini-cli `--model`; thinking level is not a CLI flag, so no effort
+    models: [
+      m("auto", "Auto (Gemini 3)", "Latest"),
+      m("gemini-3.1-pro-preview", "Gemini 3.1 Pro (preview)", "Gemini 3"),
+      m("gemini-3-pro-preview", "Gemini 3 Pro (preview)", "Gemini 3"),
+      m("gemini-3-flash-preview", "Gemini 3 Flash (preview)", "Gemini 3"),
+      m("gemini-2.5-pro", "Gemini 2.5 Pro", "Gemini 2.5"),
+      m("gemini-2.5-flash", "Gemini 2.5 Flash", "Gemini 2.5"),
+    ],
     effort: false,
   },
 ];
+
+/** The curated entry for `id` on `tool`, if any (a custom id has none). */
+export function modelOption(tool: AgentTool, id: string): ModelOption | undefined {
+  return tool.models.find((x) => x.id === id);
+}
+
+/** Effort levels `model` accepts on `tool` — the model's own list when it
+ *  narrows the tool's, else the tool's; `false` when there is no knob. A
+ *  custom (non-curated) id gets the tool's list: the CLI still accepts it. */
+export function effortLevelsFor(tool: AgentTool, model: string): string[] | false {
+  return modelOption(tool, model)?.effort ?? tool.effort;
+}
+
+/** The level to pre-select for `model`: its declared default, else `high`
+ *  (the historical spawn default) when offered, else the first level. `null`
+ *  when the model takes no effort. */
+export function defaultEffortFor(tool: AgentTool, model: string): string | null {
+  const levels = effortLevelsFor(tool, model);
+  if (!levels) return null;
+  const preferred = modelOption(tool, model)?.defaultEffort;
+  if (preferred && levels.includes(preferred)) return preferred;
+  return levels.includes("high") ? "high" : levels[0];
+}
 
 // ---------- projects (each = one git repo) ----------
 export const PROJECTS: Project[] = [

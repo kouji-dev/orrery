@@ -77,7 +77,10 @@ pub trait GitBackend: Send + Sync {
 
     // -------------------------------------------------------------- branches
 
-    /// Local branch names, sorted.
+    /// Local branch names in picker order: the conventional trunk/integration
+    /// names (`main`, `master`, `feature`, `release`, `prod`, `prd`, `dev`,
+    /// `develop`) first, then the rest by most recent use (reflogs / tip
+    /// commit time), ties by name.
     fn branches(&self, path: &Path) -> Vec<String>;
     /// `origin/HEAD`'s target, else `main`/`master` if they exist, else HEAD's branch.
     fn default_branch(&self, path: &Path) -> Option<String>;

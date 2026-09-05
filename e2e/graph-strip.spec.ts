@@ -56,3 +56,21 @@ test("with no agent scoped, the strip still renders and invites scoping", async 
   await expect(strip).toBeVisible();
   await expect(strip).toContainText("select an agent to scope the graph");
 });
+
+test("the expand shortcut is a row of xs kouji key chips, inset from the strip's edges", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForSelector("app-top-bar");
+  const strip = page.locator("app-graph-strip .graph-strip");
+  const chips = strip.locator("kj-kbd kbd");
+  await expect(chips).toHaveText(["Ctrl", "Shift", "G"]);
+  await expect(chips.first()).toHaveAttribute("data-size", "xs");
+  // the chips are smaller than the strip's own text and never touch its edges
+  const stripBox = (await strip.boundingBox())!;
+  const chipBox = (await chips.last().boundingBox())!;
+  const stripFs = await strip.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  const chipFs = await chips.last().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  expect(chipFs).toBeLessThan(stripFs);
+  expect(chipBox.y).toBeGreaterThan(stripBox.y + 2);
+  expect(chipBox.y + chipBox.height).toBeLessThan(stripBox.y + stripBox.height - 2);
+  expect(chipBox.x).toBeGreaterThan(stripBox.x);
+});

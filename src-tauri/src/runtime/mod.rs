@@ -1107,9 +1107,9 @@ mod tests {
         assert_eq!(argv_of(&cmd), vec!["claude", "t"]);
     }
 
-    // Codex is the one tool with a reasoning-effort knob: effort is forwarded as a
-    // TOML config override AFTER the model. Tools without an effort flag
-    // (claude/cursor/gemini) silently ignore the effort value.
+    // Codex's reasoning-effort knob is a TOML config override, forwarded AFTER
+    // the model. Tools without an effort flag (cursor/gemini) silently ignore
+    // the effort value.
     #[test]
     fn tool_command_codex_forwards_model_and_effort() {
         let cmd = tool_command("codex", "t", "gpt-5.1-codex", Some("high"), true, None, "off");
@@ -1126,12 +1126,28 @@ mod tests {
         );
     }
 
+    // Claude Code's knob is a plain `--effort <level>`, after the model.
+    #[test]
+    fn tool_command_claude_forwards_model_and_effort() {
+        let cmd = tool_command("claude", "t", "claude-opus-5", Some("xhigh"), true, None, "off");
+        assert_eq!(
+            argv_of(&cmd),
+            vec!["claude", "--model", "claude-opus-5", "--effort", "xhigh", "t"]
+        );
+        // no effort on the record (e.g. haiku) → no flag, Claude's own default
+        let cmd = tool_command("claude", "t", "opus", None, true, None, "off");
+        assert_eq!(argv_of(&cmd), vec!["claude", "--model", "opus", "t"]);
+    }
+
     #[test]
     fn tool_command_effort_ignored_for_tools_without_an_effort_flag() {
-        // claude has `effort: false` in the catalog — even if an effort slips
+        // cursor has `effort: false` in the catalog — even if an effort slips
         // through, it adds nothing (only --model is forwarded).
-        let cmd = tool_command("claude", "t", "opus", Some("high"), true, None, "off");
-        assert_eq!(argv_of(&cmd), vec!["claude", "--model", "opus", "t"]);
+        let cmd = tool_command("cursor", "t", "composer-2.5", Some("high"), true, None, "off");
+        assert_eq!(
+            argv_of(&cmd),
+            vec!["cursor-agent", "--model", "composer-2.5", "t"]
+        );
     }
 
     // Model + effort are part of the run, so they ride a resume launch too (after

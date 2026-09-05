@@ -3,6 +3,7 @@ import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { ToolWindowStore } from "./tool-window.store";
 import { IconComponent } from "../shared/icon.component";
+import { KjKbdComponent } from "@kouji-ui/components";
 
 /**
  * v2 collapsed graph strip (~28px): history's one home, always one click away.
@@ -13,7 +14,7 @@ import { IconComponent } from "../shared/icon.component";
 @Component({
   selector: "app-graph-strip",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, KjKbdComponent],
   template: `
     @let ag = agent();
     <button
@@ -29,8 +30,13 @@ import { IconComponent } from "../shared/icon.component";
       } @else {
         <span>select an agent to scope the graph</span>
       }
-      <span style="margin-left:auto;display:inline-flex;align-items:center;gap:var(--sp-3)">
-        <span class="kbd">Ctrl+Shift+G</span><span>expand graph</span>
+      <!-- shortcut hint: one xs <kj-kbd> per key (the top-bar search chip's
+           pattern), inset from the strip's edges by its own margin -->
+      <span class="gs-hint">
+        @for (k of keys; track $index) {
+          <kj-kbd kjSize="xs">{{ k }}</kj-kbd>
+        }
+        <span>expand graph</span>
       </span>
     </button>
   `,
@@ -56,6 +62,16 @@ import { IconComponent } from "../shared/icon.component";
       .graph-strip:hover {
         background: var(--panel-3);
       }
+      .gs-hint {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-2);
+        padding: 0 var(--sp-2);
+      }
+      .gs-hint > span {
+        margin-left: var(--sp-2);
+      }
     `,
   ],
 })
@@ -64,6 +80,8 @@ export class GraphStripComponent {
   private readonly runtime = inject(AgentRuntimeService);
   private readonly projects = inject(ProjectActionsService);
 
+  /** One chip per key of the expand binding. */
+  readonly keys = ["Ctrl", "Shift", "G"];
   readonly agent = computed(() => this.runtime.activeAgent());
   readonly base = computed(() => {
     const ag = this.agent();

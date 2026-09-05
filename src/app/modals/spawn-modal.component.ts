@@ -9,12 +9,12 @@ import {
   signal,
   viewChild,
 } from "@angular/core";
-import { AGENT_TOOLS } from "../data";
+import { AGENT_TOOLS, defaultEffortFor, effortLevelsFor, modelOption } from "../data";
 import { Agent, AgentTool, Project, Ticket } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
-import { effectiveEffort, effectiveModel, SettingsStore, worktreeRootLabel } from "../settings/settings.store";
+import { effectiveModel, SettingsStore, worktreeRootLabel } from "../settings/settings.store";
 import { TicketsStore } from "../stores/tickets.store";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -101,7 +101,6 @@ function slugName(title: string): string {
   host: { role: "dialog", "aria-modal": "true", "aria-label": "Spawn agent" },
   template: `
     @let proj = project();
-    @let tool = currentTool();
     @let linked = !!ticketId();
     <kj-dialog-shell>
       <div class="kj-dialog rise">
@@ -210,9 +209,9 @@ function slugName(title: string): string {
           <div style="display:flex;gap:var(--sp-6)">
             <kj-field class="spawn-field" style="flex:1">
               <kj-field-label>Model</kj-field-label>
-              <app-select [value]="model()" [options]="tool.models" (valueChange)="model.set($event)" />
+              <app-select [value]="model()" [options]="modelOptions()" (valueChange)="setModel($event)" />
             </kj-field>
-            @if (tool.effort) {
+            @if (effortLevels(); as levels) {
               <kj-field class="spawn-field" style="flex:1">
                 <kj-field-label>Reasoning effort</kj-field-label>
                 <!-- pills tabs, the same segmented control Settings uses for
@@ -230,7 +229,7 @@ function slugName(title: string): string {
                   (valueChange)="effort.set($any($event))"
                 >
                   <kj-tab-list aria-label="Reasoning effort">
-                    @for (ef of tool.effort; track ef) {
+                    @for (ef of levels; track ef) {
                       <kj-tab [value]="ef">{{ ef }}</kj-tab>
                     }
                   </kj-tab-list>
@@ -379,6 +378,22 @@ export class SpawnModalComponent {
 
   readonly model = signal<string>(this.prefillModel(this.currentTool()));
   readonly effort = signal<string | null>(this.prefillEffort(this.currentTool()));
+  /** The tool's curated models as grouped picker options ("Latest" aliases,
+   *  "Pinned versions"…), labels human, values the exact `--model` id. */
+  readonly modelOptions = computed<(SelectOption | SelectGroup)[]>(() => {
+    const groups: { label: string; options: SelectOption[] }[] = [];
+    for (const m of this.currentTool().models) {
+      const label = m.group ?? "";
+      let g = groups.find((x) => x.label === label);
+      if (!g) groups.push((g = { label, options: [] }));
+      g.options.push({ value: m.id, label: m.label });
+    }
+    // a single unnamed group is just a flat list
+    return groups.length === 1 && !groups[0].label ? groups[0].options : groups;
+  });
+  /** Effort levels the PICKED model accepts (per model: Haiku none, Opus 4.6
+   *  no `xhigh`); false hides the tray. */
+  readonly effortLevels = computed(() => effortLevelsFor(this.currentTool(), this.model()));
   // Pre-select the repo's default branch (origin/HEAD → main/master → HEAD);
   // fall back to the first branch in the list when no default resolves.
   readonly branch = signal<string>(this.defaultBranchFor(this.project()));
@@ -455,14 +470,27 @@ export class SpawnModalComponent {
    *  otherwise the tool's first curated model — the old hardcoded default. */
   private prefillModel(tool: AgentTool): string {
     const m = effectiveModel(this.settingsStore.settings(), tool.id);
-    return tool.models.includes(m) ? m : tool.models[0];
+    return modelOption(tool, m) ? m : tool.models[0].id;
   }
-  /** Per-tool settings effort override when valid"high" (the old hardcoded
-   *  default) otherwise; null for tools without effort levels. */
+  /** The user's explicit settings effort when the prefilled MODEL accepts it,
+   *  else that model's own default; null when it takes no effort (Haiku). The
+   *  raw override, not `effectiveEffort`: that resolves against the SETTINGS
+   *  model, which may be a custom id the dialog just fell back from. */
   private prefillEffort(tool: AgentTool): string | null {
-    if (!tool.effort) return null;
-    const e = effectiveEffort(this.settingsStore.settings(), tool.id);
-    return tool.effort.includes(e) ? e : "high";
+    const model = this.prefillModel(tool);
+    const levels = effortLevelsFor(tool, model);
+    if (!levels) return null;
+    const override = this.settingsStore.settings().toolEffort[tool.id];
+    return override && levels.includes(override) ? override : defaultEffortFor(tool, model);
+  }
+  /** Picking a model re-validates the effort against what IT accepts: keep
+   *  the level when offered, else fall to the model's default (or none). */
+  setModel(id: string) {
+    this.model.set(id);
+    const tool = this.currentTool();
+    const levels = effortLevelsFor(tool, id);
+    const cur = this.effort();
+    this.effort.set(!levels ? null : cur && levels.includes(cur) ? cur : defaultEffortFor(tool, id));
   }
 
   private promptEl = viewChild("promptEl", { read: ElementRef });
