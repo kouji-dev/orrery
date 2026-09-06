@@ -36,7 +36,7 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
           type="button"
           class="sb-link"
           (click)="openQueue()"
-          title="Work the unblock queue · N"
+          title="Work the unblock queue · Alt+N"
           style="color:var(--st-blocked)"
         >
           <span class="dot" style="background:var(--st-blocked)"></span

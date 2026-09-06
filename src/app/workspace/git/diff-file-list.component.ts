@@ -287,7 +287,7 @@ export class DiffFileListComponent {
     this.menuMode.set("rename");
     this.nameInput.set(this.name(this.menu()!.file.path));
     queueMicrotask(() => {
-      const el = this.host.nativeElement.querySelector(".dfl-input") as HTMLInputElement | null;
+      const el = this.host.nativeElement.querySelector(".menu-input") as HTMLInputElement | null;
       el?.focus();
       el?.select();
     });
