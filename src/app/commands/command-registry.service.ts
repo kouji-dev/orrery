@@ -153,9 +153,13 @@ export class CommandRegistryService {
       c({ id: "goto.line", label: "Go to Line…", group: "Navigate", icon: "enter", kbd: "Ctrl+l", enabled: !!fileLeaf, run: () => this.open("goto") }),
       c({ id: "goto.file", label: "Go to File…", group: "Navigate", icon: "file", kbd: "Ctrl+Shift+o", enabled: !!ag, run: () => this.open("search", "files") }),
       // v2 peek overlay: opens OVER the workspace (never replaces the tab).
-      // Guard: 'n' while the queue is already open belongs to its own next/prev
-      // handling — re-opening would recreate the component and reset the index.
-      c({ id: "queue.peek", label: "Needs You — Unblock Queue", group: "Navigate", icon: "bell", kbd: "n", run: () => { if (this.overlay()?.kind !== "peek") this.open("peek"); } }),
+      // Alt+N, not a bare 'n': the file editor is writable, so a bare letter
+      // would open the queue every time focus sat on a non-input surface of an
+      // open file (markdown preview, blame, image/PDF, a freshly opened pane).
+      // Same rule fuzzy.ts already enforces for user-recorded chords.
+      // Guard: Alt+N while the queue is already open belongs to its own
+      // next/prev handling — re-opening would reset the index.
+      c({ id: "queue.peek", label: "Needs You — Unblock Queue", group: "Navigate", icon: "bell", kbd: "Alt+n", run: () => { if (this.overlay()?.kind !== "peek") this.open("peek"); } }),
       c({ id: "view.orchestrator", label: "Open Orchestrator", group: "Navigate", icon: "grid", run: () => this.ui.selectTab("orchestrator") }),
       c({ id: "view.backlog", label: "Open Backlog", group: "Navigate", icon: "archive", run: () => this.ui.openBacklog() }),
       c({

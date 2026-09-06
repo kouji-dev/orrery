@@ -197,7 +197,7 @@ export class SidebarFileTreeComponent {
 
   private focusInput(): void {
     queueMicrotask(() => {
-      const el = this.host.nativeElement.querySelector(".ft-input") as HTMLInputElement | null;
+      const el = this.host.nativeElement.querySelector(".menu-input") as HTMLInputElement | null;
       el?.focus();
       el?.select();
     });

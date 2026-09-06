@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   input,
   signal,
@@ -15,6 +16,8 @@ import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
 import { fileDir, fileName, fileStateLabel, isMarkdownPath, langId, langTag, mix, revealLabelFor } from "../utils";
 import { UiStore } from "../ui/ui.store";
+import { EditsStore } from "../stores/edits.store";
+import { ScrollStateService } from "./scroll-state.service";
 import { MenuPanelComponent } from "../context-menu/menu-panel.component";
 import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
@@ -27,6 +30,21 @@ import { AddDelComponent } from "../shared/git/add-del.component";
 const LIST_MIN = 160; // px — narrowest the file-list panel may get
 const LIST_MAX = 520; // px — widest before the diff body is too cramped
 const LIST_DEFAULT = 300;
+
+/** Worktree paths travel with forward slashes; the backend joins them itself. */
+const norm = (p: string): string => p.replace(/\\/g, "/");
+const msgOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** What the row context menu acts on: a changed file, a folder row (a real
+ *  worktree folder, even though the tree synthesises the path segment), or
+ *  null for the empty space below the rows (the worktree root). */
+interface MenuTarget {
+  path: string;
+  name: string;
+  isDir: boolean;
+  /** The git state of a file row; null for folders (nothing to hand the OS). */
+  state: AgentFile["state"] | null;
+}
 
 @Component({
   selector: "app-diff-view",
@@ -54,14 +72,17 @@ const LIST_DEFAULT = 300;
           <kj-button kjSize="icon" kjVariant="ghost" (click)="refresh()" title="Rescan changes"><app-icon size="md" name="refresh" /></kj-button>
         </div>
 
-        <div class="scroll-y" style="padding-bottom:var(--sp-3)">
+        <!-- the listing is also the root-scoped menu surface: row handlers stop
+             propagation, so a right-click on empty space below them (or on the
+             "no changes" placeholder) creates at the worktree root -->
+        <div class="scroll-y" style="padding-bottom:var(--sp-3)" (contextmenu)="onContext($event, null)">
         @if (!changes().length) {
           <div style="padding:var(--sp-5) var(--sp-6);color:var(--ink-4)">no changes</div>
         } @else if (treeMode()) {
           <!-- tree view: folders + indented file leaves -->
           @for (row of treeRows(); track row.path) {
             @if (row.dir) {
-              <div class="diff-dir" (click)="toggleDir(row.path)" [style.padding-left.px]="8 + row.depth * 13">
+              <div class="diff-dir" (click)="toggleDir(row.path)" (contextmenu)="onDirContext($event, row.path, row.name)" [style.padding-left.px]="8 + row.depth * 13">
                 <app-icon [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" size="sm" color="var(--ink-4)" />
                 <app-icon [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" size="sm" color="var(--ink-4)" />
                 <!-- uniform-state folders read like their files: a fully-deleted
@@ -86,7 +107,7 @@ const LIST_DEFAULT = 300;
                 class="diff-file list-row"
                 [class.sel]="current()?.path === row.path"
                 (click)="select(row.path)"
-                (contextmenu)="onContext($event, row.file!)"
+                (contextmenu)="onFileContext($event, row.file!)"
                 [style.padding-left.px]="12 + row.depth * 13"
               >
                 <app-state-badge [state]="row.file!.state" />
@@ -103,7 +124,7 @@ const LIST_DEFAULT = 300;
               class="diff-file list-row"
               [class.sel]="current()?.path === f.path"
               (click)="select(f.path)"
-              (contextmenu)="onContext($event, f)"
+              (contextmenu)="onFileContext($event, f)"
             >
               <app-state-badge [state]="f.state" />
               <span [title]="f.state === 'R' && f.oldPath ? ('renamed from ' + f.oldPath) : f.path" class="fname trunc">{{ fname(f.path) }}</span>
@@ -119,13 +140,48 @@ const LIST_DEFAULT = 300;
         </div>
       </div>
 
-      <!-- context menu: OS hand-offs for one changed file, opened from a file
-           row in either view (folders and the header open nothing). A deleted
-           file has nothing on disk to open or show, so both items disable. -->
+      <!-- context menu: file/folder CRUD + the OS hand-offs, opened from a file
+           row, a folder row, or the empty space below the rows (creates only,
+           scoped to the worktree root). A deleted file has nothing left on
+           disk to open or show, so both hand-offs disable. -->
       @if (menu(); as m) {
         <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
-          <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="m.file.state === 'D'" (click)="openExternal(m.file)"><app-icon size="md" name="ext" />Open in Default App</kj-button>
-          <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="m.file.state === 'D'" (click)="reveal(m.file)"><app-icon size="md" name="folderOpen" />{{ revealLabel }}</kj-button>
+          @switch (menuMode()) {
+            @case ("actions") {
+              <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startInput('create-file')"><app-icon size="md" name="file" />New File…</kj-button>
+              <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startInput('create-dir')"><app-icon size="md" name="folder" />New Folder…</kj-button>
+              @if (m.target; as t) {
+                <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startRename()"><app-icon size="md" name="rename" />Rename…</kj-button>
+                <div class="menu-sep"></div>
+                <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="t.state === 'D'" (click)="openExternal(t)"><app-icon size="md" name="ext" />Open in Default App</kj-button>
+                <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="t.state === 'D'" (click)="reveal(t)"><app-icon size="md" name="folderOpen" />{{ revealLabel }}</kj-button>
+                <div class="menu-sep"></div>
+                <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item danger" (click)="menuMode.set('delete')"><app-icon size="md" name="trash" />Delete</kj-button>
+              }
+            }
+            @case ("delete") {
+              <div class="menu-label">Delete <b>{{ m.target?.name }}</b>{{ m.target?.isDir ? ' and its contents' : '' }}?</div>
+              <div class="menu-row">
+                <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
+                <kj-button kjVariant="danger" (click)="confirmDelete()">Delete</kj-button>
+              </div>
+            }
+            @default {
+              <div class="menu-label">{{ inputLabel() }}</div>
+              <input
+                class="menu-input"
+                [value]="nameInput()"
+                (input)="nameInput.set($any($event.target).value)"
+                (keydown.enter)="commit()"
+                (keydown.escape)="closeMenu()"
+                spellcheck="false"
+              />
+              <div class="menu-row">
+                <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
+                <kj-button kjVariant="default" [kjDisabled]="!nameInput().trim()" (click)="commit()">OK</kj-button>
+              </div>
+            }
+          }
         </app-menu-panel>
       }
 
@@ -344,6 +400,9 @@ export class DiffViewComponent {
   private agents = inject(AgentsStore);
   private work = inject(AgentWorkStore);
   private ui = inject(UiStore);
+  private edits = inject(EditsStore);
+  private scroll = inject(ScrollStateService);
+  private host = inject(ElementRef<HTMLElement>);
   readonly agent = input.required<Agent>();
 
   // selection by PATH (works across both flat + tree views); treeMode toggles
@@ -360,35 +419,149 @@ export class DiffViewComponent {
     this.ui.diffTreeMode.set(on);
   }
 
-  // ----- file-row context menu: the OS hand-offs (open / reveal) -----
-  // Same two commands the commit-diff list and the sidebar file tree ship;
-  // no rename/delete here — a working-tree change is the agent's, and those
-  // edits belong to the file tree (which shows every file, not just changed).
-  readonly menu = signal<{ x: number; y: number; file: AgentFile } | null>(null);
+  // ----- row context menu: file CRUD + the OS hand-offs -----
+  // The same menu the sidebar file tree ships, on the changed-file list. A
+  // folder row here IS a real worktree folder (the tree only synthesises the
+  // path segments), so rename / delete act on disk exactly as they do there.
+  // Creates scope to where the user pointed: a folder row → inside it, a file
+  // row → its parent, empty space below the rows → the worktree root.
+  readonly menu = signal<{ x: number; y: number; target: MenuTarget | null } | null>(null);
+  readonly menuMode = signal<"actions" | "create-file" | "create-dir" | "rename" | "delete">("actions");
+  readonly nameInput = signal("");
   readonly revealLabel = revealLabelFor(navigator.userAgent);
 
-  onContext(e: MouseEvent, file: AgentFile): void {
+  readonly inputLabel = computed(() => {
+    const t = this.menu()?.target ?? null;
+    switch (this.menuMode()) {
+      case "create-file":
+        return `New file in ${this.scopeDir(t) || "worktree root"}`;
+      case "create-dir":
+        return `New folder in ${this.scopeDir(t) || "worktree root"}`;
+      case "rename":
+        return `Rename ${t?.name ?? ""}`;
+      default:
+        return "";
+    }
+  });
+
+  onContext(e: MouseEvent, target: MenuTarget | null): void {
     e.preventDefault();
     e.stopPropagation();
-    this.menu.set({ x: e.clientX, y: e.clientY, file });
+    this.menu.set({ x: e.clientX, y: e.clientY, target });
+    this.menuMode.set("actions");
+    this.nameInput.set("");
+  }
+  /** Folder rows carry no AgentFile — build the target from the tree row. */
+  onDirContext(e: MouseEvent, path: string, name: string): void {
+    this.onContext(e, { path, name, isDir: true, state: null });
+  }
+  /** File rows: the changed file's state drives the OS hand-offs (a deleted
+   *  file has nothing on disk left to open or reveal). */
+  onFileContext(e: MouseEvent, file: AgentFile): void {
+    this.onContext(e, { path: file.path, name: fileName(file.path), isDir: false, state: file.state });
   }
   closeMenu(): void {
     this.menu.set(null);
   }
-  openExternal(file: AgentFile): void {
-    this.toOs(Commands.FileOpenExternal, file, "couldn't open");
+
+  startInput(mode: "create-file" | "create-dir"): void {
+    this.menuMode.set(mode);
+    this.nameInput.set("");
+    this.focusInput();
   }
-  reveal(file: AgentFile): void {
-    this.toOs(Commands.FileReveal, file, "couldn't reveal");
+  startRename(): void {
+    this.menuMode.set("rename");
+    this.nameInput.set(this.menu()?.target?.name ?? "");
+    this.focusInput();
+  }
+  private focusInput(): void {
+    queueMicrotask(() => {
+      const el = this.host.nativeElement.querySelector(".menu-input") as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    });
+  }
+
+  /** Directory a create scopes to: the row itself (folder), its parent (file),
+   *  or "" for the worktree root. */
+  private scopeDir(t: MenuTarget | null): string {
+    if (!t) return "";
+    const p = norm(t.path);
+    if (t.isDir) return p;
+    const i = p.lastIndexOf("/");
+    return i === -1 ? "" : p.slice(0, i);
+  }
+
+  async commit(): Promise<void> {
+    const m = this.menu();
+    const name = this.nameInput().trim();
+    if (!m || !name) return;
+    const mode = this.menuMode();
+    const id = this.agentId();
+    try {
+      if (mode === "rename") {
+        const from = norm(m.target!.path);
+        // the parent of the row, folder and file alike
+        const dir = this.scopeDir({ ...m.target!, isDir: false });
+        const to = dir ? `${dir}/${name}` : name;
+        await this.bridge.invoke(Commands.FileRename, { id, from, to });
+        this.edits.close(id, from); // stale buffer under the old path
+        this.scroll.clear(id, from);
+      } else {
+        const base = this.scopeDir(m.target);
+        const path = base ? `${base}/${name}` : name;
+        const cmd = mode === "create-dir" ? Commands.DirCreate : Commands.FileCreate;
+        await this.bridge.invoke(cmd, { id, path });
+        if (mode === "create-file") this.ui.openFileInWorkspace(id, path);
+      }
+      this.closeMenu();
+      this.afterMutation();
+    } catch (e) {
+      this.ui.flash(msgOf(e));
+    }
+  }
+
+  async confirmDelete(): Promise<void> {
+    const t = this.menu()?.target;
+    if (!t) return;
+    const id = this.agentId();
+    const path = norm(t.path);
+    // dismiss first, like every other row action: the confirmation has already
+    // been given, and a failure reports through the flash rather than by
+    // leaving the menu hanging open.
+    this.closeMenu();
+    try {
+      await this.bridge.invoke(Commands.FileDelete, { id, path });
+      this.edits.close(id, path);
+      this.scroll.clear(id, path);
+      this.afterMutation();
+    } catch (e) {
+      this.ui.flash(msgOf(e));
+    }
+  }
+
+  /** A worktree write moves BOTH feeds: this list (git status) and the sidebar
+   *  file tree, which is rooted at the same agent id. */
+  private afterMutation(): void {
+    const id = this.agentId();
+    this.work.loadChanges(id);
+    this.work.loadTree(id, true);
+  }
+
+  openExternal(t: MenuTarget): void {
+    this.toOs(Commands.FileOpenExternal, t.path, "couldn't open");
+  }
+  reveal(t: MenuTarget): void {
+    this.toOs(Commands.FileReveal, t.path, "couldn't reveal");
   }
   /** Dismiss first, then hand the worktree-relative path to the OS; a failure
    *  reports through the flash rather than by leaving the menu hanging open. */
-  private toOs(command: string, file: AgentFile, failed: string): void {
-    const path = file.path.replace(/\\/g, "/");
+  private toOs(command: string, raw: string, failed: string): void {
+    const path = norm(raw);
     this.closeMenu();
     void this.bridge
       .invoke(command, { id: this.agentId(), path })
-      .catch((e: unknown) => this.ui.flash(`${failed} ${fileName(path)}: ${e instanceof Error ? e.message : String(e)}`));
+      .catch((e: unknown) => this.ui.flash(`${failed} ${fileName(path)}: ${msgOf(e)}`));
   }
 
   readonly fname = fileName;

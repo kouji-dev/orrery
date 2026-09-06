@@ -34,7 +34,7 @@ import { KjPopoverContent, KjPopoverTrigger } from "@kouji-ui/core";
             <span class="up" style="color:var(--ink-2)">Notifications</span>
             @if (unread()) {
               <!-- v2: the ACT path — the peek queue opens over the workspace -->
-              <kj-button kjVariant="outline" style="margin-left:auto;color:var(--ui-ink)" (click)="np.controller.close(); workQueue()" title="Walk the pending queue · N">
+              <kj-button kjVariant="outline" style="margin-left:auto;color:var(--ui-ink)" (click)="np.controller.close(); workQueue()" title="Walk the pending queue · Alt+N">
                 <app-icon name="bolt" size="sm" />Work the queue · {{ unread() }}
               </kj-button>
             }
