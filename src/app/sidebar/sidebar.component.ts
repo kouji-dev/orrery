@@ -10,6 +10,7 @@ import { IconComponent } from "../shared/icon.component";
 import { ProjectGroupComponent } from "./project-group.component";
 import { KjBadgeComponent, KjButtonComponent, KjInputComponent, KjInputGroupAddonComponent, KjInputGroupComponent } from "@kouji-ui/components";
 import { SidebarFilesComponent } from "./files/sidebar-files.component";
+import { FilesRootService } from "./files/files-root.service";
 
 @Component({
   selector: "app-sidebar",
@@ -151,6 +152,7 @@ export class SidebarComponent {
   readonly runtime = inject(AgentRuntimeService);
   private readonly agentsStore = inject(AgentsStore);
   private readonly ticketsStore = inject(TicketsStore);
+  private readonly filesRoot = inject(FilesRootService);
   readonly collapsed = signal<Record<string, boolean>>({});
 
   constructor() {
@@ -209,8 +211,13 @@ export class SidebarComponent {
     return g.length > 0 && g.every((x) => this.collapsed()[x.project.id]);
   });
 
+  /** A project row is also "work on this project": it roots the files tree at
+   *  the project's main — unless the project is already in scope, where
+   *  re-rooting would yank the tree off the worktree in use (FilesRootService).
+   *  The collapse/expand is unconditional either way. */
   toggle(id: string) {
     this.collapsed.update((c) => ({ ...c, [id]: !c[id] }));
+    this.filesRoot.selectProject(id);
   }
 
   /** One click folds every visible project away, the next brings them back. */

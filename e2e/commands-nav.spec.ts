@@ -133,7 +133,11 @@ test("Ctrl+Shift+F opens find-in-files with scope + toggles once an agent exists
   await expect(replaceTab).toBeEnabled();
   await expect(find.getByRole("button", { name: "Aa" })).toBeVisible();
   await expect(find.getByRole("button", { name: ".*" })).toBeVisible();
-  await expect(find.locator("kj-select")).toBeVisible();
+  // the lone scope select is an <app-scope-bar> now: project + worktree + kind
+  await expect(find.locator("app-scope-bar")).toBeVisible();
+  // worktree + kind always; the project select only once a project exists, and
+  // this spec seeds a bare agent — so assert the floor, not an exact shape
+  expect(await find.locator("app-scope-bar kj-select").count()).toBeGreaterThanOrEqual(2);
   await expect(find).toContainText("type to search");
 
   // switching to Replace reveals the replacement row + apply button

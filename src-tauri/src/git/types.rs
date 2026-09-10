@@ -43,6 +43,29 @@ pub struct FileChange {
     pub old_path: Option<String>,
 }
 
+/// One file touched by a SET of selected commits (`commits_files`): the change
+/// SUMMED across every selected commit that touched it, plus the span of those
+/// commits.
+///
+/// The span travels with the row because the per-file diff for a selection is
+/// "the file before `first_sha`" vs "the file at `last_sha`" — carrying both
+/// here lets a file click cost two tree diffs instead of re-walking the whole
+/// selection. Unlike a range, commits BETWEEN two selected commits contribute
+/// nothing.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitsFile {
+    /// path / add / del / state / old_path, summed and collapsed over the span.
+    #[serde(flatten)]
+    pub file: FileChange,
+    /// Oldest SELECTED commit that touched this file.
+    pub first_sha: String,
+    /// Newest SELECTED commit that touched this file.
+    pub last_sha: String,
+    /// How many of the selected commits touched it.
+    pub commits: usize,
+}
+
 /// Old (HEAD) vs new (working-tree) content of a file, for a diff view.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

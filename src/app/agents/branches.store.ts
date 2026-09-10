@@ -116,6 +116,15 @@ export class BranchesStore {
     );
   }
 
+  /** Fast-forward a branch nobody has checked out, straight from its upstream. */
+  updateBranch(projectId: string, name: string, upstream: string): Promise<boolean> {
+    return this.op(
+      projectId,
+      () => this.bridge.invoke(Commands.ProjectBranchUpdate, { id: projectId, branch: name, upstream }),
+      `Updated ${name}`,
+    );
+  }
+
   checkoutAgent(projectId: string, agentId: string, branch: string): Promise<boolean> {
     return this.op(
       projectId,

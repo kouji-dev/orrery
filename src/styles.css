@@ -1792,6 +1792,18 @@ app-icon svg {
 .kj-center .kj-button {
   --kj-button-justify: center;
 }
+/* Icon-only button that must line up with LABELLED siblings (card action rows,
+   branch row ops). Unlike .kj-button[data-size="icon"] further down — which
+   deliberately drops the control height so a lone glyph fits a dense toolbar —
+   this KEEPS the size step's height and only squares the padding, so the glyph
+   sits in a box exactly as tall as the buttons beside it. `flex:none` for the
+   same reason .kj-push needs its extra selectors: the host is
+   `display:contents`, so the flex item is the inner .kj-button. */
+kj-button.kj-icon .kj-button {
+  --kj-button-justify: center;
+  --kj-button-padding-x: var(--sp-3);
+  flex: none;
+}
 /* Push a control to the end of its row (the last item before a right edge). */
 /* Pushes an element to the end of its flex row. The extra selectors matter:
    kouji's element wrappers are `display:contents`, so the flex ITEM is the

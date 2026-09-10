@@ -21,10 +21,11 @@ const seedAgent = (id: string, name: string) => `(() => {
   });
 })()`;
 
-/** Seed a project through the open dock's ProjectActionsService handle. */
+/** Seed a project through the top bar's ProjectActionsService handle. The dock
+ *  no longer holds one of its own — its scope comes from a ScopeSelection. */
 const seedProject = `(() => {
-  const tw = window.ng.getComponent(document.querySelector("app-tool-window"));
-  tw.projects["projectsStore"]["store"].upsert({
+  const bar = window.ng.getComponent(document.querySelector("app-top-bar"));
+  bar.projects["projectsStore"]["store"].upsert({
     id: "p-e2e", name: "e2e-proj", path: "", icon: "box", color: "#a855f7",
     folderExists: true, hasGit: true, branch: "main", branches: ["main", "dev"],
   });
@@ -89,7 +90,7 @@ test("the palette lists and runs the tool-window commands", async ({ page }) => 
   await expect(page.locator("app-commit-graph-panel")).toHaveCount(1);
 });
 
-test("graph panel: real scope, filter chrome, and the B4.1 path filter disabled", async ({ page }) => {
+test("graph panel: real scope, filter chrome, and the branch context row", async ({ page }) => {
   await openSeeded(page);
   const panel = page.locator("app-commit-graph-panel");
 
@@ -97,12 +98,17 @@ test("graph panel: real scope, filter chrome, and the B4.1 path filter disabled"
   // (no backend) → honest empty state, never fabricated rows
   await expect(panel.locator(`input[placeholder="Filter by message or sha…"]`)).toBeVisible();
   await expect(panel).toContainText("no commits on this branch yet");
-  await expect(panel).toContainText("shift-click two commits");
+  // the selection model is N commits now, not a fixed pair
+  await expect(panel).toContainText("click, shift-click a run, ctrl-click to add");
 
-  // the B4.1 note lives on the <kj-input>'s wrapper, not on the native input
-  const path = panel.locator(`input[placeholder="path…"]`);
-  await expect(path).toBeDisabled();
-  await expect(panel.getByTitle(/B4\.1/)).toBeVisible();
+  // the dead disabled "path…" input is gone; the row it made way for names the
+  // branch this graph IS and offers the two ops that refresh it
+  await expect(panel.locator(`input[placeholder="path…"]`)).toHaveCount(0);
+  // the dock scope follows the focused agent; with no agent tab open it resolves
+  // to the project's MAIN checkout, so the context row names that branch
+  await expect(panel).toContainText("main");
+  await expect(panel.getByRole("button", { name: "Fetch" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Update" })).toBeVisible();
 
   // the scope cluster shows the seeded project + worktree — <app-select> is a
   // kouji <kj-select> now, so the trigger LABEL is what's assertable (not a value)
@@ -126,7 +132,9 @@ test("branches panel: live A3.2 chrome with honest no-backend states", async ({ 
   await expect(panel).toContainText("Branches · e2e-proj");
   await expect(panel).toContainText("main");
   await expect(panel).toContainText("dev");
-  await expect(panel).toContainText("agent/e2e-tw");
+  // the dock scope follows the focused agent; with no agent tab open it resolves
+  // to the project's MAIN checkout, so the context row names that branch
+  await expect(panel).toContainText("main");
   // the scoped worktree's branch is HEAD
   await expect(panel.locator("kj-badge", { hasText: "HEAD" })).toHaveCount(1);
 
@@ -134,15 +142,22 @@ test("branches panel: live A3.2 chrome with honest no-backend states", async ({ 
   await expect(panel).toContainText("Remotes");
   await expect(panel).toContainText("no remotes configured");
 
-  // live ops: New branch stays disabled until a name is typed, then enables
-  const newBranch = panel.getByRole("button", { name: "New branch" }).first();
-  await expect(newBranch).toBeDisabled();
+  // the create form is a MODE now: no permanent input row until you ask for one
+  await expect(panel.locator(`input[placeholder="new branch name…"]`)).toHaveCount(0);
+  await panel.getByRole("button", { name: "New branch" }).first().click();
+  const create = panel.getByRole("button", { name: "Create" });
+  await expect(create).toBeDisabled();
   await panel.locator(`input[placeholder="new branch name…"]`).fill("feat-e2e");
-  await expect(newBranch).toBeEnabled();
+  await expect(create).toBeEnabled();
+  await panel.getByRole("button", { name: "Cancel" }).first().click();
+  await expect(panel.locator(`input[placeholder="new branch name…"]`)).toHaveCount(0);
 
-  // row ops are enabled buttons now (invokes reject backend-side — no fake ok)
+  // row ops are ICON-ONLY now — reachable only by their accessible name
   const checkout = panel.getByRole("button", { name: "Checkout" }).first();
   await expect(checkout).toBeEnabled();
+  await expect(panel.getByRole("button", { name: "Update" }).first()).toBeEnabled();
+  await expect(panel.getByRole("button", { name: "Upstream" }).first()).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Rename" }).first()).toBeVisible();
   // Delete opens a <kj-confirm-popup> — its content is portalled out of the
   // panel, so the confirm chrome is asserted at page scope
   await panel.getByRole("button", { name: "Delete" }).first().click();

@@ -152,6 +152,10 @@ export class CommandRegistryService {
       c({ id: "recent.files", label: "Recent Files", group: "Navigate", icon: "clock", kbd: "Ctrl+e", run: () => this.open("recent") }),
       c({ id: "goto.line", label: "Go to Line…", group: "Navigate", icon: "enter", kbd: "Ctrl+l", enabled: !!fileLeaf, run: () => this.open("goto") }),
       c({ id: "goto.file", label: "Go to File…", group: "Navigate", icon: "file", kbd: "Ctrl+Shift+o", enabled: !!ag, run: () => this.open("search", "files") }),
+      // Ctrl+T (IntelliJ/VS Code "Go to Symbol"), Ctrl+Alt+Shift+O as the alt.
+      // Both slots are free, and `matchBinding` requires EXACT modifier
+      // equality (fuzzy.ts:84-94), so Go to File's Ctrl+Shift+O is untouched.
+      c({ id: "goto.symbol", label: "Go to Symbol…", group: "Navigate", icon: "box", kbd: "Ctrl+t", kbdAlt: "Ctrl+Alt+Shift+o", enabled: !!ag, run: () => this.open("search", "symbols") }),
       // v2 peek overlay: opens OVER the workspace (never replaces the tab).
       // Alt+N, not a bare 'n': the file editor is writable, so a bare letter
       // would open the queue every time focus sat on a non-input surface of an

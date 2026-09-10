@@ -94,25 +94,33 @@ import { SelectComponent } from "../shared/select.component";
               </kj-button>
               <kj-button
                 kjVariant="default"
-                [kjDisabled]="store.busy() || !newName().trim()"
-                title="create the branch named below"
-                (click)="create(p.id)"
+                [kjPressed]="newOpen()"
+                [kjDisabled]="store.busy()"
+                title="name a new branch and its start point"
+                (click)="toggleNew()"
               >
                 <app-icon name="plus" size="sm" />New branch
               </kj-button>
             </div>
           </div>
-          <div class="pane-head" style="background:var(--panel-2)">
-            <kj-input
-              kjSize="sm"
-              [value]="newName()"
-              (input)="newName.set($any($event.target).value)"
-              (keydown.enter)="create(p.id)"
-              placeholder="new branch name…"
-            />
-            <span style="color:var(--ink-4)">from</span>
-            <app-select [value]="newFrom() ?? current()" [options]="names()" (valueChange)="newFrom.set($event)" style="width: round(calc(160px * var(--density)), 1px);flex:none" />
-          </div>
+          <!-- the create form is a MODE, not permanent chrome: it only earns a
+               row while the user is actually naming a branch -->
+          @if (newOpen()) {
+            <div class="pane-head" style="background:var(--panel-2)">
+              <kj-input
+                kjSize="sm"
+                [value]="newName()"
+                (input)="newName.set($any($event.target).value)"
+                (keydown.enter)="create(p.id)"
+                (keydown.escape)="closeNew()"
+                placeholder="new branch name…"
+              />
+              <span style="color:var(--ink-4)">from</span>
+              <app-select [value]="newFrom() ?? current()" [options]="names()" (valueChange)="newFrom.set($event)" style="width: round(calc(160px * var(--density)), 1px);flex:none" />
+              <kj-button kjVariant="default" [kjDisabled]="store.busy() || !newName().trim()" title="create the branch named here" (click)="create(p.id)">Create</kj-button>
+              <kj-button kjVariant="toolbar" title="discard" (click)="closeNew()">Cancel</kj-button>
+            </div>
+          }
           <div class="scroll-y" style="flex:1;padding:var(--sp-2) 0">
             @for (b of rows(); track b.name) {
               @let held = b.checkedOutIn !== undefined;
@@ -144,33 +152,39 @@ import { SelectComponent } from "../shared/select.component";
                   <kj-button kjVariant="toolbar" [kjDisabled]="!renameTo().trim()" (click)="doRename(p.id, b.name)">OK</kj-button>
                   <kj-button kjVariant="toolbar" (click)="renameFor.set(null)">Cancel</kj-button>
                 } @else {
+                  <!-- row ops are ICON-ONLY: six labelled buttons per row drowned
+                       the branch name they act on. The title (hover) and the
+                       kjAriaLabel (a11y + e2e) carry the verb. -->
                   <div style="margin-left:auto;display:flex;gap:var(--sp-1)">
                     @if (!b.current && agent()) {
-                      <kj-button kjVariant="toolbar" [title]="'diff ' + b.name + ' against ' + current() + ' — file list + per-file diffs in the center'" (click)="compare(b.name)">
-                        <app-icon size="md" name="diff" />Diff
+                      <kj-button kjVariant="toolbar" kjAriaLabel="Diff" [title]="'diff ' + b.name + ' against ' + current() + ' — file list + per-file diffs in the center'" (click)="compare(b.name)">
+                        <app-icon size="md" name="diff" />
                       </kj-button>
                     }
                     @if (!b.current) {
-                      <kj-button kjVariant="toolbar" [kjDisabled]="store.busy() || held || !agent()" [title]="checkoutTitle(b)" (click)="checkout(p.id, b.name)">
-                        <app-icon size="md" name="enter" />Checkout
+                      <kj-button kjVariant="toolbar" kjAriaLabel="Checkout" [kjDisabled]="store.busy() || held || !agent()" [title]="checkoutTitle(b)" (click)="checkout(p.id, b.name)">
+                        <app-icon size="md" name="enter" />
                       </kj-button>
                     }
-                    <kj-button kjVariant="toolbar" [kjDisabled]="store.busy()" [title]="upstreamTitle(b)" (click)="toggleUpstream(p.id, b)">
-                      <app-icon size="md" name="link" />Upstream
+                    <kj-button kjVariant="toolbar" kjAriaLabel="Update" [kjDisabled]="store.busy()" [title]="updateTitle(b)" (click)="update(p.id, b)">
+                      <app-icon size="md" name="stage" />
+                    </kj-button>
+                    <kj-button kjVariant="toolbar" kjAriaLabel="Upstream" [kjDisabled]="store.busy()" [title]="upstreamTitle(b)" (click)="toggleUpstream(p.id, b)">
+                      <app-icon size="md" name="link" />
                     </kj-button>
                     @if (!b.current && agent()) {
-                      <kj-button kjVariant="toolbar" [kjDisabled]="store.busy()" [title]="'merge ' + b.name + ' into ' + agent()!.branch + ' · native (conflicts open the resolver)'" (click)="mergeIn(b.name)">
-                        <app-icon size="md" name="merge" />Merge in
+                      <kj-button kjVariant="toolbar" kjAriaLabel="Merge in" [kjDisabled]="store.busy()" [title]="'merge ' + b.name + ' into ' + agent()!.branch + ' · native (conflicts open the resolver)'" (click)="mergeIn(b.name)">
+                        <app-icon size="md" name="merge" />
                       </kj-button>
                     }
-                    <kj-button kjVariant="toolbar" [kjDisabled]="store.busy() || held" [title]="held ? 'in use — cannot rename' : 'rename branch'" (click)="startRename(b.name)">
-                      <app-icon size="md" name="rename" />Rename
+                    <kj-button kjVariant="toolbar" kjAriaLabel="Rename" [kjDisabled]="store.busy() || held" [title]="held ? 'in use — cannot rename' : 'rename branch'" (click)="startRename(b.name)">
+                      <app-icon size="md" name="rename" />
                     </kj-button>
                     @if (!b.current) {
                       <kj-confirm-popup [kjDestructive]="true">
                         <kj-confirm-popup-trigger #delTrig="kjConfirmPopupTrigger">
-                          <kj-button kjVariant="danger" [kjDisabled]="store.busy() || held" [title]="held ? 'in use — cannot delete' : 'delete branch'">
-                            <app-icon size="md" name="trash" />Delete
+                          <kj-button kjVariant="danger" kjAriaLabel="Delete" [kjDisabled]="store.busy() || held" [title]="held ? 'in use — cannot delete' : 'delete branch'">
+                            <app-icon size="md" name="trash" />
                           </kj-button>
                         </kj-confirm-popup-trigger>
                         <kj-confirm-popup-content [kjFor]="delTrig">
@@ -208,6 +222,8 @@ export class BranchesPanelComponent {
 
   readonly newName = signal("");
   readonly newFrom = signal<string | null>(null);
+  /** Is the create-branch form showing (it is a mode, not permanent chrome). */
+  readonly newOpen = signal(false);
   readonly renameFor = signal<string | null>(null);
   readonly renameTo = signal("");
 
@@ -256,12 +272,68 @@ export class BranchesPanelComponent {
     else void this.store.pull(projectId);
   }
 
+  toggleNew(): void {
+    if (this.newOpen()) this.closeNew();
+    else this.newOpen.set(true);
+  }
+
+  closeNew(): void {
+    this.newOpen.set(false);
+    this.newName.set("");
+    this.newFrom.set(null);
+  }
+
   create(projectId: string): void {
     const name = this.newName().trim();
     if (!name) return;
     void this.store.create(projectId, name, this.newFrom() ?? this.current()).then((ok) => {
-      if (ok) this.newName.set("");
+      if (ok) this.closeNew();
     });
+  }
+
+  /** The scoped worktree's DIRECTORY name — what `BranchInfo.checkedOutIn`
+   *  reports. It is NOT `Agent.name`: spawn appends a 6-char uuid fragment to
+   *  the slug when the name is already taken in the project. */
+  private scopedWorktreeDir(): string | null {
+    const wt = this.agent()?.worktree;
+    if (!wt) return null;
+    return wt.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? null;
+  }
+
+  updateTitle(b: BranchInfo): string {
+    if (b.current) return "git pull --ff-only in the project checkout";
+    if (b.checkedOutIn !== undefined && b.checkedOutIn === this.scopedWorktreeDir())
+      return `git pull --ff-only in ${this.agent()!.name}'s worktree`;
+    if (b.checkedOutIn !== undefined)
+      return `checked out in ${b.checkedOutIn || "the project checkout"} — update it from that worktree`;
+    if (!b.upstream) return "no upstream — set one first";
+    return `git fetch ${b.upstream.replace("/", " ")}:${b.name} — fast-forward only`;
+  }
+
+  /** Bring one branch up to date. Deliberately NOT gated on `behind > 0`: the
+   *  counts come from the local remote-tracking ref, so they are stale until a
+   *  fetch — hiding the button would hide the very thing that refreshes them. */
+  update(projectId: string, b: BranchInfo): void {
+    if (b.current) {
+      void this.store.pull(projectId);
+      return;
+    }
+    const ag = this.agent();
+    if (ag && b.checkedOutIn !== undefined && b.checkedOutIn === this.scopedWorktreeDir()) {
+      void this.store.pullAgent(projectId, ag.id);
+      return;
+    }
+    if (b.checkedOutIn !== undefined) {
+      this.ui.flash(
+        `checked out in ${b.checkedOutIn || "the project checkout"} — update it from that worktree`,
+      );
+      return;
+    }
+    if (!b.upstream) {
+      this.ui.flash("no upstream — set one first");
+      return;
+    }
+    void this.store.updateBranch(projectId, b.name, b.upstream);
   }
 
   checkoutTitle(b: BranchInfo): string {

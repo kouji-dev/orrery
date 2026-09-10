@@ -20,13 +20,14 @@
 //! helper handles auth (gix has no push at all). They are default methods
 //! here.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::core::errors::{AppError, AppResult};
 
 use super::types::{
-    Blame, BranchInfo, ConflictFile, FileChange, FileDiff, FileHistoryEntry, Hunk, LogEntry,
-    MergeSession, RemoteInfo, SessionState, WorktreeDisposal,
+    Blame, BranchInfo, CommitsFile, ConflictFile, FileChange, FileDiff, FileHistoryEntry, Hunk,
+    LogEntry, MergeSession, RemoteInfo, SessionState, WorktreeDisposal,
 };
 
 /// Where a repository keeps its parts — the file watcher's root set. For a
@@ -114,6 +115,123 @@ pub trait GitBackend: Send + Sync {
     fn commit_file_diff(&self, path: &Path, sha: &str, rel: &str) -> AppResult<FileDiff>;
     /// Files changed between two revisions' trees.
     fn range_diff(&self, path: &Path, from: &str, to: &str) -> AppResult<Vec<FileChange>>;
+
+    /// Files changed BY a SET of commits — the union of what each selected
+    /// commit itself introduced. This is NOT [`Self::range_diff`]: a two-tree
+    /// compare of the endpoints would drag in files touched only by unselected
+    /// commits sitting between the selections, and would miss what the OLDEST
+    /// selected commit introduced (its own tree is the starting point). Both
+    /// are wrong for "show me what these commits changed".
+    ///
+    /// A default method on purpose: [`Self::commit_files`] already diffs one
+    /// commit against its own first parent and is root-commit safe (the parent
+    /// tree is an Option), so the union needs no new object-database code.
+    fn commits_files(&self, path: &Path, shas: &[String]) -> AppResult<Vec<CommitsFile>> {
+        // Time order, not click order: the state collapse and each file's span
+        // are defined by which selected commit came first and which last.
+        let mut ordered: Vec<(i64, String)> = shas
+            .iter()
+            .map(|sha| self.commit_time(path, sha))
+            .collect::<AppResult<Vec<_>>>()?;
+        ordered.sort_by_key(|(t, _)| *t);
+
+        /// Per-path accumulator. `first_state` is kept beside the running
+        /// FileChange because the collapse needs BOTH ends of the span.
+        struct Acc {
+            file: FileChange,
+            first_state: String,
+            first_sha: String,
+            last_sha: String,
+            commits: usize,
+        }
+
+        // A Vec of keys beside the map: the file list keeps first-touch order,
+        // which is stable across reloads (HashMap iteration is not).
+        let mut order: Vec<String> = Vec::new();
+        let mut acc: HashMap<String, Acc> = HashMap::new();
+
+        for (_, sha) in &ordered {
+            for ch in self.commit_files(path, sha)? {
+                match acc.get_mut(&ch.path) {
+                    Some(a) => {
+                        a.file.add += ch.add;
+                        a.file.del += ch.del;
+                        // A later rename is the move the user ends up seeing,
+                        // so the newest "R" wins the pre-move path.
+                        if ch.old_path.is_some() {
+                            a.file.old_path = ch.old_path;
+                        }
+                        a.file.state = ch.state; // running LAST state
+                        a.last_sha = sha.clone();
+                        a.commits += 1;
+                    }
+                    None => {
+                        order.push(ch.path.clone());
+                        acc.insert(
+                            ch.path.clone(),
+                            Acc {
+                                first_state: ch.state.clone(),
+                                file: ch,
+                                first_sha: sha.clone(),
+                                last_sha: sha.clone(),
+                                commits: 1,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(order
+            .into_iter()
+            .filter_map(|p| acc.remove(&p))
+            .map(|mut a| {
+                // Gone by the end of the span → "D", however it got there;
+                // born inside the span and still alive → "A"; else "M". The
+                // one exception is a lone touch, which keeps its own state so
+                // a single-commit rename still reads as "R".
+                a.file.state = if a.file.state == "D" {
+                    "D".to_string()
+                } else if a.first_state == "A" {
+                    "A".to_string()
+                } else if a.commits == 1 {
+                    a.first_state
+                } else {
+                    "M".to_string()
+                };
+                CommitsFile {
+                    file: a.file,
+                    first_sha: a.first_sha,
+                    last_sha: a.last_sha,
+                    commits: a.commits,
+                }
+            })
+            .collect())
+    }
+
+    /// Old/new text of `rel` across one file's span of SELECTED commits: `old`
+    /// is the file BEFORE `first_sha`, `new` is the file AT `last_sha`.
+    ///
+    /// The span shas are ARGUMENTS rather than re-derived from the selection so
+    /// that clicking a file costs O(2) tree diffs instead of O(N) — one per
+    /// selected commit — every time; [`Self::commits_files`] already recorded
+    /// them on the row. Root-commit safe for the same reason as
+    /// [`Self::commit_files`]: the parent tree it diffs against is an Option.
+    fn commit_span_file_diff(
+        &self,
+        path: &Path,
+        first_sha: &str,
+        last_sha: &str,
+        rel: &str,
+    ) -> AppResult<FileDiff> {
+        let old = self.commit_file_diff(path, first_sha, rel)?.old;
+        let last = self.commit_file_diff(path, last_sha, rel)?;
+        Ok(FileDiff {
+            old,
+            new: last.new,
+            lang: last.lang,
+        })
+    }
     /// Old/new text of `rel` between two revisions.
     fn range_file_diff(&self, path: &Path, from: &str, to: &str, rel: &str)
         -> AppResult<FileDiff>;
@@ -223,6 +341,54 @@ pub trait GitBackend: Send + Sync {
         cmd.current_dir(checkout).args(["pull", "--ff-only"]);
         run_git(cmd, "pull")
     }
+
+    /// Bring ONE local branch up to date with its upstream without checking it
+    /// out anywhere: `git fetch <remote> <remote_branch>:<branch>`.
+    ///
+    /// A refspec fetch into a local branch is fast-forward-only by git's own
+    /// rules, so there is no "--ff-only" to pass and nothing to undo — the two
+    /// failures both surface git's stderr VERBATIM to the user:
+    ///
+    /// * "refusing to fetch into branch …" — the branch is checked out in this
+    ///   repository or one of its worktrees, so it must be pulled from there.
+    ///   The UI routes those rows to `pull_ff` instead and never gets here.
+    /// * "\[rejected\] … (non-fast-forward)" — the local branch has commits the
+    ///   upstream does not; that needs a merge or rebase, not an update.
+    ///
+    /// `upstream` is the SHORTHAND tracking name (`origin/main`,
+    /// `origin/feature/x`) and splits on the FIRST '/' only, because remote
+    /// branch names may themselves contain slashes.
+    fn branch_update(&self, repo_path: &Path, branch: &str, upstream: &str) -> AppResult<()> {
+        let (remote, remote_branch) = split_upstream(upstream)?;
+        let mut cmd = crate::core::proc::cmd("git");
+        cmd.current_dir(repo_path)
+            .args(["fetch", remote, &format!("{remote_branch}:{branch}")]);
+        run_git(cmd, "fetch")
+    }
+}
+
+/// `origin/feature/x` -> ("origin", "feature/x"). Splitting on the FIRST '/'
+/// is what makes slashed branch names work; splitting on the last would fetch
+/// a remote named "origin/feature".
+///
+/// A "." remote is git's marker for a LOCAL-branch upstream (`branch.*.remote
+/// = .`). There is nothing to fetch from it, and `git fetch .` would silently
+/// self-fetch, so it is rejected with a message the user can act on.
+pub(crate) fn split_upstream(upstream: &str) -> AppResult<(&str, &str)> {
+    let (remote, remote_branch) = upstream
+        .split_once('/')
+        .ok_or_else(|| AppError::Other(format!("upstream '{upstream}' is not <remote>/<branch>")))?;
+    if remote.is_empty() || remote_branch.is_empty() {
+        return Err(AppError::Other(format!(
+            "upstream '{upstream}' is not <remote>/<branch>"
+        )));
+    }
+    if remote == "." {
+        return Err(AppError::Other(format!(
+            "upstream '{upstream}' tracks a local branch — merge it instead of updating"
+        )));
+    }
+    Ok((remote, remote_branch))
 }
 
 /// Run a prepared `git` command; a non-zero exit surfaces git's stderr.
@@ -237,5 +403,36 @@ fn run_git(mut cmd: std::process::Command, what: &str) -> AppResult<()> {
             "git {what} failed: {}",
             String::from_utf8_lossy(&out.stderr).trim()
         )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_upstream;
+
+    #[test]
+    fn splits_on_the_first_slash_so_slashed_branches_survive() {
+        assert_eq!(split_upstream("origin/main").unwrap(), ("origin", "main"));
+        assert_eq!(
+            split_upstream("origin/feature/x").unwrap(),
+            ("origin", "feature/x")
+        );
+        assert_eq!(
+            split_upstream("upstream/release/2.0/rc1").unwrap(),
+            ("upstream", "release/2.0/rc1")
+        );
+    }
+
+    #[test]
+    fn rejects_a_local_branch_upstream() {
+        let err = split_upstream("./main").unwrap_err().to_string();
+        assert!(err.contains("local branch"), "{err}");
+    }
+
+    #[test]
+    fn rejects_malformed_upstreams() {
+        for bad in ["origin", "", "/main", "origin/"] {
+            assert!(split_upstream(bad).is_err(), "expected error for {bad:?}");
+        }
     }
 }
