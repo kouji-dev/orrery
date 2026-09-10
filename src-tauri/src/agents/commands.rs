@@ -364,9 +364,12 @@ pub fn agent_start<R: Runtime>(
             program_override.as_deref(),
         )
         .map_err(AppError::Other)?;
-        if send_prompt {
-            svc.mark_started(id)?;
-        }
+        // Unconditional now that mark_started also stamps `last_run_at`: the
+        // overview's recency buckets must move on EVERY launch and resume, not
+        // only on the first prompt delivery. The `started = 1` half is
+        // idempotent and correct on all of these paths — rt.start() has just
+        // run, so the agent has by definition been launched at least once.
+        svc.mark_started(id)?;
         let updated = svc.update(
             id,
             AgentUpdateRequest {
@@ -748,6 +751,59 @@ pub async fn agent_range_file_diff(
         crate::perf::timed("agent_range_file_diff", || {
             let agent = svc.get(id)?;
             svc.git().range_file_diff(std::path::Path::new(&agent.worktree), &from, &to, &path)
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Files changed BY a set of commits: the UNION of what each selected commit
+/// itself introduced, with commits sitting between two selections EXCLUDED.
+/// Each row carries the span of selected commits that touched it (`firstSha` /
+/// `lastSha`) for `agent_commits_file_diff`. Contrast `agent_range_files`,
+/// which is a two-endpoint tree compare.
+#[tauri::command]
+pub async fn agent_commits_files(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    shas: Vec<String>,
+) -> AppResult<Vec<crate::git::service::CommitsFile>> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_commits_files", || {
+            if shas.is_empty() {
+                return Err(AppError::Other("shas must not be empty".into()));
+            }
+            let agent = svc.get(id)?;
+            svc.git()
+                .commits_files(std::path::Path::new(&agent.worktree), &shas)
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}
+
+/// Old/new content of `path` across one file's span of selected commits: the
+/// text BEFORE `first_sha` vs the text AT `last_sha` (both from
+/// `agent_commits_files`).
+#[tauri::command]
+pub async fn agent_commits_file_diff(
+    svc: State<'_, AgentService>,
+    id: Uuid,
+    first_sha: String,
+    last_sha: String,
+    path: String,
+) -> AppResult<crate::git::service::FileDiff> {
+    let svc = svc.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("agent_commits_file_diff", || {
+            let agent = svc.get(id)?;
+            svc.git().commit_span_file_diff(
+                std::path::Path::new(&agent.worktree),
+                &first_sha,
+                &last_sha,
+                &path,
+            )
         })
     })
     .await

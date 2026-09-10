@@ -76,7 +76,7 @@ import { KjButtonComponent } from "@kouji-ui/components";
         </span>
       </div>
 
-      <div style="display:flex;gap:var(--sp-3)" (click)="$event.stopPropagation()">
+      <div class="card-actions" style="display:flex;gap:var(--sp-3)" (click)="$event.stopPropagation()">
         @switch (ag.status) {
           @case ('done') {
             <kj-button kjVariant="default" class="kj-center" [kjFullWidth]="true" (click)="agentActions.act(ag.id, 'merge')"><app-icon name="merge" size="sm" />Merge</kj-button>
@@ -98,7 +98,7 @@ import { KjButtonComponent } from "@kouji-ui/components";
                 <app-icon name="play" size="sm" />{{ ag.started ? 'Resume' : 'Start' }}
               </kj-button>
               @if (ag.sessionId) {
-                <kj-button kjVariant="outline" (click)="continueSession(ag.id)" [title]="'continue last session · ' + ag.tool + ' (' + ag.sessionId + ')'">
+                <kj-button class="fixed" kjVariant="outline" (click)="continueSession(ag.id)" [title]="'continue last session · ' + ag.tool + ' (' + ag.sessionId + ')'">
                   <app-icon name="refresh" size="sm" />Continue
                 </kj-button>
               }
@@ -106,9 +106,12 @@ import { KjButtonComponent } from "@kouji-ui/components";
           }
         }
         @if (ag.worktree) {
-          <kj-button kjSize="icon" kjVariant="outline" (click)="diagnostics.openWorktree(ag.worktree)" title="Open worktree folder"><app-icon name="folderOpen" size="sm" /></kj-button>
+          <!-- .kj-icon, not kjSize="icon": that size step drops the control
+               height (see styles.css) and rendered this glyph ~20px tall beside
+               its 32px siblings. -->
+          <kj-button class="kj-icon" kjVariant="outline" (click)="diagnostics.openWorktree(ag.worktree)" title="Open worktree folder" kjAriaLabel="Open worktree folder"><app-icon name="folderOpen" size="sm" /></kj-button>
         }
-        <kj-button kjVariant="outline" (click)="ui.openAgent(ag.id)"><app-icon name="terminal" size="sm" />Open</kj-button>
+        <kj-button class="fixed" kjVariant="outline" (click)="ui.openAgent(ag.id)"><app-icon name="terminal" size="sm" />Open</kj-button>
       </div>
     </div>
   `,
@@ -117,6 +120,14 @@ import { KjButtonComponent } from "@kouji-ui/components";
       .agent-card:hover {
         border-color: var(--hair-2) !important;
         transform: translateY(-2px);
+      }
+      /* Only the kjFullWidth primary may absorb the row's slack. The grid floors
+         at 320px (grid-view), and a shrinking labelled button clips its own text
+         long before the primary gives any width back. ::ng-deep is required and
+         safe here: .kj-button belongs to kouji's template, so it carries no
+         scope attribute of ours, and .card-actions keeps the reach local. */
+      .card-actions ::ng-deep kj-button.fixed > .kj-button {
+        flex: none;
       }
       /* breathing pulse on the liveness ring while the agent is actively working */
       .working {

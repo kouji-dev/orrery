@@ -15,6 +15,7 @@ import { UiStore } from "../../ui/ui.store";
 import { IconComponent } from "../../shared/icon.component";
 import { StatusDotComponent } from "../../shared/status-dot.component";
 import { SidebarFileTreeComponent } from "./file-tree.component";
+import { FilesRootService } from "./files-root.service";
 
 /** Default section height (px) when the user has never resized it. */
 export const FILES_SECTION_DEFAULT_H = 288;
@@ -127,34 +128,18 @@ export class SidebarFilesComponent {
   private readonly runtime = inject(AgentRuntimeService);
   private readonly work = inject(AgentWorkStore);
   private readonly registry = inject(CommandRegistryService);
+  private readonly filesRoot = inject(FilesRootService);
 
   readonly pick = signal(false);
   readonly projKey = projectRootKey;
 
-  /** What the section follows when the user hasn't overridden: the active
-   *  tab's scoped agent, else the first project's main worktree. The v2
-   *  project pseudo-agent (id === projectId) maps to the `proj:` ROOT key —
-   *  its raw id would read as an agent root and the chip would show "—". */
-  private readonly followKey = computed<string | null>(() => {
-    const ag = this.runtime.activeAgent();
-    if (ag) return ag.id === ag.projectId ? projectRootKey(ag.projectId) : ag.id;
-    const first = this.projects.all()[0];
-    return first ? projectRootKey(first.id) : null;
-  });
-
-  /** The effective root: the active tab's explicit pick, else follow. A stale
-   *  override (agent removed) falls back to follow. */
-  readonly rootKey = computed<string | null>(() => {
-    const override = this.ui.filesRootOverride()[this.ui.activeTab()];
-    if (override && this.rootExists(override)) return override;
-    return this.followKey();
-  });
-  readonly overridden = computed(
-    () => this.rootKey() !== null && this.rootKey() !== this.followKey(),
-  );
+  // Root resolution is the service's (the sidebar's project rows re-root too);
+  // what stays here is presentation over `filesRoot.rootKey()`.
+  readonly rootKey = this.filesRoot.rootKey;
+  readonly overridden = this.filesRoot.overridden;
 
   readonly rootAgent = computed<Agent | null>(() => {
-    const key = this.rootKey();
+    const key = this.filesRoot.rootKey();
     if (!key || key.startsWith("proj:")) return null;
     return this.runtime.agents().find((a) => a.id === key) ?? null;
   });
@@ -195,19 +180,13 @@ export class SidebarFilesComponent {
     });
   }
 
-  private rootExists(key: string): boolean {
-    if (key.startsWith("proj:")) return this.projects.all().some((p) => p.id === key.slice(5));
-    return this.runtime.agents().some((a) => a.id === key);
-  }
-
   agentsOf(projectId: string): Agent[] {
-    return this.runtime.agents().filter((a) => a.projectId === projectId);
+    return this.filesRoot.agentsOf(projectId);
   }
 
   pickRoot(key: string): void {
     this.pick.set(false);
-    // picking what follow already shows clears the override (chip un-highlights)
-    this.ui.setFilesRootOverride(this.ui.activeTab(), key === this.followKey() ? null : key);
+    this.filesRoot.pickRoot(key);
   }
 
   toggleOpen(): void {

@@ -1,16 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from "@angular/core";
-import { Agent, Project } from "../models";
-import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from "@angular/core";
 import { AgentWorkStore } from "../agents/agent-work.store";
-import { ProjectActionsService } from "../projects/project-actions.service";
-import { pseudoProjectAgent } from "../projects/pseudo-agent";
 import { IconComponent } from "../shared/icon.component";
+import { ScopeBarComponent } from "../shared/scope-bar.component";
+import { ScopeSelection } from "../shared/scope";
 import { BranchesPanelComponent } from "./branches-panel.component";
 import { CommitGraphPanelComponent } from "./commit-graph-panel.component";
 import { LocalHistoryPanelComponent } from "./local-history-panel.component";
 import { TOOL_PANELS, ToolWindowStore } from "./tool-window.store";
 import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
-import { SelectComponent } from "../shared/select.component";
 
 /**
  * The IntelliJ-style bottom tool window (design toolwindow.jsx): a resizable
@@ -23,7 +20,8 @@ import { SelectComponent } from "../shared/select.component";
 @Component({
   selector: "app-tool-window",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, CommitGraphPanelComponent, BranchesPanelComponent, LocalHistoryPanelComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, SelectComponent],
+  imports: [IconComponent, CommitGraphPanelComponent, BranchesPanelComponent, LocalHistoryPanelComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, ScopeBarComponent],
+  providers: [ScopeSelection],
   template: `
     <!-- resize grip (absolute — sits over the top hairline) -->
     <div class="grip" (mousedown)="onGripDown($event)"></div>
@@ -41,33 +39,7 @@ import { SelectComponent } from "../shared/select.component";
 
       <!-- scope: project + worktree the panels act on -->
       <div style="margin-left:auto;display:flex;align-items:center;gap:var(--sp-3);padding-left:var(--sp-5)">
-        <span class="up" style="color:var(--ink-4);flex:none">scope</span>
-        @if (project(); as p) {
-          <span style="display:flex;align-items:center;gap:var(--sp-2);flex:none">
-            <app-icon size="md" [name]="p.icon" [color]="p.color" />
-            <app-select
-              title="Project the panels read from"
-              size="xs"
-              [value]="p.id"
-              [options]="projectOptions()"
-              (valueChange)="pickProject($event)"
-              style="width: round(calc(152px * var(--density)), 1px)"
-            />
-          </span>
-        }
-        <app-select
-          title="Worktree the panel reads from"
-          size="xs"
-          [value]="agent()?.id ?? ''"
-          [options]="agentOptions()"
-          (valueChange)="pickAgent($event)"
-          style="width: round(calc(150px * var(--density)), 1px);flex:none"
-        />
-        @if (outOfSync()) {
-          <kj-button kjVariant="toolbar" [title]="'Follow the focused agent · ' + focus()!.name" (click)="follow()">
-            <app-icon size="md" name="link" />{{ focus()!.name }}
-          </kj-button>
-        }
+        <app-scope-bar [scope]="scope" />
         <button kjButton class="pane-btn" (click)="tw.close()" title="Hide tool window" style="align-self:center">
           <app-icon name="x" size="sm" />
         </button>
@@ -122,9 +94,18 @@ import { SelectComponent } from "../shared/select.component";
 })
 export class ToolWindowComponent {
   readonly tw = inject(ToolWindowStore);
-  readonly projects = inject(ProjectActionsService);
-  readonly runtime = inject(AgentRuntimeService);
   private readonly work = inject(AgentWorkStore);
+
+  /** DOCK-LOCAL on purpose: the dock's scope is not the lookup overlays' scope
+   *  (those share the root LookupScopeStore), so the two never drag each other. */
+  readonly scope = inject(ScopeSelection);
+
+  // What the strip and the panel bindings read — delegated so the template and
+  // the pin effect keep their short names.
+  readonly agent = this.scope.agent;
+  readonly realAgent = this.scope.realAgent;
+  readonly project = this.scope.project;
+  readonly projAgents = this.scope.projAgents;
 
   readonly panels = TOOL_PANELS;
 
@@ -162,91 +143,5 @@ export class ToolWindowComponent {
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
     document.body.style.cursor = "row-resize";
-  }
-
-  // ---- scope ----
-  // null = follow the focused agent (the default); set by the two selects.
-  private readonly explicit = signal<{ projectId: string | null; agentId: string | null }>({
-    projectId: null,
-    agentId: null,
-  });
-
-  /** The focused agent of the active tab (what the scope follows by default). */
-  readonly focus = computed<Agent | null>(() => this.runtime.activeAgent());
-
-  readonly project = computed<Project | undefined>(() => {
-    const all = this.projects.all();
-    const ex = this.explicit();
-    return (
-      (ex.projectId ? all.find((p) => p.id === ex.projectId) : undefined) ??
-      all.find((p) => p.id === this.focus()?.projectId) ??
-      all[0]
-    );
-  });
-
-  readonly projAgents = computed<Agent[]>(() => {
-    const p = this.project();
-    return p ? this.runtime.agents().filter((a) => a.projectId === p.id) : [];
-  });
-
-  readonly projectOptions = computed(() => this.projects.all().map((p) => ({ value: p.id, label: p.name })));
-
-  /** The scoped project's MAIN checkout as a pseudo-agent (id = project id) —
-   *  the worktree select offers it first, so a project tab's focus resolves to
-   *  the checkout itself rather than falling back to some agent worktree. */
-  readonly mainPseudo = computed<Agent | null>(() => {
-    const p = this.project();
-    return p ? pseudoProjectAgent(p, this.runtime.shellRunning(p.id)) : null;
-  });
-
-  /** Options for the worktree select: the main checkout, then agent worktrees. */
-  readonly scopeAgents = computed<Agent[]>(() => {
-    const ps = this.mainPseudo();
-    return ps ? [ps, ...this.projAgents()] : this.projAgents();
-  });
-
-  readonly agentOptions = computed(() => {
-    const pid = this.project()?.id;
-    const list = this.scopeAgents();
-    return list.length
-      ? list.map((a) => ({ value: a.id, label: a.id === pid ? "checkout · " + a.branch : a.name }))
-      : [{ value: "", label: "no worktrees" }];
-  });
-
-  readonly agent = computed<Agent | null>(() => {
-    const list = this.scopeAgents();
-    const ex = this.explicit();
-    return (
-      (ex.agentId ? list.find((a) => a.id === ex.agentId) : undefined) ??
-      list.find((a) => a.id === this.focus()?.id) ??
-      list[0] ??
-      null
-    );
-  });
-
-  /** The scoped agent for panels that treat "no agent" as the project checkout
-   *  (branches): the pseudo maps back to null there. */
-  readonly realAgent = computed<Agent | null>(() => {
-    const ag = this.agent();
-    return ag && ag.id !== this.project()?.id ? ag : null;
-  });
-
-  /** An explicit scope is set and it diverges from the focused agent. */
-  readonly outOfSync = computed(() => {
-    const f = this.focus();
-    const ex = this.explicit();
-    if (!f || (!ex.projectId && !ex.agentId)) return false;
-    if (!this.projects.all().some((p) => p.id === f.projectId)) return false;
-    return this.agent()?.id !== f.id;
-  });
-
-  pickProject(id: string): void {
-    this.explicit.set({ projectId: id, agentId: null });
-  }
-  pickAgent(id: string): void {
-    this.explicit.update((s) => ({ projectId: s.projectId ?? this.project()?.id ?? null, agentId: id || null }));
-  }
-  follow(): void {
-    this.explicit.set({ projectId: null, agentId: null });
   }
 }

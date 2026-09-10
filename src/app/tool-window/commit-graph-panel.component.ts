@@ -9,6 +9,7 @@ import {
 } from "@angular/core";
 import { Agent, Commit, Project } from "../models";
 import { AgentWorkStore } from "../agents/agent-work.store";
+import { BranchesStore } from "../agents/branches.store";
 import { IconComponent } from "../shared/icon.component";
 import { AuthorAvatarComponent } from "../shared/git/author-avatar.component";
 import { ShaChipComponent } from "../shared/git/sha-chip.component";
@@ -46,18 +47,46 @@ import { SelectComponent } from "../shared/select.component";
           (input)="q.set($any($event.target).value)"
           placeholder="Filter by message or sha…"
         />
-        <span title="path filter arrives with B4.1 (needs per-commit file lists)" style="width: round(calc(150px * var(--density)), 1px);flex:none;opacity:.55">
-          <kj-input kjSize="sm" [disabled]="true" placeholder="path…" />
-        </span>
         <app-select [value]="author()" [options]="authorOptions()" (valueChange)="author.set($event)" style="width: round(calc(132px * var(--density)), 1px);flex:none" />
         <app-select [value]="when()" [options]="whenOptions" (valueChange)="when.set($event)" style="width: round(calc(108px * var(--density)), 1px);flex:none" />
-        @if (sel().length === 2) {
-          <kj-button kjVariant="default" (click)="openRange()">
-            <app-icon name="diff" size="sm" />Compare range
+        @if (sel().length >= 2) {
+          <kj-button kjVariant="default" [kjAriaLabel]="'Compare ' + sel().length + ' commits'" (click)="openRange()">
+            <app-icon name="diff" size="sm" />Compare {{ sel().length }} commits
+          </kj-button>
+        }
+        @if (sel().length) {
+          <span class="tnum" style="font-size:var(--fs-badge);color:var(--ink-4);flex:none">{{ sel().length }} selected</span>
+          <kj-button kjVariant="toolbar" kjAriaLabel="Clear selection" title="Clear the commit selection" (click)="clearSel()">
+            <app-icon name="x" size="sm" />
           </kj-button>
         } @else {
-          <span style="font-size:var(--fs-badge);color:var(--ink-4);flex:none">shift-click two commits to diff a range</span>
+          <span style="font-size:var(--fs-badge);color:var(--ink-4);flex:none">click, shift-click a run, ctrl-click to add</span>
         }
+      </div>
+
+      <!-- context: which branch this graph is, and how it sits vs its upstream.
+           Ahead/behind come from the LOCAL remote-tracking ref, so they are only
+           as fresh as the last fetch — hence Fetch sitting right next to them. -->
+      <div class="pane-head" style="background:var(--panel-2)">
+        <app-icon name="branch" size="sm" color="var(--ink-4)" />
+        <span style="color:var(--ink-2)">{{ ag.branch }}</span>
+        @if (branchInfo(); as b) {
+          @if (b.upstream) {
+            <span class="tnum" style="font-size:var(--fs-meta);color:var(--ink-4)" [title]="'upstream ' + b.upstream">
+              {{ b.upstream }}@if (b.ahead || b.behind) { · ↑{{ b.ahead }} ↓{{ b.behind }} }
+            </span>
+          } @else {
+            <span style="font-size:var(--fs-meta);color:var(--ink-4)">no upstream</span>
+          }
+        }
+        <div style="margin-left:auto;display:flex;gap:var(--sp-3);align-items:center">
+          <kj-button kjVariant="toolbar" [kjDisabled]="branches.busy() || !project()" title="git fetch --all --prune — refreshes the ahead/behind counts above" (click)="fetch()">
+            <app-icon name="refresh" size="sm" />Fetch
+          </kj-button>
+          <kj-button kjVariant="toolbar" [kjDisabled]="branches.busy() || !project()" [title]="pullTitle()" (click)="update()">
+            <app-icon name="stage" size="sm" />Update
+          </kj-button>
+        </div>
       </div>
 
       <!-- rows -->
@@ -73,7 +102,7 @@ import { SelectComponent } from "../shared/select.component";
           @let on = sel().includes(c.sha);
           <div
             class="row-hover"
-            (click)="toggleSel(c.sha, $event.shiftKey)"
+            (click)="toggleSel(c.sha, i, $event)"
             (dblclick)="openCommit(c.sha)"
             [style.background]="on ? 'var(--panel-3)' : ''"
             [style.border-left]="'2px solid ' + (on ? 'var(--ui-focus)' : 'transparent')"
@@ -87,7 +116,9 @@ import { SelectComponent } from "../shared/select.component";
               @if (!last || entry().hasMore) {
                 <line x1="11" [attr.y1]="rowH() / 2" x2="11" [attr.y2]="rowH()" stroke="var(--lane-1)" stroke-width="1.6" stroke-opacity=".75" />
               }
-              <circle cx="11" [attr.cy]="rowH() / 2" r="3.6" fill="var(--lane-1)" />
+              <!-- the dot carries the focus colour too: with N rows selected the
+                   lane column alone has to say which ones are in the range -->
+              <circle cx="11" [attr.cy]="rowH() / 2" r="3.6" [attr.fill]="on ? 'var(--ui-focus)' : 'var(--lane-1)'" />
             </svg>
             @if (i === 0) {
               <kj-badge style="font-size:var(--fs-badge);padding:1px var(--sp-3);flex:none;color:var(--st-done);border-color:color-mix(in oklch, var(--st-done), transparent 60%)">
@@ -120,10 +151,19 @@ import { SelectComponent } from "../shared/select.component";
 })
 export class CommitGraphPanelComponent {
   readonly work = inject(AgentWorkStore);
+  readonly branches = inject(BranchesStore);
   private readonly ui = inject(UiStore);
 
   readonly agent = input<Agent | null>(null);
   readonly project = input<Project | undefined>(undefined);
+
+  /** Upstream / ahead-behind for the branch this graph shows, when the native
+   *  branch detail is loaded for THIS project (a stale load says nothing). */
+  readonly branchInfo = computed(() => {
+    const ag = this.agent();
+    if (!ag || this.branches.loadedFor() !== this.project()?.id) return null;
+    return this.branches.branches().find((b) => b.name === ag.branch) ?? null;
+  });
 
   /** Lane-cell height. Mirrors the row's CSS height: var(--row-h). Recomputed on
    *  every density switch so the SVG cell and the row stay pixel-identical —
@@ -180,26 +220,80 @@ export class CommitGraphPanelComponent {
       this.work.ensureCommits(ag.id);
       if (ag.id !== this.lastId) {
         this.lastId = ag.id;
-        this.sel.set([]);
+        this.clearSel();
       }
+    });
+    // the context row needs the same branch detail the Branches panel loads —
+    // whichever panel is shown first pays for it, the store is shared
+    effect(() => {
+      const p = this.project();
+      if (p && this.branches.loadedFor() !== p.id) void this.branches.load(p.id);
     });
   }
 
-  /** Plain click selects one; shift-click accumulates (last two kept). */
-  toggleSel(sha: string, shift: boolean): void {
-    this.sel.update((s) => {
-      if (!shift) return [sha];
-      const nx = s.includes(sha) ? s.filter((x) => x !== sha) : [...s, sha];
-      return nx.slice(-2);
-    });
+  pullTitle(): string {
+    const ag = this.agent();
+    return ag ? `git pull --ff-only in ${ag.name}'s worktree` : "git pull --ff-only";
+  }
+
+  fetch(): void {
+    const p = this.project();
+    if (p) void this.branches.fetch(p.id);
+  }
+
+  /** The scoped worktree may be the project's MAIN checkout pseudo-agent — its
+   *  id is the project id, which the backend resolves to the same worktree
+   *  view, so one call covers both cases. */
+  update(): void {
+    const p = this.project();
+    const ag = this.agent();
+    if (p && ag) void this.branches.pullAgent(p.id, ag.id);
+  }
+
+  /** Row index in filtered() a shift-range stretches from. -1 = no anchor yet.
+   *  Plain field, not a signal: nothing renders from it. */
+  private anchor = -1;
+
+  /**
+   * Multi-select over filtered(), matching the changed-file list's convention:
+   * click picks one, ctrl/cmd toggles one, shift takes the contiguous run from
+   * the anchor. No cap — the range backend accepts N shas and sorts them itself.
+   */
+  toggleSel(sha: string, i: number, ev: MouseEvent): void {
+    const rows = this.filtered();
+    if (ev.shiftKey && this.anchor >= 0 && this.anchor < rows.length) {
+      // anchor deliberately stays put so a second shift-click re-stretches the
+      // same run instead of walking the selection down the list
+      const [lo, hi] = this.anchor <= i ? [this.anchor, i] : [i, this.anchor];
+      this.sel.set(rows.slice(lo, hi + 1).map((c) => c.sha));
+      return;
+    }
+    if (ev.ctrlKey || ev.metaKey) {
+      this.sel.update((s) => (s.includes(sha) ? s.filter((x) => x !== sha) : [...s, sha]));
+      this.anchor = i;
+      return;
+    }
+    this.sel.set([sha]);
+    this.anchor = i;
+  }
+
+  clearSel(): void {
+    this.sel.set([]);
+    this.anchor = -1;
   }
 
   openCommit(sha: string): void {
     const ag = this.agent();
-    if (ag) this.ui.setGitView(ag.id, { kind: "commit", sha });
+    if (!ag) return;
+    // a double click is two clicks, and with a modifier held the first one could
+    // have left a range behind — collapse to the commit actually being opened
+    this.sel.set([sha]);
+    this.ui.setGitView(ag.id, { kind: "commit", sha });
   }
   openRange(): void {
     const ag = this.agent();
-    if (ag) this.ui.setGitView(ag.id, { kind: "range", shas: this.sel() });
+    // 'commits', not 'range': the user asked for what THESE commits changed,
+    // so unselected commits between two selections must not ride along.
+    if (ag) this.ui.setGitView(ag.id, { kind: "commits", shas: this.sel() });
   }
 }

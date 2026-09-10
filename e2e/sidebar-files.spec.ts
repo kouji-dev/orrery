@@ -121,3 +121,37 @@ test("compact rail shows a files icon that expands the sidebar", async ({ page }
   await expect(page.locator("app-sidebar")).toBeVisible();
   await expect(page.locator("app-sidebar-files")).toBeVisible();
 });
+
+/* ── clicking a project row roots the tree at its main (M7) ──────────────── */
+
+const seedProject2 = `(() => {
+  const bar = window.ng.getComponent(document.querySelector("app-top-bar"));
+  bar.projects["projectsStore"]["store"].upsert({
+    id: "p-e2e-2", name: "second-proj", path: "C:/e2e2", icon: "cube", color: "#f59e0b",
+    folderExists: true, hasGit: true, branch: "main",
+  });
+})()`;
+
+test("clicking a project row roots the files tree at its main", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(seedProject2);
+  // scope sits on p-e2e's alpha worktree
+  await page.evaluate(ui(`.openAgent("e2e-sf1")`));
+  const chip = page.locator("app-sidebar-files button[title*='Worktree root']");
+  await expect(chip).toContainText("alpha");
+
+  // clicking the OTHER project re-roots — nothing of its own is in scope
+  await page.locator("app-project-group", { hasText: "second-proj" }).locator(".proj-row").click();
+  await expect(chip).toContainText("main");
+});
+
+test("clicking the project already in scope leaves its worktree root alone", async ({ page }) => {
+  await boot(page);
+  await page.evaluate(ui(`.openAgent("e2e-sf1")`));
+  const chip = page.locator("app-sidebar-files button[title*='Worktree root']");
+  await expect(chip).toContainText("alpha");
+
+  // alpha belongs to e2e-proj, so clicking e2e-proj must NOT yank the tree to main
+  await page.locator("app-project-group", { hasText: "e2e-proj" }).locator(".proj-row").click();
+  await expect(chip).toContainText("alpha");
+});

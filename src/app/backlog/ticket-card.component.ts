@@ -107,27 +107,43 @@ function plainText(html: string | null | undefined): string {
             <app-icon size="md" [name]="chipIcon()" style="flex:none" />
             <span class="trunc">{{ chipName() }}</span>
           </span>
-          <!-- card actions ride the compact xs step, like the orchestrator
-               cards; the card's hover promotes it from accent-tinted outline to
-               the filled primary -->
+          <!-- Dispatch is the card's ONE primary action, so it reads as filled
+               at rest too — the old hover-only promotion made the whole row look
+               inert until the pointer arrived, and hid which action was primary
+               on a touch/keyboard pass. -->
           <kj-button
-            [kjVariant]="hovered() ? 'default' : 'outline'"
-            class="kj-push"
-            (click)="dispatch($event, tk)"
-            [style.--kj-button-fg]="hovered() ? null : 'var(--ui-ink)'"
-            [style.--kj-button-border-color]="hovered() ? null : 'var(--ui-line)'"
-            style="flex:none"
+            class="kj-icon kj-push"
+            kjVariant="outline"
+            (click)="edit($event, tk)"
+            title="Edit ticket"
+            kjAriaLabel="Edit ticket"
           >
+            <app-icon name="rename" size="sm" />
+          </kj-button>
+          <kj-button kjVariant="default" (click)="dispatch($event, tk)" style="flex:none">
             <app-icon name="bolt" size="sm" />Dispatch
           </kj-button>
         </div>
       }
 
       @if (st === 'inprogress') {
-        <span style="display:inline-flex;align-items:center;gap:var(--sp-2);min-width:0;overflow:hidden" [style.color]="chipColor()">
-          <app-icon size="md" [name]="chipIcon()" style="flex:none" />
-          <span class="trunc">{{ chipName() }}</span>
-        </span>
+        <!-- same bottom row shape as the todo card: an in-progress ticket is
+             still editable, so Edit sits at the end of the project chip's row -->
+        <div style="display:flex;align-items:center;gap:var(--sp-4)">
+          <span style="display:inline-flex;align-items:center;gap:var(--sp-2);min-width:0;overflow:hidden" [style.color]="chipColor()">
+            <app-icon size="md" [name]="chipIcon()" style="flex:none" />
+            <span class="trunc">{{ chipName() }}</span>
+          </span>
+          <kj-button
+            class="kj-icon kj-push"
+            kjVariant="outline"
+            (click)="edit($event, tk)"
+            title="Edit ticket"
+            kjAriaLabel="Edit ticket"
+          >
+            <app-icon name="rename" size="sm" />
+          </kj-button>
+        </div>
       }
 
       @if (st === 'done') {
@@ -212,6 +228,13 @@ export class TicketCardComponent {
   dispatch(e: MouseEvent, tk: Ticket) {
     e.stopPropagation();
     this.ui.dispatchTicket({ id: tk.id, projectId: tk.projectId });
+  }
+
+  /** Open the ticket tab already in edit mode — the card click alone opens it
+   *  read-only, so the pencil has to say "and start editing". */
+  edit(e: MouseEvent, tk: Ticket) {
+    e.stopPropagation();
+    this.ui.openTicket(tk.id, true);
   }
 
   onDragStart(e: DragEvent) {

@@ -4,6 +4,7 @@ import {
   BlameIntern,
   BlameLine,
   CommitFile,
+  CommitsFile,
   FileHistoryEntry,
   FileDiff,
   hydrateBlame,
@@ -34,6 +35,8 @@ export class GitInspectStore {
   private readonly commitFileDiffMap = signal<Record<string, Loadable<FileDiff | null>>>({});
   private readonly rangeFilesMap = signal<Record<string, Loadable<RangeFiles | null>>>({});
   private readonly rangeFileDiffMap = signal<Record<string, Loadable<FileDiff | null>>>({});
+  private readonly commitsFilesMap = signal<Record<string, Loadable<CommitsFile[]>>>({});
+  private readonly commitsFileDiffMap = signal<Record<string, Loadable<FileDiff | null>>>({});
   private readonly blameMap = signal<Record<string, Loadable<BlameLine[]>>>({});
   private readonly fileHistoryMap = signal<Record<string, Loadable<FileHistoryEntry[]>>>({});
 
@@ -42,6 +45,8 @@ export class GitInspectStore {
   private commitFileDiffGen: Record<string, number> = {};
   private rangeFilesGen: Record<string, number> = {};
   private rangeFileDiffGen: Record<string, number> = {};
+  private commitsFilesGen: Record<string, number> = {};
+  private commitsFileDiffGen: Record<string, number> = {};
   private blameGen: Record<string, number> = {};
   private fileHistoryGen: Record<string, number> = {};
 
@@ -168,6 +173,69 @@ export class GitInspectStore {
   }
 
   // =========================================================================
+  // commits files (AgentCommitsFiles)
+  // =========================================================================
+
+  /** The union of what the SELECTED commits themselves changed — not a
+   *  two-endpoint tree compare (that is `rangeFilesFor`). */
+  commitsFilesFor(id: string, shas: string[]): Loadable<CommitsFile[]> {
+    return this.commitsFilesMap()[`${id}/${shas.join(",")}`] ?? IDLE_ARR<CommitsFile>();
+  }
+
+  loadCommitsFiles(id: string, shas: string[]): void {
+    this.touch(id);
+    const key = `${id}/${shas.join(",")}`;
+    const gen = (this.commitsFilesGen[key] ?? 0) + 1;
+    this.commitsFilesGen[key] = gen;
+    const prev = this.commitsFilesFor(id, shas);
+    this.patch(this.commitsFilesMap, key, { status: "loading", data: prev.data });
+    void this.bridge
+      .invoke<CommitsFile[]>(Commands.AgentCommitsFiles, { id, shas })
+      .then((files) => {
+        if (this.commitsFilesGen[key] !== gen) return;
+        this.patch(this.commitsFilesMap, key, { status: "ready", data: files ?? [] });
+      })
+      .catch(() => {
+        if (this.commitsFilesGen[key] !== gen) return;
+        this.patch(this.commitsFilesMap, key, { status: "error", data: prev.data });
+      });
+  }
+
+  // =========================================================================
+  // commits file diff (AgentCommitsFileDiff)
+  // =========================================================================
+
+  /** Keyed by the file's OWN span, not by the whole selection: two files in the
+   *  same selection can have different first/last touching commits. */
+  commitsFileDiffFor(
+    id: string,
+    firstSha: string,
+    lastSha: string,
+    path: string
+  ): Loadable<FileDiff | null> {
+    return this.commitsFileDiffMap()[`${id}/${firstSha}/${lastSha}/${path}`] ?? IDLE_NULL<FileDiff>();
+  }
+
+  loadCommitsFileDiff(id: string, firstSha: string, lastSha: string, path: string): void {
+    this.touch(id);
+    const key = `${id}/${firstSha}/${lastSha}/${path}`;
+    const gen = (this.commitsFileDiffGen[key] ?? 0) + 1;
+    this.commitsFileDiffGen[key] = gen;
+    const prev = this.commitsFileDiffFor(id, firstSha, lastSha, path);
+    this.patch(this.commitsFileDiffMap, key, { status: "loading", data: prev.data });
+    void this.bridge
+      .invoke<FileDiff | null>(Commands.AgentCommitsFileDiff, { id, firstSha, lastSha, path })
+      .then((diff) => {
+        if (this.commitsFileDiffGen[key] !== gen) return;
+        this.patch(this.commitsFileDiffMap, key, { status: "ready", data: diff });
+      })
+      .catch(() => {
+        if (this.commitsFileDiffGen[key] !== gen) return;
+        this.patch(this.commitsFileDiffMap, key, { status: "error", data: prev.data });
+      });
+  }
+
+  // =========================================================================
   // blame (AgentBlame)
   // =========================================================================
 
@@ -248,6 +316,8 @@ export class GitInspectStore {
       this.commitFileDiffMap,
       this.rangeFilesMap,
       this.rangeFileDiffMap,
+      this.commitsFilesMap,
+      this.commitsFileDiffMap,
       this.blameMap,
       this.fileHistoryMap,
     ] as WritableSignal<Record<string, unknown>>[]) {
@@ -259,6 +329,8 @@ export class GitInspectStore {
       this.commitFileDiffGen,
       this.rangeFilesGen,
       this.rangeFileDiffGen,
+      this.commitsFilesGen,
+      this.commitsFileDiffGen,
       this.blameGen,
       this.fileHistoryGen,
     ]) {

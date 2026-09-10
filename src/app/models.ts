@@ -150,6 +150,9 @@ export interface Agent {
   started?: boolean;
   /** The tool's CLI session id (captured from a hook), for `--resume <id>`. */
   sessionId?: string;
+  /** Unix ms of the last launch/resume (set at spawn too, so a never-run agent
+   *  still sorts). Absent on rows written before the column existed. */
+  lastRunAt?: number;
   commits: number;
   /** Persisted placeholder (the backend sends 0). LIVE elapsed is derived in
    *  the UI from AgentRuntimeService.elapsedFor() — never patched in here, so
@@ -285,6 +288,11 @@ export interface Tweaks {
 }
 
 export type VizMode = "grid" | "kanban" | "graph" | "timeline";
+
+/** Recency bucket of the orchestrator grid, keyed off {@link Agent.lastRunAt}.
+ *  A long-lived workspace accumulates dozens of finished agents; the grid shows
+ *  one bucket at a time so the recent ones are not buried. */
+export type GridRange = "week" | "month" | "older";
 
 export interface MenuItem {
   label?: string;
@@ -568,10 +576,24 @@ export interface RangeFiles {
   to: string;
 }
 
+/** One file touched by a SET of selected commits (`agent_commits_files`): the
+ *  change SUMMED over every selected commit that touched it, plus the span of
+ *  those commits. `firstSha`/`lastSha` key the per-file diff, so a file click
+ *  costs two tree diffs instead of one per selected commit. */
+export interface CommitsFile extends CommitFile {
+  oldPath?: string;
+  firstSha: string;
+  lastSha: string;
+  commits: number;
+}
+
 /** Discriminated union describing which git surface is currently displayed. */
 export type GitView =
   | { kind: 'commit'; sha: string; path?: string }
   | { kind: 'range'; shas: string[] }
+  /** The UNION of what the selected commits themselves changed — unlike
+   *  'range', commits sitting between two selections contribute nothing. */
+  | { kind: 'commits'; shas: string[] }
   | { kind: 'filehistory'; path: string }
   | { kind: 'conflict' };
 

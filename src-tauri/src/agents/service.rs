@@ -124,7 +124,8 @@ impl AgentService {
                 branch TEXT NOT NULL,
                 worktree TEXT NOT NULL,
                 base TEXT NOT NULL,
-                started INTEGER NOT NULL DEFAULT 0
+                started INTEGER NOT NULL DEFAULT 0,
+                last_run_at INTEGER
             )",
             [],
         )
@@ -138,6 +139,9 @@ impl AgentService {
         let _ = c.execute("ALTER TABLE agents ADD COLUMN session_id TEXT", []);
         // migrate DBs created before the `ticket_id` column existed (ignored if present)
         let _ = c.execute("ALTER TABLE agents ADD COLUMN ticket_id TEXT", []);
+        // migrate DBs created before the `last_run_at` column existed (ignored if
+        // present). NULL on old rows — the UI buckets those as "older".
+        let _ = c.execute("ALTER TABLE agents ADD COLUMN last_run_at INTEGER", []);
     }
 
     /// Record → view model. Runtime fields are defaulted (no disk/process access yet).
@@ -157,6 +161,7 @@ impl AgentService {
             started: rec.started,
             session_id: rec.session_id,
             ticket_id: rec.ticket_id,
+            last_run_at: rec.last_run_at,
             commits: 0,
             elapsed: 0,
             progress: 0.0,
@@ -231,13 +236,16 @@ impl AgentService {
             started: false,
             session_id: None,
             ticket_id: req.ticket_id,
+            // seeded at creation so a never-launched agent still has a place in
+            // the recency buckets instead of sinking to "older" on day one
+            last_run_at: Some(now_ms()),
         };
         {
             let c = self.db.lock().unwrap();
             c.execute(
                 "INSERT INTO agents
-                    (id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, ticket_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                    (id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, ticket_id, last_run_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 rusqlite::params![
                     rec.id.to_string(),
                     rec.project_id.to_string(),
@@ -252,6 +260,7 @@ impl AgentService {
                     rec.base,
                     rec.started,
                     rec.ticket_id.map(|u| u.to_string()),
+                    rec.last_run_at,
                 ],
             )
             .map_err(DbError::Sqlite)?;
@@ -521,11 +530,13 @@ impl AgentService {
     // ---- record readers ----
 
     /// Mark the agent as launched-at-least-once (so its prompt is delivered only once).
+    /// Also stamps `last_run_at`: this fires on EVERY launch and resume, which is
+    /// exactly the "last activity" the overview's recency buckets sort on.
     pub fn mark_started(&self, id: Uuid) -> AppResult<()> {
         let c = self.db.lock().unwrap();
         c.execute(
-            "UPDATE agents SET started = 1 WHERE id = ?1",
-            [id.to_string()],
+            "UPDATE agents SET started = 1, last_run_at = ?2 WHERE id = ?1",
+            rusqlite::params![id.to_string(), now_ms()],
         )
         .map_err(DbError::Sqlite)?;
         Ok(())
@@ -591,11 +602,12 @@ impl AgentService {
             bool,
             Option<String>,
             Option<String>,
+            Option<i64>,
         )> = {
             let c = self.db.lock().unwrap();
             let mut stmt = c
                 .prepare(
-                    "SELECT id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id, ticket_id FROM agents",
+                    "SELECT id, project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id, ticket_id, last_run_at FROM agents",
                 )
                 .map_err(DbError::Sqlite)?;
             let rows = stmt
@@ -615,6 +627,7 @@ impl AgentService {
                         r.get(11)?,
                         r.get(12)?,
                         r.get(13)?,
+                        r.get(14)?,
                     ))
                 })
                 .map_err(DbError::Sqlite)?;
@@ -638,6 +651,7 @@ impl AgentService {
                     started,
                     session_id,
                     ticket_id,
+                    last_run_at,
                 )| {
                     let ticket_id = ticket_id
                         .as_deref()
@@ -660,6 +674,7 @@ impl AgentService {
                         started,
                         session_id,
                         ticket_id,
+                        last_run_at,
                     })
                 },
             )
@@ -681,12 +696,13 @@ impl AgentService {
             bool,
             Option<String>,
             Option<String>,
+            Option<i64>,
         )> = {
             let c = self.db.lock().unwrap();
             c.query_row(
-                "SELECT project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id, ticket_id FROM agents WHERE id = ?1",
+                "SELECT project_id, tool, model, effort, name, task, status, branch, worktree, base, started, session_id, ticket_id, last_run_at FROM agents WHERE id = ?1",
                 [id.to_string()],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?, r.get(12)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?, r.get(12)?, r.get(13)?)),
             )
             .optional()
             .map_err(DbError::Sqlite)?
@@ -706,6 +722,7 @@ impl AgentService {
                 started,
                 session_id,
                 ticket_id,
+                last_run_at,
             )) => {
                 let ticket_id = ticket_id
                     .as_deref()
@@ -728,6 +745,7 @@ impl AgentService {
                     started,
                     session_id,
                     ticket_id,
+                    last_run_at,
                 })
             }
             None => self.project_pseudo_record(id),
@@ -773,6 +791,7 @@ impl AgentService {
             started: false,
             session_id: None,
             ticket_id: None,
+            last_run_at: None,
         })
     }
 }
@@ -843,6 +862,15 @@ fn sanitize_branch(raw: &str) -> String {
         .filter(|c| !c.is_empty())
         .collect::<Vec<_>>()
         .join("/")
+}
+
+/// Wall clock in unix ms — the timestamp shape the frontend reads directly
+/// (`Date` takes ms). A clock behind the epoch yields 0 rather than panicking.
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// Today as MMDD for the `{date}` token. UTC — a branch date tag doesn't
@@ -1033,6 +1061,21 @@ mod tests {
         assert!(!a.started, "new agent has not been started");
         s.mark_started(a.id).unwrap();
         assert!(s.get(a.id).unwrap().started, "mark_started persists");
+    }
+
+    #[test]
+    fn last_run_at_is_seeded_at_spawn_and_advances_on_mark_started() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "recent"), &nogit()).unwrap();
+        let spawned = a.last_run_at.expect("spawn seeds last_run_at so a never-run agent still sorts");
+        // the clock has ms resolution; without a nudge the two stamps can be equal
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        s.mark_started(a.id).unwrap();
+        let started = s.get(a.id).unwrap().last_run_at.expect("mark_started persists it");
+        assert!(
+            started > spawned,
+            "every launch/resume restamps last_run_at ({started} !> {spawned})"
+        );
     }
 
     #[test]

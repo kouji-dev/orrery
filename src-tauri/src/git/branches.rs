@@ -191,3 +191,29 @@ pub async fn agent_checkout(
     .await
     .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
+
+/// Bring one local branch up to date with its upstream WITHOUT checking it
+/// out: `git fetch <remote> <remote_branch>:<branch>` in the project checkout.
+/// Branches that some worktree holds go through `project_pull`/`agent_pull`
+/// instead — git refuses to fetch into a checked-out branch, and the UI routes
+/// those rows there before ever calling this.
+#[tauri::command]
+pub async fn project_branch_update(
+    projects: State<'_, ProjectService>,
+    id: Uuid,
+    branch: String,
+    upstream: String,
+) -> AppResult<()> {
+    let projects = projects.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("project_branch_update", || {
+            projects.git().branch_update(
+                Path::new(&projects.path_of(id)?),
+                &branch,
+                &upstream,
+            )
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
+}

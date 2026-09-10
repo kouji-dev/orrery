@@ -111,6 +111,13 @@ export const Commands = {
   AgentCommitFileDiff: 'agent_commit_file_diff',
   AgentRangeFiles: 'agent_range_files',
   AgentRangeFileDiff: 'agent_range_file_diff',
+  /** Files changed BY a set of commits — the union of what each selected
+   *  commit itself introduced, commits in between excluded (vs AgentRangeFiles,
+   *  which compares the two endpoint trees). */
+  AgentCommitsFiles: 'agent_commits_files',
+  /** Old/new text of one file across its span of selected commits: before
+   *  `firstSha` vs at `lastSha` (both come from AgentCommitsFiles rows). */
+  AgentCommitsFileDiff: 'agent_commits_file_diff',
   AgentBlame: 'agent_blame',
   AgentWorkingBlame: 'agent_working_blame',
   AgentFileHistory: 'agent_file_history',
@@ -174,6 +181,10 @@ export const Commands = {
   ProjectBranchRename: 'project_branch_rename',
   ProjectBranchDelete: 'project_branch_delete',
   ProjectBranchUpstream: 'project_branch_upstream',
+  /** Fast-forward ONE branch from its upstream without checking it out
+   *  (`git fetch <remote> <branch>:<branch>`). Branches a worktree holds must
+   *  use ProjectPull/AgentPull — git refuses to fetch into a checked-out ref. */
+  ProjectBranchUpdate: 'project_branch_update',
   /** Check out a branch in the agent's worktree (occupancy pre-checked). */
   AgentCheckout: 'agent_checkout',
   // ---- editor gutter change markers (B4.3) ----

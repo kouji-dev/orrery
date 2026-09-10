@@ -511,6 +511,15 @@ export class TicketPageComponent {
       if (id !== "draft") void this.loadComments(id);
       else this.comments.set([]);
     });
+    // The board's pencil asks for edit mode via a one-shot UiStore signal (it
+    // cannot reach `editing`, which is a linkedSignal seeded from ticketId).
+    // An EFFECT, not a computed: this both writes `editing` and clears the
+    // request, and writing signals from a computed is illegal.
+    effect(() => {
+      if (this.ui.editTicketId() !== this.ticketId()) return;
+      this.editing.set(true);
+      this.ui.editTicketId.set(null); // consume — a later re-render must not re-enter edit
+    });
   }
 
   private async loadComments(ticketId: string): Promise<void> {

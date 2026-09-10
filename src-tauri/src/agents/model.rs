@@ -25,6 +25,9 @@ pub struct AgentRecord {
     /// The ticket this agent is working on, if any. Set at spawn time; drives
     /// lifecycle: attach_agent on spawn, complete_for_agent on PTY exit.
     pub ticket_id: Option<Uuid>,
+    /// Unix ms of the last launch/resume, seeded at spawn so a never-run agent
+    /// still sorts. `None` only on rows written before the column existed.
+    pub last_run_at: Option<i64>,
 }
 
 /// View model sent to the frontend: persisted record + transient runtime fields.
@@ -48,6 +51,9 @@ pub struct Agent {
     pub session_id: Option<String>,
     /// The ticket this agent is working on (`ticketId` in camelCase for the frontend).
     pub ticket_id: Option<Uuid>,
+    /// Unix ms of the last launch/resume (`lastRunAt` for the frontend), which
+    /// buckets the orchestrator grid by recency.
+    pub last_run_at: Option<i64>,
     // --- transient runtime (defaulted; owned by the runtime layer later) ---
     pub commits: i64,
     pub elapsed: i64,

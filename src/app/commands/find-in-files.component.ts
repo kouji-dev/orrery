@@ -10,7 +10,6 @@ import {
   signal,
   viewChild,
 } from "@angular/core";
-import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import {
   BRIDGE,
   Commands,
@@ -20,21 +19,14 @@ import {
   SearchMatchEntry,
   SearchResultsPayload,
 } from "../data-source/bridge";
-import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
+import { LookupScopeStore } from "../shared/scope";
+import { ScopeBarComponent } from "../shared/scope-bar.component";
 import { UiStore } from "../ui/ui.store";
 import { fileDir, fileName } from "../utils";
 import { CommandRegistryService } from "./command-registry.service";
 import { OverlayFooterComponent, OverlayShellComponent } from "./overlay-shell.component";
 import { KjBadgeComponent, KjButtonComponent, KjCheckboxComponent, KjInputComponent, KjTabComponent, KjTabListComponent, KjTabsComponent} from "@kouji-ui/components";
-import { SelectComponent } from "../shared/select.component";
-
-type Scope = "worktree" | "project" | "all";
-const SCOPES: { k: Scope; label: string }[] = [
-  { k: "worktree", label: "This worktree" },
-  { k: "project", label: "This project" },
-  { k: "all", label: "All worktrees" },
-];
 
 interface Group {
   key: string;
@@ -75,7 +67,7 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
 @Component({
   selector: "app-find-in-files",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, OverlayShellComponent, OverlayFooterComponent, KjButtonComponent, KjBadgeComponent, KjCheckboxComponent, KjInputComponent, SelectComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
+  imports: [IconComponent, OverlayShellComponent, OverlayFooterComponent, KjButtonComponent, KjBadgeComponent, KjCheckboxComponent, KjInputComponent, ScopeBarComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     <app-overlay-shell [width]="860" top="9vh" label="Find in files" (closed)="registry.close()">
       <!-- query row -->
@@ -101,12 +93,7 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
           <kj-button kjVariant="outline" [kjPressed]="word()" (click)="toggle('word')" title="Words">W</kj-button>
           <kj-button kjVariant="outline" [kjPressed]="regex()" (click)="toggle('regex')" title="Regular expression">.*</kj-button>
         </div>
-        <app-select
-          [value]="scope()"
-          [options]="scopeOptions()"
-          (valueChange)="scope.set($any($event))"
-          style="display:inline-block;width: round(calc(150px * var(--density)), 1px);flex:none"
-        />
+        <app-scope-bar [scope]="scope" [showKind]="true" />
       </div>
 
       <!-- replacement row (replace mode) -->
@@ -138,7 +125,7 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
             {{ q() ? total() + ' match' + (total() === 1 ? '' : 'es') + ' in ' + groups().length + ' file' + (groups().length === 1 ? '' : 's') + (truncated() ? ' · capped' : '') : 'type to search' }}
           </span>
         }
-        <kj-badge style="margin-left:auto;font-size:var(--fs-badge)">grep · {{ scopeLabel() }}</kj-badge>
+        <kj-badge style="margin-left:auto;font-size:var(--fs-badge)">grep · {{ scope.label() }}</kj-badge>
         @if (busy()) {
           <kj-button kjVariant="outline" (click)="stop()">
             <app-icon size="md" name="stop" />Stop
@@ -205,8 +192,6 @@ function lineSegments(m: SearchMatchEntry): { t: string; hit: boolean }[] {
 export class FindInFilesComponent {
   readonly registry = inject(CommandRegistryService);
   private bridge = inject(BRIDGE);
-  private runtime = inject(AgentRuntimeService);
-  private projects = inject(ProjectActionsService);
   private ui = inject(UiStore);
 
   readonly fname = fileName;
@@ -233,14 +218,23 @@ export class FindInFilesComponent {
   readonly truncated = signal(false);
   readonly error = signal<string | null>(null);
 
-  /** Agent scoping the search (the focused one, else the first). */
-  readonly scopeAgent = computed(() => this.runtime.activeAgent() ?? this.runtime.agents()[0] ?? null);
-  readonly scope = signal<Scope>("worktree");
-  readonly scopeLabel = computed(() => SCOPES.find((s) => s.k === this.scope())?.label.toLowerCase() ?? "");
-  /** Options for the scope select — the worktree scope simply drops out when
-   *  no agent is open (app-select has no per-option disabled state). */
-  readonly scopeOptions = computed(() =>
-    SCOPES.filter((s) => s.k !== "worktree" || this.scopeAgent()).map((s) => ({ value: s.k, label: s.label })),
+  /** Where the grep runs. SHARED with the other lookup overlays on purpose:
+   *  re-pointing the scope in Ctrl+E must survive reopening Ctrl+Shift+F. */
+  readonly scope = inject(LookupScopeStore);
+
+  /** The real agent behind the scope — the worktree select leads with the
+   *  project's MAIN checkout pseudo-agent, which has no worktree of its own, so
+   *  a "this worktree" search over it is really a project-checkout search. */
+  private readonly searchScope = computed<{ kind: string; agentId: string | null; projectId: string | null }>(
+    () => {
+      const real = this.scope.realAgent();
+      const kind = this.scope.kind();
+      return {
+        kind: kind === "worktree" && !real ? "project" : kind,
+        agentId: real?.id ?? null,
+        projectId: this.scope.project()?.id ?? null,
+      };
+    },
   );
 
   private inp = viewChild.required<KjInputComponent>("inp");
@@ -322,8 +316,7 @@ export class FindInFilesComponent {
   /** Apply the replacement to every included match, then re-run the search. */
   async apply(): Promise<void> {
     if (this.applying()) return;
-    const agent = this.scopeAgent();
-    const projectId = agent?.projectId ?? this.projects.all()[0]?.id ?? null;
+    const projectId = this.searchScope().projectId;
     // group included hits per (agent, path) with the file's scan stamp
     const byFile = new Map<
       string,
@@ -370,8 +363,6 @@ export class FindInFilesComponent {
   }
 
   constructor() {
-    if (!this.scopeAgent()) this.scope.set("project");
-
     const destroy = inject(DestroyRef);
     void this.bridge
       .on<SearchResultsPayload>(Events.SearchResults, (p) => this.onResults(p))
@@ -401,7 +392,12 @@ export class FindInFilesComponent {
       this.caseSensitive();
       this.word();
       this.regex();
-      this.scope();
+      // read every scope FIELD, not the store: `scope` is an injected object,
+      // so touching it tracks nothing and the search stops re-running when the
+      // user re-points it.
+      this.scope.kind();
+      this.scope.agent()?.id;
+      this.scope.project()?.id;
       this.mode();
       this.replacement();
       if (this.debounce) clearTimeout(this.debounce);
@@ -439,10 +435,8 @@ export class FindInFilesComponent {
       this.busy.set(false);
       return;
     }
-    const agent = this.scopeAgent();
-    const projectId = agent?.projectId ?? this.projects.all()[0]?.id ?? null;
-    const scope = this.scope();
-    if (scope === "worktree" && !agent) {
+    const { kind: scope, agentId, projectId } = this.searchScope();
+    if (scope === "worktree" && !agentId) {
       this.error.set("open an agent to search its worktree");
       return;
     }
@@ -451,7 +445,7 @@ export class FindInFilesComponent {
       return;
     }
     this.busy.set(true);
-    this.runAgentId = agent?.id ?? null;
+    this.runAgentId = agentId;
     try {
       const id = await this.bridge.invoke<string>(Commands.SearchStart, {
         req: {
@@ -460,7 +454,7 @@ export class FindInFilesComponent {
           wholeWord: this.word(),
           regex: this.regex(),
           scope,
-          agentId: agent?.id ?? null,
+          agentId,
           projectId,
           replacement: this.mode() === "replace" ? this.replacement() : null,
         },
@@ -521,7 +515,7 @@ export class FindInFilesComponent {
     if (!h) return;
     // matches from an agent worktree open there; project-checkout matches open
     // in the scoping agent's worktree (same path) — the file view is agent-bound
-    const agentId = h.agentId ?? this.runAgentId ?? this.scopeAgent()?.id ?? null;
+    const agentId = h.agentId ?? this.runAgentId ?? this.scope.realAgent()?.id ?? null;
     if (!agentId) {
       this.ui.flash("open an agent to view files");
       return;

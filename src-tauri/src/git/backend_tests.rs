@@ -869,6 +869,124 @@ macro_rules! for_each_backend {
         assert_eq!(changes[0].state, "A");
     }
 
+    // ── commits_files / commit_span_file_diff tests ────────────────────────
+
+    /// Like `commit_content`, but with an EXPLICIT commit timestamp. Fixture
+    /// commits made in the same second are indistinguishable to
+    /// `commit_time`, and `commits_files` orders the selection by exactly
+    /// that, so these tests pin the seconds instead of racing the clock.
+    fn commit_at(repo_path: &Path, name: &str, content: &str, msg: &str, when: i64) -> String {
+        std::fs::write(repo_path.join(name), content).unwrap();
+        let repo = Repository::open(repo_path).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(name)).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = Signature::new("T", "t@t", &git2::Time::new(when, 0)).unwrap();
+        let parent = repo
+            .head()
+            .ok()
+            .and_then(|h| h.target())
+            .and_then(|oid| repo.find_commit(oid).ok());
+        let parents: Vec<&git2::Commit> = parent.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents)
+            .unwrap()
+            .to_string()
+    }
+
+    /// Three commits, each touching a different file. Selecting only the first
+    /// and the third must NOT report `mid.txt` — the whole reason `commits_files`
+    /// exists instead of range-diffing the two endpoints.
+    fn commits_files_skips_unselected_commits_in_between(b: &dyn GitBackend) {
+        let dir = tempfile::tempdir().unwrap();
+        b.init(dir.path()).unwrap();
+        let c1 = commit_at(dir.path(), "first.txt", "one
+", "c1", 1_000);
+        commit_at(dir.path(), "mid.txt", "middle
+", "c2", 2_000);
+        let c3 = commit_at(dir.path(), "last.txt", "three
+", "c3", 3_000);
+
+        let files = b.commits_files(dir.path(), &[c1, c3]).unwrap();
+        let paths: Vec<&str> = files.iter().map(|f| f.file.path.as_str()).collect();
+        assert!(
+            !paths.contains(&"mid.txt"),
+            "the unselected commit's file leaked in: {paths:?}"
+        );
+        assert_eq!(paths, vec!["first.txt", "last.txt"]);
+    }
+
+    /// A file touched by two selected commits reports one row with the SUMMED
+    /// add/del and the span of both.
+    fn commits_files_sums_a_file_touched_twice(b: &dyn GitBackend) {
+        let dir = tempfile::tempdir().unwrap();
+        b.init(dir.path()).unwrap();
+        commit_at(dir.path(), "f.txt", "a
+", "base", 1_000);
+        let c2 = commit_at(dir.path(), "f.txt", "a
+b
+", "add b", 2_000);
+        let c3 = commit_at(dir.path(), "f.txt", "a
+b
+c
+", "add c", 3_000);
+
+        let files = b
+            .commits_files(dir.path(), &[c3.clone(), c2.clone()])
+            .unwrap();
+        assert_eq!(files.len(), 1, "one row per path");
+        let f = &files[0];
+        assert_eq!(f.commits, 2);
+        assert_eq!(f.file.add, 2, "one line added by each selected commit");
+        assert_eq!(f.file.del, 0);
+        assert_eq!(f.file.state, "M");
+        // Span is in COMMIT TIME order, not the caller's click order.
+        assert_eq!(f.first_sha, c2);
+        assert_eq!(f.last_sha, c3);
+    }
+
+    /// A file ADDED by the oldest SELECTED commit is reported as "A". The old
+    /// range semantics started from that commit's own tree and dropped it.
+    fn commits_files_reports_the_oldest_selection_own_changes(b: &dyn GitBackend) {
+        let dir = tempfile::tempdir().unwrap();
+        b.init(dir.path()).unwrap();
+        commit_at(dir.path(), "base.txt", "base
+", "base", 1_000);
+        let c2 = commit_at(dir.path(), "new.txt", "hello
+", "add new", 2_000);
+        let c3 = commit_at(dir.path(), "other.txt", "other
+", "add other", 3_000);
+
+        let files = b.commits_files(dir.path(), &[c2, c3]).unwrap();
+        let added = files
+            .iter()
+            .find(|f| f.file.path == "new.txt")
+            .expect("the oldest selected commit's own file must be reported");
+        assert_eq!(added.file.state, "A");
+    }
+
+    /// `commit_span_file_diff` shows the file as it was BEFORE `first_sha`, so a
+    /// file first added there has an empty `old` side.
+    fn commit_span_file_diff_starts_before_the_first_selected_commit(b: &dyn GitBackend) {
+        let dir = tempfile::tempdir().unwrap();
+        b.init(dir.path()).unwrap();
+        commit_at(dir.path(), "base.txt", "base
+", "base", 1_000);
+        let c2 = commit_at(dir.path(), "n.txt", "one
+", "add n", 2_000);
+        let c3 = commit_at(dir.path(), "n.txt", "one
+two
+", "extend n", 3_000);
+
+        let d = b
+            .commit_span_file_diff(dir.path(), &c2, &c3, "n.txt")
+            .unwrap();
+        assert_eq!(d.old, "", "n.txt did not exist before the first selection");
+        assert_eq!(d.new, "one
+two
+", "content at the last selection");
+    }
+
     // ── merge session tests (A3.5 / A3.6) ──────────────────────────────────
 
     /// Fixture: a repo where merging `feature` into the default branch
@@ -1380,6 +1498,10 @@ for_each_backend!(
     status_cache_serves_unchanged_key_and_invalidates_on_worktree_edit,
     status_counts_only_skips_line_counts_but_not_states,
     range_diff_shows_files_between_two_commits,
+    commits_files_skips_unselected_commits_in_between,
+    commits_files_sums_a_file_touched_twice,
+    commits_files_reports_the_oldest_selection_own_changes,
+    commit_span_file_diff_starts_before_the_first_selected_commit,
     merge_conflict_returns_session_and_keeps_state,
     merge_clean_returns_empty_conflicts,
     conflict_resolve_stages_and_merge_continue_commits,

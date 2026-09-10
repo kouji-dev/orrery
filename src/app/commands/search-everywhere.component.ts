@@ -3,17 +3,21 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
   input,
   linkedSignal,
   signal,
+  untracked,
   viewChild,
 } from "@angular/core";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
+import { LookupScopeStore } from "../shared/scope";
+import { ScopeBarComponent } from "../shared/scope-bar.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { TicketsStore } from "../stores/tickets.store";
 import { ToolWindowStore } from "../tool-window/tool-window.store";
@@ -23,12 +27,13 @@ import { AgentStatus } from "../models";
 import { CommandRegistryService, WorkspaceFilesService } from "./command-registry.service";
 import { fzMatch, kbdLabel } from "./fuzzy";
 import { fzSegments, OverlayFooterComponent, OverlayShellComponent } from "./overlay-shell.component";
+import { SymbolSearchService } from "./symbol-search.service";
 import { KjBadgeComponent, KjButtonComponent } from "@kouji-ui/components";
 
-/** One Search-Everywhere corpus row. Symbols are deliberately OMITTED for now
- *  (no tree-sitter layer yet — roadmap B2.4/B2.5). */
+/** One Search-Everywhere corpus row. "symbol" rows come from the grep-backed
+ *  `SymbolSearchService` (no tree-sitter layer — roadmap B2.4/B2.5). */
 interface SeItem {
-  type: "file" | "agent" | "ticket" | "command" | "ref";
+  type: "file" | "symbol" | "agent" | "ticket" | "command" | "ref";
   key: string;
   /** Ranked/displayed primary text. */
   label: string;
@@ -52,24 +57,40 @@ interface SeItem {
 const TABS = [
   { k: "commands", label: "Actions" },
   { k: "files", label: "Files" },
+  { k: "symbols", label: "Symbols" },
   { k: "agents", label: "Agents" },
   { k: "tickets", label: "Tickets" },
   { k: "git", label: "Git" },
 ] as const;
 type TabKey = (typeof TABS)[number]["k"];
 /** Tabs whose corpus is too large to be useful empty — blank until you type,
- *  and their results group by project (design SE_LAZY / SE_GROUPED). */
-const LAZY: Partial<Record<TabKey, true>> = { files: true };
+ *  and their results group by project (design SE_LAZY / SE_GROUPED). Symbols
+ *  are lazy for a harder reason: their corpus does not exist until a query
+ *  streams it out of the grep engine. */
+const LAZY: Partial<Record<TabKey, true>> = { files: true, symbols: true };
+
+/** Worktrees indexed for the Files corpus in one open. One `search_files`
+ *  invoke each (a full gitignore-filtered tree walk), so it stays capped even
+ *  when the scope says "all". */
+const MAX_FILE_ROOTS = 8;
 
 /**
  * Search Everywhere (roadmap B2.1, double-Shift): one ranked fuzzy overlay
- * over files, agents, tickets, commands and git branches. Keyboard-only:
+ * over files, symbols, agents, tickets, commands and git branches. Keyboard-only:
  * ↑↓ navigate, ⏎ opens, Tab cycles the type tabs, Esc closes.
  */
 @Component({
   selector: "app-search-everywhere",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, StatusDotComponent, OverlayShellComponent, OverlayFooterComponent, KjButtonComponent, KjBadgeComponent],
+  imports: [
+    IconComponent,
+    StatusDotComponent,
+    OverlayShellComponent,
+    OverlayFooterComponent,
+    ScopeBarComponent,
+    KjButtonComponent,
+    KjBadgeComponent,
+  ],
   template: `
     <app-overlay-shell [width]="720" top="9vh" label="Search everywhere" (closed)="registry.close()">
       <div class="pane-head" style="gap:var(--sp-5);padding:var(--sp-6) var(--sp-7)">
@@ -79,11 +100,17 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
           [value]="q()"
           (input)="onInput($event)"
           (keydown)="onKeys($event)"
-          placeholder="Search files, agents, tickets, actions, branches…"
+          placeholder="Search files, symbols, agents, tickets, actions, branches…"
           spellcheck="false"
           autocomplete="off"
           style="flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--ink);font-family:var(--font-mono);font-size:var(--fs-md)"
         />
+      </div>
+
+      <!-- scope: WHICH project/worktree the file + symbol corpora read from.
+           Shared root store, so the choice survives closing the overlay. -->
+      <div class="pane-head" style="gap:var(--sp-4);padding:var(--sp-3) var(--sp-7)">
+        <app-scope-bar [scope]="scope" [showKind]="true" style="flex:1;min-width:0" />
       </div>
 
       <!-- type tabs -->
@@ -101,10 +128,28 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
         }
       </div>
 
+      <!-- status row: what is still running, and the way to stop it -->
+      @if (statusText(); as st) {
+        <div class="pane-head" style="gap:var(--sp-4);padding:var(--sp-2) var(--sp-7);color:var(--ink-3)">
+          @if (symbols.error(); as err) {
+            <span style="color:var(--st-blocked)">{{ err }}</span>
+          } @else {
+            <span style="display:flex;align-items:center;gap:var(--sp-3);color:var(--st-running)">
+              <span class="dot running" style="background:var(--st-running)"></span>{{ st }}
+            </span>
+          }
+          @if (busy()) {
+            <kj-button kjVariant="outline" style="margin-left:auto" (click)="stop()">
+              <app-icon size="md" name="stop" />Stop
+            </kj-button>
+          }
+        </div>
+      }
+
       <div #list class="scroll-y" style="flex:1;padding:var(--sp-2) 0;min-height:120px">
-        @if (!items().length) {
+        @if (!items().length && emptyText()) {
           <div style="padding:var(--sp-8) var(--sp-7);font-size:var(--fs-meta);color:var(--ink-4)">
-            {{ q() ? 'nothing matches "' + q() + '"' : lazy[tab()] ? 'start typing to search files' : 'start typing to filter' }}
+            {{ emptyText() }}
           </div>
         }
         @for (row of rows(); track row.r.it.key) {
@@ -134,16 +179,28 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
             style="display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-7);cursor:pointer"
           >
             <app-icon [name]="r.it.icon" size="sm" [color]="sel() === i ? 'var(--ui-ink)' : 'var(--ink-3)'" />
-            <span class="trunc" style="flex:none;max-width:52%">
-              @for (s of r.segs; track $index) {
-                @if (s.hit) { <b style="color:var(--ui-ink);font-weight:var(--fw-medium)">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
+            @if (r.it.type === 'symbol') {
+              <!-- symbol row reads declaration-first: identifier · kind · where.
+                   Deliberately unlike a file row (name · directory · language). -->
+              <span class="trunc" style="flex:none;max-width:44%;font-family:var(--font-mono)">
+                @for (s of r.segs; track $index) {
+                  @if (s.hit) { <b style="color:var(--ui-ink);font-weight:var(--fw-medium)">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
+                }
+              </span>
+              <kj-badge style="--kj-badge-font-size:var(--fs-badge);flex:none">{{ r.it.meta }}</kj-badge>
+              <span class="trunc" style="color:var(--ink-4);flex:1;font-size:var(--fs-meta)">{{ r.it.sub }}</span>
+            } @else {
+              <span class="trunc" style="flex:none;max-width:52%">
+                @for (s of r.segs; track $index) {
+                  @if (s.hit) { <b style="color:var(--ui-ink);font-weight:var(--fw-medium)">{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
+                }
+              </span>
+              @if (r.it.sub) {
+                <span class="trunc" style="color:var(--ink-4);flex:1">{{ r.it.sub }}</span>
               }
-            </span>
-            @if (r.it.sub) {
-              <span class="trunc" style="color:var(--ink-4);flex:1">{{ r.it.sub }}</span>
+              @if (r.it.status) { <app-status-dot [status]="r.it.status!" /> }
+              @if (r.it.meta) { <kj-badge style="--kj-badge-font-size:var(--fs-badge)">{{ r.it.meta }}</kj-badge> }
             }
-            @if (r.it.status) { <app-status-dot [status]="r.it.status!" /> }
-            @if (r.it.meta) { <kj-badge style="--kj-badge-font-size:var(--fs-badge)">{{ r.it.meta }}</kj-badge> }
           </div>
         }
       </div>
@@ -153,6 +210,8 @@ const LAZY: Partial<Record<TabKey, true>> = { files: true };
 })
 export class SearchEverywhereComponent {
   readonly registry = inject(CommandRegistryService);
+  readonly scope = inject(LookupScopeStore);
+  readonly symbols = inject(SymbolSearchService);
   private runtime = inject(AgentRuntimeService);
   private projects = inject(ProjectActionsService);
   private tickets = inject(TicketsStore);
@@ -170,13 +229,18 @@ export class SearchEverywhereComponent {
   });
   readonly lazy = LAZY;
   readonly q = signal("");
-  /** File corpora, one per project (its scope/first agent's worktree),
-   *  fetched lazily on open. */
+  /** File corpora, one per worktree the scope resolves to. */
   private readonly fileList = signal<{ agentId: string; projectId: string; paths: string[] }[]>([]);
+  /** Worktrees still being walked (0 = idle) — drives "indexing N worktrees…". */
+  readonly filesBusy = signal(0);
+  /** Bumped per corpus load so a Stop (or a scope change) abandons the walks
+   *  already in flight instead of letting them land late. */
+  private fileGen = 0;
 
   private inp = viewChild.required<ElementRef<HTMLInputElement>>("inp");
   private list = viewChild<ElementRef<HTMLElement>>("list");
   private focused = false;
+  private symDebounce: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     afterRenderEffect(() => {
@@ -189,24 +253,112 @@ export class SearchEverywhereComponent {
       const i = this.sel();
       this.list()?.nativeElement.querySelector<HTMLElement>(`[data-idx="${i}"]`)?.scrollIntoView({ block: "nearest" });
     });
-    // fetch one file corpus PER WORKTREE (scope agent first) so file results
-    // span — and group by — every worktree; the same path appears once per
-    // worktree that has it. Why cap 8: one invoke per worktree on overlay open.
-    const scope = this.runtime.activeAgent();
+    // The Files corpus FOLLOWS the scope bar: re-index whenever the scope (or
+    // the worktree list behind it) changes, instead of blindly walking every
+    // worktree in the app on open.
+    effect(() => {
+      // keyed on the ROOT IDS, not the array: `fileRoots()` rebuilds its array
+      // on every unrelated agent-status tick, and re-walking 8 trees for that
+      // would be a full re-index per heartbeat
+      this.fileRootsKey();
+      untracked(() => this.loadFiles(this.fileRoots()));
+    });
+    // Symbols stream from the grep engine — debounced, and only while their
+    // tab is the visible one (a background search would burn a worker thread
+    // and fight Find in Files for the shared results channel).
+    effect(() => {
+      const active = this.tab() === "symbols";
+      const q = this.q();
+      const kind = this.scope.kind();
+      const agentId = this.scope.realAgent()?.id ?? null;
+      const projectId = this.scope.project()?.id ?? null;
+      untracked(() => {
+        if (this.symDebounce) clearTimeout(this.symDebounce);
+        if (!active) {
+          this.symbols.cancel();
+          return;
+        }
+        this.symDebounce = setTimeout(() => this.symbols.search(q, { kind, agentId, projectId }), 200);
+      });
+    });
+    inject(DestroyRef).onDestroy(() => {
+      if (this.symDebounce) clearTimeout(this.symDebounce);
+      this.fileGen++;
+      this.symbols.cancel();
+    });
+  }
+
+  // ------------------------------------------------------------ files corpus
+
+  /** Worktrees the Files corpus should cover for the current scope.
+   *  worktree = the scoped one; project = its project's worktrees; all = every
+   *  worktree — each capped, one tree walk per root. */
+  private readonly fileRoots = computed<{ id: string; projectId: string }[]>(() => {
+    const kind = this.scope.kind();
     const picks: { id: string; projectId: string }[] = [];
     const seen = new Set<string>();
-    for (const a of [scope, ...this.runtime.agents()]) {
-      if (!a || seen.has(a.id)) continue;
+    // the "main checkout" pseudo-agent has the PROJECT's id and no worktree of
+    // its own — `search_files` takes a real agent id, so it never goes in
+    const push = (a: { id: string; projectId: string } | null | undefined) => {
+      if (!a || a.id === a.projectId || seen.has(a.id)) return;
       seen.add(a.id);
       picks.push({ id: a.id, projectId: a.projectId });
+    };
+    push(this.scope.realAgent());
+    if (kind === "project") for (const a of this.scope.projAgents()) push(a);
+    else if (kind === "all") for (const a of this.runtime.agents()) push(a);
+    // worktree scope sitting on the MAIN checkout has no worktree to walk —
+    // fall back to the project's worktrees so Go to File is not simply blank
+    if (!picks.length) for (const a of this.scope.projAgents()) push(a);
+    return picks.slice(0, MAX_FILE_ROOTS);
+  });
+
+  /** Identity of the current root set — the effect's actual dependency. */
+  private readonly fileRootsKey = computed(() => this.fileRoots().map((r) => r.id).join(","));
+
+  private loadFiles(roots: { id: string; projectId: string }[]): void {
+    const gen = ++this.fileGen;
+    this.fileList.set([]);
+    this.filesBusy.set(roots.length);
+    for (const p of roots) {
+      void this.files.filesFor(p.id).then((paths) => {
+        if (gen !== this.fileGen) return; // scope changed / stopped mid-walk
+        this.fileList.update((cur) => [...cur, { agentId: p.id, projectId: p.projectId, paths }]);
+        this.filesBusy.update((n) => Math.max(0, n - 1));
+      });
     }
-    for (const p of picks.slice(0, 8)) {
-      void this.files
-        .filesFor(p.id)
-        .then((paths) =>
-          this.fileList.update((cur) => [...cur, { agentId: p.id, projectId: p.projectId, paths }]),
-        );
+  }
+
+  // ----------------------------------------------------------------- status
+
+  readonly busy = computed(() => (this.tab() === "symbols" && this.symbols.busy()) || this.filesBusy() > 0);
+
+  readonly statusText = computed<string | null>(() => {
+    if (this.symbols.error() && this.tab() === "symbols") return this.symbols.error();
+    if (this.tab() === "symbols" && this.symbols.busy()) return "streaming symbols…";
+    const n = this.filesBusy();
+    if (n > 0) return `indexing ${n} worktree${n === 1 ? "" : "s"}…`;
+    if (this.tab() === "symbols" && this.symbols.truncated()) return "symbols capped — narrow the query";
+    return null;
+  });
+
+  readonly emptyText = computed(() => {
+    const t = this.tab();
+    if (!this.q()) {
+      if (t === "symbols") return "start typing to search symbols";
+      return LAZY[t] ? "start typing to search files" : "start typing to filter";
     }
+    // 2 chars minimum: a 1-char declaration regex truncates before it is useful
+    if (t === "symbols" && this.q().trim().length < 2) return "type at least 2 characters";
+    if (t === "symbols" && this.symbols.busy()) return "";
+    return 'nothing matches "' + this.q() + '"';
+  });
+
+  /** Stop whatever the overlay is still fetching for the current scope. */
+  stop(): void {
+    this.symbols.cancel();
+    this.fileGen++;
+    this.filesBusy.set(0);
   }
 
   /** The full project record for a group header (icon, color, name, path). */
@@ -291,19 +443,64 @@ export class SearchEverywhereComponent {
           open: () => this.openGitTabFor(a.id),
       });
     }
-    return { files, agents, tickets, commands, git: refs };
+    // symbols are NOT part of the synchronous corpus — they stream in from the
+    // grep engine, so `items()` builds them on its own branch below
+    return { files, symbols: [], agents, tickets, commands, git: refs };
   });
 
   countOf(k: string): number {
+    // the symbol corpus lives in the streaming service, not in `corpus()`
+    if (k === "symbols") return this.symbolItems().length;
     const c = this.corpus();
     return (c as Record<string, SeItem[]>)[k]?.length ?? 0;
   }
 
+  /** Streamed symbol hits, ranked + highlighted the same way every other tab
+   *  is — scored against the identifier, never the path. */
+  private readonly symbolItems = computed(() => {
+    const q = this.q();
+    const byAgent = new Map(this.runtime.agents().map((a) => [a.id, a.projectId]));
+    const fallbackProject = this.scope.project()?.id ?? null;
+    const fallbackAgent = this.scope.realAgent()?.id ?? null;
+    const scored = this.symbols
+      .hits()
+      .map((h) => {
+        const m = fzMatch(h.name, q);
+        if (!m) return null;
+        const agentId = h.agentId ?? fallbackAgent;
+        const it: SeItem = {
+          type: "symbol",
+          key: "s:" + h.key,
+          label: h.name,
+          text: h.name + " " + h.path,
+          sub: h.path + ":" + h.line,
+          meta: h.kind,
+          icon: "box",
+          projectId: h.agentId ? (byAgent.get(h.agentId) ?? null) : fallbackProject,
+          agentId: h.agentId,
+          open: () => {
+            if (!agentId) {
+              this.ui.flash("open an agent to view files");
+              return;
+            }
+            this.registry.openFileAt(agentId, h.path, h.line);
+          },
+        };
+        return { it, score: m.score, segs: fzSegments(h.name, m.idx) };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x);
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 80);
+  });
+
   readonly items = computed(() => {
     const t = this.tab();
     const q = this.q();
-    // lazy tabs (files) stay BLANK until the first character (design SE_LAZY)
+    // lazy tabs (files, symbols) stay BLANK until the first character (SE_LAZY)
     if (LAZY[t] && !q) return [];
+    // symbols are async: their rows come from the streaming service, not the
+    // synchronous corpus every other tab reads
+    if (t === "symbols") return this.symbolItems();
     const pool: SeItem[] = this.corpus()[t];
     const scored = pool
       .map((it) => {
@@ -340,8 +537,9 @@ export class SearchEverywhereComponent {
   /** Display rows. Lazy tabs group PER WORKTREE (same path in two worktrees =
    *  two rows in two groups) — groups ordered by their BEST HIT (first
    *  appearance in the ranked list), rows keeping score order inside each
-   *  group. Row indices stay aligned with `items()` so keyboard selection and
-   *  scroll targeting stay untouched by grouping. */
+   *  group. Symbol rows carry projectId/agentId exactly like file rows, so the
+   *  same grouping applies unchanged. Row indices stay aligned with `items()`
+   *  so keyboard selection and scroll targeting stay untouched by grouping. */
   readonly rows = computed(() => {
     const its = this.items();
     type Row = { head: { icon: string; color: string; name: string; path: string; count: number } | null; first: boolean; r: (typeof its)[number]; i: number };

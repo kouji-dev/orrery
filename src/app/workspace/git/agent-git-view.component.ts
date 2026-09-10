@@ -9,7 +9,8 @@ import { KjButtonComponent } from "@kouji-ui/components";
 
 /**
  * Center "Diff tab" dispatcher: when a {@link GitView} is active for an agent
- * (the user picked a commit / range / file-history from the graph panel),
+ * (the user picked a commit / range / commit selection / file-history from the
+ * graph panel),
  * this renders the matching read-only inspection view in place of the
  * working-tree diff. A back button clears the view (→ working changes).
  */
@@ -34,6 +35,11 @@ import { KjButtonComponent } from "@kouji-ui/components";
         }
         @case ('range') {
           <app-range-diff-view [agent]="ag" [shas]="gv.shas" />
+        }
+        @case ('commits') {
+          <!-- same view, other semantics: the union of what these commits
+               changed, not a compare of the two endpoint trees. -->
+          <app-range-diff-view [agent]="ag" [mode]="'commits'" [shas]="gv.shas" />
         }
         @case ('filehistory') {
           <app-file-history-view [agent]="ag" [path]="gv.path" />

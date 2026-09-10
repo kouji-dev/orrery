@@ -1,6 +1,6 @@
 import { computed, effect, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS, ORG } from "../data";
-import { ContextMenuState, GitView, MenuItem, Tab, Tweaks, VizMode } from "../models";
+import { ContextMenuState, GitView, GridRange, MenuItem, Tab, Tweaks, VizMode } from "../models";
 import {
   dropAgent,
   firstLeafOf,
@@ -60,6 +60,10 @@ function loadTweaks(): Tweaks {
 export class UiStore {
   readonly tweaks = signal<Tweaks>(loadTweaks());
   readonly viz = signal<VizMode>(TWEAK_DEFAULTS.defaultViz);
+  /** Recency bucket shown by the grid view. Lives here, like `viz`, because the
+   *  overview component is destroyed on every tab switch — component-local
+   *  state would snap back to "This week" each time the user came back. */
+  readonly gridRange = signal<GridRange>("week");
 
   readonly tabs = signal<Tab[]>([
     { id: "orchestrator", kind: "orchestrator" },
@@ -319,8 +323,18 @@ export class UiStore {
     this.activeTab.set("backlog");
   }
 
+  /** One-shot "open this ticket IN edit mode" request, consumed by the ticket
+   *  page. It is a signal rather than a tab field / input because the page owns
+   *  its own `editing` linkedSignal keyed on ticketId: an input would re-seed
+   *  (and re-enter edit mode) on every re-render, whereas the page reads this
+   *  once and clears it. */
+  readonly editTicketId = signal<string | null>(null);
+
   /** Open a ticket tab — reuse if one for this ticketId already exists. */
-  openTicket(ticketId: string) {
+  openTicket(ticketId: string, edit = false) {
+    // set BEFORE the tab exists/activates: the page's effect runs as soon as it
+    // renders, so the request must already be there when it looks.
+    this.editTicketId.set(edit ? ticketId : null);
     const existing = this.tabs().find(
       (t) => t.kind === "ticket" && t.ticketId === ticketId,
     );
