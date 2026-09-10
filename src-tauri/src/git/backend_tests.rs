@@ -789,6 +789,42 @@ macro_rules! for_each_backend {
             "untouched lines keep their original author"
         );
     }
+    /// Every agent file lives in a LINKED worktree, never the main checkout:
+    /// HEAD and the workdir must resolve through the worktree's own gitdir.
+    fn working_blame_inside_a_linked_worktree(b: &dyn GitBackend) {
+        let dir = tempfile::tempdir().unwrap();
+        b.init(dir.path()).unwrap();
+        let sha = commit_content(dir.path(), "f.txt", "one\ntwo\nthree\n", "init");
+
+        let wt_root = tempfile::tempdir().unwrap();
+        let wt_path = wt_root.path().join("blamed");
+        b.create_worktree(dir.path(), "blamed", "agent/blamed", None, &wt_path)
+            .unwrap();
+        // edit line 2 INSIDE the worktree, not the main checkout
+        std::fs::write(wt_path.join("f.txt"), "one\nTWO\nthree\n").unwrap();
+
+        let (_old, new) = b.working_blame(&wt_path, "f.txt").unwrap();
+        let text: Vec<&str> = new
+            .lines
+            .iter()
+            .filter(|l| !l.line.is_empty())
+            .map(|l| l.line.as_str())
+            .collect();
+        assert_eq!(text, ["one", "TWO", "three"], "three working lines: {:?}", new.lines);
+        let commit_of = |n: usize| {
+            let l = new.lines.iter().find(|l| l.n == n).unwrap();
+            &new.commits[l.c as usize]
+        };
+        assert_eq!(commit_of(1).sha, sha[..7], "line 1 keeps the committed sha");
+        assert_eq!(commit_of(1).author, "T", "line 1 keeps the committed author");
+        assert_eq!(commit_of(3).sha, sha[..7], "line 3 keeps the committed sha");
+        assert_eq!(commit_of(3).author, "T");
+        assert_eq!(
+            commit_of(2).author,
+            "Uncommitted",
+            "the edited line maps to the Uncommitted entry"
+        );
+    }
 
     // ── status cache tests (A2.3) ──────────────────────────────────────────
     fn status_cache_serves_unchanged_key_and_invalidates_on_worktree_edit(b: &dyn GitBackend) {
@@ -1495,6 +1531,7 @@ for_each_backend!(
     blame_returns_one_entry_per_line,
     blame_interns_commits_once_with_per_line_indices,
     working_blame_marks_uncommitted_lines_via_the_commit_table,
+    working_blame_inside_a_linked_worktree,
     status_cache_serves_unchanged_key_and_invalidates_on_worktree_edit,
     status_counts_only_skips_line_counts_but_not_states,
     range_diff_shows_files_between_two_commits,

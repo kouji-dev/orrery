@@ -9,14 +9,34 @@ import {
   signal,
 } from "@angular/core";
 import { IconComponent } from "../../shared/icon.component";
-import { ReviewStore } from "../../agents/review.store";
-import { isBlock } from "../../agents/review.store";
+import { isBlock, ReviewComment, ReviewStore } from "../../agents/review.store";
 import { AgentReviewService } from "../../agents/agent-review.service";
 import { fileName, fileDir } from "../../utils";
 import { KjBadgeComponent, KjButtonComponent, KjTextareaComponent } from "@kouji-ui/components";
 
 function refLines(c: { fromLine: number; toLine: number }): string {
   return c.fromLine === c.toLine ? `${c.fromLine}` : `${c.fromLine}-${c.toLine}`;
+}
+
+export interface FileGroup {
+  file: string;
+  items: ReviewComment[];
+}
+
+/** Pure: bucket comments by file, files in first-comment order — shared by the
+ *  per-pane Send review modal and the top-bar Feedback popover so both list
+ *  the same queue the same way. */
+export function groupByFile(comments: ReviewComment[]): FileGroup[] {
+  const byFile: Record<string, FileGroup> = {};
+  const order: string[] = [];
+  for (const c of comments) {
+    if (!byFile[c.file]) {
+      byFile[c.file] = { file: c.file, items: [] };
+      order.push(c.file);
+    }
+    byFile[c.file].items.push(c);
+  }
+  return order.map((f) => byFile[f]);
 }
 
 // ─── Modal ───────────────────────────────────────────────────────────────────
@@ -168,18 +188,7 @@ export class SendReviewModalComponent {
 
   readonly comments = computed(() => this.review.list(this.agent()));
 
-  readonly groups = computed(() => {
-    const byFile: Record<string, { file: string; items: ReturnType<ReviewStore["list"]> }> = {};
-    const order: string[] = [];
-    for (const c of this.comments()) {
-      if (!byFile[c.file]) {
-        byFile[c.file] = { file: c.file, items: [] };
-        order.push(c.file);
-      }
-      byFile[c.file].items.push(c);
-    }
-    return order.map((f) => byFile[f]);
-  });
+  readonly groups = computed(() => groupByFile(this.comments()));
 
   nameOf(path: string): string { return fileName(path); }
   dirOf(path: string): string { return fileDir(path); }
