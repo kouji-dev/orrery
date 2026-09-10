@@ -19,6 +19,7 @@ import { treeAgentIds } from "../workspace/pane-model";
 import { TabCloseGuardService } from "../workspace/tab-close-guard.service";
 import { LogoComponent } from "./logo.component";
 import { NotificationCenterComponent } from "./notification-center.component";
+import { ReviewChipComponent } from "./review-chip.component";
 import { WindowControlsComponent } from "./window-controls.component";
 import { VersionBadgeComponent } from "../shared/version-badge.component";
 import { TicketsStore } from "../stores/tickets.store";
@@ -28,7 +29,7 @@ import { mix } from "../utils";
 @Component({
   selector: "app-top-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LogoComponent, IconComponent, StatusDotComponent, NotificationCenterComponent, WindowControlsComponent, VersionBadgeComponent, KjButtonComponent, KjKbdComponent],
+  imports: [LogoComponent, IconComponent, StatusDotComponent, ReviewChipComponent, NotificationCenterComponent, WindowControlsComponent, VersionBadgeComponent, KjButtonComponent, KjKbdComponent],
   template: `
     <header
       data-tauri-drag-region
@@ -181,6 +182,8 @@ import { mix } from "../utils";
              (run/pause · theme · settings) — one shared border, icon-only -->
         <div style="display:flex;align-items:center;gap:var(--sp-4);padding:0 var(--sp-6);flex:none">
           @let running = agentActions.anyRunning();
+          <!-- queued review comments across every agent; renders nothing at 0 -->
+          <app-review-chip />
           <app-notification-center />
           <!-- Plain div, not <kj-button-group>: the group pulls every button
                after the first by -1px (its own segmented seam), which slides

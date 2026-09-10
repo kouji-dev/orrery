@@ -31,6 +31,28 @@ describe("ReviewStore", () => {
     const p = store.buildPayload("a", "  tighten  ");
     expect(p.global).toBe("tighten");
     expect(p.comments[0]).toMatchObject({ file: "src/a.ts", fromLine: 10, toLine: 12, block: true });
+    expect(p.comments[0].quote).toBeUndefined(); // code comments carry no quote
+  });
+
+  it("keeps the quote to one line / 160 chars and passes it through the payload", () => {
+    store.add("a", { ...base("docs/x.md"), quote: "  first line\nsecond line  " });
+    store.add("a", { ...base("docs/x.md"), quote: "y".repeat(400) });
+    const p = store.buildPayload("a", "");
+    expect(p.comments[0].quote).toBe("first line");
+    expect(p.comments[1].quote?.length).toBe(160);
+    expect(p.comments[1].quote?.endsWith("…")).toBe(true);
+  });
+
+  it("totalCount / allByAgent span every agent, skipping empty ones", () => {
+    expect(store.totalCount()).toBe(0);
+    expect(store.allByAgent()).toEqual([]);
+    store.add("a", base());
+    store.add("a", base("src/b.ts"));
+    store.add("z", base());
+    store.clear("z");
+    store.add("q", base());
+    expect(store.totalCount()).toBe(3);
+    expect(store.allByAgent().map((g) => [g.agentId, g.comments.length])).toEqual([["a", 2], ["q", 1]]);
   });
 });
 
@@ -54,6 +76,17 @@ describe("assembleReviewMessage", () => {
         "  → extract a helper",
       ].join("\n"),
     );
+  });
+
+  it("adds a > quote line between the ref and the note only when present", () => {
+    const msg = assembleReviewMessage({
+      global: "",
+      comments: [
+        { file: "docs/a.md", fromLine: 3, toLine: 3, snippet: "s", note: "say when", block: false, quote: "keyed on event.id" },
+        { file: "src/b.ts", fromLine: 1, toLine: 1, snippet: "s", note: "n", block: false },
+      ],
+    });
+    expect(msg).toBe(["Review feedback:", "", "docs/a.md:3", "  > keyed on event.id", "  → say when", "src/b.ts:1", "  → n"].join("\n"));
   });
 
   it("omits the global line when empty", () => {

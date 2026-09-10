@@ -11,7 +11,6 @@ import {
   untracked,
 } from "@angular/core";
 import { DomSanitizer, SafeResourceUrl } from "@angular/platform-browser";
-import { marked } from "marked";
 import { Agent, BlameIntern, BlameLine, hydrateBlame } from "../models";
 import { AgentsStore } from "../stores/agents.store";
 import { EditsStore } from "../stores/edits.store";
@@ -19,7 +18,7 @@ import { IconComponent } from "../shared/icon.component";
 import { UiStore } from "../ui/ui.store";
 import { fileDir, fileName, isMarkdownPath, langId, langTag } from "../utils";
 import { BRIDGE, Commands, FileHunk } from "../data-source/bridge";
-import { renderMermaidBlocks } from "./md-mermaid";
+import { MarkdownPreviewComponent } from "./markdown/markdown-preview.component";
 import { MonacoFileEditorComponent } from "./monaco-file-editor.component";
 import { ScrollStateService } from "./scroll-state.service";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
@@ -33,12 +32,13 @@ const MAX_CHARS = 1_500_000;
  * Read-only single-file view for a pane's file tab. Content is the
  * working-tree text — fetched through the existing `agent_diff` command whose
  * `.new` side is exactly that — rendered by the shared UnifiedCodeComponent.
- * Markdown gets a Raw / Preview toggle. Annotate overlays per-line blame.
+ * Markdown gets a Raw / Preview toggle (the preview itself is
+ * MarkdownPreviewComponent). Annotate overlays per-line blame.
  */
 @Component({
   selector: "app-file-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, MonacoFileEditorComponent, AnnotateBlameComponent, SendReviewButtonComponent, KjButtonComponent, KjBadgeComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
+  imports: [IconComponent, MarkdownPreviewComponent, MonacoFileEditorComponent, AnnotateBlameComponent, SendReviewButtonComponent, KjButtonComponent, KjBadgeComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     <!-- slim toolbar: path · changed-state · (md toggle) · annotate · lang · refresh -->
     <div class="pane-head" style="gap:var(--sp-3);padding-block:var(--sp-2);background:var(--panel);min-width:0">
@@ -97,10 +97,21 @@ const MAX_CHARS = 1_500_000;
       }
     } @else if (notice(); as n) {
       <div class="pane-empty pad" style="text-align:center">{{ n }}</div>
-    } @else if (isMarkdown() && preview()) {
-      <div class="scroll-y rte-view md-body" (scroll)="onBodyScroll($event)" style="flex:1;padding:var(--sp-7) var(--sp-8)" [innerHTML]="mdHtml()"></div>
     } @else if (annotate()) {
-      <app-annotate-blame [lines]="blame()" (openCommit)="onOpenCommit($event)" />
+      <!-- Annotate outranks the markdown preview. Preview is the default for
+           .md, and with this branch BELOW it the Annotate pill toggled state
+           that never rendered — a silent no-op on every markdown file. -->
+      @if (blameLoading()) {
+        <div class="pane-empty pad">annotating…</div>
+      } @else if (blameError(); as be) {
+        <div class="pane-empty pad">blame failed: {{ be }}</div>
+      } @else if (blame().length === 0) {
+        <div class="pane-empty pad">no history for this file yet</div>
+      } @else {
+        <app-annotate-blame [lines]="blame()" (openCommit)="onOpenCommit($event)" />
+      }
+    } @else if (isMarkdown() && preview()) {
+      <app-markdown-preview [source]="content()!" [agent]="agent()" [path]="path()" />
     } @else {
       <app-monaco-file-editor [agent]="agent().id" [file]="path()" [newText]="content() ?? ''" [lang]="lid()" [syncGen]="syncGen()" [hunks]="hunks()" (revertHunk)="onRevertHunk($event)" />
     }
@@ -112,10 +123,6 @@ const MAX_CHARS = 1_500_000;
       :host {
         background: var(--bg);
       }
-      /* Heading / code / pre / link styling is the shared .rte-view recipe.
-         Only the mermaid block, which rte-view knows nothing about, stays. */
-      .md-body ::ng-deep .mmd { margin: var(--sp-5) 0; overflow-x: auto; }
-      .md-body ::ng-deep .mmd svg { max-width: 100%; height: auto; }
       .ec-banner {
         display: flex;
         align-items: center;
@@ -164,6 +171,10 @@ export class FileViewComponent {
   readonly content = signal<string | null>(null);
   private readonly error = signal<string | null>(null);
   readonly blame = signal<BlameLine[]>([]);
+  /** Blame request in flight — the pane says so instead of sitting blank. */
+  readonly blameLoading = signal(false);
+  /** Backend error message from the last blame request; null when it succeeded. */
+  readonly blameError = signal<string | null>(null);
   /** Disk text when it diverged under a dirty buffer (drives the banner). */
   readonly conflict = signal<string | null>(null);
   /** B4.3: changed regions vs HEAD — the editor's gutter change markers. */
@@ -193,7 +204,6 @@ export class FileViewComponent {
   readonly fname = fileName;
   readonly isMarkdown = computed(() => isMarkdownPath(this.path()));
   readonly tag = computed(() => langTag(this.path()));
-  readonly mdHtml = computed(() => (this.content() ? (marked.parse(this.content()!) as string) : ""));
 
   readonly lid = computed(() => langId(this.path()));
 
@@ -251,50 +261,41 @@ export class FileViewComponent {
       const path = this.path();
       if (!on) {
         this.blame.set([]);
+        this.blameLoading.set(false);
+        this.blameError.set(null);
         return;
       }
       const g = ++this.blameGen;
+      this.blameLoading.set(true);
+      this.blameError.set(null);
       void this.bridge
         .invoke<{ old: BlameIntern; new: BlameIntern }>(Commands.AgentWorkingBlame, { id, path })
         .then((r) => {
           if (this.blameGen !== g) return;
           this.blame.set(hydrateBlame(r.new));
+          this.blameLoading.set(false);
         })
-        .catch(() => {
+        .catch((e) => {
           if (this.blameGen !== g) return;
+          // surface the backend's message — swallowing it left a blank pane
+          // and nothing in the log to explain why
           this.blame.set([]);
+          this.blameError.set(e instanceof Error ? e.message : String(e));
+          this.blameLoading.set(false);
         });
     });
 
-    // Mermaid fences in the rendered markdown preview. The [innerHTML] binding
-    // lands during change detection, so wait two frames before touching the
-    // DOM; re-runs on a theme toggle to restyle already-rendered diagrams.
+    // Restore a saved scroll offset once a media body is showing (the markdown
+    // preview restores its own). Two-frame wait — the [src] binding lands
+    // during change detection. Re-applying to an already positioned body is a
+    // no-op, so no showing-vs-reloading distinction.
     effect(() => {
-      const html = this.mdHtml();
-      const showing = this.isMarkdown() && this.preview() && this.kind() === "text" && this.notice() === null;
-      const theme = this.ui.tweaks().theme;
-      if (!showing || !html.includes("language-mermaid")) return;
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          const body = this.host.nativeElement.querySelector<HTMLElement>(".md-body");
-          if (body) void renderMermaidBlocks(body, theme);
-        }),
-      );
-    });
-
-    // Restore a saved scroll offset once a plain body (md preview / media) is
-    // showing. Same two-frame wait as the mermaid effect — the [innerHTML] /
-    // [src] bindings land during change detection. Re-applying to an already
-    // positioned body is a no-op, so no showing-vs-reloading distinction.
-    effect(() => {
-      const showingMd = this.isMarkdown() && this.preview() && this.kind() === "text" && this.notice() === null && this.content();
-      const showingMedia = this.kind() === "image" && this.mediaDataUrl();
-      if (!showingMd && !showingMedia) return;
+      if (this.kind() !== "image" || !this.mediaDataUrl()) return;
       const top = untracked(() => this.scroll.getPlain(this.agent().id, this.path()));
       if (top === undefined) return;
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
-          const body = this.host.nativeElement.querySelector<HTMLElement>(".scroll-y");
+          const body = this.host.nativeElement.querySelector<HTMLElement>(".media-body");
           if (body) body.scrollTop = top;
         }),
       );
@@ -306,8 +307,9 @@ export class FileViewComponent {
     this.scroll.savePlain(this.agent().id, this.path(), el.scrollTop);
   }
 
+  /** Media body only — the markdown preview saves its own scroller. */
   private saveBodyScroll(key: { agent: string; path: string }): void {
-    const body = this.host.nativeElement.querySelector<HTMLElement>(".scroll-y");
+    const body = this.host.nativeElement.querySelector<HTMLElement>(".media-body");
     if (body) this.scroll.savePlain(key.agent, key.path, body.scrollTop);
   }
 

@@ -1457,6 +1457,80 @@ kj-button.menu-item,
   text-decoration: line-through;
 }
 
+/* ── Markdown preview: reading column + the `.md-box` block family ──────────
+   Ported from design/orrery-v2.html "Markdown Preview surface". The shared
+   .rte-view recipe above already owns headings / lists / inline code / quote;
+   this block adds ONLY what the preview column needs on top of it:
+   · `.md-body .rte-view` — the design's 760px centred reading column. Scoped
+     under .md-body so ticket/comment views keep their full-width .rte-view.
+   · `.md-box` — the design's ONE block family (table · diagram · error ·
+     fence): panel-2 ground + hair edge + r-md, so every non-prose block reads
+     as the same card. Markup is emitted by marked-mermaid.ts / md-mermaid.ts.
+   WHY a table lives in a scroll box: `width: max-content` lets a wide table
+   keep its natural column widths, and `.box-scroll { overflow-x: auto }` makes
+   the CARD scroll horizontally — never the reading pane. `min-width: 100%`
+   keeps a narrow table flush with the card edges. Cell padding is restored
+   explicitly because the global reset above zeroes padding on every element
+   that is not a kouji component. marked emits `align="right|center"` per cell
+   and Angular's sanitizer keeps `align`, so those attributes carry the
+   design's `.num` (right, mono, tabular) and centred looks. */
+.md-body .rte-view { max-width: round(calc(760px * var(--density)), 1px); margin: 0 auto; padding: var(--sp-10) var(--sp-11) round(calc(60px * var(--density)), 1px); letter-spacing: -0.005em; text-wrap: pretty; }
+/* the one block family: table · diagram · error · fence — panel-2 + hair edge */
+.md-box { position: relative; margin: var(--sp-4) 0 var(--sp-7); background: var(--panel-2); border: 1px solid var(--hair); border-radius: var(--r-md); overflow: hidden; }
+.md-box .box-scroll { overflow-x: auto; overflow-y: hidden; }
+.md-box .box-scroll::-webkit-scrollbar { height: round(calc(8px * var(--density)), 1px); }
+.md-box table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: var(--fs-meta); line-height: 1.45; }
+.md-box th { text-align: left; font-weight: var(--fw-medium); color: var(--ink); background: var(--panel-3); padding: var(--sp-4) var(--sp-6); border-bottom: 1px solid var(--hair); white-space: nowrap; position: sticky; top: 0; }
+.md-box td { padding: var(--sp-4) var(--sp-6); color: var(--ink-2); border-bottom: 1px solid var(--hair); vertical-align: top; }
+.md-box th + th, .md-box td + td { border-left: 1px solid var(--hair); }
+.md-box tr:last-child td { border-bottom: none; }
+.md-box tbody tr:nth-child(even) td { background: color-mix(in oklch, var(--ink), transparent 97%); }
+.md-box .num, .md-box td[align="right"], .md-box th[align="right"] { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.md-box td[align="center"], .md-box th[align="center"] { text-align: center; }
+.md-box .mono { font-family: var(--font-mono); font-size: var(--fs-badge); white-space: nowrap; color: var(--ink-2); }
+.md-box .wide { min-width: round(calc(360px * var(--density)), 1px); }
+/* mermaid */
+.md-box.diagram .box-scroll { padding: var(--sp-8) var(--sp-8); }
+.md-box .box-tb { position: absolute; top: 8px; right: 8px; display: flex; gap: 1px; padding: var(--sp-1); background: var(--elev); border: 1px solid var(--hair-2); border-radius: var(--r-sm); box-shadow: var(--shadow); opacity: 0; transition: opacity .12s; z-index: 2; }
+.md-box:hover .box-tb, .md-box.is-hover .box-tb { opacity: 1; }
+.md-box .box-tb button { display: flex; align-items: center; gap: 5px; padding: var(--sp-2) var(--sp-4); border-radius: 3px; border: none; background: transparent; color: var(--ink-2); font-size: var(--fs-badge); cursor: pointer; white-space: nowrap; }
+.md-box .box-tb button:hover { background: var(--panel-3); color: var(--ink); }
+.md-box .box-tb button .icon { color: var(--ink-3); }
+.md-box .box-tb .dim { color: var(--ink-4); font-size: var(--fs-badge); }
+.md-box .box-tb .div { width: 1px; background: var(--hair); margin: var(--sp-2) var(--sp-1); }
+.mmd text { font-family: var(--font-ui); font-size: var(--fs-meta); fill: var(--ink); }
+.mmd text.lbl { font-family: var(--font-mono); font-size: var(--fs-micro); fill: var(--ink-3); }
+.mmd .node { fill: var(--panel-3); stroke: var(--hair-2); }
+.mmd .dec { fill: var(--panel-2); stroke: var(--ink-4); }
+.mmd .edge { stroke: var(--ink-3); fill: none; }
+.mmd .edge.back { stroke-dasharray: 4 3; stroke: var(--ink-4); }
+.mmd .arrow { fill: var(--ink-3); }
+/* diagram failure — the block failed, not the page */
+.md-box.error .hd { display: flex; align-items: flex-start; gap: 9px; padding: var(--sp-5) var(--sp-6); border-bottom: 1px solid var(--hair); }
+.md-box.error .hd .icon { color: var(--st-blocked); margin-top: var(--sp-1); flex: none; }
+.md-box.error .hd .t { color: var(--ink); font-weight: var(--fw-medium); font-size: var(--fs-body); }
+.md-box.error .hd .s { color: var(--ink-3); font-size: var(--fs-meta); margin-top: 1px; }
+.md-box.error pre { margin: 0; padding: var(--sp-5) var(--sp-6) var(--sp-6); font-family: var(--font-mono); font-size: var(--fs-badge); line-height: 1.6; color: var(--ink-2); overflow-x: auto; white-space: pre; background: transparent; border: 0; border-radius: 0; }
+.md-box.error pre .m { color: var(--ink); }
+.md-box.error pre .c { color: var(--ink-4); }
+.md-box.error pre.src { border-top: 1px solid var(--hair); color: var(--ink-3); }
+/* fence header (static on a code fence, a click-to-reveal toggle on an error's source) */
+.md-box .fence-hd { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-5); background: var(--panel); border-top: 1px solid var(--hair); color: var(--ink-3); font-size: var(--fs-badge); cursor: pointer; }
+.md-box .fence-hd:hover { color: var(--ink); }
+.md-box .fence-hd .chip { font-size: var(--fs-micro); padding: 0 5px; }
+.md-box .fence-hd .right { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--ink-3); }
+.md-box .fence-hd.static { cursor: default; border-top: none; border-bottom: 1px solid var(--hair); }
+.md-box .fence-hd .chev { transition: transform .12s; }
+.md-box .fence-hd.open .chev { transform: rotate(90deg); }
+/* the card IS the code block's edge — drop the shared .rte-view pre chrome (bg/border/wrap) inside it */
+.md-box.fence pre { margin: 0; padding: var(--sp-5) var(--sp-6); font-family: var(--font-mono); font-size: var(--fs-badge); line-height: 1.6; color: var(--ink-2); overflow-x: auto; white-space: pre; background: transparent; border: 0; border-radius: 0; }
+.md-box.fence pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+/* full-screen diagram overlay keeps the same svg palette */
+.md-full .mmd text { font-family: var(--font-ui); font-size: var(--fs-meta); fill: var(--ink); }
+.md-full .mmd text.lbl { font-family: var(--font-mono); font-size: var(--fs-micro); fill: var(--ink-3); }
+.md-full .mmd .node { fill: var(--panel-3); stroke: var(--hair-2); } .md-full .mmd .dec { fill: var(--panel-2); stroke: var(--ink-4); }
+.md-full .mmd .edge { stroke: var(--ink-3); fill: none; } .md-full .mmd .edge.back { stroke-dasharray: 4 3; stroke: var(--ink-4); } .md-full .mmd .arrow { fill: var(--ink-3); }
+
 /* Icon sizing — see the --ico-* scale above. `--ico` is set per <app-icon>. */
 app-icon svg {
   width: var(--ico, var(--ico-md));
@@ -2439,3 +2513,59 @@ kj-backdrop {
   --kj-badge-font-size: var(--fs-badge);
   --kj-badge-padding-x: var(--sp-3);
 }
+
+/* ---------- feedback popover (top bar) ----------
+   design/orrery-v2.html `.fb-pop` — the cross-agent review queue anchored
+   under the top-bar chat chip. Global because the rows are rendered by
+   <app-review-chip> but the grouped agent/file/row skin is the design's own
+   recipe and must read like the rest of the chrome. */
+.fb-pop { position: absolute; top: calc(100% + 8px); right: 0; width: round(calc(520px * var(--density)), 1px); z-index: 40; background: var(--elev); border: 1px solid var(--hair-2); border-radius: var(--r-md); box-shadow: var(--shadow); display: flex; flex-direction: column; letter-spacing: -0.01em; }
+.fb-pop .hd { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-5) var(--sp-7); border-bottom: 1px solid var(--hair); }
+.fb-pop .agent { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-4) var(--sp-7) var(--sp-3); background: var(--panel); }
+.fb-pop .agent .name { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--ink); }
+.fb-pop .agent .btn { margin-left: auto; padding: var(--sp-1) var(--sp-3); font-size: var(--fs-badge); color: var(--ink-3); }
+.fb-pop .agent .btn:hover { color: var(--ink); }
+.fb-pop .file { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-4) var(--sp-7) var(--sp-2); font-family: var(--font-mono); font-size: var(--fs-badge); color: var(--ink-3); }
+.fb-pop .file .name { color: var(--ink-2); }
+.fb-pop .row { display: grid; grid-template-columns: 52px 1fr; gap: var(--sp-2) var(--sp-5); padding: var(--sp-3) var(--sp-7) var(--sp-4) var(--sp-7); }
+.fb-pop .row:hover { background: var(--panel-3); }
+.fb-pop .row .ln { font-family: var(--font-mono); font-size: var(--fs-badge); color: var(--ink-3); text-align: right; padding-top: var(--sp-2); font-variant-numeric: tabular-nums; }
+.fb-pop .row .q { font-family: var(--font-mono); font-size: var(--fs-badge); color: var(--ink-3); background: var(--panel-2); border: 1px solid var(--hair); border-radius: 4px; padding: var(--sp-2) var(--sp-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-pop .row .note { grid-column: 2; display: flex; gap: var(--sp-3); font-size: var(--fs-body); color: var(--ink); line-height: 1.45; }
+.fb-pop .row .note .arr { color: var(--ui-ink); flex: none; }
+.fb-pop .ft { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-5) var(--sp-7); border-top: 1px solid var(--hair); }
+.fb-pop .ft .hint { font-size: var(--fs-badge); color: var(--ink-4); }
+.fb-pop .ft .btn { padding: var(--sp-2) var(--sp-6); }
+
+/* ---------- markdown preview: selection → note ----------
+   design/orrery-v2.html "selection → note", "saved comment" and "anchored
+   popups" rules. Global because the wraps and marks are inserted
+   into the [innerHTML] document by hand (md-highlight.ts) and the popups are
+   <app-md-review-overlay>'s absolute children inside the `.md-body` scroller.
+   The `.rc-composer` base is injected by review-comments.monaco.ts for the
+   Monaco view-zone (flush strip); the markdown one is the SAME family as a
+   floating card — scoped under `.md-body` so the two never fight. */
+.md-sel { background: var(--ui-sel-2); border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; position: relative; }
+.md-note-btn { display: inline-grid; place-items: center; width: round(calc(20px * var(--density)), 1px); height: round(calc(20px * var(--density)), 1px); margin-left: var(--sp-2); vertical-align: baseline; transform: translateY(5px); border-radius: 50%; border: 1px solid var(--hair-2); background: var(--elev); color: var(--ui-ink); box-shadow: var(--shadow); cursor: pointer; padding: 0; }
+.md-note-btn:hover { border-color: var(--ui-line); background: var(--panel-3); }
+.md-note-btn.floating { position: absolute; transform: none; margin: 0; z-index: 6; }
+.md-note-btn app-icon svg { width: round(calc(11px * var(--density)), 1px); height: round(calc(11px * var(--density)), 1px); }
+/* saved comment */
+.md-hl { background: var(--ui-sel); box-shadow: inset 0 -1px 0 var(--ui-line); border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; position: relative; }
+.md-mark { display: inline-grid; place-items: center; width: round(calc(16px * var(--density)), 1px); height: round(calc(16px * var(--density)), 1px); margin-left: var(--sp-1); vertical-align: baseline; transform: translateY(3px); border-radius: 50%; border: 1px solid var(--ui-line); background: var(--ui-sel); color: var(--ui-ink); cursor: pointer; padding: 0; position: relative; }
+.md-mark.is-hover, .md-mark:hover { background: var(--ui-sel-2); }
+/* anchored popups — same family as rc-composer */
+.md-body .rc-composer, .md-card { position: absolute; z-index: 20; display: block; background: var(--elev); border: 1px solid var(--hair-2); border-radius: var(--r-md); box-shadow: var(--shadow); text-align: left; letter-spacing: -0.01em; font-family: var(--font-ui); }
+.md-body .rc-composer { width: round(calc(360px * var(--density)), 1px); padding: var(--sp-5) var(--sp-6) var(--sp-5); }
+.md-body .rc-composer .hd { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); font-size: var(--fs-badge); color: var(--ink-2); }
+.md-body .rc-composer .hd b { color: var(--ink); font-weight: var(--fw-medium); }
+.md-body .rc-composer .hd .q { margin-left: auto; font-size: var(--fs-micro); color: var(--ink-4); text-transform: uppercase; letter-spacing: .12em; }
+.md-body .rc-composer textarea { width: 100%; resize: vertical; min-height: round(calc(64px * var(--density)), 1px); background: var(--panel-2); border: 1px solid var(--ui-line); border-radius: var(--r-sm); padding: var(--sp-4) var(--sp-5); color: var(--ink); font-family: var(--font-mono); font-size: var(--fs-meta); line-height: 1.55; outline: none; box-shadow: var(--ui-ring); box-sizing: border-box; }
+.md-body .rc-composer .ft { display: flex; align-items: center; gap: var(--sp-4); margin-top: var(--sp-4); }
+.md-body .rc-composer .hint { font-size: var(--fs-badge); color: var(--ink-4); display: flex; align-items: center; gap: var(--sp-2); }
+.md-card { width: round(calc(300px * var(--density)), 1px); padding: var(--sp-5) var(--sp-6); font-size: var(--fs-body); line-height: 1.5; color: var(--ink); }
+.md-card .hd { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-3); font-size: var(--fs-meta); color: var(--ink-2); }
+.md-card .you { width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center; font-size: var(--fs-micro); font-weight: var(--fw-strong); color: var(--ui-ink); background: var(--ui-sel); border: 1px solid var(--ui-sel-2); }
+.md-card .ft { display: flex; align-items: center; margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--hair); }
+.md-card .ft .btn { margin-left: auto; color: var(--ink-3); }
+.md-card .ft .btn:hover { color: var(--ink); }

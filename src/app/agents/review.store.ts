@@ -14,6 +14,11 @@ export interface ReviewComment {
   snippet: string;
   lines: string[];
   note: string;
+  /** Prose the reviewer selected (markdown preview). Unlike `snippet` — which
+   *  the Monaco call sites always fill from the line text — this is only set
+   *  when the surface has a real quote, and it is the one thing that reaches
+   *  the agent's message as a `> …` line. */
+  quote?: string;
 }
 
 export interface ReviewPayloadItem {
@@ -23,6 +28,7 @@ export interface ReviewPayloadItem {
   snippet: string;
   note: string;
   block: boolean;
+  quote?: string;
 }
 
 export interface ReviewPayload {
@@ -47,9 +53,19 @@ export function assembleReviewMessage(p: ReviewPayload): string {
   out.push("");
   p.comments.forEach((c) => {
     out.push(`${c.file}:${refLines(c)}`);
+    // quote sits between the ref and the note so the agent reads "where →
+    // what was said → what to do" in one glance; absent for code comments.
+    if (c.quote) out.push(`  > ${c.quote}`);
     out.push(`  → ${c.note}`);
   });
   return out.join("\n");
+}
+
+/** One line, 160 chars — a quote is a pointer for the agent, not a transcript. */
+const QUOTE_MAX = 160;
+function oneLine(q: string): string {
+  const first = q.trim().split(/\r?\n/)[0]?.trim() ?? "";
+  return first.length > QUOTE_MAX ? first.slice(0, QUOTE_MAX - 1).trimEnd() + "…" : first;
 }
 
 interface Slot {
@@ -70,13 +86,28 @@ export class ReviewStore {
     return this.list(agentId).length;
   }
 
+  /** Every queued comment across all agents — drives the top-bar chip. */
+  totalCount(): number {
+    return Object.values(this.state()).reduce((n, s) => n + s.comments.length, 0);
+  }
+
+  /** Agents with at least one queued comment, in first-comment order. */
+  allByAgent(): { agentId: string; comments: ReviewComment[] }[] {
+    return Object.entries(this.state())
+      .filter(([, s]) => s.comments.length > 0)
+      .map(([agentId, s]) => ({ agentId, comments: s.comments }));
+  }
+
   add(agentId: string, c: Omit<ReviewComment, "id">): string {
     let id = "";
     this.state.update((m) => {
       const slot = m[agentId] ?? { comments: [], seq: 0 };
       const seq = slot.seq + 1;
       id = `rc${seq}`;
-      return { ...m, [agentId]: { seq, comments: [...slot.comments, { ...c, id }] } };
+      const { quote: raw, ...rest } = c;
+      const quote = raw ? oneLine(raw) : "";
+      const next: ReviewComment = { ...rest, id, ...(quote ? { quote } : {}) };
+      return { ...m, [agentId]: { seq, comments: [...slot.comments, next] } };
     });
     return id;
   }
@@ -106,6 +137,7 @@ export class ReviewStore {
         snippet: c.snippet,
         note: c.note,
         block: isBlock(c),
+        quote: c.quote || undefined,
       })),
     };
   }

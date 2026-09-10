@@ -872,7 +872,10 @@ pub async fn agent_working_blame(
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("agent_working_blame", || {
             let agent = svc.get(id)?;
-            let (old, new) = svc.git().working_blame(std::path::Path::new(&agent.worktree), &path)?;
+            let (old, new) = svc
+                .git()
+                .working_blame(std::path::Path::new(&agent.worktree), &path)
+                .inspect_err(|e| log::warn!("agent_working_blame {path}: {e}"))?;
             Ok(WorkingBlame { old, new })
         })
     })
