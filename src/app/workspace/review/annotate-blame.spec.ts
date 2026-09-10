@@ -86,6 +86,21 @@ describe("AnnotateBlameComponent scoped find (B3.3)", () => {
     expect(f.nativeElement.querySelector(".bf-count")?.textContent).toContain("1/2");
   });
 
+  it("holds the rows in a plain container, not a <pre>", () => {
+    // Regression: the rows lived in a <pre>, and Angular never trims template
+    // whitespace inside one — every newline + indent of the template rendered,
+    // so each row was followed by a blank line and the view looked padded out.
+    const f = render(LINES);
+    expect(f.nativeElement.querySelector("pre")).toBeNull();
+    const box = f.nativeElement.querySelector(".blm-lines") as HTMLElement;
+    expect(box).not.toBeNull();
+    const blank = Array.from(box.childNodes).filter(
+      (n) => n.nodeType === 3 /* text */ && (n.textContent ?? "").trim() === "",
+    );
+    expect(blank).toEqual([]);
+    expect(box.querySelectorAll("[data-bn]").length).toBe(LINES.length);
+  });
+
   it("closeFind resets query and hides the bar", () => {
     const f = render(LINES);
     const c = f.componentInstance;

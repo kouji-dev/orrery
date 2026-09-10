@@ -14,6 +14,7 @@ import { BlameLine } from "../../models";
 import { IconComponent } from "../../shared/icon.component";
 import { ShaChipComponent } from "../../shared/git/sha-chip.component";
 import { KjBadgeComponent, KjButtonComponent } from "@kouji-ui/components";
+import { ageBg as ageBgA, authorColor, initials, relTime } from "./blame-format";
 
 // ---------------------------------------------------------------------------
 // Pure data helpers
@@ -29,49 +30,6 @@ export interface BlameRow {
   rel: string;
   first: boolean;
   summary: string;
-}
-
-/** Stable per-author hue — mirrors authorColor in code-diff.component.ts. */
-function authorColor(author: string): string {
-  let hash = 0;
-  for (let i = 0; i < author.length; i++) hash = ((hash * 31) + author.charCodeAt(i)) >>> 0;
-  const hue = ((hash % 300) + 30) % 360;
-  return `hsl(${hue}, 60%, 66%)`;
-}
-
-/** 1–2 uppercase initials from a display name. */
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
-}
-
-/** Unix seconds → short relative string, e.g. "2h", "3d", "5m". Empty for 0. */
-function relTime(when: number, now = Date.now()): string {
-  if (!when) return "";
-  const secs = Math.floor(now / 1000) - when;
-  if (secs < 0) return "now";
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo`;
-  return `${Math.floor(months / 12)}y`;
-}
-
-/**
- * Age background using the same color-mix formula from the design reference.
- * age 0 = newest → most opaque ink; age 1 = oldest → most transparent.
- */
-function ageBgA(age: number): string {
-  return `color-mix(in oklch, var(--ui-ink), transparent ${86 + Math.round(age * 11)}%)`;
 }
 
 export function blameToRows(lines: BlameLine[], now = Date.now()): BlameRow[] {
@@ -154,7 +112,7 @@ interface Popup {
           <kj-button kjSize="icon" kjVariant="ghost" (click)="closeFind()" title="Close (Esc)"><app-icon size="sm" name="x" /></kj-button>
         </div>
       }
-      <pre style="font-size:var(--fs-badge);line-height:1.7">
+      <div class="blm-lines">
         @for (row of rows(); track row.n; let i = $index) {
           <div style="display:flex" [class.bf-hit]="isHit(i)" [class.bf-on]="isActiveHit(i)" [attr.data-bn]="row.n">
             <!-- author column -->
@@ -186,7 +144,7 @@ interface Popup {
             <code style="flex:1;white-space:pre-wrap;word-break:break-word;padding-right:14px;color:var(--ink-2)">{{ row.s }}</code>
           </div>
         }
-      </pre>
+      </div>
 
       <!-- hover popup -->
       @if (popup(); as p) {
@@ -214,6 +172,16 @@ interface Popup {
   `,
   styles: [
     `
+      /* The rows used to live in a <pre>. Angular never trims whitespace inside
+         one (SKIP_WS_TRIM_TAGS), so every newline and indent of the template
+         itself rendered — a blank line between each row and a fat gap above the
+         first. A plain div with the same metrics has no such rule; the code
+         column keeps its own white-space:pre-wrap. */
+      .blm-lines {
+        font-family: var(--font-mono);
+        font-size: var(--fs-badge);
+        line-height: 1.7;
+      }
       /* scoped-find bar: sticky over the scroller, code-surface metrics */
       .bf-bar {
         position: sticky;

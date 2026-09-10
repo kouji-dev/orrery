@@ -21,7 +21,6 @@ import { BRIDGE, Commands, FileHunk } from "../data-source/bridge";
 import { MarkdownPreviewComponent } from "./markdown/markdown-preview.component";
 import { MonacoFileEditorComponent } from "./monaco-file-editor.component";
 import { ScrollStateService } from "./scroll-state.service";
-import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
 import { KjBadgeComponent, KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent} from "@kouji-ui/components";
 
@@ -38,7 +37,7 @@ const MAX_CHARS = 1_500_000;
 @Component({
   selector: "app-file-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, MarkdownPreviewComponent, MonacoFileEditorComponent, AnnotateBlameComponent, SendReviewButtonComponent, KjButtonComponent, KjBadgeComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
+  imports: [IconComponent, MarkdownPreviewComponent, MonacoFileEditorComponent, SendReviewButtonComponent, KjButtonComponent, KjBadgeComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     <!-- slim toolbar: path · changed-state · (md toggle) · annotate · lang · refresh -->
     <div class="pane-head" style="gap:var(--sp-3);padding-block:var(--sp-2);background:var(--panel);min-width:0">
@@ -97,23 +96,25 @@ const MAX_CHARS = 1_500_000;
       }
     } @else if (notice(); as n) {
       <div class="pane-empty pad" style="text-align:center">{{ n }}</div>
-    } @else if (annotate()) {
-      <!-- Annotate outranks the markdown preview. Preview is the default for
-           .md, and with this branch BELOW it the Annotate pill toggled state
-           that never rendered — a silent no-op on every markdown file. -->
-      @if (blameLoading()) {
-        <div class="pane-empty pad">annotating…</div>
-      } @else if (blameError(); as be) {
-        <div class="pane-empty pad">blame failed: {{ be }}</div>
-      } @else if (blame().length === 0) {
-        <div class="pane-empty pad">no history for this file yet</div>
-      } @else {
-        <app-annotate-blame [lines]="blame()" (openCommit)="onOpenCommit($event)" />
-      }
-    } @else if (isMarkdown() && preview()) {
+    } @else if (isMarkdown() && preview() && !annotate()) {
       <app-markdown-preview [source]="content()!" [agent]="agent()" [path]="path()" />
     } @else {
-      <app-monaco-file-editor [agent]="agent().id" [file]="path()" [newText]="content() ?? ''" [lang]="lid()" [syncGen]="syncGen()" [hunks]="hunks()" (revertHunk)="onRevertHunk($event)" />
+      <!-- Annotate outranks the markdown preview (Preview is the default for
+           .md, so a lower branch made the pill a silent no-op there), and it
+           annotates the EDITOR rather than replacing it: blame rides in as an
+           injected column, so the file itself — highlighting, folding, find,
+           scrolling — is never taken away. The strip only reports the states
+           where there is no column to show. -->
+      @if (annotate()) {
+        @if (blameLoading()) {
+          <div class="blame-strip">annotating…</div>
+        } @else if (blameError(); as be) {
+          <div class="blame-strip err">blame failed: {{ be }}</div>
+        } @else if (blame().length === 0) {
+          <div class="blame-strip">no history for this file yet</div>
+        }
+      }
+      <app-monaco-file-editor [agent]="agent().id" [file]="path()" [newText]="content() ?? ''" [lang]="lid()" [syncGen]="syncGen()" [hunks]="hunks()" [blame]="blame()" (revertHunk)="onRevertHunk($event)" (openCommit)="onOpenCommit($event)" />
     }
   `,
   styles: [
@@ -132,6 +133,18 @@ const MAX_CHARS = 1_500_000;
         border-bottom: 1px solid color-mix(in oklch, var(--code-del-ink), transparent 70%);
         color: var(--ink-2);
         flex: none;
+      }
+      /* Annotate status line — sits above the editor, never instead of it */
+      .blame-strip {
+        flex: none;
+        padding: var(--sp-2) var(--sp-6);
+        background: var(--panel-2);
+        border-bottom: 1px solid var(--hair);
+        color: var(--ink-3);
+        font-size: var(--fs-meta);
+      }
+      .blame-strip.err {
+        color: var(--code-del-ink);
       }
       .media-body {
         flex: 1;
