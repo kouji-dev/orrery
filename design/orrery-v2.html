@@ -803,6 +803,141 @@ body { font-family: var(--font-ui); }
 .bg-texture, .bg-glow { display: none; }
 [data-preset="nebula"] .bg-texture, [data-preset="nebula"] .bg-glow { display: block; }
 
+/* ---------- Markdown Preview surface ---------- */
+/* Orrery — Markdown Preview surface. Tokens from app.html; no new colors. */
+/* pane toolbar (matches FileViewer / EditorPane header band) */
+.md-tb { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--panel); border-bottom: 1px solid var(--hair); font-size: var(--fs-meta); flex: none; min-height: 38px; }
+.md-tb .path { display: flex; align-items: center; gap: 0; min-width: 0; font-family: var(--font-mono); font-size: var(--fs-meta); }
+.md-tb .path .dir { color: var(--ink-4); }
+.md-tb .path .name { color: var(--ink); }
+.md-seg { display: flex; gap: 1px; padding: 2px; background: var(--panel-2); border: 1px solid var(--hair); border-radius: 5px; }
+.md-seg button { display: flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 3px; border: none; cursor: pointer; background: transparent; color: var(--ink-3); font-size: var(--fs-badge); }
+.md-seg button.on { background: var(--panel-3); color: var(--ink); }
+.md-seg button.on .icon { color: var(--ui-ink); }
+.md-tb .btn.sm { padding: 3px 9px; font-size: var(--fs-badge); }
+.md-tb .btn.review { padding: 3px 9px; font-size: var(--fs-badge); color: var(--ink); border: 1px solid var(--ui-line); background: var(--ui-sel); }
+.md-tb .btn.review .n { font-size: var(--fs-micro); font-weight: var(--fw-strong); color: var(--ui-on-fill); background: var(--ui-fill); border-radius: 999px; padding: 1px 6px; margin-left: 2px; }
+/* reading column */
+.md-body { flex: 1; min-height: 0; background: var(--panel-2); position: relative; }
+.rte-view { max-width: 760px; margin: 0 auto; padding: 26px 36px 60px; font-family: var(--font-ui); font-size: var(--fs-body); line-height: 1.65; color: var(--ink-2); letter-spacing: -0.005em; text-wrap: pretty; }
+.rte-view > *:first-child { margin-top: 0; }
+.rte-view h1 { font-size: var(--fs-xl); font-weight: var(--fw-medium); letter-spacing: -0.02em; color: var(--ink); line-height: 1.2; margin: 0 0 8px; }
+.rte-view h2 { font-size: var(--fs-md); font-weight: var(--fw-medium); letter-spacing: -0.015em; color: var(--ink); margin: 26px 0 8px; padding-top: 14px; border-top: 1px solid var(--hair); }
+.rte-view h3 { font-size: var(--fs-sm); font-weight: var(--fw-medium); color: var(--ink); margin: 18px 0 6px; }
+.rte-view p { margin: 0 0 10px; }
+.rte-view .meta { font-size: var(--fs-meta); color: var(--ink-3); display: flex; gap: 8px; align-items: center; margin-bottom: 18px; }
+.rte-view ul, .rte-view ol { margin: 0 0 10px; padding-left: 22px; }
+.rte-view li { margin: 3px 0; }
+.rte-view li::marker { color: var(--ink-4); }
+.rte-view a { color: var(--ui-link); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: color-mix(in oklch, var(--ui-link), transparent 50%); }
+.rte-view a:hover { text-decoration-color: var(--ui-link); }
+.rte-view code { font-family: var(--font-mono); font-size: 0.9em; background: var(--panel-3); border: 1px solid var(--hair); border-radius: 4px; padding: 1px 5px; color: var(--ink); }
+.rte-view strong { color: var(--ink); font-weight: var(--fw-medium); }
+.rte-view blockquote { margin: 0 0 12px; padding: 4px 14px; border-left: 2px solid var(--ui-line); color: var(--ink-3); }
+.rte-view blockquote p { margin: 0; }
+/* the one block family: table · diagram · error · fence — panel-2 + hair edge */
+.md-box { position: relative; margin: 8px 0 14px; background: var(--panel-2); border: 1px solid var(--hair); border-radius: var(--r-md); overflow: hidden; }
+.md-box .box-scroll { overflow-x: auto; overflow-y: hidden; }
+.md-box .box-scroll::-webkit-scrollbar { height: 8px; }
+.md-box table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: var(--fs-meta); line-height: 1.45; }
+.md-box th { text-align: left; font-weight: var(--fw-medium); color: var(--ink); background: var(--panel-3); padding: 7px 12px; border-bottom: 1px solid var(--hair); white-space: nowrap; position: sticky; top: 0; }
+.md-box td { padding: 7px 12px; color: var(--ink-2); border-bottom: 1px solid var(--hair); vertical-align: top; }
+.md-box th + th, .md-box td + td { border-left: 1px solid var(--hair); }
+.md-box tr:last-child td { border-bottom: none; }
+.md-box tbody tr:nth-child(even) td { background: color-mix(in oklch, var(--ink), transparent 97%); }
+.md-box .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.md-box .mono { font-family: var(--font-mono); font-size: var(--fs-badge); white-space: nowrap; color: var(--ink-2); }
+.md-box .wide { min-width: 360px; }
+/* mermaid */
+.md-box.diagram .box-scroll { padding: 18px 20px; }
+.md-box .box-tb { position: absolute; top: 8px; right: 8px; display: flex; gap: 1px; padding: 2px; background: var(--elev); border: 1px solid var(--hair-2); border-radius: var(--r-sm); box-shadow: var(--shadow); opacity: 0; transition: opacity .12s; z-index: 2; }
+.md-box:hover .box-tb, .md-box.is-hover .box-tb { opacity: 1; }
+.md-box .box-tb button { display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 3px; border: none; background: transparent; color: var(--ink-2); font-size: var(--fs-badge); cursor: pointer; white-space: nowrap; }
+.md-box .box-tb button:hover { background: var(--panel-3); color: var(--ink); }
+.md-box .box-tb button .icon { color: var(--ink-3); }
+.md-box .box-tb .dim { color: var(--ink-4); font-size: var(--fs-badge); }
+.md-box .box-tb .div { width: 1px; background: var(--hair); margin: 3px 2px; }
+.mmd text { font-family: var(--font-ui); font-size: 12.5px; fill: var(--ink); }
+.mmd text.lbl { font-family: var(--font-mono); font-size: 10.5px; fill: var(--ink-3); }
+.mmd .node { fill: var(--panel-3); stroke: var(--hair-2); }
+.mmd .dec { fill: var(--panel-2); stroke: var(--ink-4); }
+.mmd .edge { stroke: var(--ink-3); fill: none; }
+.mmd .edge.back { stroke-dasharray: 4 3; stroke: var(--ink-4); }
+.mmd .arrow { fill: var(--ink-3); }
+/* diagram failure — the block failed, not the page */
+.md-box.error .hd { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border-bottom: 1px solid var(--hair); }
+.md-box.error .hd .icon { color: var(--st-blocked); margin-top: 2px; flex: none; }
+.md-box.error .hd .t { color: var(--ink); font-weight: var(--fw-medium); font-size: var(--fs-body); }
+.md-box.error .hd .s { color: var(--ink-3); font-size: var(--fs-meta); margin-top: 1px; }
+.md-box.error pre { margin: 0; padding: 10px 12px 12px; font-family: var(--font-mono); font-size: var(--fs-badge); line-height: 1.6; color: var(--ink-2); overflow-x: auto; white-space: pre; }
+.md-box.error pre .m { color: var(--ink); }
+.md-box.error pre .c { color: var(--ink-4); }
+.md-box .fence-hd { display: flex; align-items: center; gap: 7px; padding: 6px 10px; background: var(--panel); border-top: 1px solid var(--hair); color: var(--ink-3); font-size: var(--fs-badge); cursor: pointer; }
+.md-box .fence-hd:hover { color: var(--ink); }
+.md-box .fence-hd .chip { font-size: var(--fs-micro); padding: 0 5px; }
+.md-box .fence-hd .right { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--ink-3); }
+/* selection → note */
+.md-sel { background: var(--ui-sel-2); border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; position: relative; }
+.md-note-btn { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-left: 3px; vertical-align: baseline; transform: translateY(5px); border-radius: 50%; border: 1px solid var(--hair-2); background: var(--elev); color: var(--ui-ink); box-shadow: var(--shadow); cursor: pointer; padding: 0; }
+.md-note-btn:hover { border-color: var(--ui-line); background: var(--panel-3); }
+/* saved comment */
+.md-hl { background: var(--ui-sel); box-shadow: inset 0 -1px 0 var(--ui-line); border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; position: relative; }
+.md-mark { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-left: 2px; vertical-align: baseline; transform: translateY(3px); border-radius: 50%; border: 1px solid var(--ui-line); background: var(--ui-sel); color: var(--ui-ink); cursor: pointer; padding: 0; position: relative; }
+.md-mark.is-hover, .md-mark:hover { background: var(--ui-sel-2); }
+/* anchored popups — same family as rc-composer */
+.rc-composer, .md-card { position: absolute; z-index: 20; background: var(--elev); border: 1px solid var(--hair-2); border-radius: var(--r-md); box-shadow: var(--shadow); text-align: left; letter-spacing: -0.01em; font-family: var(--font-ui); }
+.rc-composer { width: 360px; padding: 10px 12px 10px; }
+.rc-composer .hd { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-size: var(--fs-badge); color: var(--ink-2); }
+.rc-composer .hd b { color: var(--ink); font-weight: var(--fw-medium); }
+.rc-composer .hd .q { margin-left: auto; font-size: var(--fs-micro); color: var(--ink-4); text-transform: uppercase; letter-spacing: .12em; }
+.rc-composer textarea { width: 100%; resize: vertical; min-height: 64px; background: var(--panel-2); border: 1px solid var(--ui-line); border-radius: var(--r-sm); padding: 8px 10px; color: var(--ink); font-family: var(--font-mono); font-size: var(--fs-meta); line-height: 1.55; outline: none; box-shadow: var(--ui-ring); }
+.rc-composer .ft { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.rc-composer .hint { font-size: var(--fs-badge); color: var(--ink-4); display: flex; align-items: center; gap: 4px; }
+.rc-composer .ft .btn { padding: 4px 11px; font-size: var(--fs-meta); }
+.md-card { width: 300px; padding: 10px 12px; font-size: var(--fs-body); line-height: 1.5; color: var(--ink); }
+.md-card .hd { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-size: var(--fs-meta); color: var(--ink-2); }
+.md-card .you { width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center; font-size: var(--fs-micro); font-weight: var(--fw-strong); color: var(--ui-ink); background: var(--ui-sel); border: 1px solid var(--ui-sel-2); }
+.md-card .ft { display: flex; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--hair); }
+.md-card .ft .btn { padding: 3px 8px; font-size: var(--fs-badge); color: var(--ink-3); margin-left: auto; }
+.md-card .ft .btn:hover { color: var(--ink); }
+/* feedback popover (top bar) */
+.fb-pop { position: absolute; top: calc(100% + 8px); right: 0; width: 520px; z-index: 40; background: var(--elev); border: 1px solid var(--hair-2); border-radius: var(--r-md); box-shadow: var(--shadow); display: flex; flex-direction: column; letter-spacing: -0.01em; }
+.fb-pop .hd { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--hair); }
+.fb-pop .agent { display: flex; align-items: center; gap: 8px; padding: 8px 14px 6px; background: var(--panel); }
+.fb-pop .agent .name { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--ink); }
+.fb-pop .agent .btn { margin-left: auto; padding: 2px 7px; font-size: var(--fs-badge); color: var(--ink-3); }
+.fb-pop .agent .btn:hover { color: var(--ink); }
+.fb-pop .file { display: flex; align-items: center; gap: 6px; padding: 7px 14px 3px; font-family: var(--font-mono); font-size: var(--fs-badge); color: var(--ink-3); }
+.fb-pop .file .name { color: var(--ink-2); }
+.fb-pop .row { display: grid; grid-template-columns: 52px 1fr; gap: 4px 10px; padding: 5px 14px 7px 14px; }
+.fb-pop .row:hover { background: var(--panel-3); }
+.fb-pop .row .ln { font-family: var(--font-mono); font-size: var(--fs-badge); color: var(--ink-3); text-align: right; padding-top: 3px; font-variant-numeric: tabular-nums; }
+.fb-pop .row .q { font-family: var(--font-mono); font-size: var(--fs-badge); color: var(--ink-3); background: var(--panel-2); border: 1px solid var(--hair); border-radius: 4px; padding: 3px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-pop .row .note { grid-column: 2; display: flex; gap: 6px; font-size: var(--fs-body); color: var(--ink); line-height: 1.45; }
+.fb-pop .row .note .arr { color: var(--ui-ink); flex: none; }
+.fb-pop .ft { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--hair); }
+.fb-pop .ft .hint { font-size: var(--fs-badge); color: var(--ink-4); }
+.fb-pop .ft .btn { padding: 4px 12px; }
+/* degraded */
+.md-empty { flex: 1; display: grid; place-items: center; padding: 30px; text-align: center; }
+.md-empty .icon { color: var(--ink-4); }
+.md-empty .t { color: var(--ink-2); font-size: var(--fs-body); margin-top: 10px; }
+.md-empty .s { color: var(--ink-3); font-size: var(--fs-meta); margin-top: 3px; font-family: var(--font-mono); }
+.md-empty .acts { display: flex; gap: 8px; justify-content: center; margin-top: 14px; }
+.md-empty .acts .btn { padding: 4px 11px; font-size: var(--fs-meta); }
+
+.md-note-btn.floating { position: absolute; transform: none; margin: 0; z-index: 6; }
+.md-box.fence pre { margin: 0; padding: 10px 12px; font-family: var(--font-mono); font-size: var(--fs-badge); line-height: 1.6; color: var(--ink-2); overflow-x: auto; }
+.md-box.fence pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+.md-box .fence-hd.static { cursor: default; border-top: none; border-bottom: 1px solid var(--hair); }
+.md-box .fence-hd .chev { transition: transform .12s; }
+.md-box .fence-hd.open .chev { transform: rotate(90deg); }
+.md-box.error pre.src { border-top: 1px solid var(--hair); color: var(--ink-3); }
+.md-full .mmd text { font-family: var(--font-ui); font-size: 12.5px; fill: var(--ink); }
+.md-full .mmd text.lbl { font-family: var(--font-mono); font-size: 10.5px; fill: var(--ink-3); }
+.md-full .mmd .node { fill: var(--panel-3); stroke: var(--hair-2); } .md-full .mmd .dec { fill: var(--panel-2); stroke: var(--ink-4); }
+.md-full .mmd .edge { stroke: var(--ink-3); fill: none; } .md-full .mmd .edge.back { stroke-dasharray: 4 3; stroke: var(--ink-4); } .md-full .mmd .arrow { fill: var(--ink-3); }
+
 </style>
 <style>
 [data-motion="off"] *, [data-motion="off"] *::after, [data-motion="off"] *::before { animation: none !important; transition: none !important; }
@@ -1024,7 +1159,7 @@ const PROJECTS = [
       "src/auth/jwt.ts", "src/auth/refresh.ts", "src/middleware/session.ts",
       "src/jobs/reconcile.ts", "src/config/queue.ts",
       "test/webhooks/retry.test.ts", "test/integration/checkout.test.ts",
-      "package.json", "tsconfig.json", "README.md",
+      "package.json", "tsconfig.json", "README.md", "docs/webhooks/retry-design.md",
     ],
   },
   {
@@ -1080,6 +1215,7 @@ const AGENTS = [
       { path: "src/webhooks/retry.ts", add: 88, del: 0, state: "A" },
       { path: "src/config/queue.ts", add: 5, del: 2, state: "M" },
       { path: "test/webhooks/retry.test.ts", add: 61, del: 0, state: "A" },
+      { path: "docs/webhooks/retry-design.md", add: 62, del: 0, state: "A" },
     ],
     pending: [
       { id: "pm1", kind: "permission", title: "Run shell command", cmd: "pnpm add p-retry@5", when: "now" },
@@ -1545,6 +1681,71 @@ export const webhookQueue = new Queue('webhooks', {
     removeOnComplete: 1000,
   },
 });`,
+  "docs/webhooks/retry-design.md": `# Stripe webhook retry — design note
+
+The handler currently acknowledges every event with \`200\` before the job is durable, so a crash between ack and enqueue loses the event. This note proposes a bounded retry with exponential backoff. Retries are driven from \`src/webhooks/retry.ts\` and keyed on Stripe's \`event.id\`, so a redelivered event never runs twice. Failed events land in a dead-letter table after the final attempt.
+
+## Goals
+
+- Never acknowledge before the job is durable
+- Cap at **five attempts** before dead-lettering, then alert via [#payments-oncall](https://northwind.slack.com/archives/payments-oncall)
+- Keep \`POST /webhooks/stripe\` under the 5s Stripe timeout on every path
+- No new infrastructure — reuse the existing \`jobs\` table and worker
+
+> Stripe retries for up to three days with an exponential schedule; our own retry must converge well inside that window or we double-process. — [Stripe docs, webhook best practices](https://docs.stripe.com/webhooks#best-practices)
+
+## Backoff schedule
+
+Delay doubles per attempt with full jitter. Cumulative wait stays under three minutes, an order of magnitude inside Stripe's own retry window.
+
+| Attempt | Delay | Jitter | Cumulative | Idempotency key | Notes |
+|---:|---|---|---:|---|---|
+| 1 | 0 s | ±0 | 0 s | \`evt_1PqR8kLx7Yh2m0Fa:attempt-1\` | immediate, in the request path |
+| 2 | 2 s | ±500 ms | 2 s | \`evt_1PqR8kLx7Yh2m0Fa:attempt-2\` | first worker pass |
+| 3 | 8 s | ±2 s | 10 s | \`evt_1PqR8kLx7Yh2m0Fa:attempt-3\` | — |
+| 4 | 32 s | ±8 s | 42 s | \`evt_1PqR8kLx7Yh2m0Fa:attempt-4\` | pages if the error is a 5xx |
+| 5 | 128 s | ±32 s | 170 s | \`evt_1PqR8kLx7Yh2m0Fa:attempt-5\` | final — dead-letter on failure |
+
+## Processing flow
+
+Signature verification happens before anything is written. Only a durable enqueue earns the \`200\`; every failure path after that is a retry, never a silent drop.
+
+\`\`\`mermaid
+flowchart LR
+  A[Webhook received] --> B[Verify signature]
+  B --> C{valid?}
+  C -->|yes| D[Enqueue job]
+  C -->|no| R[Reject 400]
+  D --> E[Process]
+  E --> F{ok?}
+  F -->|yes| G[Ack 200]
+  F -->|fail| H[Retry with backoff ≤ 5]
+  H -.->|requeue| E
+  H --> X[Dead-letter]
+\`\`\`
+
+Attempts two through five run off the worker, so the request path never waits on a retry. The requeue edge is the only loop in the graph and is bounded by the attempt counter.
+
+## Failure handling
+
+Dead-lettered rows are replayable from the ops console. The diagram below still has the edge syntax wrong — the arrow after \`inspect\` is missing its head.
+
+\`\`\`mermaid
+flowchart LR
+  X[Dead-letter row] --> Y[Alert #payments-oncall]
+  Y -- inspect -- Z{Replay?}
+  Z -->|yes| D[Enqueue job]
+  Z -->|no| K[Archive]
+\`\`\`
+
+## Rollout
+
+Ship behind \`WEBHOOK_RETRY=1\`, replay last week's events from the [staging fixture set](https://github.com/northwind/payments-service/tree/main/test/fixtures), then remove the flag once the dead-letter table has stayed empty for 48 hours.
+
+## Open questions
+
+- Should the cap be per endpoint rather than global?
+- Do we surface the dead-letter count in the ops dashboard?`,
   "README.md": `# payments-service
 
 Money-movement API for northwind. Handles checkout, capture,
@@ -2445,6 +2646,8 @@ const ICONS = {
   shield: "M12 3l7 3v5c0 4.2-3 7.6-7 9-4-1.4-7-4.8-7-9V6l7-3z",
   volume: "M11 5L6 9H3v6h3l5 4V5zM15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13",
   tag: "M11 3H3v8l9.5 9.5a1.8 1.8 0 002.5 0l6-6a1.8 1.8 0 000-2.5L11 3zM6.5 6.5h.01",
+  code: "M8 8l-4 4 4 4M16 8l4 4-4 4",
+  eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 100 6 3 3 0 000-6z",
 };
 
 function Icon({ name, size, cls, style }) {
@@ -4228,9 +4431,369 @@ function SendReviewModal({ agentId, agentName, onClose, onSend }) {
 
 Object.assign(window, {
   ReviewCode, SendReviewButton, SendReviewModal,
-  diffToRows, fileToRows, reviewGet,
+  diffToRows, fileToRows, reviewGet, reviewAdd, reviewRemove, reviewClear, reviewSubs, useReviewComments, refLines,
 });
 
+</script>
+
+<!-- markdown.jsx -->
+<script type="text/babel">
+/* global React, Icon, fileName, fileDir, reviewAdd, reviewRemove, reviewClear, reviewGet, reviewSubs, useReviewComments, StatusDot, ToolBadge */
+// Orrery — Markdown Preview: tiny GFM renderer (headings, lists, quotes, links,
+// inline code, fences, tables) + a mermaid flowchart renderer with real parse
+// errors, plus selection → review comments that feed the per-agent review store.
+const { useState: useStateMd, useEffect: useEffectMd, useRef: useRefMd, useMemo: useMemoMd } = React;
+
+const MD_ICON = {
+  alert: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 8v5M12 16h.01", dup: "M9 9h10v10H9zM5 15V5h10",
+  maximize: "M5 9V5h4M19 9V5h-4M5 15v4h4M19 15v4h-4", palette: "M12 3a9 9 0 100 18c1.5 0 2-1 2-2s-1-2 0-3 3 0 4-1 1-2 1-3a9 9 0 00-7-9zM7.5 12h.01M10 8h.01M14 8h.01",
+  chevron: "M9 6l6 6-6 6", chat: "M4 5h16v10H9l-4 4V5z",
+};
+const svgIcon = (n, w = 12, cls = "") => `<svg class="icon ${cls}" width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${MD_ICON[n]}"/></svg>`;
+const escHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function mdInline(s) {
+  let out = escHtml(s);
+  out = out.replace(/`([^`]+)`/g, (_, c) => "<code>" + c + "</code>");
+  out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  out = out.replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  return out;
+}
+
+// ---------- mermaid (flowchart subset) ----------
+const tokName = (ch) => ({ "-": "MINUS", "|": "PIPE", "(": "PS", ")": "PE", "{": "DIAMOND_START", "}": "DIAMOND_STOP", ">": "TAGEND", "[": "SQS", "]": "SQE", ".": "DOT" }[ch] || (/[A-Za-z]/.test(ch || "") ? "ALPHA" : /\d/.test(ch || "") ? "NUM" : /\s/.test(ch || "") ? "SPACE" : ch == null ? "EOF" : "INVALID"));
+function parseErr(line, raw, pos, got) {
+  const t = raw.trimStart(); const off = raw.length - t.length; const p = Math.max(0, pos - off);
+  const excerpt = "..." + t.slice(Math.max(0, p - 22), p + 18);
+  const caret = "-".repeat(3 + Math.min(p, 22)) + "^";
+  const e = new Error("Parse error on line " + line + ":\n" + excerpt + "\n" + caret + "\nExpecting 'SEMI', 'NEWLINE', 'SPACE', 'EOF', 'ARROW_POINT', 'ARROW_CIRCLE', 'ARROW_CROSS', 'ARROW_OPEN', got '" + got + "'");
+  e.line = line; return e;
+}
+function mermaidParse(src) {
+  const lines = src.split("\n"); const nodes = {}; const edges = []; let dir = "TD";
+  const NODE = /^([A-Za-z_][\w-]*)(?:\[([^\]]*)\]|\{([^}]*)\}|\(\(([^)]*)\)\)|\(([^)]*)\))?/;
+  lines.forEach((raw, li) => {
+    const s = raw.trim(); if (!s || /^%%/.test(s)) return;
+    const hd = /^(flowchart|graph)\s*(LR|TD|TB|RL)?\s*$/.exec(s); if (hd) { dir = hd[2] || "TD"; return; }
+    const off = raw.length - raw.trimStart().length;
+    let pos = 0, prev = null, pend = null;
+    while (pos < s.length) {
+      const rest = s.slice(pos);
+      const nm = NODE.exec(rest); if (!nm) throw parseErr(li + 1, raw, pos + off, tokName(rest[0]));
+      const id = nm[1]; if (!nodes[id]) nodes[id] = { id, label: id, shape: "rect" };
+      const lab = nm[2] != null ? nm[2] : nm[3] != null ? nm[3] : nm[4] != null ? nm[4] : nm[5];
+      if (lab != null) { nodes[id].label = lab; nodes[id].shape = nm[3] != null ? "dec" : nm[4] != null ? "circ" : nm[5] != null ? "round" : "rect"; }
+      pos += nm[0].length;
+      if (prev) edges.push({ from: prev, to: id, label: pend && pend.label, dashed: !!(pend && pend.dashed) });
+      prev = id;
+      const r2 = s.slice(pos); if (!r2.trim()) break;
+      let am = /^\s*(-\.->|-->|---)\s*(?:\|([^|]*)\|)?\s*/.exec(r2);
+      if (am) { pend = { label: am[2] ? am[2].trim() : null, dashed: am[1] === "-.->" }; pos += am[0].length; continue; }
+      am = /^\s*--\s*([^-][^-]*?)\s*-->\s*/.exec(r2);
+      if (am) { pend = { label: am[1].trim(), dashed: false }; pos += am[0].length; continue; }
+      const ws = /^\s*/.exec(r2)[0].length;
+      throw parseErr(li + 1, raw, pos + ws + off, tokName(r2[ws]));
+    }
+  });
+  const list = Object.values(nodes); if (!list.length) throw new Error("Parse error on line 1:\n...\n^\nExpecting a node or edge, got 'EOF'");
+  return { dir, nodes: list, edges };
+}
+function mermaidSvg(g) {
+  const horiz = g.dir === "LR" || g.dir === "RL";
+  const ids = g.nodes.map((n) => n.id); const byId = {}; g.nodes.forEach((n) => (byId[n.id] = n));
+  const adj = {}; ids.forEach((id) => (adj[id] = [])); g.edges.forEach((e) => adj[e.from].push(e));
+  const st = {}; const dfs = (u) => { st[u] = 1; adj[u].forEach((e) => { if (st[e.to] === 1) e.back = true; else if (!st[e.to]) dfs(e.to); }); st[u] = 2; };
+  ids.forEach((id) => { if (!st[id]) dfs(id); });
+  const rank = {}, indeg = {}; ids.forEach((id) => { rank[id] = 0; indeg[id] = 0; });
+  g.edges.filter((e) => !e.back).forEach((e) => indeg[e.to]++);
+  const q = ids.filter((id) => !indeg[id]);
+  while (q.length) { const u = q.shift(); adj[u].filter((e) => !e.back).forEach((e) => { rank[e.to] = Math.max(rank[e.to], rank[u] + 1); if (--indeg[e.to] === 0) q.push(e.to); }); }
+  const cols = {}; ids.forEach((id) => (cols[rank[id]] = cols[rank[id]] || []).push(id));
+  const ranks = Object.keys(cols).map(Number).sort((a, b) => a - b);
+  const H = 38, PAD = 18, GAP_R = horiz ? 58 : 46, GAP_S = horiz ? 22 : 30;
+  const wOf = (n) => Math.max(n.shape === "dec" ? 104 : 80, Math.round(n.label.length * 7 + (n.shape === "dec" ? 48 : 28)));
+  const pos = {};
+  const maxStack = Math.max(...ranks.map((r) => cols[r].length));
+  if (horiz) {
+    const totalH = maxStack * H + (maxStack - 1) * GAP_S; let x = PAD;
+    ranks.forEach((r) => { const c = cols[r]; const cw = Math.max(...c.map((id) => wOf(byId[id]))); const hh = c.length * H + (c.length - 1) * GAP_S;
+      c.forEach((id, i) => { const w = wOf(byId[id]); pos[id] = { x: x + (cw - w) / 2, y: PAD + (totalH - hh) / 2 + i * (H + GAP_S), w, h: H }; }); x += cw + GAP_R; });
+    var W = x - GAP_R + PAD, Ht = totalH + PAD * 2;
+  } else {
+    const rowW = ranks.map((r) => cols[r].reduce((s, id) => s + wOf(byId[id]), 0) + (cols[r].length - 1) * GAP_S);
+    const totalW = Math.max(...rowW); let y = PAD;
+    ranks.forEach((r, ri) => { let x = PAD + (totalW - rowW[ri]) / 2; cols[r].forEach((id) => { const w = wOf(byId[id]); pos[id] = { x, y, w, h: H }; x += w + GAP_S; }); y += H + GAP_R; });
+    var W = totalW + PAD * 2, Ht = y - GAP_R + PAD;
+  }
+  const hasBack = g.edges.some((e) => e.back); if (hasBack) Ht += 26;
+  const out = [];
+  g.edges.forEach((e) => {
+    const a = pos[e.from], b = pos[e.to]; let d, lx, ly;
+    if (e.back) {
+      const yy = Ht - 12; const ax = a.x + a.w / 2, bx = b.x + b.w / 2;
+      d = `M${ax} ${a.y + a.h} V${yy} H${bx} V${b.y + b.h + 2}`; lx = (ax + bx) / 2; ly = yy - 5;
+    } else if (horiz) {
+      const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2; const dx = Math.max(20, x2 - x1);
+      d = `M${x1} ${y1} C${x1 + dx / 2} ${y1} ${x2 - dx / 2} ${y2} ${x2} ${y2}`; lx = (x1 + x2) / 2; ly = (y1 + y2) / 2 - 6;
+    } else {
+      const x1 = a.x + a.w / 2, y1 = a.y + a.h, x2 = b.x + b.w / 2, y2 = b.y; const dy = Math.max(20, y2 - y1);
+      d = `M${x1} ${y1} C${x1} ${y1 + dy / 2} ${x2} ${y2 - dy / 2} ${x2} ${y2}`; lx = (x1 + x2) / 2 + 8; ly = (y1 + y2) / 2; 
+    }
+    out.push(`<path class="edge${e.back || e.dashed ? " back" : ""}" d="${d}" marker-end="url(#mmd-arr)"/>`);
+    if (e.label) out.push(`<text class="lbl" x="${lx}" y="${ly}" text-anchor="${horiz || e.back ? "middle" : "start"}">${escHtml(e.label)}</text>`);
+  });
+  g.nodes.forEach((n) => { const p = pos[n.id]; const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+    if (n.shape === "dec") out.push(`<path class="dec" d="M${cx} ${p.y - 6} L${p.x + p.w} ${cy} L${cx} ${p.y + p.h + 6} L${p.x} ${cy} Z"/>`);
+    else if (n.shape === "circ") out.push(`<ellipse class="node" cx="${cx}" cy="${cy}" rx="${p.w / 2}" ry="${p.h / 2 + 2}"/>`);
+    else out.push(`<rect class="node" x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="${n.shape === "round" ? 19 : 5}"/>`);
+    out.push(`<text x="${cx}" y="${cy + 4}" text-anchor="middle">${escHtml(n.label)}</text>`); });
+  return `<svg class="mmd" width="${W}" height="${Ht}" viewBox="0 0 ${W} ${Ht}" style="display:block"><defs><marker id="mmd-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="arrow" d="M0 0L10 5 0 10z"/></marker></defs>${out.join("")}</svg>`;
+}
+function mermaidBlock(src, l0, l1) {
+  const n = src.split("\n").length; const data = `data-l0="${l0}" data-l1="${l1}" data-src="${escHtml(src)}"`;
+  try {
+    const svg = mermaidSvg(mermaidParse(src));
+    return `<div class="md-box diagram" ${data}><div class="box-tb" role="toolbar" aria-label="Diagram"><button data-act="copy">${svgIcon("dup")}Copy source</button><button data-act="full">${svgIcon("maximize")}Open full size</button><span class="div"></span><button data-act="theme" title="Diagram theme follows the app theme">${svgIcon("palette")}Theme<span class="dim">· app</span></button></div><div class="box-scroll">${svg}</div></div>`;
+  } catch (e) {
+    const msg = escHtml(e.message).split("\n"); const first = msg.shift();
+    const body = msg.map((l) => /^-+\^$/.test(l) ? `<span class="c">${l}</span>` : l).join("\n");
+    return `<div class="md-box error" role="group" aria-label="Diagram failed to render" ${data}><div class="hd">${svgIcon("alert", 15)}<div><div class="t">Diagram failed to render</div><div class="s">mermaid · the rest of this document is unaffected</div></div></div><pre><span class="m">${first}</span>\n${body}</pre><div class="fence-hd" data-act="toggle-src">${svgIcon("chevron", 11, "chev")}Source<span class="chip mono">mermaid</span><span class="tnum mono">${n} lines</span><span class="right" data-act="copy">${svgIcon("dup")}Copy source</span></div><pre class="src" hidden>${escHtml(src)}</pre></div>`;
+  }
+}
+
+// ---------- block renderer → HTML (blocks carry source line ranges) ----------
+function mdRender(src) {
+  const L = src.split("\n"); const out = []; let i = 0;
+  const blk = (tag, l0, l1, inner, attrs = "") => out.push(`<${tag} data-l0="${l0}" data-l1="${l1}"${attrs}>${inner}</${tag}>`);
+  const isBlockStart = (s) => /^(#{1,6}\s|```|>|\s*[-*]\s+|\s*\d+\.\s+|\s*\||    )/.test(s);
+  while (i < L.length) {
+    const s = L[i]; let m;
+    if (!s.trim()) { i++; continue; }
+    if ((m = /^(#{1,6})\s+(.*)$/.exec(s))) { blk("h" + Math.min(3, m[1].length), i + 1, i + 1, mdInline(m[2].replace(/\s#+$/, ""))); i++; continue; }
+    if ((m = /^```(\w*)\s*$/.exec(s))) {
+      const lang = m[1], start = i; i++; const buf = []; while (i < L.length && !/^```/.test(L[i])) buf.push(L[i++]); i++;
+      if (lang === "mermaid") out.push(mermaidBlock(buf.join("\n"), start + 1, i));
+      else out.push(`<div class="md-box fence" data-l0="${start + 1}" data-l1="${i}"><div class="fence-hd static"><span class="chip mono">${escHtml(lang || "text")}</span><span class="tnum mono">${buf.length} lines</span></div><pre><code>${escHtml(buf.join("\n"))}</code></pre></div>`);
+      continue;
+    }
+    if (/^    \S/.test(s)) { const start = i; const buf = []; while (i < L.length && (/^    /.test(L[i]) || !L[i].trim())) buf.push(L[i++].slice(4)); while (buf.length && !buf[buf.length - 1].trim()) { buf.pop(); i--; }
+      out.push(`<div class="md-box fence" data-l0="${start + 1}" data-l1="${i}"><pre><code>${escHtml(buf.join("\n"))}</code></pre></div>`); continue; }
+    if (/^\s*\|/.test(s) && i + 1 < L.length && /^\s*\|?\s*:?-{2,}/.test(L[i + 1])) {
+      const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const head = cells(s), align = cells(L[i + 1]).map((a) => /^:-+:$/.test(a) ? "center" : /-+:$/.test(a) ? "right" : "left");
+      const start = i; i += 2; const rows = []; while (i < L.length && /^\s*\|/.test(L[i])) rows.push(cells(L[i++]));
+      const cls = (k) => align[k] === "right" ? ' class="num"' : align[k] === "center" ? ' style="text-align:center"' : "";
+      const th = head.map((c, k) => `<th${cls(k)}>${mdInline(c)}</th>`).join("");
+      const tb = rows.map((r, ri) => `<tr>${head.map((_, k) => `<td${cls(k)} data-l0="${start + 3 + ri}" data-l1="${start + 3 + ri}">${mdInline(r[k] || "")}</td>`).join("")}</tr>`).join("");
+      out.push(`<div class="md-box table" data-l0="${start + 1}" data-l1="${i}"><div class="box-scroll"><table><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table></div></div>`); continue;
+    }
+    if (/^>\s?/.test(s)) { const start = i; const buf = []; while (i < L.length && /^>\s?/.test(L[i])) buf.push(L[i++].replace(/^>\s?/, "")); blk("blockquote", start + 1, i, "<p>" + mdInline(buf.join(" ")) + "</p>"); continue; }
+    if ((m = /^\s*([-*]|\d+\.)\s+/.exec(s))) {
+      const ol = /\d/.test(m[1]); const re = ol ? /^\s*\d+\.\s+/ : /^\s*[-*]\s+/; const start = i; const items = [];
+      while (i < L.length && re.test(L[i])) { const l0 = i + 1; let t = L[i++].replace(re, ""); while (i < L.length && L[i].trim() && !isBlockStart(L[i])) t += " " + L[i++].trim(); items.push(`<li data-l0="${l0}" data-l1="${i}">${mdInline(t)}</li>`); }
+      blk(ol ? "ol" : "ul", start + 1, i, items.join("")); continue;
+    }
+    const start = i; const buf = [s]; i++; while (i < L.length && L[i].trim() && !isBlockStart(L[i])) buf.push(L[i++]);
+    blk("p", start + 1, i, mdInline(buf.join(" ")));
+  }
+  return out.join("");
+}
+
+// ---------- saved-comment highlight: wrap the snippet's text range ----------
+function applyHighlight(root, c) {
+  const want = (c.snippet || "").replace(/\s+/g, " ").trim(); if (!want) return;
+  const blocks = root.querySelectorAll("p, li, h1, h2, h3, td, th, blockquote");
+  for (const b of blocks) {
+    const at = b.textContent.replace(/\s+/g, " ").indexOf(want); if (at < 0) continue;
+    const range = document.createRange(); let acc = "", started = false;
+    const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); let n;
+    while ((n = walker.nextNode())) {
+      const t = n.nodeValue;
+      for (let k = 0; k < t.length; k++) {
+        const ch = /\s/.test(t[k]) ? " " : t[k]; if (ch === " " && acc.endsWith(" ")) continue;
+        if (!started && acc.length === at) { range.setStart(n, k); started = true; }
+        acc += ch;
+        if (started && acc.length === at + want.length) {
+          range.setEnd(n, k + 1);
+          const span = document.createElement("span"); span.className = "md-hl"; span.dataset.id = c.id;
+          try { span.appendChild(range.extractContents()); range.insertNode(span); } catch (e) { return; }
+          const mk = document.createElement("button"); mk.className = "md-mark"; mk.dataset.id = c.id; mk.title = "Comment · lines " + c.fromLine + (c.toLine !== c.fromLine ? "–" + c.toLine : ""); mk.setAttribute("aria-label", "Comment"); mk.innerHTML = svgIcon("chat", 9);
+          span.after(mk); return;
+        }
+      }
+    }
+    return;
+  }
+}
+
+// ---------- the pane body ----------
+function MarkdownPreview({ path, agent, source, onFlash }) {
+  const ref = useRefMd(null), scroller = useRefMd(null), hoverT = useRefMd(null), taRef = useRefMd(null);
+  const all = useReviewComments(agent.id);
+  const comments = all.filter((c) => c.md && c.file === path);
+  const [pending, setPending] = useStateMd(null);
+  const [compose, setCompose] = useStateMd(false);
+  const [draft, setDraft] = useStateMd("");
+  const [hover, setHover] = useStateMd(null);
+  const [full, setFull] = useStateMd(null);
+  const [gen, setGen] = useStateMd(0);
+  const html = useMemoMd(() => mdRender(source), [source]);
+  const key = comments.map((c) => c.id).join(",");
+  useEffectMd(() => { const el = ref.current; if (!el) return; el.innerHTML = html; comments.forEach((c) => applyHighlight(el, c)); setHover(null); }, [html, key, gen]);
+  useEffectMd(() => { if (compose && taRef.current) taRef.current.focus(); }, [compose]);
+  useEffectMd(() => { if (!full) return; const k = (e) => { if (e.key === "Escape") setFull(null); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [full]);
+
+  const box = () => { const s = scroller.current; const r = s.getBoundingClientRect(); return { l: r.left - s.scrollLeft, t: r.top - s.scrollTop, w: s.clientWidth }; };
+  const onMouseUp = () => {
+    if (compose) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !ref.current || !ref.current.contains(sel.anchorNode) || !ref.current.contains(sel.focusNode)) { setPending(null); return; }
+    const range = sel.getRangeAt(0); const rects = range.getClientRects(); if (!rects.length) return;
+    const last = rects[rects.length - 1]; const b = box();
+    const blockOf = (n) => { const e = n.nodeType === 3 ? n.parentElement : n; return e && e.closest("[data-l0]"); };
+    const b1 = blockOf(range.startContainer), b2 = blockOf(range.endContainer);
+    const f = b1 ? +b1.dataset.l0 : 1, t = b2 ? +b2.dataset.l1 : f;
+    setPending({ snippet: sel.toString().replace(/\s+/g, " ").trim().slice(0, 160), fromLine: Math.min(f, t), toLine: Math.max(f, t), x: last.right - b.l, y: last.top - b.t, h: last.height, range: range.cloneRange() });
+  };
+  const startCompose = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try { const span = document.createElement("span"); span.className = "md-sel"; span.appendChild(pending.range.extractContents()); pending.range.insertNode(span); } catch (_) {}
+    window.getSelection().removeAllRanges(); setDraft(""); setCompose(true);
+  };
+  const cancel = () => { setCompose(false); setPending(null); setGen((g) => g + 1); };
+  const save = () => {
+    if (!draft.trim()) return;
+    reviewAdd(agent.id, { file: path, fromLine: pending.fromLine, toLine: pending.toLine, fromIdx: 0, toIdx: 0, snippet: pending.snippet, note: draft.trim(), md: true });
+    setCompose(false); setPending(null); setGen((g) => g + 1);
+    onFlash && onFlash("comment saved · " + fileName(path) + ":" + pending.fromLine + " · queued for " + agent.name);
+  };
+  const onClick = (e) => {
+    const act = e.target.closest("[data-act]"); if (!act) return;
+    const boxEl = act.closest(".md-box"); const src = boxEl ? boxEl.dataset.src : "";
+    const a = act.dataset.act;
+    if (a === "copy") { try { navigator.clipboard.writeText(src); } catch (_) {} onFlash && onFlash("copied diagram source · " + src.split("\n").length + " lines"); }
+    else if (a === "full") { const svg = boxEl.querySelector("svg"); setFull(svg ? svg.outerHTML : null); }
+    else if (a === "theme") onFlash && onFlash("diagram theme follows the app theme");
+    else if (a === "toggle-src") { const pre = boxEl.querySelector("pre.src"); pre.hidden = !pre.hidden; act.classList.toggle("open", !pre.hidden); }
+    e.stopPropagation();
+  };
+  const onOver = (e) => {
+    const mk = e.target.closest(".md-mark"); if (!mk) return;
+    clearTimeout(hoverT.current); const r = mk.getBoundingClientRect(); const b = box();
+    setHover({ id: mk.dataset.id, x: Math.min(r.left - b.l - 140, b.w - 320), y: r.bottom - b.t + 6 });
+  };
+  const onOut = (e) => { if (e.target.closest(".md-mark")) { hoverT.current = setTimeout(() => setHover(null), 260); } };
+  const hc = hover && comments.find((c) => c.id === hover.id);
+  return (
+    <div ref={scroller} className="scroll-y md-body" style={{ flex: 1, minWidth: 0, position: "relative" }} onMouseUp={onMouseUp} onClick={onClick} onMouseOver={onOver} onMouseOut={onOut}>
+      <div ref={ref} className="rte-view" />
+      {pending && !compose && (
+        <button className="md-note-btn floating" style={{ left: pending.x + 4, top: pending.y + pending.h / 2 - 10 }} onMouseDown={startCompose} title="Comment on selection" aria-label="Comment on selection"><Icon name="chat" size="sm" style={{ width: 11, height: 11 }} /></button>
+      )}
+      {pending && compose && (
+        <div className="rc-composer" style={{ left: Math.max(24, Math.min(pending.x - 120, (scroller.current ? scroller.current.clientWidth : 800) - 384)), top: pending.y + pending.h + 10 }} onMouseUp={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+          <div className="hd"><Icon name="chat" size="sm" style={{ color: "var(--ui-ink)" }} />Comment on <b>selection · {pending.fromLine === pending.toLine ? "line " + pending.fromLine : "lines " + pending.fromLine + "–" + pending.toLine}</b><span className="q">review · queued for agent</span></div>
+          <textarea ref={taRef} rows={3} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Leave a note for the agent — what to change and why…"
+            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") save(); if (e.key === "Escape") cancel(); }} />
+          <div className="ft">
+            <span className="hint"><span className="kbd">⌘⏎</span> save <span style={{ margin: "0 3px" }}>·</span> <span className="kbd">esc</span> cancel</span>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 7 }}><button className="btn ghost-hair" onClick={cancel}>Cancel</button><button className="btn primary" disabled={!draft.trim()} onClick={save}>Save</button></div>
+          </div>
+        </div>
+      )}
+      {hc && (
+        <div className="md-card" style={{ left: Math.max(16, hover.x), top: hover.y }} onMouseEnter={() => clearTimeout(hoverT.current)} onMouseLeave={() => setHover(null)} onMouseUp={(e) => e.stopPropagation()}>
+          <div className="hd"><span className="you">YOU</span>You<span className="tnum" style={{ fontSize: "var(--fs-badge)", color: "var(--ink-4)" }}>· {hc.fromLine === hc.toLine ? "line " + hc.fromLine : "lines " + hc.fromLine + "–" + hc.toLine}</span><span className="chip" style={{ fontSize: "var(--fs-micro)", padding: "0 5px", color: "var(--ui-ink)", borderColor: "var(--ui-sel-2)" }}>pending</span></div>
+          <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{hc.note}</div>
+          <div className="ft"><button className="btn" onClick={() => { reviewRemove(agent.id, hc.id); setHover(null); }}><Icon name="trash" size="sm" />Remove</button></div>
+        </div>
+      )}
+      {full && (
+        <div onClick={() => setFull(null)} style={{ position: "fixed", inset: 0, zIndex: 80, display: "grid", placeItems: "center", background: "var(--scrim)", backdropFilter: "blur(3px)", padding: 32 }}>
+          <div className="surface md-full" onClick={(e) => e.stopPropagation()} style={{ padding: 20, maxWidth: "92vw", maxHeight: "88vh", overflow: "auto", boxShadow: "var(--shadow)" }} dangerouslySetInnerHTML={{ __html: full }} />
+          <span style={{ position: "absolute", bottom: 18, fontSize: "var(--fs-badge)", color: "var(--ink-3)" }}><span className="kbd">esc</span> close</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- top bar: feedback chip + submit popover ----------
+function useAllReview() {
+  const [, force] = useStateMd(0);
+  useEffectMd(() => { const f = () => force((x) => x + 1); reviewSubs.add(f); return () => reviewSubs.delete(f); }, []);
+}
+function FeedbackChip({ agents, onSendReview }) {
+  useAllReview();
+  const [open, setOpen] = useStateMd(false);
+  const ref = useRefMd(null);
+  useEffectMd(() => { if (!open) return; const f = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener("mousedown", f); return () => document.removeEventListener("mousedown", f); }, [open]);
+  const groups = (agents || []).map((a) => ({ agent: a, comments: reviewGet(a.id) })).filter((g) => g.comments.length);
+  const n = groups.reduce((s, g) => s + g.comments.length, 0);
+  if (!n) return null;
+  const ok = () => { groups.forEach((g) => { onSendReview && onSendReview(g.agent.id, { comments: g.comments.map((c) => ({ file: c.file, fromLine: c.fromLine, toLine: c.toLine, snippet: c.snippet, note: c.note, block: c.toIdx > c.fromIdx })), global: "" }); reviewClear(g.agent.id); }); setOpen(false); };
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button className="btn" onClick={() => setOpen((v) => !v)} title={"Feedback · " + n + " comment" + (n !== 1 ? "s" : "") + " queued"} aria-label="Feedback"
+        style={{ padding: "4px 8px 4px 7px", gap: 6, color: "var(--ink)", border: "1px solid " + (open ? "var(--ui-line)" : "var(--hair)"), background: open ? "var(--ui-sel)" : "transparent" }}>
+        <Icon name="chat" size="sm" style={{ color: "var(--ui-ink)" }} />
+        <span className="tnum" style={{ fontSize: "var(--fs-badge)", fontWeight: "var(--fw-strong)", color: "var(--ui-on-fill)", background: "var(--ui-fill)", borderRadius: 999, padding: "0 6px", lineHeight: "16px" }}>{n}</span>
+      </button>
+      {open && (
+        <div className="fb-pop rise" role="dialog" aria-label="Feedback">
+          <div className="hd">
+            <Icon name="chat" style={{ color: "var(--ui-ink)" }} />
+            <span className="disp" style={{ fontSize: "var(--fs-body)", fontWeight: "var(--fw-strong)" }}>Feedback</span>
+            <span className="tnum" style={{ fontSize: "var(--fs-meta)", color: "var(--ink-3)" }}>{n} comment{n !== 1 ? "s" : ""} · {groups.length} agent{groups.length !== 1 ? "s" : ""}</span>
+            <button className="pane-btn" style={{ marginLeft: "auto" }} title="Close" onClick={() => setOpen(false)}><Icon name="x" size="sm" /></button>
+          </div>
+          <div className="scroll-y" style={{ maxHeight: 440, padding: "4px 0 6px" }}>
+            {groups.map((g) => {
+              const files = []; const byF = {}; g.comments.forEach((c) => { if (!byF[c.file]) { byF[c.file] = { file: c.file, items: [] }; files.push(byF[c.file]); } byF[c.file].items.push(c); });
+              return (
+                <div key={g.agent.id}>
+                  <div className="agent"><StatusDot status={g.agent.status} /><span className="name">{g.agent.name}</span><ToolBadge tool={g.agent.tool} size={14} /><span className="tnum" style={{ fontSize: "var(--fs-badge)", color: "var(--ink-4)" }}>{g.comments.length}</span>
+                    <button className="btn" title="Discard this agent's comments" onClick={() => reviewClear(g.agent.id)}><Icon name="trash" size="sm" />Discard</button></div>
+                  {files.map((f) => (
+                    <div key={f.file}>
+                      <div className="file"><Icon name="file" size="sm" style={{ width: 12, height: 12, color: "var(--ink-4)" }} /><span>{fileDir(f.file)}</span><span className="name" style={{ marginLeft: -6 }}>{fileName(f.file)}</span></div>
+                      {f.items.map((c) => (
+                        <div key={c.id} className="row">
+                          <span className="ln">:{c.fromLine === c.toLine ? c.fromLine : c.fromLine + "–" + c.toLine}</span>
+                          <span className="q">{c.toIdx > c.fromIdx ? c.lines.length + " lines" : "“" + (c.snippet || "(blank)") + "”"}</span>
+                          <span className="note"><span className="arr">→</span><span>{c.note}</span></span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+          <div className="ft">
+            <span className="hint">OK sends each agent its comments as one message</span>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              <button className="btn ghost-hair" onClick={() => setOpen(false)} title="Close — comments stay queued"><Icon name="x" size="sm" />Cancel</button>
+              <button className="btn primary" onClick={ok}><Icon name="enter" size="sm" />OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// seed two saved comments on the agent's design note so the surface has state on first run
+try {
+  if (!localStorage.getItem("orrery.md.seeded") && !reviewGet("a1").some((c) => c.md)) {
+    reviewAdd("a1", { file: "docs/webhooks/retry-design.md", fromLine: 3, toLine: 3, fromIdx: 0, toIdx: 0, md: true, snippet: "keyed on Stripe's event.id, so a redelivered event never runs twice", note: "Say what happens when event.id is missing — reject or process once?" });
+    reviewAdd("a1", { file: "docs/webhooks/retry-design.md", fromLine: 8, toLine: 8, fromIdx: 0, toIdx: 0, md: true, snippet: "Cap at five attempts before dead-lettering", note: "Make the cap configurable per endpoint — five is fine as the default." });
+    localStorage.setItem("orrery.md.seeded", "1");
+  }
+} catch (e) { /* ignore */ }
+
+Object.assign(window, { MarkdownPreview, FeedbackChip, mdRender, mermaidParse });
 </script>
 
 <!-- extras.jsx -->
@@ -4620,7 +5183,7 @@ function TabLabel({ tab, agents, tickets, active }) {
   </>);
 }
 
-function TopBar({ nav, onSearchEverywhere, tabs, activeTab, onTab, onCloseTab, onTabContext, agents, projects, tickets, onTheme, theme, onRunAll, running, onMergeTabs, onReorderTab, onAddAgent, win, onHide, onMinimize, onMaximize, onClose, build, compact, rightPanel, onSettings, onShowWhatsNew }) {
+function TopBar({ onSendReview, nav, onSearchEverywhere, tabs, activeTab, onTab, onCloseTab, onTabContext, agents, projects, tickets, onTheme, theme, onRunAll, running, onMergeTabs, onReorderTab, onAddAgent, win, onHide, onMinimize, onMaximize, onClose, build, compact, rightPanel, onSettings, onShowWhatsNew }) {
   const [dragId, setDragId] = useStateT(null);
   const [drop, setDrop] = useStateT(null); // { id, zone: 'merge'|'before'|'after' }
   const pendingN = (agents || []).reduce((s, a) => s + ((a.pending || []).length), 0); // v2 bell
@@ -4737,6 +5300,7 @@ function TopBar({ nav, onSearchEverywhere, tabs, activeTab, onTab, onCloseTab, o
         width: "auto",
         borderLeft: "1px solid var(--hair)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "0 12px", flex: 1, minWidth: 0, justifyContent: "flex-end" }}>
+          <FeedbackChip agents={agents} onSendReview={onSendReview} />
           <button className="btn" title={pendingN ? "Needs you · " + pendingN + " pending · N" : "Inbox zero · N"} aria-label="Work the queue"
             onClick={() => window.dispatchEvent(new CustomEvent("orrery:v2", { detail: { t: "queue" } }))}
             style={{ padding: 5, position: "relative", color: "var(--ink-2)" }}>
@@ -5781,6 +6345,7 @@ function Workspace({ ag, project, liveLogs, onAct, onFlash, onAppendLog, openFil
   const [pane, setPane] = useStateW(initialPane || "diff");
   const [treeMode, setTreeMode] = useStateW(false);
   const [reviewOpen, setReviewOpen] = useStateW(false);
+  useEffectW(() => { const f = (e) => { if (e.detail && e.detail.agentId === ag.id) setReviewOpen(true); }; window.addEventListener("orrery:open-review", f); return () => window.removeEventListener("orrery:open-review", f); }, [ag.id]);
   // when a file is opened from the right panel, jump to the file pane
   useEffectW(() => { if (openFile) setPane("file"); }, [openFile]);
   useEffectW(() => { if (!openFile && pane === "file") setPane("diff"); }, [openFile]);
@@ -8995,6 +9560,8 @@ function EditorPane({ path, agent, onFlash, structureOpen, autosave, jump, onOpe
   const ta = useRefE(null);
   const scroller = useRefE(null);
   const saveT = useRefE(null);
+  const isMd = /\.(md|markdown)$/i.test(path);
+  const [mdMode, setMdMode] = useStateE("preview");
   useEffectE(() => { setText(initial); setSaved(initial); setCursor({ line: 1, col: 1 }); }, [path, initial]);
 
   const lines = text.split("\n");
@@ -9077,6 +9644,12 @@ function EditorPane({ path, agent, onFlash, structureOpen, autosave, jump, onOpe
     <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, background: "var(--bg)" }}>
       <Breadcrumbs path={path} agent={agent} symbol={curSym} right={
         <React.Fragment>
+          {isMd && (
+            <div className="md-seg" role="tablist" aria-label="View">
+              <button className={mdMode === "raw" ? "on" : ""} onClick={() => setMdMode("raw")}><Icon name="code" size="sm" style={{ width: 12, height: 12 }} />Raw</button>
+              <button className={mdMode === "preview" ? "on" : ""} onClick={() => setMdMode("preview")}><Icon name="eye" size="sm" style={{ width: 12, height: 12 }} />Preview</button>
+            </div>
+          )}
           {dirty && <span className="chip" style={{ fontSize: "var(--fs-micro)", color: "var(--sem-attn)", borderColor: "color-mix(in oklch, var(--sem-attn), transparent 60%)" }}>unsaved</span>}
           <button className="btn ghost-hair" onClick={() => setBlame((v) => !v)} style={{ padding: "3px 8px", fontSize: "var(--fs-badge)", color: blame ? "var(--ink)" : "var(--ink-3)",
             background: blame ? "var(--ui-sel)" : "transparent", borderColor: blame ? "var(--ui-sel-2)" : "var(--hair)" }}>
@@ -9085,9 +9658,14 @@ function EditorPane({ path, agent, onFlash, structureOpen, autosave, jump, onOpe
           <button className={"btn " + (dirty ? "primary" : "ghost-hair")} disabled={!dirty} onClick={save} style={{ padding: "3px 9px", fontSize: "var(--fs-badge)" }}>
             <Icon name="check" size="sm" />Save
           </button>
+          <span className="chip" style={{ fontSize: "var(--fs-badge)" }}>{lang}</span>
+          <button className="pane-btn" title="Reload from disk" onClick={() => { setText(FC[path] != null ? FC[path] : initial); onFlash("reloaded " + fileName(path) + " from the worktree"); }}><Icon name="refresh" size="sm" /></button>
+          <SendReviewButton agentId={agent.id} onOpen={() => window.dispatchEvent(new CustomEvent("orrery:open-review", { detail: { agentId: agent.id } }))} />
         </React.Fragment>
       } />
-      {blame
+      {isMd && mdMode === "preview" && !blame
+        ? <MarkdownPreview path={path} agent={agent} source={text} onFlash={onFlash} />
+        : blame
         ? <FileBlameGutter agent={agent} path={path} onOpenCommit={onOpenCommit} />
         : (
           <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
@@ -14333,7 +14911,7 @@ function App() {
           <div className="bg-texture" />
           <div className="bg-glow" />
           <div className="shell">
-            <TopBar tabs={tabs} activeTab={activeTab} onTab={selectTab} onCloseTab={closeTab}
+            <TopBar tabs={tabs} activeTab={activeTab} onTab={selectTab} onCloseTab={closeTab} onSendReview={sendReview}
               nav={{ canBack: cmdCtx.canBack, canForward: cmdCtx.canForward, onBack: navBack, onForward: navForward, keymap }}
               onSearchEverywhere={() => setOverlay({ kind: "search" })}
               onTabContext={(e, tab) => openMenu(e, tabMenu(tab))}
