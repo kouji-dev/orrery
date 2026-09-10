@@ -16,6 +16,8 @@ import type * as monacoApi from "monaco-editor";
 
 import { ReviewStore } from "../agents/review.store";
 import { FileHunk } from "../data-source/bridge";
+import { BlameLine } from "../models";
+import { BlameSpec, blameDecorations, blameSpecs, shaAtLine } from "./monaco-blame";
 import { EditorNavService } from "../commands/editor-nav.service";
 import { EditsStore } from "../stores/edits.store";
 import { UiStore } from "../ui/ui.store";
@@ -84,6 +86,29 @@ import { KjButtonComponent } from "@kouji-ui/components";
         width: 7px !important;
         cursor: pointer;
       }
+      /* Annotate: the blame column is Monaco injected text at column 1, so it
+         is styled through a class name (no inline style is possible there).
+         Fixed hue buckets stand in for the continuous per-author hue. */
+      :host ::ng-deep .blm {
+        border-right: 1px solid var(--hair);
+        cursor: pointer;
+        white-space: pre;
+      }
+      :host ::ng-deep .blm-cont {
+        color: transparent;
+      }
+      :host ::ng-deep .blm-h0 { color: hsl(15, 60%, 66%); }
+      :host ::ng-deep .blm-h1 { color: hsl(45, 60%, 66%); }
+      :host ::ng-deep .blm-h2 { color: hsl(75, 60%, 66%); }
+      :host ::ng-deep .blm-h3 { color: hsl(105, 60%, 66%); }
+      :host ::ng-deep .blm-h4 { color: hsl(135, 60%, 66%); }
+      :host ::ng-deep .blm-h5 { color: hsl(165, 60%, 66%); }
+      :host ::ng-deep .blm-h6 { color: hsl(195, 60%, 66%); }
+      :host ::ng-deep .blm-h7 { color: hsl(225, 60%, 66%); }
+      :host ::ng-deep .blm-h8 { color: hsl(255, 60%, 66%); }
+      :host ::ng-deep .blm-h9 { color: hsl(285, 60%, 66%); }
+      :host ::ng-deep .blm-h10 { color: hsl(315, 60%, 66%); }
+      :host ::ng-deep .blm-h11 { color: hsl(345, 60%, 66%); }
       /* surface comes from .popover */
       .gm-pop {
         position: fixed;
@@ -116,6 +141,9 @@ export class MonacoFileEditorComponent {
   readonly syncGen = signal(0);
   /** B4.3: changed regions vs HEAD — rendered as gutter change markers. */
   readonly hunks = signal<FileHunk[]>([]);
+  /** Annotate: per-line blame, rendered as an injected-text column. Empty =
+   *  Annotate off, and the editor is exactly what it was before. */
+  readonly blame = signal<BlameLine[]>([]);
 
   @Input("agent") set agentInput(v: string) { this.agent.set(v); }
   @Input("file") set fileInput(v: string) { this.file.set(v); }
@@ -123,9 +151,12 @@ export class MonacoFileEditorComponent {
   @Input("lang") set langInput(v: string) { this.lang.set(v); }
   @Input("syncGen") set syncGenInput(v: number) { this.syncGen.set(v); }
   @Input("hunks") set hunksInput(v: FileHunk[]) { this.hunks.set(v ?? []); }
+  @Input("blame") set blameInput(v: BlameLine[]) { this.blame.set(v ?? []); }
 
   /** Marker click confirmed — the host runs the backend revert. */
   @Output() readonly revertHunk = new EventEmitter<FileHunk>();
+  /** Blame gutter click — the host opens that commit's diff. */
+  @Output() readonly openCommit = new EventEmitter<string>();
   /** Pending revert confirmation (screen coords of the marker click). */
   readonly revertAsk = signal<{ hunk: FileHunk; x: number; y: number } | null>(null);
 
@@ -137,6 +168,9 @@ export class MonacoFileEditorComponent {
   private unregisterCap: (() => void) | null = null;
   private hunkDecos: monacoApi.editor.IEditorDecorationsCollection | null = null;
   private hunkSub: monacoApi.IDisposable | null = null;
+  private blameDecos: monacoApi.editor.IEditorDecorationsCollection | null = null;
+  /** Specs behind the live blame column — the gutter click reads its sha here. */
+  private blameLive: BlameSpec[] = [];
   /** Bumped when a fresh editor is live, so dependent effects re-push. */
   private readonly viewGen = signal(0);
   private renderToken = 0;
@@ -203,6 +237,13 @@ export class MonacoFileEditorComponent {
       this.viewGen();
       this.renderHunkMarkers(hunks);
     });
+    // Annotate: (re)paint the blame column, and make the buffer read-only while
+    // it is on — the column is a view of a past state, not a place to type.
+    effect(() => {
+      const blame = this.blame();
+      this.viewGen();
+      this.renderBlame(blame);
+    });
     // Go-to-line (B2.3): consume a posted target once this editor is live.
     effect(() => {
       const t = this.editorNav.target();
@@ -228,6 +269,8 @@ export class MonacoFileEditorComponent {
     this.hunkSub?.dispose();
     this.hunkSub = null;
     this.hunkDecos = null;
+    this.blameDecos = null;
+    this.blameLive = [];
     this.revertAsk.set(null);
     if (this.editor && this.mountedKey) {
       this.scroll.saveView(this.mountedKey.agent, this.mountedKey.file, this.editor.saveViewState());
@@ -266,6 +309,22 @@ export class MonacoFileEditorComponent {
       });
     }
     this.hunkDecos.set(decos);
+  }
+
+  /** Annotate: the injected blame column, or nothing when Annotate is off. */
+  private renderBlame(lines: BlameLine[]): void {
+    const editor = this.editor;
+    const monaco = this.monaco;
+    const model = this.model;
+    if (!editor || !monaco || !model) return;
+    this.blameDecos ??= editor.createDecorationsCollection();
+    this.blameLive = lines.length ? blameSpecs(lines) : [];
+    this.blameDecos.set(
+      this.blameLive.length
+        ? blameDecorations(monaco, this.blameLive, model.getLineCount())
+        : [],
+    );
+    editor.updateOptions({ readOnly: this.blameLive.length > 0 });
   }
 
   /** The hunk whose marker covers `line` (deleted hunks sit on their boundary). */
@@ -343,6 +402,19 @@ export class MonacoFileEditorComponent {
       });
       // B4.3: a click on a change marker opens the revert popover.
       this.hunkSub = editor.onMouseDown((e) => {
+        // Annotate: a click in the blame column opens that commit. The injected
+        // text sits INSIDE the content area, so the mouse target is ordinary
+        // text — the class on the clicked node is what tells it apart.
+        if (this.blameLive.length) {
+          const el = e.event.target as HTMLElement | null;
+          if (el?.closest?.(".blm")) {
+            const line = e.target.position?.lineNumber;
+            const sha = line ? shaAtLine(this.blameLive, line) : null;
+            e.event.preventDefault();
+            if (sha) this.openCommit.emit(sha);
+            return;
+          }
+        }
         if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS) return;
         const line = e.target.position?.lineNumber;
         if (!line) return;
