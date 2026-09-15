@@ -105,7 +105,8 @@ jobs:
           if [ "${{ inputs.packs }}" = "all" ] || [ -z "${{ inputs.packs }}" ]; then
             echo "only=all" >> "$GITHUB_OUTPUT"
           else
-            only=$(echo "${{ inputs.packs }}" | tr ',' '\n' | grep '^runtime\.' | paste -sd, -)
+            # `|| true`: no runtime pack in the list is a valid selection, not a grep failure under pipefail
+            only=$(echo "${{ inputs.packs }}" | tr ',' '\n' | { grep '^runtime\.' || true; } | paste -sd, -)
             echo "only=$only" >> "$GITHUB_OUTPUT"
           fi
       - name: Build runtime packs
@@ -161,7 +162,8 @@ jobs:
           if [ "${{ inputs.packs }}" = "all" ] || [ -z "${{ inputs.packs }}" ]; then
             echo "only=all" >> "$GITHUB_OUTPUT"
           else
-            only=$(echo "${{ inputs.packs }}" | tr ',' '\n' | grep '^server\.' | paste -sd, -)
+            # `|| true`: no server pack in the list is a valid selection, not a grep failure under pipefail
+            only=$(echo "${{ inputs.packs }}" | tr ',' '\n' | { grep '^server\.' || true; } | paste -sd, -)
             echo "only=$only" >> "$GITHUB_OUTPUT"
           fi
       - name: Build server packs
