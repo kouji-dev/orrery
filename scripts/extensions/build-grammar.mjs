@@ -268,7 +268,8 @@ function pickQuery(pin, repoRoot, name) {
  *  upstream tag change (a query fix) — the app's parsed-symbol cache is
  *  keyed by pack version, so the bump is what makes every file reparse. */
 export function packRevOf(pin, cliRev) {
-  if (cliRev !== undefined && cliRev !== null) return Number(cliRev);
+  // a blank / bare `--rev` (the workflow's default input) is "not given"
+  if (cliRev !== undefined && cliRev !== null && cliRev !== '' && cliRev !== true) return Number(cliRev);
   return Number(pin.packRev ?? 1);
 }
 

@@ -19,10 +19,10 @@ on:
         type: string
         default: all
       rev:
-        description: "Pack revision suffix (bump when rebuilding the same upstream tag)"
+        description: "Pack revision suffix override — blank (the default) uses each pin's own packRev in grammars.json, else 1"
         required: false
         type: string
-        default: "1"
+        default: ""
 
 permissions:
   contents: read
@@ -67,7 +67,7 @@ jobs:
           pnpm ext:build
           --lang "${{ steps.langs.outputs.langs }}"
           --target ${{ matrix.target }}
-          --rev "${{ inputs.rev }}"
+          ${{ inputs.rev && format('--rev {0}', inputs.rev) || '' }}
           --out dist-ext
       - uses: actions/upload-artifact@v7
         if: steps.langs.outputs.langs != ''
@@ -115,7 +115,7 @@ jobs:
           pnpm ext:build:runtimes
           --only "${{ steps.runtimes.outputs.only }}"
           --target ${{ matrix.target }}
-          --rev "${{ inputs.rev }}"
+          ${{ inputs.rev && format('--rev {0}', inputs.rev) || '' }}
           --out dist-ext
       - uses: actions/upload-artifact@v7
         if: steps.runtimes.outputs.only != ''
@@ -171,7 +171,7 @@ jobs:
           pnpm ext:build:servers
           --only "${{ steps.servers.outputs.only }}"
           --target ${{ matrix.target }}
-          --rev "${{ inputs.rev }}"
+          ${{ inputs.rev && format('--rev {0}', inputs.rev) || '' }}
           --out dist-ext
           ${{ matrix.extra }}
       - uses: actions/upload-artifact@v7

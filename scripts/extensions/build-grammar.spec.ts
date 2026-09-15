@@ -140,6 +140,8 @@ describe('packRevOf', () => {
   it('prefers the CLI --rev, then the pin, then 1', () => {
     expect(packRevOf({ packRev: 2 }, '3')).toBe(3);
     expect(packRevOf({ packRev: 2 }, undefined)).toBe(2);
+    expect(packRevOf({ packRev: 2 }, '')).toBe(2); // the workflow's blank default
+    expect(packRevOf({ packRev: 2 }, true)).toBe(2); // a bare --rev flag
     expect(packRevOf({}, undefined)).toBe(1);
   });
 });
@@ -172,7 +174,7 @@ describe('grammars.json pins', () => {
   });
 
   it('typescript and tsx compose their queries with javascript (upstream tree-sitter.json lists both files) at pack rev 2', () => {
-    // rev 2 because the shipped tags.scm changed under the same upstream tag —
+    // rev 2 because the shipped tags.scm changed under the same upstream tag â€”
     // the app's parsed-symbol cache is keyed by pack version
     for (const lang of ['typescript', 'tsx']) {
       const pin = selectPins(pins, lang)[0];
