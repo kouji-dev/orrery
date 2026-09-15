@@ -88,20 +88,8 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
         </button>
       }
 
-      <!-- M2/M3 chips (design LspCluster): the aggregate language-server chip
-           + the transient symbol-index chip. The language-server marker is
-           PERMANENT (user, 2026-09-12) and so is this cluster: a marker that
-           disappears hides exactly the states worth seeing — a crash, a server
-           that never came up. The index chip still renders only while an index
-           runs. Wrapped so the cluster can take the right-cluster's
-           margin-left:auto when it is the first member. -->
-      <span class="lsp-wrap" [style.margin-left]="ui.toast() || telemetry.traceActive() ? null : 'auto'">
-        <app-lsp-chip />
-        <app-index-chip />
-      </span>
-
       <!-- open the rolling diagnostics log file -->
-      <button kjButton type="button" class="sb-link" [style.margin-left]="ui.toast() || telemetry.traceActive() || lsp.any() || index.visible() || libsrc.any() ? null : 'auto'" (click)="diag.openLog()" title="Open log file">
+      <button kjButton type="button" class="sb-link" [style.margin-left]="ui.toast() || telemetry.traceActive() ? null : 'auto'" (click)="diag.openLog()" title="Open log file">
         <app-icon size="md" name="file" />logs
       </button>
 
@@ -136,6 +124,19 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
           </span>
         </kj-tooltip-content>
       }
+
+      <!-- M2/M3 chips (design LspCluster): the aggregate language-server chip
+           + the transient symbol-index chip. The language-server marker is
+           PERMANENT (user, 2026-09-12) and so is this cluster: a marker that
+           disappears hides exactly the states worth seeing — a crash, a server
+           that never came up. The index chip still renders only while an index
+           runs. Sits between "logs" and the resources gauge (user, 2026-09-15:
+           right next to resources, fit-content only) — the logs button is the
+           right cluster's first member and carries the margin-left:auto. -->
+      <span class="lsp-wrap">
+        <app-lsp-chip />
+        <app-index-chip />
+      </span>
 
       <!-- bottom-right cpu/memory readout; the per-process breakdown lives in
            the dev console's Resources tab — clicking deep-links there -->
@@ -320,9 +321,11 @@ export class StatusBarComponent {
   );
 
   // ---- gauge readout: AGENTS only (fed from the same subtree rollups the
-  // Resources tree drills into — every non-"app" row is an agent subtree) ----
+  // Resources tree drills into — every non-"app", non-"lsp:" row is an agent
+  // subtree; language servers ride along as `lsp:` rows and have their own
+  // footer chip) ----
   private readonly agentProcs = computed(() =>
-    (this.metrics.metrics()?.procs ?? []).filter((p) => p.id !== "app"),
+    (this.metrics.metrics()?.procs ?? []).filter((p) => p.id !== "app" && !p.id.startsWith("lsp:")),
   );
   readonly hasAgentProcs = computed(() => this.agentProcs().length > 0);
   // machine-relative %, to one decimal

@@ -25,6 +25,8 @@ import {
   monacoDensityOptions,
   monacoLanguage,
 } from "../monaco-loader";
+import { diffModelUri } from "../nav-providers";
+import { NavProvidersService } from "../nav-providers.service";
 import { ScrollStateService } from "../scroll-state.service";
 import { DiffStats, lineChangeStats } from "./chunk-stats";
 import { attachReviewComments, MonacoReviewApi } from "./review-comments.monaco";
@@ -54,6 +56,7 @@ export class UnifiedCodeComponent {
   private readonly ui = inject(UiStore);
   private readonly editorNav = inject(EditorNavService);
   private readonly scroll = inject(ScrollStateService);
+  private readonly nav = inject(NavProvidersService);
 
   // Inputs: decorator @Input backed by signals (vitest JIT / NG0950 pattern).
   readonly agent = signal("");
@@ -160,6 +163,13 @@ export class UnifiedCodeComponent {
     inject(DestroyRef).onDestroy(() => this.teardown());
   }
 
+  /** The nav-aware uri for the new-side model, when this view knows its file. */
+  private navUri(monaco: MonacoApi): monacoApi.Uri | undefined {
+    const agent = this.agent();
+    const file = this.file();
+    return agent && file ? monaco.Uri.parse(diffModelUri(agent, file)) : undefined;
+  }
+
   /** The editor review comments + nav act on: modified side (diff) or the only one. */
   private activeEditor(): monacoApi.editor.ICodeEditor | null {
     return this.diffEditor ? this.diffEditor.getModifiedEditor() : this.editor;
@@ -253,7 +263,7 @@ export class UnifiedCodeComponent {
           renderOverviewRuler: false,
         });
         const original = monaco.editor.createModel(oldText, langId);
-        const modified = monaco.editor.createModel(newText, langId);
+        const modified = monaco.editor.createModel(newText, langId, this.navUri(monaco));
         diff.setModel({ original, modified });
         this.models = [original, modified];
         this.diffEditor = diff;
@@ -272,7 +282,7 @@ export class UnifiedCodeComponent {
         );
         this.api = attachReviewComments(monaco, diff.getModifiedEditor(), this.commentHost());
       } else {
-        const model = monaco.editor.createModel(newText, langId);
+        const model = monaco.editor.createModel(newText, langId, this.navUri(monaco));
         const editor = monaco.editor.create(el, { ...common, model });
         this.models = [model];
         this.editor = editor;
@@ -280,6 +290,10 @@ export class UnifiedCodeComponent {
         this.stats.emit(null);
         this.api = attachReviewComments(monaco, editor, this.commentHost());
       }
+      // Symbol navigation on the new side: hover, Ctrl+click, references —
+      // the same providers the file editor uses, keyed by the diff model uri.
+      this.nav.ensureOpener(monaco);
+      this.nav.ensureLanguage(monaco, langId);
       // A0.6 editor cap: demote to plain text to bound the webview heap.
       const mine = capTarget;
       this.unregisterCap = registerEditor(() => {

@@ -167,7 +167,7 @@ fn lsp_first(
     let name = project.name.clone();
     let handle = match lsp.acquire(lang.id, project.id, &project.root, &|| name.clone()) {
         lsp::Acquire::NotInstalled => return None,
-        lsp::Acquire::Starting => return Some(LspAnswer::Fallback(Some("starting".into()))),
+        lsp::Acquire::Starting(_) => return Some(LspAnswer::Fallback(Some("starting".into()))),
         lsp::Acquire::Unavailable => return Some(LspAnswer::Fallback(Some("unavailable".into()))),
         lsp::Acquire::Ready(h) => h,
     };

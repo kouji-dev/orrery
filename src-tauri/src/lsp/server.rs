@@ -151,7 +151,15 @@ pub fn launch_for(
     cwd: PathBuf,
     env: &DetectEnv,
 ) -> Launch {
-    let args: Vec<String> = manifest.args.iter().map(|a| substitute(a, ph)).collect();
+    // a self-contained (v2) pack keeps its arguments under `launch` and may
+    // omit the top-level `args` — a system copy of that server needs the
+    // same `--stdio` (typescript-language-server and pyright refuse without)
+    let source: &[String] = if manifest.args.is_empty() {
+        manifest.launch.as_ref().map(|l| l.args.as_slice()).unwrap_or(&[])
+    } else {
+        manifest.args.as_slice()
+    };
+    let args: Vec<String> = source.iter().map(|a| substitute(a, ph)).collect();
     if is_jdtls_script(program) {
         match find_java(env) {
             Some(java) => {
@@ -342,10 +350,14 @@ pub struct LspServer {
     pub last_error: Option<String>,
 }
 
+/// An editor document the server should know about. `sent` = the server
+/// has had its `didOpen`; a doc opened while the server is still `starting`
+/// (or re-queued by a restart) waits for [`ServerHandle::flush_docs`].
 struct Doc {
     version: i64,
-    #[allow(dead_code)]
     text: String,
+    language_id: String,
+    sent: bool,
 }
 
 struct Inner {
@@ -585,6 +597,7 @@ impl ServerHandle {
     }
 
     fn fail_start(&self, err: String) {
+        log::warn!("lsp {}: start failed: {err}", self.ext_id);
         {
             let mut g = self.inner.lock().unwrap();
             g.state = State::Crashed;
@@ -630,7 +643,9 @@ impl ServerHandle {
             let mut g = self.inner.lock().unwrap();
             g.generation += 1;
             g.stopping = false;
-            g.docs.clear();
+            // the editor's buffers survive a (re)start: they go out again
+            // after the handshake
+            Self::requeue_docs(&mut g);
             g.generation
         };
         let mut cmd = crate::core::proc::cmd(&launch.program);
@@ -697,6 +712,7 @@ impl ServerHandle {
                 g.last_used = Instant::now();
             }
         }
+        self.flush_docs();
         (self.on_change)();
     }
 
@@ -830,7 +846,7 @@ impl ServerHandle {
                 let tail = g.client.as_ref().map(|c| c.last_error()).unwrap_or_default();
                 g.client = None;
                 g.pid = None;
-                g.docs.clear();
+                Self::requeue_docs(&mut g);
                 if let Some(mut c) = g.child.take() {
                     if c.try_wait().ok().flatten().is_none() {
                         let _ = c.kill();
@@ -911,12 +927,16 @@ impl ServerHandle {
         (self.on_change)();
     }
 
-    fn client(&self) -> Result<Arc<Client>, LspErr> {
-        let g = self.inner.lock().unwrap();
+    /// The client while the server is up (`ready` / `idle`).
+    fn live_client(g: &Inner) -> Option<Arc<Client>> {
         match (&g.client, g.state) {
-            (Some(c), State::Ready | State::Idle) => Ok(c.clone()),
-            _ => Err(LspErr::Closed),
+            (Some(c), State::Ready | State::Idle) => Some(c.clone()),
+            _ => None,
         }
+    }
+
+    fn client(&self) -> Result<Arc<Client>, LspErr> {
+        Self::live_client(&self.inner.lock().unwrap()).ok_or(LspErr::Closed)
     }
 
     /// A request with a budget; bumps `last_used`.
@@ -940,20 +960,47 @@ impl ServerHandle {
         self.open(uri, text, language_id, 1)
     }
 
-    /// Explicit open from the editor (replaces a disk-sourced open).
+    /// Explicit open from the editor (replaces a disk-sourced open). While
+    /// the server is still `starting` the document is queued and goes out
+    /// with [`Self::flush_docs`] after the handshake; a uri the server already
+    /// has becomes a full-text `didChange` rather than a second `didOpen`.
+    /// Editor traffic counts as use: an edited buffer keeps the server alive.
     pub fn open(&self, uri: String, text: String, language_id: &str, version: i64) -> Result<(), LspErr> {
-        let client = self.client()?;
-        {
+        self.touch();
+        let (client, was_sent, version) = {
             let mut g = self.inner.lock().unwrap();
-            g.docs.insert(uri.clone(), Doc { version, text: text.clone() });
+            let (was_sent, version) = match g.docs.get(&uri) {
+                Some(d) if d.sent => (true, version.max(d.version + 1)),
+                _ => (false, version),
+            };
+            g.docs.insert(
+                uri.clone(),
+                Doc { version, text: text.clone(), language_id: language_id.to_string(), sent: false },
+            );
+            (Self::live_client(&g), was_sent, version)
+        };
+        let Some(client) = client else {
+            return Ok(()); // queued: the flush after the handshake sends it
+        };
+        let r = if was_sent {
+            client.notify(
+                "textDocument/didChange",
+                json!({ "textDocument": { "uri": uri, "version": version }, "contentChanges": [{ "text": text }] }),
+            )
+        } else {
+            client.notify(
+                "textDocument/didOpen",
+                json!({ "textDocument": { "uri": uri, "languageId": language_id, "version": version, "text": text } }),
+            )
+        };
+        if r.is_ok() {
+            self.mark_sent(&uri);
         }
-        client.notify(
-            "textDocument/didOpen",
-            json!({ "textDocument": { "uri": uri, "languageId": language_id, "version": version, "text": text } }),
-        )
+        r
     }
 
-    /// Full-text `didChange` (opens the doc first when it is unknown).
+    /// Full-text `didChange` (opens the doc first when it is unknown). A
+    /// queued doc just takes the new text — the flush carries the latest.
     pub fn change(&self, abs: &Path, text: String, version: i64, language_id: &str) -> Result<(), LspErr> {
         let uri = path_to_uri(abs);
         let known = {
@@ -962,27 +1009,86 @@ impl ServerHandle {
                 Some(d) => {
                     d.version = version.max(d.version + 1);
                     d.text = text.clone();
-                    Some(d.version)
+                    Some((d.version, d.sent))
                 }
                 None => None,
             }
         };
         match known {
-            Some(v) => self.client()?.notify(
-                "textDocument/didChange",
-                json!({ "textDocument": { "uri": uri, "version": v }, "contentChanges": [{ "text": text }] }),
-            ),
+            Some((v, true)) => {
+                self.touch();
+                self.client()?.notify(
+                    "textDocument/didChange",
+                    json!({ "textDocument": { "uri": uri, "version": v }, "contentChanges": [{ "text": text }] }),
+                )
+            }
+            Some((_, false)) => {
+                self.touch();
+                Ok(())
+            }
             None => self.open(uri, text, language_id, version),
         }
     }
 
     pub fn close(&self, abs: &Path) -> Result<(), LspErr> {
         let uri = path_to_uri(abs);
-        if self.inner.lock().unwrap().docs.remove(&uri).is_none() {
-            return Ok(());
+        let sent = match self.inner.lock().unwrap().docs.remove(&uri) {
+            Some(d) => d.sent,
+            None => return Ok(()),
+        };
+        if !sent {
+            return Ok(()); // the server never heard of it
         }
         self.client()?
             .notify("textDocument/didClose", json!({ "textDocument": { "uri": uri } }))
+    }
+
+    /// `didOpen` for every queued document — after the handshake, and after
+    /// a restart re-queued the buffers the editor still has open.
+    pub(crate) fn flush_docs(&self) {
+        let (client, pending) = {
+            let g = self.inner.lock().unwrap();
+            let pending: Vec<(String, String, String, i64)> = g
+                .docs
+                .iter()
+                .filter(|(_, d)| !d.sent)
+                .map(|(u, d)| (u.clone(), d.text.clone(), d.language_id.clone(), d.version))
+                .collect();
+            (Self::live_client(&g), pending)
+        };
+        let Some(client) = client else {
+            return;
+        };
+        for (uri, text, language_id, version) in pending {
+            let r = client.notify(
+                "textDocument/didOpen",
+                json!({ "textDocument": { "uri": uri, "languageId": language_id, "version": version, "text": text } }),
+            );
+            if r.is_ok() {
+                self.mark_sent(&uri);
+            }
+        }
+    }
+
+    fn mark_sent(&self, uri: &str) {
+        if let Some(d) = self.inner.lock().unwrap().docs.get_mut(uri) {
+            d.sent = true;
+        }
+    }
+
+    /// Every known doc goes out again on the next handshake.
+    fn requeue_docs(g: &mut Inner) {
+        for d in g.docs.values_mut() {
+            d.sent = false;
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn queued_docs(&self) -> Vec<String> {
+        let g = self.inner.lock().unwrap();
+        let mut v: Vec<String> = g.docs.iter().filter(|(_, d)| !d.sent).map(|(u, _)| u.clone()).collect();
+        v.sort();
+        v
     }
 
     #[cfg(test)]
@@ -1209,6 +1315,24 @@ mod tests {
     }
 
     #[test]
+    fn system_launch_of_a_v2_pack_takes_the_launch_block_args() {
+        let crate::extensions::manifest::Manifest::Server(m) =
+            crate::extensions::manifest::Manifest::parse(crate::extensions::manifest::fixtures::SERVER_BUNDLED).unwrap()
+        else {
+            unreachable!()
+        };
+        let m = ServerManifest { args: Vec::new(), ..m };
+        let ph = Placeholders::new("C:/e", "C:/w", "C:/p");
+        let env = DetectEnv { path_env: None, home: None, vars: Default::default(), windows: true };
+        let l = launch_for(&m, Path::new("C:/x/typescript-language-server.cmd"), &ph, PathBuf::from("C:/p"), &env);
+        assert_eq!(l.args, vec!["--stdio"], "a system ts-ls without --stdio refuses to start");
+        // explicit top-level args still win
+        let m = ServerManifest { args: vec!["--socket=1".into()], ..m };
+        let l = launch_for(&m, Path::new("C:/x/typescript-language-server.cmd"), &ph, PathBuf::from("C:/p"), &env);
+        assert_eq!(l.args, vec!["--socket=1"]);
+    }
+
+    #[test]
     fn idle_reaper_state_machine() {
         let w = Duration::from_secs(600);
         assert_eq!(reap_decision(State::Ready, Duration::from_secs(10), w), Reap::Keep);
@@ -1331,5 +1455,77 @@ mod tests {
         assert_eq!(seen[2]["params"]["textDocument"]["version"], 3);
         assert_eq!(seen[2]["params"]["contentChanges"][0]["text"], "class A { int y; }");
         assert!(h.open_docs().is_empty());
+    }
+
+    fn recording_client() -> (Arc<Client>, Arc<Mutex<Vec<Value>>>) {
+        use crate::lsp::client::fake::client_with;
+        let seen: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen2 = seen.clone();
+        let client = client_with(
+            Box::new(move |msg, _| {
+                seen2.lock().unwrap().push(msg.clone());
+            }),
+            Box::new(|m, _| Err(RpcError::method_not_found(m))),
+            Box::new(|_, _| {}),
+            Box::new(|| {}),
+        );
+        (client, seen)
+    }
+
+    fn methods(seen: &Arc<Mutex<Vec<Value>>>) -> Vec<String> {
+        std::thread::sleep(Duration::from_millis(80));
+        seen.lock().unwrap().iter().map(|m| m["method"].as_str().unwrap().to_string()).collect()
+    }
+
+    #[test]
+    fn docs_opened_while_starting_are_queued_and_flushed_once_ready() {
+        let (client, seen) = recording_client();
+        let h = ServerHandle::with_client("server.jdtls", manifest(), project(), client);
+        h.force_state(State::Starting);
+        let abs = project().root.join("src").join("A.java");
+        // the editor opens + edits before the handshake is done: nothing goes out yet
+        h.open(path_to_uri(&abs), "class A {}".into(), "java", 1).unwrap();
+        h.change(&abs, "class A { int x; }".into(), 2, "java").unwrap();
+        assert_eq!(h.queued_docs().len(), 1);
+        assert!(methods(&seen).is_empty(), "nothing before the handshake");
+        // ready → one didOpen carrying the LATEST text; a second flush is a no-op
+        h.force_state(State::Ready);
+        h.flush_docs();
+        h.flush_docs();
+        assert_eq!(methods(&seen), vec!["textDocument/didOpen"]);
+        assert!(h.queued_docs().is_empty());
+        {
+            let s = seen.lock().unwrap();
+            assert_eq!(s[0]["params"]["textDocument"]["text"], "class A { int x; }");
+            assert_eq!(s[0]["params"]["textDocument"]["version"], 2);
+            assert_eq!(s[0]["params"]["textDocument"]["languageId"], "java");
+        }
+        // an explicit re-open of a uri the server has = full-text change, not a 2nd didOpen
+        h.open(path_to_uri(&abs), "class A { int y; }".into(), "java", 1).unwrap();
+        assert_eq!(methods(&seen), vec!["textDocument/didOpen", "textDocument/didChange"]);
+        assert_eq!(seen.lock().unwrap()[1]["params"]["textDocument"]["version"], 3);
+        // a crash re-queues the buffer for the next handshake; closing an
+        // unsent doc tells nobody
+        let generation = h.inner.lock().unwrap().generation;
+        h.on_closed(generation);
+        assert_eq!(h.state(), State::Crashed);
+        assert_eq!(h.queued_docs().len(), 1);
+        h.close(&abs).unwrap();
+        assert!(h.open_docs().is_empty());
+        assert_eq!(methods(&seen).len(), 2, "no didClose for a doc the server never got");
+    }
+
+    #[test]
+    fn editor_traffic_keeps_an_idle_server_awake() {
+        let (client, _seen) = recording_client();
+        let h = ServerHandle::with_client("server.jdtls", manifest(), project(), client);
+        h.mark_idle();
+        assert_eq!(h.state(), State::Idle);
+        let before = h.idle_for();
+        std::thread::sleep(Duration::from_millis(5));
+        let abs = project().root.join("src").join("B.java");
+        h.change(&abs, "class B {}".into(), 1, "java").unwrap();
+        assert_eq!(h.state(), State::Ready, "a didChange counts as use");
+        assert!(h.idle_for() < before + Duration::from_millis(5));
     }
 }

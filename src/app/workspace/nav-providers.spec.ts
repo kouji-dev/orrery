@@ -9,6 +9,7 @@ import {
   modelUri,
   NavDeps,
   NavMonaco,
+  diffModelUri,
   parseModelUri,
   pickLocations,
   locationDetail,
@@ -88,6 +89,20 @@ describe("model uri", () => {
     expect(isVirtualUri("src/app.ts")).toBe(false);
     // the worktree's own scheme is NOT virtual
     expect(isVirtualUri("orrery://agent-1/src/app.ts")).toBe(false);
+  });
+});
+
+describe("diff model uri", () => {
+  it("carries the same id + path as the worktree file, its own scheme and a serial, and is not virtual", () => {
+    const a = diffModelUri("agent-1", "src/we#ird?.ts");
+    const b = diffModelUri("agent-1", "src/we#ird?.ts");
+    expect(a.startsWith("orrery-diff://agent-1~")).toBe(true);
+    expect(a).not.toBe(b); // two diffs of one file never collide as Monaco models
+    expect(parseModelUri(a)).toEqual({ id: "agent-1", path: "src/we#ird?.ts" });
+    expect(parseModelUri(fakeUri(b).toString())).toEqual({ id: "agent-1", path: "src/we#ird?.ts" });
+    expect(isVirtualUri(a)).toBe(false);
+    // the editor's own uri keeps working without a serial
+    expect(parseModelUri("orrery://agent-1/src/app.ts")).toEqual({ id: "agent-1", path: "src/app.ts" });
   });
 });
 
@@ -264,6 +279,15 @@ describe("buildProviders", () => {
     const p = buildProviders(monaco, d);
     await p.definition.provideDefinition(model("orrery://a/src/use.ts", "foo", "TEXT"), pos, live);
     expect(d.definition).toHaveBeenCalledWith("a", "src/use.ts", 2, 5, "foo", "TEXT");
+  });
+
+  it("a diff model always sends the text it shows (it may differ from the worktree) under the file's id + path", async () => {
+    const d = deps({ sendText: () => false });
+    const p = buildProviders(monaco, d);
+    await p.definition.provideDefinition(model(diffModelUri("a", "src/use.ts"), "foo", "SHOWN"), pos, live);
+    expect(d.definition).toHaveBeenCalledWith("a", "src/use.ts", 2, 5, "foo", "SHOWN");
+    await p.hover.provideHover(model(diffModelUri("a", "src/use.ts")), pos, live);
+    expect(d.hover).toHaveBeenCalledWith("a", "src/use.ts", 2, 5, "foo");
   });
 
   it("ensures a model per target when several locations will peek", async () => {

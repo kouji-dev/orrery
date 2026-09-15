@@ -145,6 +145,50 @@ test("F12 on an identifier opens the target file at the definition line", async 
   expect(starts).toContain(AGENT);
 });
 
+/** The agent's diff tab with USE listed as a changed file (its "new" side is
+ *  USE_TEXT, so the diff surface shows the same code the editor would). */
+const seedDiffChanges = `(() => {
+  const bar = window.ng.getComponent(document.querySelector("app-top-bar"));
+  const work = bar.agentActions["work"];
+  work["patch"](work["changesMap"], "${AGENT}", {
+    status: "ready",
+    data: [{ path: ${JSON.stringify(USE)}, add: 3, del: 0, state: "A" }],
+  });
+})()`;
+
+test("F12 in the agent's DIFF view navigates too — the new side carries the file's id + path", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForSelector("app-top-bar");
+  await page.evaluate(seedProject);
+  await page.evaluate(seedAgent);
+  await page.evaluate(seedNav);
+  await page.evaluate(seedDiffChanges);
+  await page.evaluate(setDefinition([DEF_LOC]));
+  await page.evaluate(ui(`.openAgent("${AGENT}", "diff")`));
+  await expect(page.locator(".diff-head-path")).toContainText(USE);
+  await expect(page.locator("app-unified-code .monaco-diff-editor")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("app-unified-code")).toContainText("helper();");
+
+  // caret on the `helper` call in the NEW side, then F12
+  await page.evaluate(`(() => {
+    const c = window.ng.getComponent(document.querySelector("app-unified-code"));
+    const ed = c["diffEditor"].getModifiedEditor();
+    ed.setPosition({ lineNumber: 3, column: 2 });
+    ed.focus();
+  })()`);
+  await page.keyboard.press("F12");
+
+  // the request went out for the diff's file, 0-based, WITH the shown text
+  await expect
+    .poll(() => page.evaluate(`window.__nav.calls.filter(([c]) => c === "nav_definition").map(([, a]) => [a.id, a.path, a.line, a.col, a.word, typeof a.text])`))
+    .toEqual([[AGENT, USE, 2, 1, "helper", "string"]]);
+  // and the opener opened def.ts as a file tab at the definition line
+  await expect(page.locator("app-file-view").filter({ hasText: "export function helper" })).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(() => page.evaluate(`(() => { const c = ${editorOf(DEF)}; return c ? c["editor"].getPosition().lineNumber : -1; })()`))
+    .toBe(4);
+});
+
 test("two definitions open Monaco's peek instead of jumping", async ({ page }) => {
   await openUse(page);
   await page.evaluate(setDefinition([DEF_LOC, USE_LOC]));
@@ -210,6 +254,38 @@ test("Search Everywhere · Symbols lists index hits as symbol rows", async ({ pa
   await page.keyboard.press("Enter");
   await expect(se).toHaveCount(0);
   await expect(page.locator("app-file-view").filter({ hasText: "export function helper" })).toBeVisible({ timeout: 15_000 });
+});
+
+test("Search Everywhere · Symbols warms the index, shows its progress and re-queries when it is done", async ({ page }) => {
+  await openUse(page);
+  await page.keyboard.press("Control+K");
+  const se = page.locator("app-search-everywhere");
+  await expect(se.locator("input")).toBeVisible();
+  const indexStarts = () => page.evaluate(`window.__nav.calls.filter(([c]) => c === "symbols_index_start").map(([, a]) => a.id)`);
+  const searches = () => page.evaluate(`window.__nav.calls.filter(([c]) => c === "symbols_search").map(([, a]) => a.query)`);
+  // opening the editor already warmed this worktree; the tab asks again for
+  // every root in scope (idempotent on the backend, deduped per session here)
+  const before = (await indexStarts()) as string[];
+  await se.getByRole("button", { name: /^Symbols/ }).click();
+  await expect(se).toContainText("start typing to search symbols");
+  await expect.poll(indexStarts).toEqual(expect.arrayContaining([AGENT]));
+  expect(((await indexStarts()) as string[]).length).toBeGreaterThanOrEqual(before.length);
+
+  await se.locator("input").fill("hel");
+  await expect.poll(searches).toEqual(["hel"]);
+  await expect(se.locator(".sym-row")).toHaveCount(2, { timeout: 10_000 });
+
+  // the backend reports the root still indexing → progress replaces the
+  // silent "nothing matches", and the query is asked ONCE more when it ends
+  const emit = (payload: unknown) => `window.__nav.handlers.forEach((h) => h(${JSON.stringify(payload)}))`;
+  await page.evaluate(emit({ root: AGENT, state: "indexing", files: 0, done: 2341, total: 10020, elapsedMs: 800 }));
+  await expect(se).toContainText("indexing 2,341 / 10,020 files…");
+  await page.evaluate(emit({ root: AGENT, state: "indexing", files: 0, done: 5000, total: 10020, elapsedMs: 1200 }));
+  await expect(se).toContainText("indexing 5,000 / 10,020 files…");
+  await page.evaluate(emit({ root: AGENT, state: "ready", files: 10020, done: 10020, total: 10020, elapsedMs: 4000 }));
+  await expect(se).not.toContainText("indexing");
+  await expect.poll(searches).toEqual(["hel", "hel", "hel"]);
+  await page.keyboard.press("Escape");
 });
 
 test("footer index chip shows while a root indexes and hides when ready", async ({ page }) => {

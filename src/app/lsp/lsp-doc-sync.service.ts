@@ -1,5 +1,6 @@
 import { effect, inject, Injectable, untracked } from "@angular/core";
 import { BRIDGE, Commands } from "../data-source/bridge";
+import { ExtensionsStore } from "../extensions/extensions.store";
 import { AgentsStore } from "../stores/agents.store";
 import { EditsStore } from "../stores/edits.store";
 import { UiStore } from "../ui/ui.store";
@@ -59,10 +60,15 @@ interface Tracked {
  *   settle, full text, monotonic version;
  * - a key disappears → `lsp_doc_close`.
  *
- * Gated: a file is tracked only while a starting/ready/idle server answers
- * for its language in the project of that root — no server, no traffic (the
- * backend would drop it anyway; this saves the IPC). A server going away
- * simply forgets the file; it is re-opened when one comes back.
+ * Gated: a file is tracked while a starting/ready/idle server answers for
+ * its language in the project of that root — OR while an installed + enabled
+ * server pack claims the language and no instance exists there yet. That
+ * first `lsp_doc_open` is what STARTS the server (the backend acquires one
+ * per project on it and queues the document until the handshake is done);
+ * with the `starting` row already tracked, its arrival re-opens nothing. A
+ * parked instance (crashed, stopped, missing) gets no traffic: the file is
+ * forgotten and re-opened when a syncable instance comes back. No pack at
+ * all → no IPC ever.
  *
  * Started once from the shell (like InterestService) — `start()` only forces
  * construction; the work is the constructor effect.
@@ -74,6 +80,7 @@ export class LspDocSyncService {
   private readonly edits = inject(EditsStore);
   private readonly agents = inject(AgentsStore);
   private readonly lsp = inject(LspStatusStore);
+  private readonly extensions = inject(ExtensionsStore);
 
   private readonly tracked = new Map<string, Tracked>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -84,8 +91,25 @@ export class LspDocSyncService {
       this.edits.editTick();
       this.lsp.servers();
       this.agents.all();
+      this.extensions.servers();
       untracked(() => this.reconcile(keys));
     });
+  }
+
+  /** An installed + enabled server pack lists `lang`: opening a file of it
+   *  is worth an IPC even before any instance exists (it starts one). */
+  private packClaims(lang: string): boolean {
+    return this.extensions.servers().some((p) => p.installed && p.enabled && p.languages.includes(lang));
+  }
+
+  /** Whether `lang` in `projectId` should receive document traffic now. */
+  private wants(projectId: string, lang: string): boolean {
+    if (!lang) return false;
+    if (this.lsp.liveFor(projectId, lang)) return true;
+    // a parked instance (crashed / stopped / missing) must not be poked
+    // awake by an open — the backend's backoff and the user's Stop own that
+    if (this.lsp.instanceFor(projectId, lang)) return false;
+    return this.packClaims(lang);
   }
 
   start(): void {
@@ -103,8 +127,7 @@ export class LspDocSyncService {
     for (const { id, path } of keys) {
       const k = `${id}:${path}`;
       const lang = langId(path);
-      const server = lang ? this.lsp.liveFor(this.projectOf(id), lang) : undefined;
-      if (!server) {
+      if (!this.wants(this.projectOf(id), lang)) {
         // no server for it (any more): forget silently — there is nothing
         // on the other side to close
         if (this.tracked.has(k)) this.forget(k);

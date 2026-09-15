@@ -35,10 +35,11 @@ pub async fn process_tree(
     agents: State<'_, AgentService>,
     job: State<'_, crate::runtime::jobobj::JobGuard>,
     webviews: State<'_, super::WebviewFamily>,
+    lsp: State<'_, crate::lsp::LspService>,
     discover: Option<bool>,
 ) -> Result<super::tree::ProcessTreeSnapshot, String> {
     let labels = agent_labels(&agents);
-    let agent_roots: Vec<(String, String, u32)> = runtime
+    let mut agent_roots: Vec<(String, String, u32)> = runtime
         .pids()
         .into_iter()
         .map(|(id, pid)| {
@@ -49,6 +50,10 @@ pub async fn process_tree(
             (id.to_string(), label, pid)
         })
         .collect();
+    // Language servers are carved out exactly like agent subtrees (they are
+    // direct children of orrery too): `lsp:<extId>:<projectId>` roots, so the
+    // Resources tab shows what each server costs (user, 2026-09-15).
+    agent_roots.extend(lsp.tree_roots());
     let job_pids = job.pids();
     let webview_roots: Vec<u32> = webviews.0.lock().unwrap().clone();
     let shared = shared.inner().clone();

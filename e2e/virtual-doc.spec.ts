@@ -159,10 +159,6 @@ test("F12 to a jdt:// location opens a read-only library tab", async ({ page }) 
   await page.keyboard.press("Enter");
   expect(await page.evaluate(`${editorOf(JDT)}["editor"].getValue()`)).toBe(JDT_TEXT);
   expect(await page.evaluate(`${editorOf(JDT)}["edits"].get("${AGENT}", ${JSON.stringify(JDT)}) ?? null`)).toBeNull();
-  // the read-only doc is not a "recent file" of the worktree
-  const recent = await page.evaluate(`JSON.stringify(${editorOf(JDT)}["nav"]["registry"]["recents"].entries())`);
-  expect(recent).toContain("use.ts");
-  expect(recent).not.toContain("ArrayList");
 
   // closing the tab from the strip removes it (no save prompt, no leftovers)
   await tab.hover();

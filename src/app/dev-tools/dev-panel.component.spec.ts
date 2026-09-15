@@ -288,6 +288,34 @@ describe("DevPanelComponent resources tab (merged tree)", () => {
     expect(rows[3].textContent).toContain("node.exe");
   });
 
+  it("a language server is its own carved-out root: server icon, its own split figure, never an agent alert", async () => {
+    const tree: ProcessTreeSnapshot = {
+      ...TREE,
+      roots: [
+        ...TREE.roots,
+        {
+          id: "lsp:server.typescript-language-server:p-1",
+          label: "ts-ls · orrery",
+          node: pn({ pid: 30, name: "node.exe", cpu: 1.1, privBytes: 900 * 2 ** 20 }),
+        },
+      ],
+    };
+    const fixture = setup([], SNAP, tree);
+    const el = await openResources(fixture);
+    const split = el.querySelector("[data-testid=res-servers]");
+    expect(split?.textContent).toContain("language servers");
+    expect(split?.textContent).toContain("900.0 MB");
+    // the agents figure does not absorb it
+    expect(fixture.componentInstance.agentsPriv()).toBe(2200 * 2 ** 20);
+    expect(fixture.componentInstance.serversPriv()).toBe(900 * 2 ** 20);
+    // 900 MB is above the runaway-child line, but a server doing its job is not an agent alert
+    expect(fixture.componentInstance.treeAlerts().map((a) => a.id)).toEqual(["ag-1"]);
+    const rows = el.querySelectorAll(".dvc-tbl tbody tr");
+    expect(rows.length).toBe(5);
+    expect(rows[4].textContent).toContain("ts-ls · orrery"); // the label, not "node.exe"
+    expect(rows[4].querySelector("[title='language server']")).not.toBeNull();
+  });
+
   it("collapsing the Orrery App root hides every process row beneath it", async () => {
     const fixture = setup([], SNAP, TREE);
     const el = await openResources(fixture);

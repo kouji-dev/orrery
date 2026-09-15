@@ -110,15 +110,15 @@ async function boot(page: Page): Promise<void> {
 const chip = (page: Page) => page.locator("app-status-bar [data-testid=lsp-chip]");
 const pop = (page: Page) => page.locator("[data-testid=lsp-popover]");
 
-test("one instance → 'jdtls · 812 MB'; three across two projects → '3 servers · 2.1 GB'; empty → gone", async ({ page }) => {
+test("any live instance → 'servers' (name and memory stay in the popover); tints follow the states; empty → 'no servers'", async ({ page }) => {
   await boot(page);
   await page.evaluate(emit(ONE));
   await expect(chip(page)).toBeVisible();
-  await expect(chip(page)).toHaveText(/jdtls · 812\.0 MB/);
+  await expect(chip(page)).toHaveText("servers");
   await expect(chip(page)).toHaveClass(/running/);
 
   await page.evaluate(emit(THREE));
-  await expect(chip(page)).toHaveText(/3 servers · 2\.1 GB/);
+  await expect(chip(page)).toHaveText("servers");
   await expect(chip(page)).toHaveAttribute("title", "jdtls · e2e-proj\ngopls · e2e-proj\njdtls · second");
 
   // any starting → spinner; any crashed → tint + count; all idle → dimmed
@@ -127,13 +127,40 @@ test("one instance → 'jdtls · 812 MB'; three across two projects → '3 serve
   await expect(chip(page)).toHaveClass(/starting/);
   await page.evaluate(emit([...ONE, inst({ id: "server.gopls:p-e2e", extId: "server.gopls", label: "gopls", state: "crashed", memBytes: 0, lastError: "exit code 1\njava.lang.OutOfMemoryError" })]));
   await expect(chip(page)).toHaveClass(/error/);
-  await expect(chip(page)).toHaveText(/1 error/);
+  await expect(chip(page)).toHaveText("servers");
   await page.evaluate(emit([inst({ id: "server.jdtls:p-e2e", state: "idle" })]));
   await expect(chip(page)).toHaveClass(/idle/);
 
   await page.evaluate(emit([]));
   await expect(chip(page)).toHaveClass(/none/);
   await expect(chip(page)).toHaveText("no servers");
+});
+
+test("a server that could not be launched is listed as 'not found' with its reason, not hidden", async ({ page }) => {
+  await boot(page);
+  // nothing runs, but the chip must not read as "no servers" and nothing else
+  await page.evaluate(
+    emit([inst({ id: "server.jdtls:p-e2e", state: "missing", pid: null, memBytes: 0, startedAt: null, lastError: "runtime.java is not installed — reinstall server.jdtls from Extensions" })]),
+  );
+  await expect(chip(page)).toHaveClass(/error/);
+  await expect(chip(page)).toHaveText("no servers");
+  await chip(page).click();
+  await expect(pop(page)).toBeVisible();
+  await expect(page.locator("[data-testid=lsp-empty]")).toHaveCount(0);
+  const row = pop(page).locator(".lsp-row.err");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("not found");
+  await expect(row.locator(".lsp-err")).toContainText("runtime.java is not installed");
+  // nothing to stop; Restart forces a fresh launch attempt
+  await expect(row.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await row.hover();
+  await row.getByRole("button", { name: "Restart" }).click();
+  await expect.poll(() => calls(page, "lsp_restart")).toEqual([{ extId: "server.jdtls", projectId: "p-e2e" }]);
+  // a manual stop stays listed too, quietly (no error tint, no count)
+  await page.evaluate(emit([inst({ id: "server.jdtls:p-e2e", state: "stopped", pid: null, memBytes: 0, startedAt: null })]));
+  await expect(chip(page)).toHaveClass(/none/);
+  await expect(chip(page)).toHaveText("no servers");
+  await expect(pop(page).locator(".lsp-row.dim")).toContainText("stopped");
 });
 
 test("with nothing running the marker still opens and explains itself", async ({ page }) => {
@@ -159,7 +186,7 @@ test("popover: rows grouped by project, Stop → lsp_stop, Stop all → lsp_stop
   await chip(page).click();
   await expect(pop(page)).toBeVisible();
   await expect(pop(page).locator(".lsp-pop-h")).toContainText("Language servers");
-  await expect(pop(page).locator(".lsp-pop-h .tot")).toHaveText("3 · 2.1 GB");
+  await expect(pop(page).locator(".lsp-pop-h .tot")).toHaveText("3 · 2.10 GB");
 
   const groups = pop(page).locator(".lsp-g");
   await expect(groups).toHaveCount(2);
@@ -170,7 +197,7 @@ test("popover: rows grouped by project, Stop → lsp_stop, Stop all → lsp_stop
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0).locator(".nm")).toHaveText("jdtls");
   await expect(rows.nth(0)).toContainText("running");
-  await expect(rows.nth(0).locator(".fig").first()).toHaveText("1.0 GB");
+  await expect(rows.nth(0).locator(".fig").first()).toHaveText("1.00 GB");
   await expect(rows.nth(1).locator(".nm")).toHaveText("gopls");
   // uptime ticks while the popover is open
   await expect(rows.nth(0).locator(".fig.sub")).toContainText(/(\d+m )?\d+s$/);
@@ -243,7 +270,7 @@ test("Extensions modal: a server row lists its live instances and the nav foot c
   );
   await expect(row.locator(".ext-up")).toHaveText("4 instances");
   const sum = row.locator(".ext-inst.sum");
-  await expect(sum).toHaveText(/2 running · 1 idle · 1 error · 2\.1 GB/);
+  await expect(sum).toHaveText(/2 running · 1 idle · 1 error · 2.1 GB/);
   await sum.click();
   await expect(row.locator(".ext-inst:not(.sum)")).toHaveCount(4);
   await expect(row.locator(".ext-inst.err .ext-line.err")).toContainText("boom");

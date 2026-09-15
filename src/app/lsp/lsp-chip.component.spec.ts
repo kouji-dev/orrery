@@ -7,7 +7,7 @@ import { ExtensionsStore } from "../extensions/extensions.store";
 import { LspServer, LspStatus } from "../models";
 import { IconComponent } from "../shared/icon.component";
 import { UiStore } from "../ui/ui.store";
-import { LspChipComponent, liveOf, uptimeOf } from "./lsp-chip.component";
+import { LspChipComponent, liveOf, shortLabel, uptimeOf } from "./lsp-chip.component";
 import { LspStatusStore } from "./lsp-status.store";
 
 beforeAll(() => {
@@ -100,22 +100,27 @@ describe("LspChip", () => {
     // server that never came up), so it renders in its quietest form instead
     expect(text(chip(s)!)).toBe("no servers");
     expect(chip(s)!.classList.contains("none")).toBe(true);
-    // stopped / missing rows still do not count as running
-    s.emit({ servers: [server({ id: "server.jdtls:p1", state: "stopped" }), server({ id: "server.gopls:p1", state: "missing" })] });
+    // a stopped row does not count as running and stays quiet…
+    s.emit({ servers: [server({ id: "server.jdtls:p1", state: "stopped", memBytes: 0 })] });
     expect(text(chip(s)!)).toBe("no servers");
     expect(chip(s)!.classList.contains("none")).toBe(true);
+    // …but a server that could not be LAUNCHED is an error to see, not a gap
+    s.emit({ servers: [server({ id: "server.gopls:p1", state: "missing", memBytes: 0, lastError: "gopls not found" })] });
+    expect(text(chip(s)!)).toBe("no servers");
+    expect(chip(s)!.classList.contains("error")).toBe(true);
+    expect(chip(s)!.classList.contains("none")).toBe(false);
   });
 
-  it("one instance → '<label> · <mem>' with the server icon", async () => {
+  it("one instance → 'servers' with the server icon; the name and memory stay in the tooltip / popover", async () => {
     const s = await setup({ servers: [server({ id: "server.jdtls:p1" })] });
     const c = chip(s)!;
-    expect(text(c)).toBe("jdtls · 812.0 MB");
+    expect(text(c)).toBe("servers");
     expect(c.classList.contains("running")).toBe(true);
     expect(c.querySelector("kj-spinner")).toBeNull();
     expect(c.title).toBe("jdtls · p1");
   });
 
-  it("three instances across two projects → '3 servers · <total>'", async () => {
+  it("three instances across two projects → still just 'servers'; the tooltip lists them", async () => {
     const s = await setup({
       servers: [
         server({ id: "server.jdtls:p1", memBytes: 1024 * MB }),
@@ -123,7 +128,7 @@ describe("LspChip", () => {
         server({ id: "server.gopls:p1", language: "go", memBytes: 102.4 * MB }),
       ],
     });
-    expect(text(chip(s))).toBe("3 servers · 2.1 GB");
+    expect(text(chip(s))).toBe("servers");
     expect(chip(s)!.title.split("\n")).toEqual(["jdtls · p1", "jdtls · two", "gopls · p1"]);
   });
 
@@ -133,15 +138,16 @@ describe("LspChip", () => {
     expect(chip(s)!.querySelector("kj-spinner")).not.toBeNull();
   });
 
-  it("a crashed instance tints the chip and appends the error count", async () => {
+  it("a crashed instance tints the chip without adding text; all crashed → 'no servers' in the error tint", async () => {
     const s = await setup({
       servers: [server({ id: "server.jdtls:p1" }), server({ id: "server.gopls:p1", language: "go", state: "crashed", memBytes: 0, lastError: "exit 1" })],
     });
     const c = chip(s)!;
     expect(c.classList.contains("error")).toBe(true);
-    expect(Array.from(c.querySelectorAll(".mono")).map(text)).toEqual(["2 servers · 812.0 MB", "· 1 error"]);
+    expect(text(c)).toBe("servers");
     s.emit({ servers: [server({ id: "a:p1", state: "crashed", memBytes: 0 }), server({ id: "b:p1", state: "crashed", memBytes: 0 })] });
-    expect(text(chip(s))).toContain("2 errors");
+    expect(text(chip(s))).toBe("no servers");
+    expect(chip(s)!.classList.contains("error")).toBe(true);
   });
 
   it("dims when every instance idles; falls back to 'no servers' when the list empties", async () => {
@@ -154,11 +160,35 @@ describe("LspChip", () => {
 });
 
 describe("LspChip helpers", () => {
+  it("shortLabel: known packs get their tool name, long labels fall back to the pack id, short ones stay", () => {
+    expect(shortLabel({ extId: "server.typescript-language-server", label: "TypeScript language server" })).toBe("ts-ls");
+    expect(shortLabel({ extId: "server.jdtls", label: "Eclipse JDT Language Server" })).toBe("jdtls");
+    expect(shortLabel({ extId: "server.clangd", label: "clangd" })).toBe("clangd");
+    expect(shortLabel({ extId: "server.clangd", label: "The clangd C/C++ language server" })).toBe("clangd");
+  });
+
+  it("the row shows the short name, two-decimal memory and two-decimal cpu; the chip and tooltip do not carry them", async () => {
+    const s = await setup({
+      servers: [server({ id: "server.typescript-language-server:p1", label: "TypeScript language server", memBytes: 604.6 * MB, cpu: 6.351164 })],
+    });
+    expect(text(chip(s))).toBe("servers");
+    expect(chip(s)!.title).toBe("TypeScript language server · p1");
+    const head = s.el.querySelector<HTMLElement>(".lsp-pop-h .tot")!;
+    expect(text(head)).toBe("1 · 604.60 MB");
+    const row = s.el.querySelector<HTMLElement>(".lsp-row")!;
+    expect(text(row.querySelector(".nm"))).toBe("ts-ls");
+    expect(text(row.querySelector(".fig"))).toBe("604.60 MB");
+    expect(text(row.querySelector(".fig.sub"))).toMatch(/^6\.35% · /);
+    expect(row.querySelector<HTMLElement>(".lsp-row-m")!.title).toContain("cpu 6.35%");
+  });
+
   it("liveOf maps backend states to the design's LiveBadge", () => {
     expect(liveOf(server({ id: "a:p", state: "starting" }))).toEqual({ tone: "live", label: "starting", spin: true });
     expect(liveOf(server({ id: "a:p", state: "ready" }))).toEqual({ tone: "live", label: "running", spin: false });
     expect(liveOf(server({ id: "a:p", state: "idle" }))).toEqual({ tone: "idle", label: "idle", spin: false });
     expect(liveOf(server({ id: "a:p", state: "crashed" }))).toEqual({ tone: "err", label: "error", spin: false });
+    expect(liveOf(server({ id: "a:p", state: "missing" }))).toEqual({ tone: "err", label: "not found", spin: false });
+    expect(liveOf(server({ id: "a:p", state: "stopped" }))).toEqual({ tone: "idle", label: "stopped", spin: false });
   });
 
   it("uptimeOf counts from startedAt, '—' before the process is up or after a crash", () => {

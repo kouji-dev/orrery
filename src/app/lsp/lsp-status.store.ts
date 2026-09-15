@@ -20,6 +20,12 @@ export function isLive(s: LspServer): boolean {
   return s.state !== "stopped" && s.state !== "missing";
 }
 
+/** Instances the footer counts as failed: a process that died, or one that
+ *  could not be launched at all (`missing` carries the reason as its error). */
+export function isError(s: LspServer): boolean {
+  return s.state === "crashed" || s.state === "missing";
+}
+
 /** Instances a document should be synced to: up, or about to be. */
 export function isSyncable(s: LspServer): boolean {
   return s.state === "starting" || s.state === "ready" || s.state === "idle";
@@ -42,25 +48,30 @@ export class LspStatusStore {
   /** Instance ids with a stop/restart in flight (buttons disable meanwhile). */
   readonly busy = signal<ReadonlySet<string>>(new Set());
 
+  /** Every instance the backend still lists — including `missing` (never
+   *  launched) and `stopped` (manual stop, or crashed past the retry table):
+   *  those are exactly the rows a user needs to SEE, so the popover and the
+   *  modal never hide them. The backend forgets idle-reaped ones itself. */
+  readonly listed = computed(() => this.servers());
   readonly running = computed(() => this.servers().filter(isLive));
-  readonly any = computed(() => this.running().length > 0);
+  readonly any = computed(() => this.listed().length > 0);
   readonly totalMem = computed(() => this.running().reduce((n, s) => n + (s.memBytes || 0), 0));
   readonly starting = computed(() => this.running().filter((s) => s.state === "starting"));
-  readonly errors = computed(() => this.running().filter((s) => s.state === "crashed"));
-  readonly allIdle = computed(() => this.any() && this.running().every((s) => s.state === "idle"));
+  readonly errors = computed(() => this.listed().filter(isError));
+  readonly allIdle = computed(() => this.running().length > 0 && this.running().every((s) => s.state === "idle"));
   readonly aggregate = computed<LspAggregate>(() => {
     if (this.errors().length) return "error";
     if (this.starting().length) return "starting";
     // "none" is a real footer state, not a reason to hide: the marker is
     // permanent so a crash or a server that never came up is always visible.
-    if (!this.any()) return "none";
+    if (!this.running().length) return "none";
     if (this.allIdle()) return "idle";
     return "running";
   });
-  /** Live instances grouped by project, in first-seen order. */
+  /** Listed instances grouped by project, in first-seen order. */
   readonly byProject = computed<LspProjectGroup[]>(() => {
     const groups: LspProjectGroup[] = [];
-    for (const s of this.running()) {
+    for (const s of this.listed()) {
       let g = groups.find((x) => x.projectId === s.projectId);
       if (!g) groups.push((g = { projectId: s.projectId, projectName: s.projectName, rows: [] }));
       g.rows.push(s);
@@ -108,9 +119,19 @@ export class LspStatusStore {
     this.servers.set(Array.isArray(p?.servers) ? p!.servers : []);
   }
 
-  /** Live instances of one server pack (the Extensions modal's sub-rows). */
+  /** Listed instances of one server pack (the Extensions modal's sub-rows). */
   instancesOf(extId: string): LspServer[] {
-    return this.running().filter((s) => s.extId === extId);
+    return this.listed().filter((s) => s.extId === extId);
+  }
+
+  /** The instance answering `lang` for `projectId` in ANY state — the doc
+   *  sync asks before opening a file whether a stopped / missing / crashed
+   *  one is parked there (an open must not wake those). */
+  instanceFor(projectId: string, lang: string): LspServer | undefined {
+    if (!lang) return undefined;
+    return this.listed().find(
+      (s) => s.projectId === projectId && (s.language === lang || this.extensions.languagesOfServer(s.extId).includes(lang)),
+    );
   }
 
   /** The syncable instance answering `lang` for `projectId`, if any. The

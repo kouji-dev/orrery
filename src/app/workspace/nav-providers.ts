@@ -13,6 +13,22 @@ import { DocSymbol, LibHint, NavHover, NavLocation, NavResult } from "../models"
  */
 
 export const MODEL_SCHEME = "orrery";
+/** `orrery-diff://<id>~<n>/<path>` — the model uri of the NEW side of a
+ *  diff surface (the agent's change view, the git tool window). Same id +
+ *  path as the worktree file so hover / Ctrl+click / references route to the
+ *  same backend lookups (user, 2026-09-15: navigation must work in diffs,
+ *  not only in open files), but its own scheme + a serial so it never
+ *  collides with the editor's model of that file or with a second diff of
+ *  it. The serial rides in the authority behind `~` (unreserved, so neither
+ *  Monaco's `Uri.toString()` nor a percent-decoder touches it; a query
+ *  string would be re-encoded on the way through). The OLD side stays
+ *  anonymous: its text is not what is on disk. */
+export const DIFF_MODEL_SCHEME = "orrery-diff";
+let diffSeq = 0;
+export function diffModelUri(id: string, path: string): string {
+  const p = path.replace(/%/g, "%25").replace(/#/g, "%23").replace(/\?/g, "%3F");
+  return `${DIFF_MODEL_SCHEME}://${id}~${++diffSeq}/${p}`;
+}
 
 /** `orrery://<id>/<path>` — the model uri of a worktree file. `#`, `?` and
  *  `%` are the three characters Uri parsing would misread as query/fragment
@@ -27,7 +43,7 @@ export function modelUri(id: string, path: string): string {
  *  `Uri.toString()` emits). Null for every other scheme — those are virtual
  *  read-only docs (M4) and never map to a worktree file. */
 export function parseModelUri(uri: string): { id: string; path: string } | null {
-  const m = /^orrery:\/\/([^/?#]+)\/([^?#]*)$/.exec(uri);
+  const m = /^orrery(?:-diff)?:\/\/([^/?#~]+)(?:~[^/?#]*)?\/([^?#]*)$/.exec(uri);
   if (!m) return null;
   return { id: safeDecode(m[1]), path: safeDecode(m[2]) };
 }
@@ -43,7 +59,13 @@ function safeDecode(s: string): string {
 /** Whether a tab path is a virtual read-only document (any scheme but the
  *  worktree's own `orrery://`) rather than a worktree-relative path. */
 export function isVirtualUri(p: string): boolean {
-  return p.includes("://") && !p.startsWith(MODEL_SCHEME + "://");
+  return p.includes("://") && !p.startsWith(MODEL_SCHEME + "://") && !p.startsWith(DIFF_MODEL_SCHEME + "://");
+}
+
+/** A diff surface's model: its text is what the user is looking at, which
+ *  may differ from the worktree file — so lookups always carry it. */
+function isDiffModel(model: monacoApi.editor.ITextModel): boolean {
+  return model.uri.toString().startsWith(DIFF_MODEL_SCHEME + ":");
 }
 
 /** Raw virtual uris by their Monaco spelling: `Uri.parse(raw).toString()`
@@ -246,7 +268,7 @@ export function buildProviders(monaco: NavMonaco, deps: NavDeps): NavProviders {
   }
 
   const textFor = (model: monacoApi.editor.ITextModel, id: string, path: string) =>
-    deps.sendText?.(id, path) ? model.getValue() : undefined;
+    isDiffModel(model) || deps.sendText?.(id, path) ? model.getValue() : undefined;
 
   async function ensureAll(locs: NavLocation[]): Promise<void> {
     await Promise.all(locs.map((l) => deps.ensureModel(locationUri(l)).catch(() => null)));

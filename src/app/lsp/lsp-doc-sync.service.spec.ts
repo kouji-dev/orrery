@@ -56,6 +56,8 @@ describe("LspDocSyncService", () => {
   let edits: EditsStore;
   let paneRoots: ReturnType<typeof signal<Record<string, PaneNode>>>;
   let agents: ReturnType<typeof signal<{ id: string; projectId: string }[]>>;
+  /** Registry view: installed + enabled server packs by language. */
+  let packs: ReturnType<typeof signal<{ id: string; installed: boolean; enabled: boolean; languages: string[] }[]>>;
   const tick = () => TestBed.inject(ApplicationRef).tick();
   const docCalls = () => invoke.mock.calls.filter((c) => String(c[0]).startsWith("lsp_doc_")).map((c) => [c[0], c[1]]);
   const push = (status: LspStatus) => {
@@ -69,6 +71,7 @@ describe("LspDocSyncService", () => {
     handlers = [];
     paneRoots = signal<Record<string, PaneNode>>({});
     agents = signal<{ id: string; projectId: string }[]>([{ id: A, projectId: "p1" }]);
+    packs = signal<{ id: string; installed: boolean; enabled: boolean; languages: string[] }[]>([]);
     const bridge: Bridge = {
       invoke: invoke as unknown as Bridge["invoke"],
       on: async (event, handler) => {
@@ -85,7 +88,10 @@ describe("LspDocSyncService", () => {
         { provide: BRIDGE, useValue: bridge },
         { provide: UiStore, useValue: { flash: vi.fn(), paneRoots } },
         { provide: AgentsStore, useValue: { all: agents } },
-        { provide: ExtensionsStore, useValue: { languagesOfServer: (id: string) => (id === "server.tsls" ? ["javascript", "typescript"] : []), servers: () => [] } },
+        {
+          provide: ExtensionsStore,
+          useValue: { languagesOfServer: (id: string) => (id === "server.tsls" ? ["javascript", "typescript"] : []), servers: packs },
+        },
       ],
     });
     TestBed.inject(LspStatusStore);
@@ -188,6 +194,57 @@ describe("LspDocSyncService", () => {
     edits.open("p1", JAVA, "x");
     push({ servers: [server({ id: "server.jdtls:p1" })] });
     expect(docCalls()).toEqual([["lsp_doc_open", { id: "p1", path: JAVA, text: "x", languageId: "java" }]]);
+  });
+
+  describe("an installed + enabled pack claims the language (no instance yet)", () => {
+    const JDTLS = { id: "server.jdtls", installed: true, enabled: true, languages: ["java"] };
+
+    it("opens the doc at once — that first open is what starts the server", () => {
+      packs.set([JDTLS]);
+      edits.open(A, JAVA, "class Main {}");
+      openTab(JAVA);
+      expect(docCalls()).toEqual([["lsp_doc_open", { id: A, path: JAVA, text: "class Main {}", languageId: "java" }]]);
+      // the `starting` row the backend answers with re-opens nothing: the
+      // handle queued the doc for its handshake
+      push({ servers: [server({ id: "server.jdtls:p1", state: "starting", pid: null, startedAt: null })] });
+      push({ servers: [server({ id: "server.jdtls:p1", state: "ready" })] });
+      expect(docCalls().length).toBe(1);
+      // a file of another language still gets nothing
+      edits.open(A, RS, "fn main() {}");
+      paneRoots.set({ t1: { ...leaf(A, "file"), files: [JAVA, RS] } });
+      tick();
+      expect(docCalls().length).toBe(1);
+    });
+
+    it("a pack that is installed but switched off, or listed but not installed, opens nothing", () => {
+      packs.set([{ ...JDTLS, enabled: false }, { id: "server.gopls", installed: false, enabled: false, languages: ["go"] }]);
+      edits.open(A, JAVA, "x");
+      edits.open(A, "main.go", "package main");
+      paneRoots.set({ t1: { ...leaf(A, "file"), files: [JAVA, "main.go"] } });
+      tick();
+      expect(docCalls()).toEqual([]);
+      // the pack being enabled later (registry push) opens the file then
+      packs.set([JDTLS]);
+      tick();
+      expect(docCalls()).toEqual([["lsp_doc_open", { id: A, path: JAVA, text: "x", languageId: "java" }]]);
+    });
+
+    it("never pokes a parked instance: crashed / stopped / missing get no open until one is syncable again", () => {
+      packs.set([JDTLS]);
+      push({ servers: [server({ id: "server.jdtls:p1", state: "missing", pid: null, lastError: "runtime.java is missing" })] });
+      edits.open(A, JAVA, "x");
+      openTab(JAVA);
+      expect(docCalls()).toEqual([]);
+      push({ servers: [server({ id: "server.jdtls:p1", state: "stopped", pid: null })] });
+      expect(docCalls()).toEqual([]);
+      // the user restarts it → starting → the file is opened (and queued there)
+      push({ servers: [server({ id: "server.jdtls:p1", state: "starting", pid: null, startedAt: null })] });
+      expect(docCalls()).toEqual([["lsp_doc_open", { id: A, path: JAVA, text: "x", languageId: "java" }]]);
+      // it crashes → forgotten; its backoff restart re-opens
+      push({ servers: [server({ id: "server.jdtls:p1", state: "crashed", pid: null, lastError: "exit 1" })] });
+      push({ servers: [server({ id: "server.jdtls:p1", state: "starting", pid: null, startedAt: null })] });
+      expect(docCalls().map(([c]) => c)).toEqual(["lsp_doc_open", "lsp_doc_open"]);
+    });
   });
 
   it("virtual uris are never synced", () => {

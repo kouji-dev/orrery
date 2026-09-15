@@ -83,6 +83,29 @@ pub fn lsp_restart(lsp: State<'_, LspService>, ext_id: String, project_id: Uuid)
     crate::perf::timed("lsp_restart", || lsp.restart(&ext_id, project_id))
 }
 
+/// An agent started in the project owning `id` (`pinned`) / the last one
+/// there stopped (`!pinned`): auto-start the servers of the languages the
+/// project uses and hold them, or release them to the idle reaper. Answers
+/// the pack ids acquired.
+#[tauri::command(async)]
+pub fn lsp_pin_project(
+    lsp: State<'_, LspService>,
+    agents: State<'_, AgentService>,
+    projects: State<'_, ProjectService>,
+    id: Uuid,
+    pinned: bool,
+) -> AppResult<Vec<String>> {
+    crate::perf::timed("lsp_pin_project", || {
+        let (_, project) = resolve_project(&agents, &projects, id)?;
+        if pinned {
+            Ok(lsp.pin_project(project))
+        } else {
+            lsp.unpin_project(project.id);
+            Ok(Vec::new())
+        }
+    })
+}
+
 #[tauri::command(async)]
 pub fn lsp_stop_all(lsp: State<'_, LspService>) -> AppResult<()> {
     crate::perf::timed("lsp_stop_all", || {
@@ -111,7 +134,7 @@ pub fn lsp_doc_open(
         let (worktree, project) = resolve_project(&agents, &projects, id)?;
         let (abs, lang) = resolve_doc(&worktree, &path)?;
         if let Some(lang) = lang {
-            lsp.doc_open(&lang, project.id, &abs, text, 1);
+            lsp.doc_open(&lang, project, &abs, text, 1);
         }
         Ok(())
     })

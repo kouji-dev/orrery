@@ -22,7 +22,7 @@ pub mod virtual_docs;
 #[cfg(test)]
 mod smoke_tests;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
@@ -93,6 +93,71 @@ pub fn language_of(rel: &str) -> Option<Lang> {
         _ => return None,
     };
     Some(Lang { id, lsp_id })
+}
+
+/// Languages a project root evidently uses: build markers at the root plus
+/// a shallow, gitignore-aware walk (three levels, capped) over file
+/// extensions. Feeds `pin_project`. A marker alone counts — a fresh
+/// TypeScript project with a `tsconfig.json` and no source yet still gets
+/// its server — and the walk catches a monorepo whose markers sit one level
+/// down.
+pub fn detect_languages(root: &Path) -> Vec<&'static str> {
+    const MARKERS: &[(&str, &str)] = &[
+        ("tsconfig.json", "typescript"),
+        ("package.json", "javascript"),
+        ("Cargo.toml", "rust"),
+        ("go.mod", "go"),
+        ("pom.xml", "java"),
+        ("build.gradle", "java"),
+        ("build.gradle.kts", "java"),
+        ("pyproject.toml", "python"),
+        ("requirements.txt", "python"),
+        ("setup.py", "python"),
+    ];
+    const MAX_ENTRIES: usize = 5000;
+    fn add(found: &mut Vec<&'static str>, lang: &'static str) {
+        if !found.contains(&lang) {
+            found.push(lang);
+        }
+    }
+    let mut found: Vec<&'static str> = Vec::new();
+    for (file, lang) in MARKERS {
+        if root.join(file).is_file() {
+            add(&mut found, lang);
+        }
+    }
+    let walker = ignore::WalkBuilder::new(root)
+        .max_depth(Some(3))
+        .hidden(true)
+        .git_ignore(true)
+        .filter_entry(|e| {
+            !matches!(
+                e.file_name().to_str(),
+                Some("node_modules" | "target" | "dist" | "build" | "vendor" | "out" | "__pycache__")
+            )
+        })
+        .build();
+    for (seen, entry) in walker.flatten().enumerate() {
+        if seen >= MAX_ENTRIES {
+            break;
+        }
+        if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            continue;
+        }
+        if let Some(l) = language_of(&entry.file_name().to_string_lossy()) {
+            add(&mut found, l.id);
+        }
+    }
+    found
+}
+
+/// The footer / process-tree name of a server pack
+/// (`server.typescript-language-server` → `ts-ls`, `server.jdtls` → `jdtls`).
+pub fn short_label(ext_id: &str) -> &str {
+    match ext_id {
+        "server.typescript-language-server" => "ts-ls",
+        other => other.strip_prefix("server.").unwrap_or(other),
+    }
 }
 
 /// Monaco language id of a virtual document served by a server for `lang`.
@@ -298,14 +363,24 @@ pub fn resolve_launch(
     }
 }
 
+/// The reaper's verdict for one handle: a pinned project (an agent works
+/// there) is never idled or stopped; otherwise the plain idle-window rule.
+fn reap_for(pinned: bool, state: State, idle_for: Duration, window: Duration) -> Reap {
+    if pinned {
+        return Reap::Keep;
+    }
+    server::reap_decision(state, idle_for, window)
+}
+
 // ---- service ------------------------------------------------------------------
 
 /// Outcome of asking for a server for `(lang, project)`.
 pub enum Acquire {
     /// No installed + enabled server pack claims the language.
     NotInstalled,
-    /// Spawning / initializing — answer from the index now.
-    Starting,
+    /// Spawning / initializing — answer from the index now; documents
+    /// opened on the handle meanwhile are queued for the handshake.
+    Starting(Arc<ServerHandle>),
     Ready(Arc<ServerHandle>),
     /// Missing program, manual stop, exhausted backoff, or waiting one out.
     Unavailable,
@@ -320,6 +395,9 @@ struct Inner {
     servers: Mutex<HashMap<String, Arc<ServerHandle>>>,
     /// Last metrics tick per server id: `(memBytes, cpu)`.
     metrics: Mutex<HashMap<String, (u64, f32)>>,
+    /// Projects with an agent at work: their servers are auto-started and
+    /// held out of the idle reaper until the frontend unpins them.
+    pinned: Mutex<HashSet<Uuid>>,
     vdocs: VirtualDocs,
     sink: Option<StatusSink>,
 }
@@ -369,6 +447,7 @@ impl LspService {
             workspaces_dir,
             servers: Mutex::new(HashMap::new()),
             metrics: Mutex::new(HashMap::new()),
+            pinned: Mutex::new(HashSet::new()),
             vdocs: VirtualDocs::default(),
             sink,
         });
@@ -392,10 +471,11 @@ impl LspService {
         let minutes = inner.settings.get().map(|s| s.lsp_idle_minutes).unwrap_or(10);
         let window = Duration::from_secs(u64::from(minutes) * 60);
         let handles: Vec<Arc<ServerHandle>> = inner.servers.lock().unwrap().values().cloned().collect();
+        let pinned = inner.pinned.lock().unwrap().clone();
         let mut changed = false;
         for h in handles {
             h.check_alive();
-            match server::reap_decision(h.state(), h.idle_for(), window) {
+            match reap_for(pinned.contains(&h.project.id), h.state(), h.idle_for(), window) {
                 Reap::Keep => {}
                 Reap::MarkIdle => h.mark_idle(),
                 Reap::Stop => {
@@ -414,6 +494,44 @@ impl LspService {
 
     fn key(ext_id: &str, project_id: Uuid) -> String {
         format!("{ext_id}:{project_id}")
+    }
+
+    /// An agent works in `project` (user, 2026-09-15: the servers should be
+    /// up while an agent runs there, not only once a file is opened): start
+    /// every installed + enabled server whose language the project evidently
+    /// uses and hold them all out of the idle reaper until `unpin_project`.
+    /// Parked servers (stopped / missing / backed off) are left alone, as
+    /// everywhere else. Returns the pack ids acquired.
+    pub fn pin_project(&self, project: ProjectRef) -> Vec<String> {
+        self.0.pinned.lock().unwrap().insert(project.id);
+        let mut started: Vec<String> = Vec::new();
+        for lang in detect_languages(&project.root) {
+            let Some(pack) = self.0.ext.server_for_language(lang) else {
+                continue;
+            };
+            if started.contains(&pack.id) {
+                continue;
+            }
+            let name = project.name.clone();
+            match self.acquire(lang, project.id, &project.root, &|| name.clone()) {
+                Acquire::Ready(_) | Acquire::Starting(_) => started.push(pack.id),
+                Acquire::NotInstalled | Acquire::Unavailable => {}
+            }
+        }
+        if !started.is_empty() {
+            log::info!("lsp: pinned project {} → {}", project.name, started.join(", "));
+        }
+        started
+    }
+
+    /// The last agent in the project stopped: its servers go back to the
+    /// idle reaper (they are not stopped here — an open file keeps them).
+    pub fn unpin_project(&self, project_id: Uuid) {
+        self.0.pinned.lock().unwrap().remove(&project_id);
+    }
+
+    pub fn is_pinned(&self, project_id: Uuid) -> bool {
+        self.0.pinned.lock().unwrap().contains(&project_id)
     }
 
     fn handle(&self, key: &str) -> Option<Arc<ServerHandle>> {
@@ -440,6 +558,11 @@ impl LspService {
                 let launch = match resolve_launch(&inner.ext, &pack, &handle.project.root, &storage) {
                     Ok(l) => l,
                     Err(hint) => {
+                        log::warn!(
+                            "lsp {}: cannot launch: {}",
+                            pack.id,
+                            hint.as_deref().unwrap_or("language server not found")
+                        );
                         handle.set_missing(hint);
                         return;
                     }
@@ -499,19 +622,20 @@ impl LspService {
             }
         };
         if fresh {
+            log::info!("lsp {}: acquired for project {} ({})", pack.id, handle.project.name, root.display());
             self.0.emit();
-            self.spawn_start(pack, handle);
-            return Acquire::Starting;
+            self.spawn_start(pack, handle.clone());
+            return Acquire::Starting(handle);
         }
         match handle.state() {
             State::Ready | State::Idle => Acquire::Ready(handle),
-            State::Starting => Acquire::Starting,
+            State::Starting => Acquire::Starting(handle),
             State::Crashed => match handle.begin_start(false) {
                 Begin::Start => {
-                    self.spawn_start(pack, handle);
-                    Acquire::Starting
+                    self.spawn_start(pack, handle.clone());
+                    Acquire::Starting(handle)
                 }
-                Begin::Busy => Acquire::Starting,
+                Begin::Busy => Acquire::Starting(handle),
                 Begin::Wait => Acquire::Unavailable,
             },
             State::Stopped | State::Missing => Acquire::Unavailable,
@@ -583,11 +707,13 @@ impl LspService {
         self.0.metrics.lock().unwrap().clear();
     }
 
-    /// A live server for `(lang, project)` — `None` never starts one.
-    pub fn get_ready(&self, lang: &str, project_id: Uuid) -> Option<Arc<ServerHandle>> {
+    /// The server for `(lang, project)` that document sync may talk to —
+    /// up, or still starting (the handle queues) — `None` never starts one.
+    pub fn get_syncable(&self, lang: &str, project_id: Uuid) -> Option<Arc<ServerHandle>> {
         let pack = self.0.ext.server_for_language(lang)?;
         let h = self.handle(&Self::key(&pack.id, project_id))?;
-        h.state().is_live().then_some(h)
+        let st = h.state();
+        (st.is_live() || st == State::Starting).then_some(h)
     }
 
     /// Any server process alive (drives the metrics cadence).
@@ -598,6 +724,26 @@ impl LspService {
             .unwrap()
             .values()
             .any(|h| h.pid().is_some())
+    }
+
+    /// `("lsp:<extId>:<projectId>", "<short name> · <project>", pid)`: one
+    /// carved-out root per live server for the Resources process tree.
+    pub fn tree_roots(&self) -> Vec<(String, String, u32)> {
+        self.0
+            .servers
+            .lock()
+            .unwrap()
+            .values()
+            .filter_map(|h| {
+                h.pid().map(|pid| {
+                    (
+                        format!("lsp:{}", h.key()),
+                        format!("{} · {}", short_label(&h.ext_id), h.project.name),
+                        pid,
+                    )
+                })
+            })
+            .collect()
     }
 
     /// `("lsp:<extId>:<projectId>", "lsp:<extId>", pid)` rows for the metrics sampler.
@@ -632,22 +778,31 @@ impl LspService {
         self.0.emit();
     }
 
-    // ---- document sync (no-ops without a live server) ----
+    // ---- document sync ----
 
-    pub fn doc_open(&self, lang: &Lang, project_id: Uuid, abs: &Path, text: String, version: i64) {
-        if let Some(h) = self.get_ready(lang.id, project_id) {
-            let _ = h.open(path_to_uri(abs), text, lang.lsp_id, version);
+    /// The editor opened a file: THIS is what starts the server for its
+    /// language in the owning project (lazy per project — the first file,
+    /// not the first Ctrl+click). A stopped / missing / backed-off server
+    /// is left alone: those are the user's or the crash table's call.
+    pub fn doc_open(&self, lang: &Lang, project: ProjectRef, abs: &Path, text: String, version: i64) {
+        let name = project.name.clone();
+        match self.acquire(lang.id, project.id, &project.root, &|| name.clone()) {
+            Acquire::Ready(h) | Acquire::Starting(h) => {
+                let _ = h.open(path_to_uri(abs), text, lang.lsp_id, version);
+            }
+            Acquire::NotInstalled | Acquire::Unavailable => {}
         }
     }
 
+    /// No-ops without a server that is up or starting.
     pub fn doc_change(&self, lang: &Lang, project_id: Uuid, abs: &Path, text: String, version: i64) {
-        if let Some(h) = self.get_ready(lang.id, project_id) {
+        if let Some(h) = self.get_syncable(lang.id, project_id) {
             let _ = h.change(abs, text, version, lang.lsp_id);
         }
     }
 
     pub fn doc_close(&self, lang: &Lang, project_id: Uuid, abs: &Path) {
-        if let Some(h) = self.get_ready(lang.id, project_id) {
+        if let Some(h) = self.get_syncable(lang.id, project_id) {
             let _ = h.close(abs);
         }
     }
@@ -862,5 +1017,144 @@ mod tests {
     fn status_shape() {
         let v = serde_json::to_value(LspStatus::default()).unwrap();
         assert_eq!(v["servers"], json!([]));
+    }
+
+    /// An `LspService` over an in-memory DB holding ONE installed + enabled
+    /// server pack (the jdtls fixture: no launch block, no system fallback,
+    /// so a start parks as `missing` — the wiring is what is under test).
+    fn service_with_pack(manifest_json: &str) -> (LspService, Arc<Mutex<Vec<LspStatus>>>, tempfile::TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db: crate::core::database::DB =
+            Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));
+        let settings = SettingsService::new(db.clone());
+        let ext = ExtensionService::new(
+            db.clone(),
+            settings.clone(),
+            tmp.path().join("extensions"),
+            "0.24.0".into(),
+            Box::new(crate::extensions::registry::HttpFetcher),
+        );
+        let dir = tmp.path().join("extensions").join("server.jdtls").join("1.40.0-1");
+        std::fs::create_dir_all(&dir).unwrap();
+        db.lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO ext_installed (id, kind, version, target, dir, sha256, enabled, manifest_json, installed_at, pending_version)
+                 VALUES (?1, 'server', '1.40.0-1', 'any', ?2, 'x', 1, ?3, 0, NULL)",
+                rusqlite::params!["server.jdtls", dir.to_string_lossy(), manifest_json],
+            )
+            .unwrap();
+        let seen: Arc<Mutex<Vec<LspStatus>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        let lsp = LspService::new(
+            ext,
+            settings,
+            tmp.path().join("lsp-workspaces"),
+            Some(Box::new(move |s| sink.lock().unwrap().push(s.clone()))),
+        );
+        (lsp, seen, tmp)
+    }
+
+    #[test]
+    fn detect_languages_reads_markers_and_a_shallow_walk() {
+        let tmp = tempfile::tempdir().unwrap();
+        let r = tmp.path();
+        assert!(detect_languages(r).is_empty(), "an empty root uses nothing");
+        std::fs::write(r.join("tsconfig.json"), "{}").unwrap();
+        std::fs::write(r.join("package.json"), "{}").unwrap();
+        std::fs::create_dir_all(r.join("api").join("src")).unwrap();
+        std::fs::write(r.join("api").join("pom.xml"), "<project/>").unwrap();
+        std::fs::write(r.join("api").join("src").join("Main.java"), "class Main {}").unwrap();
+        // ignored trees never count: a vendored .py in node_modules is not "python"
+        std::fs::create_dir_all(r.join("node_modules").join("x")).unwrap();
+        std::fs::write(r.join("node_modules").join("x").join("setup.py"), "").unwrap();
+        let langs = detect_languages(r);
+        assert_eq!(langs, vec!["typescript", "javascript", "java"], "markers first, then the walk; no python");
+    }
+
+    #[test]
+    fn short_label_names_the_tool() {
+        assert_eq!(short_label("server.typescript-language-server"), "ts-ls");
+        assert_eq!(short_label("server.jdtls"), "jdtls");
+        assert_eq!(short_label("server.rust-analyzer"), "rust-analyzer");
+        assert_eq!(short_label("clangd"), "clangd");
+    }
+
+    #[test]
+    fn reap_for_keeps_a_pinned_project_alive_past_the_window() {
+        let window = Duration::from_secs(600);
+        let stale = Duration::from_secs(601);
+        assert_eq!(reap_for(true, State::Ready, stale, window), Reap::Keep);
+        assert_eq!(reap_for(true, State::Idle, stale, window), Reap::Keep);
+        assert_eq!(reap_for(false, State::Ready, stale, window), Reap::Stop);
+        assert_eq!(reap_for(false, State::Ready, Duration::from_secs(301), window), Reap::MarkIdle);
+    }
+
+    #[test]
+    fn pin_project_starts_the_servers_of_the_languages_the_root_uses() {
+        let (lsp, seen, tmp) = service_with_pack(fixtures::SERVER);
+        // a rust project: the jdtls fixture claims java only → nothing starts
+        let rs = tmp.path().join("rs");
+        std::fs::create_dir_all(&rs).unwrap();
+        std::fs::write(rs.join("Cargo.toml"), "[package]").unwrap();
+        let rs_ref = ProjectRef { id: Uuid::from_u128(1), name: "rs".into(), root: rs };
+        assert!(lsp.pin_project(rs_ref).is_empty());
+        assert!(lsp.is_pinned(Uuid::from_u128(1)), "pinned even with nothing to start — a pack may arrive later");
+        assert!(lsp.status_snapshot().servers.is_empty());
+        assert!(seen.lock().unwrap().is_empty());
+        // a maven project → the pack's handle appears as `starting` at once
+        let java = tmp.path().join("java");
+        std::fs::create_dir_all(&java).unwrap();
+        std::fs::write(java.join("pom.xml"), "<project/>").unwrap();
+        let project = ProjectRef { id: Uuid::from_u128(2), name: "java".into(), root: java };
+        assert_eq!(lsp.pin_project(project.clone()), vec!["server.jdtls".to_string()]);
+        let st = lsp.status_snapshot();
+        assert_eq!(st.servers.len(), 1);
+        assert_eq!(st.servers[0].ext_id, "server.jdtls");
+        assert_eq!(st.servers[0].project_id, Uuid::from_u128(2));
+        assert_eq!(seen.lock().unwrap().first().map(|s| s.servers[0].state.clone()).as_deref(), Some("starting"));
+        // pinning again is idempotent: same handle, no second start
+        assert_eq!(lsp.pin_project(project), vec!["server.jdtls".to_string()]);
+        assert_eq!(lsp.status_snapshot().servers.len(), 1);
+        lsp.unpin_project(Uuid::from_u128(2));
+        assert!(!lsp.is_pinned(Uuid::from_u128(2)));
+        assert_eq!(lsp.status_snapshot().servers.len(), 1, "unpin releases to the reaper, it does not stop");
+    }
+
+    #[test]
+    fn doc_open_starts_the_server_for_its_language_and_nothing_else() {
+        let (lsp, seen, _tmp) = service_with_pack(fixtures::SERVER);
+        let java = Lang { id: "java", lsp_id: "java" };
+        let rust = Lang { id: "rust", lsp_id: "rust" };
+        // no pack claims rust → no handle, no event
+        lsp.doc_open(&rust, project(), &root().join("lib.rs"), "fn main() {}".into(), 1);
+        assert!(lsp.status_snapshot().servers.is_empty());
+        assert!(seen.lock().unwrap().is_empty());
+        // a java file → the pack's handle appears as `starting` at once
+        lsp.doc_open(&java, project(), &root().join("A.java"), "class A {}".into(), 1);
+        let st = lsp.status_snapshot();
+        assert_eq!(st.servers.len(), 1);
+        assert_eq!(st.servers[0].ext_id, "server.jdtls");
+        assert_eq!(st.servers[0].project_id, Uuid::nil());
+        assert_eq!(seen.lock().unwrap().first().map(|s| s.servers[0].state.clone()).as_deref(), Some("starting"));
+        // the doc is queued on the handle meanwhile
+        assert!(lsp.get_syncable("java", Uuid::nil()).is_some(), "starting counts as syncable");
+        // …and this fixture cannot launch (no launch block, system servers off):
+        // the row stays LISTED as `missing` with the reason, never silently gone
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let st = lsp.status_snapshot();
+            if st.servers[0].state == "missing" {
+                assert!(st.servers[0].last_error.as_deref().unwrap_or("").contains("not self-contained"));
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline, "never reached missing: {:?}", st.servers[0].state);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(lsp.get_syncable("java", Uuid::nil()).is_none());
+        // a second open does not resurrect a missing server (manual restart does)
+        lsp.doc_open(&java, project(), &root().join("B.java"), "class B {}".into(), 1);
+        assert_eq!(lsp.status_snapshot().servers[0].state, "missing");
+        assert_eq!(lsp.status_snapshot().servers.len(), 1);
     }
 }

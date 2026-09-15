@@ -2,7 +2,7 @@ import { expect, Page, test } from "@playwright/test";
 
 /**
  * E2E for the B2 navigation surfaces (command registry + palette, Search
- * Everywhere, recent files, go-to-line) and the B3.1 find-in-files overlay.
+ * Everywhere, go-to-line) and the B3.1 find-in-files overlay.
  *
  * The browser build has no Tauri backend (every invoke rejects), so the specs
  * exercise the pure-frontend contract: overlays open from their keybindings,
@@ -105,16 +105,6 @@ test("Ctrl+K opens Search Everywhere (the primary binding)", async ({ page }) =>
   await expect(se).toHaveCount(0);
 });
 
-test("Ctrl+E shows recent files (empty state before any file was opened)", async ({ page }) => {
-  await ready(page);
-  await page.keyboard.press("Control+E");
-  const recent = page.locator("app-recent-files-overlay");
-  // portalled panel again (see above)
-  await expect(page.getByText("no files opened yet")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(recent).toHaveCount(0);
-});
-
 /** Computed background/border a probe element gets from Orrery's tokens. */
 const tokens = `(() => {
   const p = document.createElement("div");
@@ -127,15 +117,9 @@ const tokens = `(() => {
   return v;
 })()`;
 
-const seedRecents = (rows: { agentId: string; path: string }[]) => `(() => {
-  const bar = window.ng.getComponent(document.querySelector("app-top-bar"));
-  const svc = bar.commands["recents"];
-  svc.entries.set(${JSON.stringify(rows.map((r) => ({ ...r, at: Date.now() })))});
-})()`;
-
-test("the recent-files palette wears the app surface, not kouji's default", async ({ page }) => {
+test("the command palette wears the app surface, not kouji's default", async ({ page }) => {
   await ready(page);
-  await page.keyboard.press("Control+E");
+  await page.keyboard.press("Control+Shift+P");
   const dialog = page.locator(".kj-command-palette__dialog");
   await expect(dialog).toBeVisible();
 
@@ -150,31 +134,6 @@ test("the recent-files palette wears the app surface, not kouji's default", asyn
   expect(got.border).toBe(want.hair);
   expect(parseFloat(got.radius)).toBeGreaterThan(0);
   expect(got.shadow).not.toBe("none");
-  // …and the narrow variant still applies to the portalled dialog
-  const width = await dialog.evaluate((el) => el.getBoundingClientRect().width);
-  expect(width).toBeLessThan(560);
-});
-
-test("the recent-files footer says how many are shown, and of how many", async ({ page }) => {
-  await ready(page);
-  await page.evaluate(seedAgent("cn-r1", "alpha"));
-  await page.evaluate(seedRecents([
-    { agentId: "cn-r1", path: "src/alpha.ts" },
-    { agentId: "cn-r1", path: "src/beta.ts" },
-    { agentId: "cn-r1", path: "src/gamma.ts" },
-  ]));
-  await page.keyboard.press("Control+E");
-  const count = page.locator(".orr-palette-count");
-  await expect(count).toHaveText("3 recent files");
-
-  // typing narrows: the count says what survived AND what it was drawn from
-  await page.locator(".kj-command-palette__input").fill("alph");
-  await expect(count).toHaveText("1 of 3 recent files");
-
-  // a query with no match names itself — not the same emptiness as "none yet"
-  await page.locator(".kj-command-palette__input").fill("zzzz");
-  await expect(count).toHaveText("0 of 3 recent files");
-  await expect(page.getByText(/no recent file matches/)).toBeVisible();
 });
 
 test("Ctrl+L without an open file flashes 'not available' instead of running", async ({ page }) => {

@@ -253,6 +253,10 @@ export const Commands = {
   LspDocChange: 'lsp_doc_change',
   /** `{id, path}` — didClose. */
   LspDocClose: 'lsp_doc_close',
+  /** `{id, pinned}` → `string[]` (pack ids acquired). An agent runs in the
+   *  project owning `id`: auto-start the servers of the languages the project
+   *  uses and hold them out of the idle reaper; `pinned:false` releases them. */
+  LspPinProject: 'lsp_pin_project',
   // ---- library sources (M4) ----
   /** `{}` → `LibSource[]` — every discovered source with its index state. */
   LibSrcSources: 'libsrc_sources',

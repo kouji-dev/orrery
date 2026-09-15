@@ -4,7 +4,7 @@ import { Bridge, BRIDGE } from "../data-source/bridge";
 import { ExtensionsStore } from "../extensions/extensions.store";
 import { LspServer, LspStatus } from "../models";
 import { UiStore } from "../ui/ui.store";
-import { isLive, isSyncable, LspStatusStore } from "./lsp-status.store";
+import { isError, isLive, isSyncable, LspStatusStore } from "./lsp-status.store";
 
 /** A bridge that answers `lsp_status` (after an optional gate) and records
  *  every `on` handler so a test can push `lsp://status`. */
@@ -145,17 +145,32 @@ describe("LspStatusStore aggregates", () => {
     server({ id: "server.tsls:p1", language: "javascript", state: "missing", memBytes: 0 }),
   ];
 
-  it("running excludes stopped/missing; totals, starting, errors follow", async () => {
+  it("running excludes stopped/missing; listed keeps them; totals, starting, errors follow", async () => {
     const { store } = make({ servers: list });
     await settle();
     expect(store.running().map((s) => s.id)).toEqual(["server.jdtls:p1", "server.jdtls:p2", "server.gopls:p1", "server.rust-analyzer:p1"]);
+    expect(store.listed().length).toBe(6);
     expect(store.any()).toBe(true);
     expect(store.totalMem()).toBe(1000 * MB);
     expect(store.starting().map((s) => s.id)).toEqual(["server.jdtls:p2"]);
-    expect(store.errors().map((s) => s.id)).toEqual(["server.rust-analyzer:p1"]);
+    // a server that never launched is an error the user must see, not a gap
+    expect(store.errors().map((s) => s.id)).toEqual(["server.rust-analyzer:p1", "server.tsls:p1"]);
     expect(store.allIdle()).toBe(false);
     // error beats starting
     expect(store.aggregate()).toBe("error");
+  });
+
+  it("a lone missing / stopped row: listed (any) but nothing runs; missing tints, stopped stays quiet", async () => {
+    const { store, bridge } = make({ servers: [server({ id: "server.tsls:p1", state: "missing", memBytes: 0, lastError: "runtime.node is not installed" })] });
+    await settle();
+    expect(store.any()).toBe(true);
+    expect(store.running()).toEqual([]);
+    expect(store.aggregate()).toBe("error");
+    expect(store.byProject()[0].rows.map((s) => s.state)).toEqual(["missing"]);
+    bridge.emit("lsp://status", { servers: [server({ id: "server.tsls:p1", state: "stopped", memBytes: 0 })] });
+    expect(store.aggregate()).toBe("none");
+    expect(store.any()).toBe(true);
+    expect(store.instancesOf("server.tsls").length).toBe(1);
   });
 
   it("aggregate: starting beats running; idle only when all idle; empty = no chip", async () => {
@@ -171,17 +186,17 @@ describe("LspStatusStore aggregates", () => {
     expect(store.allIdle()).toBe(true);
   });
 
-  it("byProject groups live rows in first-seen order with the project name", async () => {
+  it("byProject groups every listed row in first-seen order with the project name", async () => {
     const { store } = make({ servers: list });
     await settle();
     const g = store.byProject();
     expect(g.map((x) => [x.projectId, x.projectName, x.rows.length])).toEqual([
-      ["p1", "p1", 3],
+      ["p1", "p1", 5],
       ["p2", "two", 1],
     ]);
   });
 
-  it("instancesOf / liveFor / labelFor", async () => {
+  it("instancesOf / liveFor / instanceFor / labelFor", async () => {
     const { store } = make({ servers: list }, { langs: { "server.tsls": ["javascript", "typescript"], "server.jdtls": ["java"] } });
     await settle();
     expect(store.instancesOf("server.jdtls").map((s) => s.projectId)).toEqual(["p1", "p2"]);
@@ -192,17 +207,26 @@ describe("LspStatusStore aggregates", () => {
     expect(store.liveFor("p1", "rust")).toBeUndefined();
     expect(store.liveFor("p1", "python")).toBeUndefined();
     expect(store.liveFor("p1", "")).toBeUndefined();
+    // instanceFor sees the parked ones too (the doc sync must not wake them)
+    expect(store.instanceFor("p1", "rust")?.state).toBe("crashed");
+    expect(store.instanceFor("p1", "python")?.state).toBe("stopped");
+    expect(store.instanceFor("p1", "typescript")?.state).toBe("missing");
+    expect(store.instanceFor("p1", "kotlin")).toBeUndefined();
+    expect(store.instanceFor("p1", "")).toBeUndefined();
     // the label the NavHint uses: the instance's label, else the pack name
     expect(store.labelFor("p1", "java")).toBe("jdtls");
     expect(store.labelFor("p9", "java")).toBe("jdtls");
     expect(store.labelFor("p1", "kotlin")).toBe("language server");
   });
 
-  it("isLive / isSyncable predicates", () => {
+  it("isLive / isSyncable / isError predicates", () => {
     expect(isLive(server({ id: "a:p", state: "crashed" }))).toBe(true);
     expect(isLive(server({ id: "a:p", state: "stopped" }))).toBe(false);
     expect(isSyncable(server({ id: "a:p", state: "crashed" }))).toBe(false);
     expect(isSyncable(server({ id: "a:p", state: "idle" }))).toBe(true);
+    expect(isError(server({ id: "a:p", state: "missing" }))).toBe(true);
+    expect(isError(server({ id: "a:p", state: "crashed" }))).toBe(true);
+    expect(isError(server({ id: "a:p", state: "stopped" }))).toBe(false);
   });
 });
 

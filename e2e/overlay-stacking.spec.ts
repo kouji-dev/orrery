@@ -3,9 +3,10 @@ import { expect, Page, test } from "@playwright/test";
 /**
  * E2E for nested overlay stacking (kouji-ui core ≥ 0.8.3): an overlay opened
  * from inside another overlay renders ABOVE it. Regression for the reported
- * bug — the scope selects in the Ctrl+E / Ctrl+K overlays opened their listbox
- * BEHIND the palette, because the palette panel sat at a hardcoded z-index
- * 1001 while every popover/select panel sat at 1000.
+ * bug — the scope selects in the lookup overlays opened their listbox BEHIND
+ * the overlay, because its panel sat at a hardcoded z-index 1001 while every
+ * popover/select panel sat at 1000. Search Everywhere (Ctrl+K) is the host
+ * here: the hand-rolled OverlayShell with the three-select scope bar.
  *
  * The proof is a real click on an option: Playwright refuses to click an
  * element another one covers, so a passing click IS the stacking assertion.
@@ -36,9 +37,8 @@ const seedAgent = `(() => {
       : orig(cmd, args);
 })()`;
 
-/** The palette panel is portalled out of the component, so everything it
- *  renders — input, scope bar, rows — is addressed globally. */
-const PALETTE_INPUT = ".kj-command-palette__input";
+const OVERLAY = "app-search-everywhere";
+const OVERLAY_INPUT = `${OVERLAY} input`;
 const SCOPE_TRIGGER = ".kj-select-trigger";
 /** The select's own panel. NOT `[role=listbox]`: the palette's command list
  *  carries that role too, so it would match while no select is open. */
@@ -47,7 +47,7 @@ const SELECT_PANEL = ".kj-select-content:visible";
 const ui = (expr: string) =>
   `window.ng.getComponent(document.querySelector("app-top-bar")).ui${expr}`;
 
-async function openRecentWithFiles(page: Page): Promise<void> {
+async function openSearchWithFiles(page: Page): Promise<void> {
   await page.goto("/");
   await page.waitForSelector("app-top-bar");
   await page.evaluate(seedProject);
@@ -58,16 +58,13 @@ async function openRecentWithFiles(page: Page): Promise<void> {
   // the editor arrives as a lazy chunk; the terminal must not hold the chord
   await expect(page.locator("app-file-view")).toBeVisible();
   await page.mouse.click(600, 400);
-  await page.locator("body").press("Control+e");
-  // the palette portals its whole panel into the shared overlay container, so
-  // nothing it renders is a DOM descendant of the component host any more
-  await expect(page.locator("app-recent-files-overlay")).toHaveCount(1);
-  await expect(page.locator(PALETTE_INPUT)).toBeVisible();
+  await page.locator("body").press("Control+k");
+  await expect(page.locator(OVERLAY_INPUT)).toBeVisible();
 }
 
-test("a scope select inside the recent-files overlay opens ABOVE it", async ({ page }) => {
+test("a scope select inside the Search Everywhere overlay opens ABOVE it", async ({ page }) => {
   test.slow(); // Monaco's lazy chunk + two overlays + a real click
-  await openRecentWithFiles(page);
+  await openSearchWithFiles(page);
 
   const trigger = page.locator(SCOPE_TRIGGER).first();
   await expect(trigger).toBeVisible();
@@ -77,54 +74,55 @@ test("a scope select inside the recent-files overlay opens ABOVE it", async ({ p
   await expect(page.locator(SELECT_PANEL)).toBeVisible();
 
 
-  // and the stack really did lift it above the palette: every overlay gets its
-  // own `.kj-overlay-wrapper`, and the select's must carry the highest level
+  // and the stack really did lift it: every kouji overlay gets its own
+  // `.kj-overlay-wrapper`, and the select's must carry the highest level
   const z = await page.evaluate(`(() => {
     const wrappers = Array.from(document.querySelectorAll(".kj-overlay-wrapper"))
       .map((w) => ({ z: parseInt(getComputedStyle(w).zIndex, 10) || 0, select: !!w.querySelector(".kj-select-content") }));
     return { count: wrappers.length, top: Math.max(...wrappers.map((w) => w.z)), selectZ: Math.max(...wrappers.filter((w) => w.select).map((w) => w.z), 0) };
   })()`);
-  expect(z.count).toBeGreaterThan(1); // palette wrapper + select wrapper
+  expect(z.count).toBeGreaterThanOrEqual(1); // at least the select's wrapper
   expect(z.selectZ).toBe(z.top); // the select owns the top level
 
+  // The wrapper level alone proved nothing: the wrappers are display:contents
+  // (no box, no stacking context), so every PANEL competes in the container's
+  // own context — and an unlayered `z-index: 1` on the panels let an
+  // overlay's backdrop (z 1000) paint over the listbox while this assertion
+  // stayed green. The hit test is the real proof: the point at the middle of
+  // the listbox must resolve to the listbox, not to a scrim.
+  const hit = await page.evaluate(`(() => {
+    const panel = Array.from(document.querySelectorAll(".kj-select-content")).find((p) => p.getBoundingClientRect().height > 0);
+    const r = panel.getBoundingClientRect();
+    const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { inside: panel.contains(el), tag: el ? el.className : null, panelZ: getComputedStyle(panel).zIndex };
+  })()`);
+  expect(hit.inside, `the point in the listbox hit ${hit.tag}`).toBe(true);
+  expect(parseInt(hit.panelZ, 10)).toBe(z.top); // the panel itself reads the stack level
 });
 
-test.fixme("picking an option closes the select and leaves the palette open", async ({ page }) => {
-  // KNOWN UPSTREAM DEFECT (kouji-ui core 0.8.4 / components 0.9.3, reported
-  // with the caller frame): the option lives in a panel portalled OUT of the
-  // palette, so the click is charged to the palette's own backdrop —
-  // `KjCommandPaletteComponent_Template_div_click_2_listener` → `close()` →
-  // `kjOpenChange` → our `registry.close()`. Picking the SAME value does not
-  // reproduce it: only a value CHANGE re-renders the option list, detaching
-  // the clicked node before the click completes. Un-fixme when the patch lands.
-  await openRecentWithFiles(page);
+test("picking an option closes the select and leaves the overlay open", async ({ page }) => {
+  // (The kouji-ui defect that made this a fixme — a value-changing option
+  // click charged to a <kj-command-palette>'s backdrop — cannot bite here:
+  // no scope select lives inside a kj palette any more.)
+  await openSearchWithFiles(page);
   await page.locator(SCOPE_TRIGGER).nth(1).click(); // the worktree select — real choices
   await expect(page.locator(SELECT_PANEL)).toBeVisible();
 
   // forced: the overlay repositions every frame, so it never reports "stable"
-  await page.getByRole("option", { name: "beta", exact: true }).click({ force: true });
-  await expect(page.locator(PALETTE_INPUT)).toBeVisible();
+  await page.getByRole("option", { name: "ovl-agent", exact: true }).click({ force: true });
+  await expect(page.locator(OVERLAY_INPUT)).toBeVisible();
   await expect(page.locator(SELECT_PANEL)).toHaveCount(0);
 });
 
-test("Escape closes the inner select first, the palette second", async ({ page }) => {
-  await openRecentWithFiles(page);
+test("Escape closes the inner select first, the overlay second", async ({ page }) => {
+  await openSearchWithFiles(page);
   await page.locator(SCOPE_TRIGGER).first().click();
   await expect(page.locator(SELECT_PANEL)).toBeVisible();
 
   await page.keyboard.press("Escape");
   await expect(page.locator(SELECT_PANEL)).toHaveCount(0);
-  await expect(page.locator(PALETTE_INPUT)).toBeVisible(); // still open
+  await expect(page.locator(OVERLAY_INPUT)).toBeVisible(); // still open
 
   await page.keyboard.press("Escape");
-  await expect(page.locator(PALETTE_INPUT)).toHaveCount(0);
-});
-
-test("the recent-files filter narrows the list as you type", async ({ page }) => {
-  await openRecentWithFiles(page);
-  const rows = page.locator("kj-command-item");
-  await expect(rows).toHaveCount(2);
-  await page.locator(PALETTE_INPUT).fill("alph");
-  await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText("alpha.ts");
+  await expect(page.locator(OVERLAY_INPUT)).toHaveCount(0);
 });

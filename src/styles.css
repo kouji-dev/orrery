@@ -2215,14 +2215,6 @@ app-version-badge .tag .kj-badge {
   border-radius: var(--r-lg);
   box-shadow: var(--shadow);
 }
-/* Two portal-era constraints in one selector: the host class cannot reach the
-   portalled dialog (so the panel's own shell is the ancestor), and kouji ships
-   no panel-class hook on the palette (it has one on kj-confirm-popup-content),
-   so the narrow variant keys off the aria-label we already set. */
-.kj-command-palette__shell .kj-command-palette__dialog[aria-label="Recent files"] {
-  top: 16vh;
-  width: round(calc(480px * var(--density)), 1px);
-}
 .kj-command-palette__shell .kj-command-palette__input-wrapper {
   gap: var(--sp-5);
   padding: var(--sp-6) var(--sp-7);
@@ -2419,11 +2411,20 @@ app-version-badge .tag .kj-badge {
    act on. The panel stayed position:static while the backdrop is fixed,
    and a positioned element paints above a static sibling, so the
    backdrop covered the dialog: only controls that were themselves
-   positioned remained clickable. */
+   positioned remained clickable.
+   The z-index READS THE STACK: KjOverlayStack writes `--kj-overlay-z` on
+   each wrapper (one step above whatever was open) and kouji's own panel
+   sheets read it — but they sit in @layer kj.component and this unlayered
+   literal `z-index: 1` used to beat them. Because the wrapper is
+   display:contents, every panel competes in the CONTAINER's stacking
+   context, so a nested select's listbox at z 1 painted UNDER the command
+   palette's backdrop (z 1000) — the scope dropdown showed behind the Recent
+   Files palette (user, 2026-09-15). Reading the variable puts each panel
+   at its own overlay level, above every earlier overlay's chrome. */
 .kj-overlay-wrapper > *:not(kj-backdrop) {
   pointer-events: auto;
   position: relative;
-  z-index: 1;
+  z-index: var(--kj-overlay-z, 1);
 }
 /* …but only a MODAL panel gets the viewport cap. kouji's portalled popup
    panels (.kj-select-content, .kj-popover-content, …) land in this same
@@ -2758,6 +2759,10 @@ kj-backdrop {
 .ext-badge.live .kj-badge{--kj-badge-fg:var(--st-running);--kj-badge-border-color:color-mix(in oklch,var(--st-running),transparent 55%);--kj-badge-bg:color-mix(in oklch,var(--st-running),transparent 90%);}
 .ext-badge.err .kj-badge{--kj-badge-fg:var(--sem-del);--kj-badge-border-color:color-mix(in oklch,var(--sem-del),transparent 55%);--kj-badge-bg:color-mix(in oklch,var(--sem-del),transparent 90%);}
 .ext-badge.idle .kj-badge{--kj-badge-fg:var(--ink-4);}
+/* the compact variant for dense rows (the language-server popover's
+   instance line — user, 2026-09-15: smaller tags on the active server line) */
+.ext-badge.sm .kj-badge{--kj-badge-font-size:calc(var(--fs-micro) - 1.5px);--kj-badge-padding-x:var(--sp-2);--kj-badge-dot-size:5px;height:auto;line-height:1.5;letter-spacing:.04em;}
+.ext-badge.sm .kj-badge .kj-spinner{width:7px;height:7px;}
 .ext-up{font-family:var(--font-mono);font-size:var(--fs-badge);color:var(--ink-2);font-variant-numeric:tabular-nums;}
 .ext-up b{color:var(--ui-ink);font-weight:var(--fw-medium);}
 
@@ -2867,7 +2872,7 @@ kj-backdrop {
 .lsp-wrap{display:inline-flex;align-items:center;gap:var(--sp-4);flex:none;white-space:nowrap;}
 .lsp-chip .kj-spinner{width:9px;height:9px;}
 .lsp-chip.starting{color:var(--ink-2);}
-.lsp-pop{position:fixed;z-index:92;width:round(calc(360px * var(--density)), 1px);max-width:calc(100vw - var(--sp-7));display:flex;flex-direction:column;max-height:calc(100vh - var(--topbar-h) - var(--statusbar-h) - var(--sp-9));background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:var(--sp-5) var(--sp-6);font-size:var(--fs-meta);color:var(--ink-2);text-align:left;white-space:normal;font-family:var(--font-ui);}
+.lsp-pop{position:fixed;z-index:92;width:round(calc(420px * var(--density)), 1px);max-width:calc(100vw - var(--sp-7));display:flex;flex-direction:column;max-height:calc(100vh - var(--topbar-h) - var(--statusbar-h) - var(--sp-9));background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:var(--sp-5) var(--sp-6);font-size:var(--fs-meta);color:var(--ink-2);text-align:left;white-space:normal;font-family:var(--font-ui);}
 .lsp-pop.static{position:static;animation:none;max-width:100%;border:none;box-shadow:none;background:transparent;max-height:min(64vh, calc(100vh - var(--topbar-h) - var(--statusbar-h) - var(--sp-9)));}
 .lsp-pop-h{display:flex;align-items:center;gap:var(--sp-4);padding-bottom:var(--sp-4);border-bottom:1px solid var(--hair);margin-bottom:var(--sp-2);flex:none;}
 .lsp-pop-h app-icon{color:var(--ink-3);flex:none;}
@@ -2883,7 +2888,7 @@ kj-backdrop {
 .lsp-row.dim{color:var(--ink-4);}
 .lsp-row-m{display:flex;align-items:center;gap:var(--sp-3);min-height:var(--row-h);padding:0 var(--sp-3);font-size:var(--fs-badge);color:var(--ink-2);}
 .lsp-row-m>app-icon{color:var(--ink-4);flex:none;}
-.lsp-row-m .nm{font-family:var(--font-mono);color:var(--ink);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lsp-row-m .nm{font-family:var(--font-mono);color:var(--ink);flex:1;min-width:7ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .lsp-row.dim .nm{color:var(--ink-3);}
 .lsp-row-m .fig{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink-3);flex:none;min-width:calc(var(--sp-11) + var(--sp-3));text-align:right;white-space:nowrap;}
 .lsp-row-m .fig.sub{color:var(--ink-4);min-width:0;}

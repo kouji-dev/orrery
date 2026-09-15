@@ -22,13 +22,15 @@ import { StatusDotComponent } from "../shared/status-dot.component";
 import { TicketsStore } from "../stores/tickets.store";
 import { ToolWindowStore } from "../tool-window/tool-window.store";
 import { UiStore } from "../ui/ui.store";
-import { fileDir, fileName, langTag } from "../utils";
+import { fileDir, fileName, fmtN, langTag } from "../utils";
 import { AgentStatus } from "../models";
 import { CommandRegistryService, WorkspaceFilesService } from "./command-registry.service";
 import { fzMatch, kbdLabel } from "./fuzzy";
 import { fzSegments, OverlayFooterComponent, OverlayShellComponent } from "./overlay-shell.component";
 import { SymbolSearchService } from "./symbol-search.service";
+import { IndexStatusStore } from "../symbols/index-status.store";
 import { symbolKindIcon } from "../symbols/symbol-kinds";
+import { NavProvidersService } from "../workspace/nav-providers.service";
 import { KjBadgeComponent, KjButtonComponent } from "@kouji-ui/components";
 
 /** One Search-Everywhere corpus row. "symbol" rows come from the tree-sitter
@@ -226,6 +228,8 @@ export class SearchEverywhereComponent {
   readonly registry = inject(CommandRegistryService);
   readonly scope = inject(LookupScopeStore);
   readonly symbols = inject(SymbolSearchService);
+  readonly index = inject(IndexStatusStore);
+  private nav = inject(NavProvidersService);
   private runtime = inject(AgentRuntimeService);
   private projects = inject(ProjectActionsService);
   private tickets = inject(TicketsStore);
@@ -279,19 +283,34 @@ export class SearchEverywhereComponent {
     });
     // Symbols are one index lookup per query — debounced just enough to
     // coalesce a burst of keystrokes, and only while their tab is visible.
+    // The query also re-runs when the index FINISHES: a first lookup on a
+    // never-indexed root answers from an empty index while the walk runs, so
+    // the rows fill in without retyping once it is done.
     effect(() => {
       const active = this.tab() === "symbols";
       const q = this.q();
       const kind = this.scope.kind();
       const agentId = this.scope.realAgent()?.id ?? null;
       const projectId = this.scope.project()?.id ?? null;
+      const indexing = this.anyIndexing();
       untracked(() => {
         if (this.symDebounce) clearTimeout(this.symDebounce);
         if (!active) {
           this.symbols.cancel();
           return;
         }
+        if (indexing && !q.trim()) return; // nothing to (re)ask yet
         this.symDebounce = setTimeout(() => this.symbols.search(q, { kind, agentId, projectId }), 60);
+      });
+    });
+    // Opening the Symbols tab warms the index of every root in scope: the
+    // editor does that per opened file, but "Ctrl+T on a fresh project"
+    // must not answer from nothing forever (idempotent on the backend).
+    effect(() => {
+      if (this.tab() !== "symbols") return;
+      const ids = this.symbolRootIds();
+      untracked(() => {
+        for (const id of ids) this.nav.startIndex(id);
       });
     });
     inject(DestroyRef).onDestroy(() => {
@@ -329,6 +348,21 @@ export class SearchEverywhereComponent {
   /** Identity of the current root set — the effect's actual dependency. */
   private readonly fileRootsKey = computed(() => this.fileRoots().map((r) => r.id).join(","));
 
+  /** A boolean edge, not the progress stream: the query effect must re-run
+   *  when indexing starts or ends, not on every "2,341 / 10,020" tick. */
+  private readonly anyIndexing = computed(() => this.index.indexing().length > 0);
+
+  /** Roots whose symbol index the Symbols tab needs: the worktrees the Files
+   *  corpus walks, plus the project checkout itself for a project / all
+   *  scope (its pseudo-agent id IS the project id). */
+  private readonly symbolRootIds = computed<string[]>(() => {
+    const ids = this.fileRoots().map((r) => r.id);
+    const kind = this.scope.kind();
+    const project = this.scope.project()?.id;
+    if (project && kind !== "worktree") ids.push(project);
+    return Array.from(new Set(ids));
+  });
+
   private loadFiles(roots: { id: string; projectId: string }[]): void {
     const gen = ++this.fileGen;
     this.fileList.set([]);
@@ -346,8 +380,19 @@ export class SearchEverywhereComponent {
 
   readonly busy = computed(() => (this.tab() === "symbols" && this.symbols.busy()) || this.filesBusy() > 0);
 
+  /** "indexing 2,341 / 10,020 files…" while any root's symbol index runs —
+   *  the Symbols tab answers from a partial index meanwhile. */
+  readonly indexingText = computed<string | null>(() => {
+    const roots = this.index.indexing().length;
+    if (!roots) return null;
+    const total = this.index.total();
+    if (total > 0) return `indexing ${fmtN(this.index.done())} / ${fmtN(total)} files…`;
+    return `indexing ${roots} root${roots === 1 ? "" : "s"}…`;
+  });
+
   readonly statusText = computed<string | null>(() => {
     if (this.symbols.error() && this.tab() === "symbols") return this.symbols.error();
+    if (this.tab() === "symbols" && this.indexingText()) return this.indexingText();
     if (this.tab() === "symbols" && this.symbols.busy()) return "searching…";
     const n = this.filesBusy();
     if (n > 0) return `indexing ${n} worktree${n === 1 ? "" : "s"}…`;
@@ -362,6 +407,7 @@ export class SearchEverywhereComponent {
       return LAZY[t] ? "start typing to search files" : "start typing to filter";
     }
     if (t === "symbols" && this.symbols.busy()) return "";
+    if (t === "symbols" && this.indexingText()) return "indexing — results appear as files are parsed";
     return 'nothing matches "' + this.q() + '"';
   });
 

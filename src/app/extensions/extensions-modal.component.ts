@@ -379,7 +379,7 @@ function fmtMb(bytes: number): string {
             } @else {
               @for (i of inst; track i.id) {
                 @let live = liveOf(i);
-                <div class="ext-inst" [class.dim]="i.state === 'idle'" [class.err]="i.state === 'crashed'" [attr.data-server]="i.id" [title]="instRowTitle(i)">
+                <div class="ext-inst" [class.dim]="i.state === 'idle' || i.state === 'stopped'" [class.err]="i.state === 'crashed' || i.state === 'missing'" [attr.data-server]="i.id" [title]="instRowTitle(i)">
                   <app-icon name="server" size="sm" />
                   <span class="pj">{{ i.projectName }}</span>
                   <kj-badge class="ext-badge" [class.live]="live.tone === 'live'" [class.idle]="live.tone === 'idle'" [class.err]="live.tone === 'err'" variant="outline" [dot]="!live.spin">
@@ -388,11 +388,11 @@ function fmtMb(bytes: number): string {
                   <span class="fig">{{ i.memBytes ? fmtMem(i.memBytes) : '—' }}</span>
                   <span class="fig">up {{ uptime(i) }}</span>
                   <span class="sp"></span>
-                  @if (i.state !== 'crashed') {
+                  @if (i.state === 'starting' || i.state === 'ready' || i.state === 'idle') {
                     <kj-button kjVariant="outline" [kjDisabled]="lsp.busy().has(i.id)" (click)="lsp.stop(i)"><app-icon name="stop" size="sm" />Stop</kj-button>
                   }
                   <kj-button kjVariant="outline" [kjDisabled]="lsp.busy().has(i.id)" (click)="lsp.restart(i)"><app-icon name="refresh" size="sm" />Restart</kj-button>
-                  @if (i.state === 'crashed' && i.lastError) { <div class="ext-line err ie"><app-icon name="warn" size="sm" /><span class="mono">{{ i.lastError }}</span></div> }
+                  @if ((i.state === 'crashed' || i.state === 'missing' || i.state === 'stopped') && i.lastError) { <div class="ext-line err ie"><app-icon name="warn" size="sm" /><span class="mono">{{ i.lastError }}</span></div> }
                 </div>
               }
               @if (inst.length > 3) {
@@ -577,7 +577,7 @@ export class ExtensionsModalComponent {
 
   // ── live instances (M3) ──
   hasCrash(inst: LspServer[]): boolean {
-    return inst.some((i) => i.state === "crashed");
+    return inst.some((i) => i.state === "crashed" || i.state === "missing");
   }
   uptime(i: LspServer): string {
     return uptimeOf(i, Date.now());
@@ -597,7 +597,7 @@ export class ExtensionsModalComponent {
   instSummary(inst: LspServer[]): string {
     const running = inst.filter((i) => i.state === "ready" || i.state === "starting").length;
     const idle = inst.filter((i) => i.state === "idle").length;
-    const errors = inst.filter((i) => i.state === "crashed").length;
+    const errors = inst.filter((i) => i.state === "crashed" || i.state === "missing").length;
     const mem = inst.reduce((n, i) => n + (i.memBytes || 0), 0);
     return `${running} running · ${idle} idle${errors ? ` · ${errors} error${errors > 1 ? "s" : ""}` : ""} · ${fmtMem(mem)}`;
   }

@@ -295,6 +295,10 @@ type Sort = { key: string; dir: number };
                 <span class="tnum" style="color:var(--ink-2)">Orrery <b style="color:var(--ink)">{{ fmtMem(orreryPriv()) }}</b></span>
                 <span style="color:var(--ink-4)">·</span>
                 <span class="tnum" style="color:var(--ink-2)">agents <b style="color:var(--ink)">{{ fmtMem(agentsPriv()) }}</b></span>
+                @if (serversPriv()) {
+                  <span style="color:var(--ink-4)">·</span>
+                  <span class="tnum" style="color:var(--ink-2)" data-testid="res-servers">language servers <b style="color:var(--ink)">{{ fmtMem(serversPriv()) }}</b></span>
+                }
                 <kj-badge variant="outline" style="--kj-badge-font-size:var(--fs-meta)">private working set</kj-badge>
                 <span style="margin-left:auto;font-size:var(--fs-meta);color:var(--ink-4)">job-object accounting · descendants rediscovered at slower cadence</span>
               </div>
@@ -324,10 +328,12 @@ type Sort = { key: string; dir: number };
                         }
                         @if (r.agentRoot && agentOf(r.rootId); as ag) {
                           <span class="dvc-kind" style="background:transparent"><app-tool-badge [tool]="ag.tool" [size]="15" /></span>
+                        } @else if (isServerRoot(r.rootId)) {
+                          <span class="dvc-kind" style="background:transparent" title="language server"><app-icon name="server" size="sm" /></span>
                         } @else {
                           <span class="dvc-pdot" [style.background]="nodeDot(r.n)"></span>
                         }
-                        <span class="dvc-nm trunc" [style.color]="notOurs(r.n) ? 'var(--ink-3)' : 'var(--ink)'" [style.font-weight]="r.depth === 0 ? 600 : null">{{ r.n.name }}</span>
+                        <span class="dvc-nm trunc" [style.color]="notOurs(r.n) ? 'var(--ink-3)' : 'var(--ink)'" [style.font-weight]="r.depth === 0 ? 600 : null">{{ rowName(r) }}</span>
                         @if (r.n.note) { <span style="font-size:var(--fs-meta);color:var(--ink-4);flex:none">{{ r.n.note }}</span> }
                         @if (r.n.detached) { <kj-badge variant="outline" fg="var(--lat-a)" style="--kj-badge-font-size:var(--fs-badge)">detached · found via job object</kj-badge> }
                       </span></td>
@@ -960,15 +966,37 @@ export class DevPanelComponent {
   );
   readonly agentsPriv = computed(() =>
     (this.tree()?.roots ?? [])
-      .filter((r) => r.id !== "app")
+      .filter((r) => r.id !== "app" && !this.isServerRoot(r.id))
       .reduce((a, r) => a + r.node.subtreePrivBytes, 0),
   );
+  /** Language servers are carved-out roots too (`lsp:<extId>:<projectId>`,
+   *  labelled "<server> · <project>"): their own figure in the split, never
+   *  counted as an agent (user, 2026-09-15: show what the servers cost). */
+  readonly serversPriv = computed(() =>
+    (this.tree()?.roots ?? [])
+      .filter((r) => this.isServerRoot(r.id))
+      .reduce((a, r) => a + r.node.subtreePrivBytes, 0),
+  );
+  isServerRoot(id: string): boolean {
+    return id.startsWith("lsp:");
+  }
+  /** A server root row is named by the backend's label ("ts-ls · orrery"),
+   *  not by its binary ("node.exe" says nothing); every other row keeps the
+   *  process name. */
+  rowName(r: { n: ProcessNode; rootId: string; agentRoot: boolean }): string {
+    if (r.agentRoot && this.isServerRoot(r.rootId)) {
+      return this.tree()?.roots.find((x) => x.id === r.rootId)?.label ?? r.n.name;
+    }
+    return r.n.name;
+  }
   /** Why 700MB: the runaway process is usually the dev server / test runner an
    *  agent started and never cleaned up — flag any agent subtree above it. */
   private readonly ALERT_PRIV_BYTES = 700 * 1024 * 1024;
   readonly treeAlerts = computed(() =>
     (this.tree()?.roots ?? [])
-      .filter((r) => r.id !== "app" && r.node.subtreePrivBytes > this.ALERT_PRIV_BYTES)
+      // a language server is expected to be big (tsserver, jdtls) — the alert
+      // is about an agent's runaway child, not about a server doing its job
+      .filter((r) => r.id !== "app" && !this.isServerRoot(r.id) && r.node.subtreePrivBytes > this.ALERT_PRIV_BYTES)
       .map((r) => ({
         id: r.id,
         label: r.label,

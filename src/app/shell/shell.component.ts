@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, effect, inject, Type, untracked } from '@angular/core';
 import { KjDialogRef, KjDialogService } from '@kouji-ui/components';
 import { InterestService } from '../agents/interest.service';
+import { LspAutoStartService } from '../lsp/lsp-auto-start.service';
 import { LspDocSyncService } from '../lsp/lsp-doc-sync.service';
 import { CommandRegistryService } from '../commands/command-registry.service';
 import { CommandOverlaysComponent } from '../commands/overlays.component';
@@ -147,6 +148,7 @@ export class ShellComponent {
     // overview card visibility, window hidden/shown.
     inject(InterestService).start();
     inject(LspDocSyncService).start();
+    inject(LspAutoStartService).start();
     // Re-check for releases while the app RUNS (poll + on focus). The startup
     // check happens once on the splash screen, so without this an instance that
     // booted before a release shipped would only notice it after a restart.

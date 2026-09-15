@@ -469,6 +469,7 @@ pub fn run() {
             lsp::commands::lsp_doc_open,
             lsp::commands::lsp_doc_change,
             lsp::commands::lsp_doc_close,
+            lsp::commands::lsp_pin_project,
             lsp::commands::nav_virtual_read,
             libsrc::commands::libsrc_sources,
             libsrc::commands::libsrc_ensure,

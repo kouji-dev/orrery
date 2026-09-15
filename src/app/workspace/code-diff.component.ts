@@ -13,6 +13,8 @@ import type * as monacoApi from "monaco-editor";
 import { BlameLine } from "../models";
 import { UiStore } from "../ui/ui.store";
 import { registerEditor } from "./editor-cap";
+import { diffModelUri } from "./nav-providers";
+import { NavProvidersService } from "./nav-providers.service";
 import {
   applyMonacoDensity,
   applyMonacoTheme,
@@ -118,6 +120,12 @@ export class CodeDiffComponent {
   readonly oldText = input<string>("");
   readonly newText = input<string>("");
   readonly lang = input<string>("");
+  /** Root id + worktree-relative path of the NEW side, when the caller knows
+   *  them: turns on symbol navigation (hover / Ctrl+click / references) on
+   *  that side. Left empty by surfaces whose new side is not a worktree file
+   *  (a revision in the file history). */
+  readonly agent = input<string>("");
+  readonly file = input<string>("");
   /** Annotate: show a per-line committer column on each side of the diff. */
   readonly showBlame = input<boolean>(false);
   /** Blame for the OLD (left) side — one entry per line of `oldText`. */
@@ -126,6 +134,7 @@ export class CodeDiffComponent {
   readonly newBlame = input<BlameLine[]>([]);
 
   private ui = inject(UiStore);
+  private readonly nav = inject(NavProvidersService);
   private host = viewChild.required<ElementRef<HTMLElement>>("host");
   private monaco: MonacoApi | null = null;
   private diff: monacoApi.editor.IStandaloneDiffEditor | null = null;
@@ -233,11 +242,18 @@ export class CodeDiffComponent {
         stickyScroll: { enabled: false },
         renderOverviewRuler: false,
       });
+      const agent = this.agent();
+      const file = this.file();
+      const navUri = agent && file ? monaco.Uri.parse(diffModelUri(agent, file)) : undefined;
       const original = monaco.editor.createModel(oldText, langId);
-      const modified = monaco.editor.createModel(newText, langId);
+      const modified = monaco.editor.createModel(newText, langId, navUri);
       diff.setModel({ original, modified });
       this.models = [original, modified];
       this.diff = diff;
+      if (navUri) {
+        this.nav.ensureOpener(monaco);
+        this.nav.ensureLanguage(monaco, langId);
+      }
       this.applyBlame(this.showBlame(), this.oldBlame(), this.newBlame());
       // A0.6 editor cap: demote to plain text to bound the webview heap.
       this.unregisterCap = registerEditor(() => {
