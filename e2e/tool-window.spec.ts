@@ -75,9 +75,9 @@ test("the palette lists and runs the tool-window commands", async ({ page }) => 
   // visible is not enough: the palette focuses its input in a microtask after
   // render, and a keystroke that lands before that goes to the document —
   // where the app's own shortcuts eat it and can close the palette outright
-  await expect(page.locator("app-command-palette input")).toBeFocused();
+  await expect(page.locator(".kj-command-palette__input")).toBeFocused();
   await page.keyboard.type("commit graph");
-  await expect(page.locator("app-command-palette")).toContainText("Show Commit Graph");
+  await expect(page.locator(".kj-command-palette__shell")).toContainText("Show Commit Graph");
   // Enter runs whatever row is HIGHLIGHTED — wait for the palette to settle on
   // one, or a loaded machine can press Enter between the query landing and the
   // list re-rendering under it.

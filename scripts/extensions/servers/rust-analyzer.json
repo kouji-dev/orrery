@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "server.rust-analyzer",
+  "kind": "server",
+  "version": "2026.09.07-1",
+  "label": "rust-analyzer",
+  "languages": ["rust"],
+  "transport": "stdio",
+  "target": "per-target",
+  "requires": [],
+  "launch": { "runtime": null, "entry": "rust-analyzer", "args": [] },
+  "_launchNote": "target `per-target` = one zip per platform; build-servers.mjs fills `target` and appends `.exe` to `entry` on Windows. rust-analyzer still needs a Rust toolchain in the PROJECT (cargo metadata) to analyze it — that is the user's project toolchain, not a launch dependency.",
+  "initializationOptions": {},
+  "settings": {},
+  "virtualSchemes": [],
+  "virtualRead": null,
+  "detect": {
+    "path": ["rust-analyzer", "rust-analyzer.exe"],
+    "env": [],
+    "requires": [{ "program": "cargo", "minVersion": "", "env": ["CARGO_HOME"] }],
+    "hint": "Optional system fallback: `rustup component add rust-analyzer` puts it on PATH."
+  },
+  "minOrreryVersion": "0.24.0"
+}

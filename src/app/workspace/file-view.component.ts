@@ -11,7 +11,7 @@ import {
   untracked,
 } from "@angular/core";
 import { DomSanitizer, SafeResourceUrl } from "@angular/platform-browser";
-import { Agent, BlameIntern, BlameLine, hydrateBlame } from "../models";
+import { Agent, BlameIntern, BlameLine, hydrateBlame, VirtualDoc } from "../models";
 import { AgentsStore } from "../stores/agents.store";
 import { EditsStore } from "../stores/edits.store";
 import { IconComponent } from "../shared/icon.component";
@@ -22,6 +22,8 @@ import { MarkdownPreviewComponent } from "./markdown/markdown-preview.component"
 import { MonacoFileEditorComponent } from "./monaco-file-editor.component";
 import { ScrollStateService } from "./scroll-state.service";
 import { SendReviewButtonComponent } from "./review/send-review.component";
+import { locationDetail } from "./nav-providers";
+import { isVirtualUri, libCrumbs, virtualFileName, virtualLang, VirtualDocService } from "./virtual-doc";
 import { KjBadgeComponent, KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent} from "@kouji-ui/components";
 
 /** Don't try to render megabyte-scale documents in the editor. */
@@ -39,6 +41,23 @@ const MAX_CHARS = 1_500_000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, MarkdownPreviewComponent, MonacoFileEditorComponent, SendReviewButtonComponent, KjButtonComponent, KjBadgeComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
+    @if (kind() === 'virtual') {
+      <!-- M3 virtual read-only doc (design LibDocToolbar + LibBanner): the
+           payload's title, the read-only badge, the language — no Annotate,
+           no reload, no review. M4: a library entry shows its crumbs
+           ("JDK 21 · java.base · java.util") before the file name. -->
+      <div class="lib-bar" data-testid="lib-bar">
+        <app-icon name="box" size="sm" class="ch" />
+        @for (c of vcrumbs().crumbs; track $index) {
+          <span class="c">{{ c }}</span><app-icon name="chevron" size="sm" class="ch" />
+        }
+        <span class="c on trunc" [title]="vtitle()">{{ vcrumbs().name }}</span>
+        <div class="r">
+          <kj-badge class="lib-badge" variant="outline">read-only · library</kj-badge>
+          @if (vlang()) { <kj-badge class="tnum" style="font-size:var(--fs-meta);padding:0 var(--sp-3)">{{ vlang() }}</kj-badge> }
+        </div>
+      </div>
+    } @else {
     <!-- slim toolbar: path · changed-state · (md toggle) · annotate · lang · refresh -->
     <div class="pane-head" style="gap:var(--sp-3);padding-block:var(--sp-2);background:var(--panel);min-width:0">
       <app-icon size="md" name="file" color="var(--ink-3)" />
@@ -68,6 +87,7 @@ const MAX_CHARS = 1_500_000;
         <app-send-review-button [agent]="agent().id" [agentName]="agent().name" />
       </div>
     </div>
+    }
 
     <!-- external-change conflict banner (B1.1): the file changed on disk while
          this buffer holds unsaved edits -->
@@ -81,7 +101,16 @@ const MAX_CHARS = 1_500_000;
     }
 
     <!-- body -->
-    @if (kind() !== 'text') {
+    @if (kind() === 'virtual') {
+      @if (notice(); as n) {
+        <div class="pane-empty pad" style="text-align:center">{{ n }}</div>
+      } @else {
+        <div class="lib-banner" data-testid="lib-banner">
+          <app-icon name="lock" size="sm" />This file comes from a library source and cannot be edited.<span class="mono">{{ path() }}</span>
+        </div>
+        <app-monaco-file-editor [agent]="agent().id" [file]="path()" [newText]="content() ?? ''" [lang]="vlang()" [readOnly]="true" />
+      }
+    } @else if (kind() !== 'text') {
       <!-- B1.4: image / PDF preview (binary read, no text pipeline) -->
       @if (mediaError(); as me) {
         <div class="pane-empty pad" style="text-align:center">{{ me }}</div>
@@ -205,8 +234,10 @@ export class FileViewComponent {
    *  with identical content skip the src swap (see loadMedia). */
   private lastMediaSig: string | null = null;
 
-  /** How this path renders: normal text pipeline, or a binary preview. */
-  readonly kind = computed<"text" | "image" | "pdf">(() => {
+  /** How this path renders: normal text pipeline, a binary preview, or (M3)
+   *  a virtual read-only document behind a non-worktree uri. */
+  readonly kind = computed<"text" | "image" | "pdf" | "virtual">(() => {
+    if (isVirtualUri(this.path())) return "virtual";
     const p = this.path().toLowerCase();
     if (/\.(png|jpe?g|gif|webp|bmp|ico|avif|svg)$/.test(p)) return "image";
     if (/\.pdf$/.test(p)) return "pdf";
@@ -219,6 +250,22 @@ export class FileViewComponent {
   readonly tag = computed(() => langTag(this.path()));
 
   readonly lid = computed(() => langId(this.path()));
+
+  // ----- M3: virtual read-only doc -----
+  private virtual = inject(VirtualDocService);
+  /** The last `nav_virtual_read` payload (title + language) for this uri. */
+  readonly vdoc = signal<VirtualDoc | null>(null);
+  readonly vname = computed(() => virtualFileName(this.path()));
+  readonly vlang = computed(() => this.vdoc()?.language || virtualLang(this.path()));
+  /** M4: design LibDocToolbar crumbs + name (see `libCrumbs`). */
+  readonly vcrumbs = computed(() => libCrumbs(this.path(), this.vdoc()?.title || this.vname()));
+  /** Tooltip of the name: the payload's full title, then the hit's
+   *  fully-qualified name when the navigation answer carried one. */
+  readonly vtitle = computed(() => {
+    const detail = locationDetail(this.path());
+    const title = this.vdoc()?.title || this.path();
+    return detail && detail !== title ? `${title}\n${detail}` : title;
+  });
 
   /** Block rendering for unloadable / oversized / binary content. */
   readonly notice = computed<string | null>(() => {
@@ -360,6 +407,10 @@ export class FileViewComponent {
   }
 
   private async load(id: string, path: string) {
+    if (this.kind() === "virtual") {
+      await this.loadVirtual(path);
+      return;
+    }
     if (this.kind() !== "text") {
       await this.loadMedia(id, path);
       return;
@@ -386,6 +437,26 @@ export class FileViewComponent {
     } catch (e) {
       if (g !== this.gen) return;
       this.error.set("could not read file: " + (e instanceof Error ? e.message : e));
+    } finally {
+      if (g === this.gen) this.loading.set(false);
+    }
+  }
+
+  /** M3: one memoized `nav_virtual_read` — no buffer, no hunks, no conflict. */
+  private async loadVirtual(uri: string) {
+    const g = ++this.gen;
+    this.loading.set(true);
+    this.error.set(null);
+    this.hunks.set([]);
+    this.conflict.set(null);
+    try {
+      const d = await this.virtual.read(uri);
+      if (g !== this.gen) return;
+      this.vdoc.set(d);
+      this.content.set(d.text);
+    } catch (e) {
+      if (g !== this.gen) return;
+      this.error.set("could not read document: " + (e instanceof Error ? e.message : e));
     } finally {
       if (g === this.gen) this.loading.set(false);
     }

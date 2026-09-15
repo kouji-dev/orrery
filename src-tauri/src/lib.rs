@@ -9,10 +9,13 @@ pub mod cli;
 mod core;
 mod cost;
 mod defender;
+mod extensions;
 mod fs;
 mod git;
 mod history;
 mod hooks;
+mod libsrc;
+mod lsp;
 mod metrics;
 mod perf;
 mod projects;
@@ -20,6 +23,7 @@ mod tickets;
 mod runtime;
 mod search;
 mod settings;
+mod symbols;
 mod update;
 mod watch;
 mod workspace;
@@ -79,6 +83,79 @@ pub fn run() {
             // settings live in the same DB; the agent service consults them at
             // spawn time (branch template + worktree root)
             let settings_service = settings::SettingsService::new(pool.clone());
+            // Extension host: grammar/server packs under app-data/extensions.
+            // Managed before every consumer (symbols, lsp): startup() promotes
+            // pending versions and prunes tmp/ + stale dirs BEFORE any dylib
+            // is mapped, and loads the enabled grammars.
+            {
+                let ext_root = app
+                    .path()
+                    .app_data_dir()
+                    .expect("no app data dir")
+                    .join("extensions");
+                let ext = extensions::ExtensionService::new(
+                    pool.clone(),
+                    settings_service.clone(),
+                    ext_root,
+                    app.package_info().version.to_string(),
+                    Box::new(extensions::registry::HttpFetcher),
+                );
+                ext.startup();
+                app.manage(ext.clone());
+                // Tree-sitter symbol index (M2): per-root in-memory maps fed
+                // by below-normal-priority indexer threads, content-hashed
+                // blob cache in its own `symbols.db` (never the app DB mutex).
+                let symbols_db = app
+                    .path()
+                    .app_data_dir()
+                    .expect("no app data dir")
+                    .join("symbols.db");
+                let symbols_app = app.handle().clone();
+                let symbols_service = symbols::SymbolService::new(
+                    std::sync::Arc::new(ext.clone()),
+                    &symbols_db,
+                    Some(Box::new(move |status| {
+                        let _ = core::emit::emit_tracked(&symbols_app, symbols::EV_INDEX, status);
+                    })),
+                );
+                let symbols_store = symbols_service.store();
+                app.manage(symbols_service);
+                // Language-server host (M3): one process per (server pack,
+                // project), started on the first navigation request, reaped
+                // when idle. `lsp-workspaces/<hash>` is each project's
+                // `${workspaceStorage}` (jdtls' -data dir).
+                let lsp_workspaces = app
+                    .path()
+                    .app_data_dir()
+                    .expect("no app data dir")
+                    .join("lsp-workspaces");
+                let lsp_app = app.handle().clone();
+                app.manage(lsp::LspService::new(
+                    ext.clone(),
+                    settings_service.clone(),
+                    lsp_workspaces,
+                    Some(Box::new(move |status| {
+                        let _ = core::emit::emit_tracked(&lsp_app, lsp::EV_STATUS, status);
+                    })),
+                ));
+                // Library sources (M4): JDK src.zip + per project its
+                // `Cargo.lock` crates / `pom.xml` jars → `lib_decls` in the
+                // same symbols.db and read-only `orrery-lib://` documents.
+                // Jobs start on demand (`libsrc_ensure`, `symbols_index_start`,
+                // project registration, a lockfile change), never here.
+                let libsrc_app = app.handle().clone();
+                let libsrc_service = libsrc::LibSrcService::new(
+                    symbols_store,
+                    std::sync::Arc::new(ext),
+                    libsrc::discover::DiscoverEnv::from_process(),
+                    std::sync::Arc::new(project_service.clone()),
+                    Some(Box::new(move |status| {
+                        let _ = core::emit::emit_tracked(&libsrc_app, libsrc::EV_STATUS, status);
+                    })),
+                );
+                libsrc_service.startup();
+                app.manage(libsrc_service);
+            }
             // Workspace layout/scroll document — same DB, frontend-owned schema.
             app.manage(workspace::WorkspaceService::new(pool.clone()));
             let worktree_root = app
@@ -199,7 +276,10 @@ pub fn run() {
                     // to 5s within one tick of an agent starting.
                     let active = metrics_app
                         .try_state::<RuntimeService>()
-                        .is_some_and(|rt| rt.any_running());
+                        .is_some_and(|rt| rt.any_running())
+                        || metrics_app
+                            .try_state::<lsp::LspService>()
+                            .is_some_and(|l| l.any_running());
                     if !active && tick % 4 != 0 {
                         continue;
                     }
@@ -216,8 +296,18 @@ pub fn run() {
                         };
                         let pids = runtime.pids();
                         let labels = metrics::commands::agent_labels(&agents);
-                        let m = shared_sampler.refresh_and_sample(app_pid, &pids, &labels);
+                        // language servers ride along as `lsp:<extId>` rows so
+                        // their RSS lands in both system://metrics and lsp://status
+                        let lsp = metrics_app.try_state::<lsp::LspService>();
+                        let lsp_rows = lsp.as_ref().map(|l| l.pids()).unwrap_or_default();
+                        let m = shared_sampler.refresh_and_sample_with(app_pid, &pids, &labels, &lsp_rows);
                         let _ = crate::core::emit::emit_tracked(&metrics_app, "system://metrics", &m);
+                        if let Some(lsp) = lsp {
+                            if !lsp_rows.is_empty() {
+                                lsp.record_metrics(&m.procs);
+                                lsp.emit_status();
+                            }
+                        }
                     });
                 }
             });
@@ -357,6 +447,35 @@ pub fn run() {
             search::commands::search_replace_apply,
             settings::commands::settings_get,
             settings::commands::settings_set,
+            extensions::commands::ext_registry_list,
+            extensions::commands::ext_install,
+            extensions::commands::ext_uninstall,
+            extensions::commands::ext_set_enabled,
+            extensions::commands::ext_set_path,
+            symbols::commands::symbols_index_status,
+            symbols::commands::symbols_index_start,
+            symbols::commands::symbols_index_stop,
+            symbols::commands::symbols_document,
+            symbols::commands::symbols_search,
+            symbols::commands::nav_definition,
+            symbols::commands::nav_references,
+            symbols::commands::nav_hover,
+            symbols::commands::nav_document_symbols,
+            lsp::commands::lsp_status,
+            lsp::commands::lsp_start,
+            lsp::commands::lsp_stop,
+            lsp::commands::lsp_restart,
+            lsp::commands::lsp_stop_all,
+            lsp::commands::lsp_doc_open,
+            lsp::commands::lsp_doc_change,
+            lsp::commands::lsp_doc_close,
+            lsp::commands::nav_virtual_read,
+            libsrc::commands::libsrc_sources,
+            libsrc::commands::libsrc_ensure,
+            libsrc::commands::libsrc_reindex,
+            libsrc::commands::libsrc_cancel,
+            libsrc::commands::libsrc_remove,
+            libsrc::commands::libsrc_rescan,
             workspace::commands::workspace_get,
             workspace::commands::workspace_set,
             metrics::commands::system_metrics,
@@ -384,6 +503,9 @@ pub fn run() {
             let teardown = || {
                 if let Some(rt) = handle.try_state::<RuntimeService>() {
                     rt.stop_all();
+                }
+                if let Some(lsp) = handle.try_state::<lsp::LspService>() {
+                    lsp.stop_all();
                 }
                 if let Some(svc) = handle.try_state::<AgentService>() {
                     let _ = svc.reset_running();

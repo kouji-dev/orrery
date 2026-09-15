@@ -16,6 +16,31 @@ export const STATUS_META: Record<AgentStatus, StatusMeta> = {
   queued: { label: "queued", color: "var(--st-idle)" },
 };
 
+/** Thousands-grouped integer ("2,341") — footer counters, index progress. */
+export function fmtN(n: number): string {
+  return Math.round(n).toLocaleString("en-US");
+}
+
+/** Human-readable bytes: B / KB / MB / GB, one decimal above KB (footer
+ *  gauge, LSP chips, extension rows). */
+export function fmtMem(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
+
+/** "23k files", "200k decls": whole numbers below 1,000, one decimal to
+ *  10k ("2.3k"), whole thousands past it ("23k"), millions as "1.2M". */
+export function fmtCompact(n: number): string {
+  if (n < 1000) return String(Math.round(n));
+  if (n < 10_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+}
+
 export function fmtDur(sec: number): string {
   if (!sec) return "0s";
   if (sec < 60) return sec + "s";

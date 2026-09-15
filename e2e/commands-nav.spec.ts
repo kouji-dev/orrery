@@ -31,13 +31,15 @@ async function ready(page: Page): Promise<void> {
 test("Ctrl+Shift+P opens the command palette; typing filters; Esc closes", async ({ page }) => {
   await ready(page);
   await page.keyboard.press("Control+Shift+P");
-  const palette = page.locator("app-command-palette");
-  // the custom-element host is a 0×0 inline box (content is fixed-positioned)
-  // — assert on the input, which has a real box
-  await expect(palette.locator("input")).toBeVisible();
-  await expect(palette.locator("input")).toBeFocused();
+  // kouji portals the panel into the shared overlay container, so nothing it
+  // renders is a DOM descendant of <app-command-palette> — the panel's own
+  // root carries the .kj-command-palette class
+  const palette = page.locator(".kj-command-palette__shell");
+  const paletteInput = page.locator(".kj-command-palette__input");
+  await expect(paletteInput).toBeVisible();
+  await expect(paletteInput).toBeFocused();
   // registry renders FROM the command list (B2.2) — footer count present
-  await expect(palette.locator(".orr-palette-count")).toContainText("commands");
+  await expect(page.locator(".orr-palette-count")).toContainText("commands");
 
   await page.keyboard.type("theme");
   await expect(palette).toContainText("Theme"); // "Switch to … Theme"
@@ -53,7 +55,7 @@ test("palette runs a command: Settings opens from the keyboard alone", async ({ 
   // visible is not enough: the palette focuses its input in a microtask after
   // render, and a keystroke that lands before that goes to the document —
   // where the app's own shortcuts eat it and can close the palette outright
-  await expect(page.locator("app-command-palette input")).toBeFocused();
+  await expect(page.locator(".kj-command-palette__input")).toBeFocused();
   await page.keyboard.type("settings");
   // Enter runs whatever row is HIGHLIGHTED — wait for the palette to settle on
   // one, or a loaded machine can press Enter between the query landing and the
@@ -107,9 +109,72 @@ test("Ctrl+E shows recent files (empty state before any file was opened)", async
   await ready(page);
   await page.keyboard.press("Control+E");
   const recent = page.locator("app-recent-files-overlay");
-  await expect(recent.getByText("no files opened yet")).toBeVisible();
+  // portalled panel again (see above)
+  await expect(page.getByText("no files opened yet")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(recent).toHaveCount(0);
+});
+
+/** Computed background/border a probe element gets from Orrery's tokens. */
+const tokens = `(() => {
+  const p = document.createElement("div");
+  p.style.background = "var(--panel)";
+  p.style.borderColor = "var(--hair)";
+  document.body.appendChild(p);
+  const cs = getComputedStyle(p);
+  const v = { panel: cs.backgroundColor, hair: cs.borderTopColor };
+  p.remove();
+  return v;
+})()`;
+
+const seedRecents = (rows: { agentId: string; path: string }[]) => `(() => {
+  const bar = window.ng.getComponent(document.querySelector("app-top-bar"));
+  const svc = bar.commands["recents"];
+  svc.entries.set(${JSON.stringify(rows.map((r) => ({ ...r, at: Date.now() })))});
+})()`;
+
+test("the recent-files palette wears the app surface, not kouji's default", async ({ page }) => {
+  await ready(page);
+  await page.keyboard.press("Control+E");
+  const dialog = page.locator(".kj-command-palette__dialog");
+  await expect(dialog).toBeVisible();
+
+  // the panel is portalled to body level, so the skin has to reach it there —
+  // when it does not, kouji's own (light) surface shows through instead
+  const want = await page.evaluate(tokens);
+  const got = await dialog.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { bg: cs.backgroundColor, border: cs.borderTopColor, radius: cs.borderTopLeftRadius, shadow: cs.boxShadow };
+  });
+  expect(got.bg).toBe(want.panel);
+  expect(got.border).toBe(want.hair);
+  expect(parseFloat(got.radius)).toBeGreaterThan(0);
+  expect(got.shadow).not.toBe("none");
+  // …and the narrow variant still applies to the portalled dialog
+  const width = await dialog.evaluate((el) => el.getBoundingClientRect().width);
+  expect(width).toBeLessThan(560);
+});
+
+test("the recent-files footer says how many are shown, and of how many", async ({ page }) => {
+  await ready(page);
+  await page.evaluate(seedAgent("cn-r1", "alpha"));
+  await page.evaluate(seedRecents([
+    { agentId: "cn-r1", path: "src/alpha.ts" },
+    { agentId: "cn-r1", path: "src/beta.ts" },
+    { agentId: "cn-r1", path: "src/gamma.ts" },
+  ]));
+  await page.keyboard.press("Control+E");
+  const count = page.locator(".orr-palette-count");
+  await expect(count).toHaveText("3 recent files");
+
+  // typing narrows: the count says what survived AND what it was drawn from
+  await page.locator(".kj-command-palette__input").fill("alph");
+  await expect(count).toHaveText("1 of 3 recent files");
+
+  // a query with no match names itself — not the same emptiness as "none yet"
+  await page.locator(".kj-command-palette__input").fill("zzzz");
+  await expect(count).toHaveText("0 of 3 recent files");
+  await expect(page.getByText(/no recent file matches/)).toBeVisible();
 });
 
 test("Ctrl+L without an open file flashes 'not available' instead of running", async ({ page }) => {

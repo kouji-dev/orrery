@@ -44,16 +44,27 @@ fn resolve_roots(
     agents: &AgentService,
     projects: &ProjectService,
 ) -> AppResult<Vec<SearchRoot>> {
-    let project_id = match (req.project_id, req.agent_id) {
+    resolve_scope(&req.scope, req.agent_id, req.project_id, agents, projects)
+}
+
+/// Scope → concrete roots. Shared with the symbol index (`symbols_search`),
+/// which takes the same `worktree | project | all` scope.
+pub(crate) fn resolve_scope(
+    scope: &str,
+    agent_id: Option<Uuid>,
+    project_id: Option<Uuid>,
+    agents: &AgentService,
+    projects: &ProjectService,
+) -> AppResult<Vec<SearchRoot>> {
+    let project_id = match (project_id, agent_id) {
         (Some(p), _) => Some(p),
         (None, Some(a)) => Some(agents.get(a)?.project_id),
         _ => None,
     };
-    match req.scope.as_str() {
+    match scope {
         "worktree" => {
-            let id = req
-                .agent_id
-                .ok_or_else(|| AppError::Other("worktree scope needs agentId".into()))?;
+            let id =
+                agent_id.ok_or_else(|| AppError::Other("worktree scope needs agentId".into()))?;
             let agent = agents.get(id)?;
             Ok(vec![SearchRoot {
                 path: PathBuf::from(agent.worktree),

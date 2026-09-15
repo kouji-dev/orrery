@@ -1,6 +1,7 @@
 import { effect, inject, Injectable, signal } from "@angular/core";
 import { UiStore } from "../ui/ui.store";
 import { PaneNode } from "../workspace/pane-model";
+import { isVirtualUri } from "../workspace/virtual-doc";
 
 export interface RecentFileEntry {
   agentId: string;
@@ -51,7 +52,8 @@ export class RecentFilesService {
     if (node.type === "leaf") {
       seen.add(node.id);
       const file = node.view === "file" ? (node.activeFile ?? null) : null;
-      if (file && node.agentId && this.lastActive.get(node.id) !== file) {
+      // a virtual read-only doc (M3) is not a recent FILE of the worktree
+      if (file && node.agentId && !isVirtualUri(file) && this.lastActive.get(node.id) !== file) {
         this.record(node.agentId, file);
       }
       this.lastActive.set(node.id, file ?? "");

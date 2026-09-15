@@ -1,6 +1,7 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 import { AGENT_TOOLS, defaultEffortFor, effortLevelsFor } from "../data";
 import { BRIDGE, Commands, Events } from "../data-source/bridge";
+import { UPDATER } from "../updater/updater";
 import { Settings, SettingsEvents, UpdateInfo } from "../models";
 import { AgentsStore } from "../stores/agents.store";
 import { WorkspaceStore } from "../stores/workspace.store";
@@ -54,6 +55,12 @@ export function settingsDefaults(): Settings {
     confirmAboveUsd: 1,
     costRates: {}, // absent model = EstimateService built-in defaults
     telemetryRawTrace: false, // tracing a flood amplifies it — always opt-in
+    // Why 10: long enough to survive a coffee break, short enough that a
+    // forgotten jdtls does not sit on 800 MB all afternoon.
+    lspIdleMinutes: 10,
+    lspPaths: {}, // absent id = auto-detect on PATH
+    lspUseSystemServers: false, // packs ship their own; PATH copies are opt-in
+    extRegistryUrl: null, // null = the built-in registry
   };
 }
 
@@ -114,6 +121,8 @@ export class SettingsStore {
   private readonly ui = inject(UiStore);
   private readonly agentsStore = inject(AgentsStore);
   private readonly workspace = inject(WorkspaceStore);
+  /** Optional: the store's specs and the web build run without a relaunch path. */
+  private readonly updater = inject(UPDATER, { optional: true });
 
   private readonly defaults = settingsDefaults();
   readonly settings = signal<Settings>(settingsDefaults());
@@ -293,6 +302,40 @@ export class SettingsStore {
     }
   }
 
+  /** Persist edits and record the live agents before the process restarts.
+   *  Tabs reopen by themselves (the WorkspaceStore persists the layout
+   *  continuously), but the relaunch must also CONTINUE the running terminals'
+   *  CLI sessions. The graceful exit path resets running flags, so the
+   *  crash-only InterruptedAgents mechanism can't cover a deliberate restart —
+   *  record the live agents in the workspace doc (drained one-shot next boot). */
+  private async prepareRelaunch(): Promise<void> {
+    this.flush(); // the process may exit — persist edits first
+    this.workspace.setUpdateResume(
+      this.agentsStore
+        .all()
+        .filter((a) => a.status === "running")
+        .map((a) => a.id),
+    );
+    await this.workspace.flush();
+  }
+
+  /** Restart the app in place (an extension's "Restart now"): same resume
+   *  bookkeeping as an update install, then the platform relaunch. */
+  async relaunch(): Promise<void> {
+    if (!this.updater) {
+      this.ui.flash("restart is not available here");
+      return;
+    }
+    await this.prepareRelaunch();
+    try {
+      await this.updater.relaunch();
+    } catch {
+      this.ui.flash("restart failed");
+      this.workspace.setUpdateResume(null);
+      void this.workspace.flush();
+    }
+  }
+
   /** "Install & relaunch" — on Windows a successful install exits the process,
    *  so this only ever "returns" on failure. While it runs, the update card
    *  tracks the download (update://progress) and the installer handoff
@@ -302,19 +345,7 @@ export class SettingsStore {
     this.installing.set(true);
     this.installProgress.set(0);
     this.installPhase.set("downloading");
-    this.flush(); // the installer may exit the process — persist edits first
-    // Tabs reopen by themselves (the WorkspaceStore persists the layout
-    // continuously), but the relaunch must also CONTINUE the running terminals'
-    // CLI sessions. The graceful exit path resets running flags, so the
-    // crash-only InterruptedAgents mechanism can't cover an update restart —
-    // record the live agents in the workspace doc (drained one-shot next boot).
-    this.workspace.setUpdateResume(
-      this.agentsStore
-        .all()
-        .filter((a) => a.status === "running")
-        .map((a) => a.id),
-    );
-    await this.workspace.flush();
+    await this.prepareRelaunch();
     const subs: (() => void)[] = [];
     try {
       subs.push(

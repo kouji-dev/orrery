@@ -4,6 +4,7 @@ import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectsStore } from "../stores/projects.store";
+import { LibSrcStore } from "../extensions/libsrc.store";
 import { IconComponent } from "../shared/icon.component";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
@@ -16,7 +17,7 @@ import {
 import { MetricsStore } from "../metrics/metrics.store";
 import { TelemetryStore } from "../metrics/telemetry.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
-import { ProcessNode, ProcessTreeSnapshot, SystemMetrics } from "../models";
+import { LibSource, ProcessNode, ProcessTreeSnapshot, SystemMetrics } from "../models";
 import { DevPanelComponent } from "./dev-panel.component";
 
 function row(p: Partial<PerfRow> & { cmd: string }): PerfRow {
@@ -62,10 +63,23 @@ class ToolBadgeStub {}
 /** Real TestBed render (not a bare `new`): this is what catches a non-callable
  *  `open` — the template invokes `open()` and the constructor needs a proper
  *  injection context for the stats-gate effect. */
+/** The M4 library-index stub the Projects tab reads (`libsrc` on the panel). */
+const libsrcStub = {
+  sources: signal<LibSource[]>([]),
+  busy: signal<ReadonlySet<string>>(new Set()),
+  error: signal<string | null>(null),
+  reindex: vi.fn(async () => {}),
+  rescan: vi.fn(async () => {}),
+};
+
 function setup(rows: PerfRow[] = [], metrics: SystemMetrics | null = null, tree: ProcessTreeSnapshot | null = null): ComponentFixture<DevPanelComponent> {
+  libsrcStub.sources.set([]);
+  libsrcStub.reindex.mockClear();
+  libsrcStub.rescan.mockClear();
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
+      { provide: LibSrcStore, useValue: libsrcStub },
       { provide: PerfStore, useValue: { rows: signal(rows), tick() {}, clear() {} } },
       { provide: AgentRuntimeService, useValue: { agents: signal([]), elapsedFor: () => 0 } },
       { provide: ProjectsStore, useValue: { all: signal([]) } },
@@ -91,6 +105,62 @@ function setup(rows: PerfRow[] = [], metrics: SystemMetrics | null = null, tree:
   fixture.detectChanges();
   return fixture;
 }
+
+const libSource = (over: Partial<LibSource> & { id: string }): LibSource => ({
+  kind: "jdk",
+  path: "",
+  label: over.id,
+  state: "idle",
+  files: 0,
+  decls: 0,
+  indexedAt: null,
+  sizeBytes: 0,
+  projectId: null,
+  projectName: null,
+  artifacts: 1,
+  missing: 0,
+  skipped: 0,
+  error: null,
+  ...over,
+});
+
+describe("DevPanel library index (M4, Projects tab)", () => {
+  it("one status line per source, Re-index per row, Re-scan projects", () => {
+    const fixture = setup();
+    libsrcStub.sources.set([
+      libSource({ id: "jdk:1", label: "JDK 21 (openjdk21)", state: "done", files: 14_883, decls: 314_962 }),
+      libSource({ id: "cargo:p1", kind: "cargo", label: "Cargo · orrery", projectId: "p1", projectName: "orrery", artifacts: 647, skipped: 2, state: "indexing", done: 2341, total: 15_502 }),
+      libSource({ id: "maven:p2", kind: "maven", label: "Maven · shop", projectId: "p2", projectName: "shop", artifacts: 12, missing: 3, state: "error", error: "pom unreadable" }),
+      libSource({ id: "cargo:p3", kind: "cargo", label: "Cargo · new", projectId: "p3", projectName: "new", artifacts: 1 }),
+    ]);
+    fixture.componentInstance.open.set(true);
+    fixture.componentInstance.tab.set("projects");
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    const line = (id: string) => el.querySelector(`[data-src-id="${id}"] .dvc-fp`)?.textContent?.trim();
+    expect(line("jdk:1")).toBe("JDK 21 (openjdk21) · indexed · 15k files · 315k decls");
+    expect(line("cargo:p1")).toBe("Cargo · orrery · 647 crates · 2 skipped · indexing 2,341 / 15,502");
+    expect(line("maven:p2")).toBe("Maven · shop · 12 jars · 3 not downloaded · error · pom unreadable");
+    expect(line("cargo:p3")).toBe("Cargo · new · 1 crate · not indexed");
+    expect(el.querySelector(".dvc-foot")?.textContent).toContain("4 library sources");
+    const btn = (id: string) => el.querySelector<HTMLButtonElement>(`[data-src-id="${id}"] .kj-button`);
+    expect(btn("cargo:p1")?.getAttribute("aria-disabled")).toBe("true"); // indexing
+    expect(btn("jdk:1")?.getAttribute("aria-disabled")).toBeNull();
+    btn("jdk:1")!.click();
+    expect(libsrcStub.reindex).toHaveBeenCalledWith("jdk:1");
+    const rescan = Array.from(el.querySelectorAll<HTMLButtonElement>(".dvc-lib-h .kj-button")).find((b) => b.textContent?.includes("Re-scan projects"));
+    rescan!.click();
+    expect(libsrcStub.rescan).toHaveBeenCalledTimes(1);
+  });
+
+  it("empty state names what a project needs", () => {
+    const fixture = setup();
+    fixture.componentInstance.open.set(true);
+    fixture.componentInstance.tab.set("projects");
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector("[data-testid=lib-index]")?.textContent).toContain("a project needs a Cargo.lock or pom.xml, or a JDK for Java");
+  });
+});
 
 describe("DevPanelComponent open gate", () => {
   it("the store's open signal toggles the panel (launcher lives in the status bar now)", () => {

@@ -186,9 +186,12 @@ export class CommandPaletteComponent {
         <app-scope-bar [scope]="scope" />
       </div>
       @if (!items().length) {
-        <!-- the palette owns the empty slot; the hand-rolled div this replaced
-             carried the copy the e2e asserts on -->
-        <kj-command-empty>no files opened yet</kj-command-empty>
+        <!-- the palette owns the empty slot. Two different emptinesses: nothing
+             opened yet in this scope, vs nothing matching what was typed —
+             saying which is the difference between "broken" and "no match". -->
+        <kj-command-empty>
+          @if (scoped().length) { no recent file matches “{{ q() }}” } @else { no files opened yet }
+        </kj-command-empty>
       }
       @for (it of items(); track it.key) {
         <kj-command-item [kjValue]="it.key">
@@ -214,7 +217,7 @@ export class CommandPaletteComponent {
         <span><kj-kbd>↑↓</kj-kbd>navigate</span>
         <span><kj-kbd>⏎</kj-kbd>open</span>
         <span><kj-kbd>esc</kj-kbd>close</span>
-        <span class="orr-palette-count tnum">{{ items().length }}</span>
+        <span class="orr-palette-count tnum">{{ countLabel() }}</span>
       </div>
     </kj-command-palette>
   `,
@@ -234,6 +237,23 @@ export class RecentFilesOverlayComponent {
 
   /** Entries whose agent still exists AND falls inside the scope, tagged with
    *  the owning project + worktree and fuzzy-scored. */
+  /** Recents inside the current scope, BEFORE the query narrows them — what
+   *  the footer counts against and what tells an empty list from a filtered
+   *  one. */
+  readonly scoped = computed(() => {
+    const agents = this.runtime.agents();
+    const kind = this.scope.kind();
+    const scopedAgent = this.scope.realAgent()?.id ?? null;
+    const scopedProject = this.scope.project()?.id ?? null;
+    return this.recents.entries().filter((e) => {
+      const ag = agents.find((a) => a.id === e.agentId);
+      if (!ag) return false;
+      if (kind === "worktree" && scopedAgent && ag.id !== scopedAgent) return false;
+      if (kind === "project" && scopedProject && ag.projectId !== scopedProject) return false;
+      return true;
+    });
+  });
+
   readonly items = computed(() => {
     const q = this.q();
     const agents = this.runtime.agents();
@@ -264,6 +284,16 @@ export class RecentFilesOverlayComponent {
       .filter((x): x is NonNullable<typeof x> => !!x);
     if (q) rows.sort((a, b) => b.score - a.score);
     return rows;
+  });
+
+  /** "12 recent files" unfiltered, "3 of 12" while a query narrows them — the
+   *  list is a local computed, so there is nothing to spin on; what the user
+   *  needs is what is on screen and what it was drawn from. */
+  readonly countLabel = computed(() => {
+    const total = this.scoped().length;
+    const shown = this.items().length;
+    const noun = total === 1 ? "recent file" : "recent files";
+    return shown === total ? `${total} ${noun}` : `${shown} of ${total} ${noun}`;
   });
 
   constructor() {

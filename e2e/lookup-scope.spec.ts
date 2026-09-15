@@ -64,8 +64,11 @@ test("every lookup overlay shows the scope it is reading", async ({ page }) => {
   await blur(page);
   await page.keyboard.press("Control+E");
   const recent = page.locator("app-recent-files-overlay");
-  await expect(recent.locator("app-scope-bar")).toBeVisible();
-  await expect(recent.locator("app-scope-bar")).toContainText("ls-proj");
+  // the palette portals its panel (scope bar included) into the shared overlay
+  // container, so the bar is no longer a descendant of the overlay component
+  const recentScope = page.locator("app-scope-bar");
+  await expect(recentScope).toBeVisible();
+  await expect(recentScope).toContainText("ls-proj");
   await page.keyboard.press("Escape");
   await expect(recent).toHaveCount(0);
 
@@ -101,7 +104,7 @@ test("re-pointing the scope in one overlay survives into the next", async ({ pag
   // …and it is still beta after the overlay was destroyed and a DIFFERENT one opened
   await blur(page);
   await page.keyboard.press("Control+E");
-  await expect(page.locator("app-recent-files-overlay app-scope-bar")).toContainText("beta");
+  await expect(page.locator("app-scope-bar")).toContainText("beta");
 });
 
 test("Ctrl+T opens the Symbols lookup, distinct from the Files lookup", async ({ page }) => {
@@ -117,9 +120,11 @@ test("Ctrl+T opens the Symbols lookup, distinct from the Files lookup", async ({
   await expect(se).toContainText("start typing to search symbols");
   await expect(se.getByText("Symbols", { exact: true })).toBeVisible();
 
-  // a 1-char query is refused up front (the grep cap would truncate instantly)
+  // a 1-char query is accepted: symbols are one index lookup now, not a grep
+  // that a short query would truncate (the old "type at least 2 characters"
+  // refusal went with the grep)
   await input.fill("h");
-  await expect(se).toContainText("type at least 2 characters");
+  await expect(se).not.toContainText("start typing to search symbols");
 
   // Files is a separate tab with its own copy
   await input.fill("");
@@ -134,9 +139,10 @@ test("Go to Symbol is a real command, distinct from Go to File", async ({ page }
   await boot(page);
   await blur(page);
   await page.keyboard.press("Control+Shift+P");
-  const palette = page.locator("app-command-palette");
-  await expect(palette.locator("input")).toBeFocused();
-  await palette.locator("input").fill("Go to");
-  await expect(palette.getByText("Go to Symbol…")).toBeVisible();
-  await expect(palette.getByText("Go to File…")).toBeVisible();
+  // portalled panel again: input and rows are addressed globally
+  const paletteInput = page.locator(".kj-command-palette__input");
+  await expect(paletteInput).toBeFocused();
+  await paletteInput.fill("Go to");
+  await expect(page.getByText("Go to Symbol…")).toBeVisible();
+  await expect(page.getByText("Go to File…")).toBeVisible();
 });

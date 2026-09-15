@@ -1,0 +1,81 @@
+[
+  {
+    "id": "grammar.java",
+    "repo": "tree-sitter/tree-sitter-java",
+    "tag": "v0.23.5",
+    "sha256": "cb199e0faae4b2c08425f88cbb51c1a9319612e7b96315a174a624db9bf3d9f0",
+    "symbol": "tree_sitter_java",
+    "language": "java",
+    "monacoLanguage": "java",
+    "fileExtensions": ["java"],
+    "hasLocals": false
+  },
+  {
+    "id": "grammar.typescript",
+    "repo": "tree-sitter/tree-sitter-typescript",
+    "tag": "v0.23.2",
+    "sha256": "2c4ce711ae8d1218a3b2f899189298159d672870b5b34dff5d937bed2f3e8983",
+    "subdir": "typescript",
+    "symbol": "tree_sitter_typescript",
+    "language": "typescript",
+    "monacoLanguage": "javascript",
+    "fileExtensions": ["ts", "mts", "cts"],
+    "hasLocals": true
+  },
+  {
+    "id": "grammar.tsx",
+    "repo": "tree-sitter/tree-sitter-typescript",
+    "tag": "v0.23.2",
+    "sha256": "2c4ce711ae8d1218a3b2f899189298159d672870b5b34dff5d937bed2f3e8983",
+    "subdir": "tsx",
+    "symbol": "tree_sitter_tsx",
+    "language": "tsx",
+    "monacoLanguage": "javascript",
+    "fileExtensions": ["tsx"],
+    "hasLocals": true
+  },
+  {
+    "id": "grammar.javascript",
+    "repo": "tree-sitter/tree-sitter-javascript",
+    "tag": "v0.25.0",
+    "sha256": "9712fc283d3dc01d996d20b6392143445d05867a7aad76fdd723824468428b86",
+    "symbol": "tree_sitter_javascript",
+    "language": "javascript",
+    "monacoLanguage": "javascript",
+    "fileExtensions": ["js", "mjs", "cjs", "jsx"],
+    "hasLocals": true
+  },
+  {
+    "id": "grammar.rust",
+    "repo": "tree-sitter/tree-sitter-rust",
+    "tag": "v0.24.2",
+    "sha256": "061e90a539a55a6aa65dceb0ad6425c50ab1a6e3e6d4ba430e2795ed4550f10e",
+    "symbol": "tree_sitter_rust",
+    "language": "rust",
+    "monacoLanguage": "rust",
+    "fileExtensions": ["rs"],
+    "hasLocals": false
+  },
+  {
+    "id": "grammar.python",
+    "repo": "tree-sitter/tree-sitter-python",
+    "tag": "v0.25.0",
+    "sha256": "4609a3665a620e117acf795ff01b9e965880f81745f287a16336f4ca86cf270c",
+    "symbol": "tree_sitter_python",
+    "language": "python",
+    "monacoLanguage": "python",
+    "fileExtensions": ["py", "pyw", "pyi"],
+    "hasLocals": false
+  },
+  {
+    "id": "grammar.go",
+    "repo": "tree-sitter/tree-sitter-go",
+    "tag": "v0.25.0",
+    "sha256": "2dc241b97872c53195e01b86542b411a3c1a6201d9c946c78d5c60c063bba1ef",
+    "symbol": "tree_sitter_go",
+    "language": "go",
+    "monacoLanguage": "go",
+    "fileExtensions": ["go"],
+    "hasLocals": false
+  }
+]

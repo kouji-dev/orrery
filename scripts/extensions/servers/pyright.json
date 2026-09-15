@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "id": "server.pyright",
+  "kind": "server",
+  "version": "1.1.414-1",
+  "label": "Pyright",
+  "languages": ["python"],
+  "transport": "stdio",
+  "target": "any",
+  "requires": ["runtime.node"],
+  "launch": {
+    "runtime": "node",
+    "entry": "server/node_modules/pyright/langserver.index.js",
+    "args": ["--stdio"]
+  },
+  "initializationOptions": {},
+  "settings": { "python": { "analysis": { "autoSearchPaths": true } } },
+  "virtualSchemes": [],
+  "virtualRead": null,
+  "detect": {
+    "path": [
+      "pyright-langserver",
+      "pyright-langserver.cmd",
+      "basedpyright-langserver",
+      "basedpyright-langserver.exe"
+    ],
+    "env": [],
+    "requires": [],
+    "hint": "Optional system fallback: npm install -g pyright  (or: pip install basedpyright)"
+  },
+  "minOrreryVersion": "0.24.0"
+}

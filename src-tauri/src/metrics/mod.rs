@@ -144,12 +144,27 @@ impl MetricsSampler {
     /// count (machine-relative, like Task Manager). Totals are the SUM of the rows —
     /// the cpu/memory used by orrery + its agents.
     pub fn sample(&self, app_pid: u32, agents: &[(Uuid, u32)]) -> SystemMetrics {
+        self.sample_with(app_pid, agents, &[])
+    }
+
+    /// `sample` plus `extra` rows `(id, label, pid)` — language servers
+    /// (`lsp:<extId>:<projectId>`), spawned as direct children of orrery
+    /// and carved out of the app row exactly like agent roots.
+    pub fn sample_with(
+        &self,
+        app_pid: u32,
+        agents: &[(Uuid, u32)],
+        extra: &[(String, String, u32)],
+    ) -> SystemMetrics {
         let map = self.process_map();
         let cores = self.cpu_count.max(1) as f32;
 
-        let agent_pids: std::collections::HashSet<u32> =
-            agents.iter().map(|(_, pid)| *pid).collect();
-        let mut procs = Vec::with_capacity(agents.len() + 1);
+        let agent_pids: std::collections::HashSet<u32> = agents
+            .iter()
+            .map(|(_, pid)| *pid)
+            .chain(extra.iter().map(|(_, _, pid)| *pid))
+            .collect();
+        let mut procs = Vec::with_capacity(agents.len() + extra.len() + 1);
         procs.push(subtree_metric(
             "app".into(),
             "Orrery".into(),
@@ -163,6 +178,16 @@ impl MetricsSampler {
             procs.push(subtree_metric(
                 id.to_string(),
                 id.to_string(),
+                *pid,
+                &map,
+                &no_stop,
+                cores,
+            ));
+        }
+        for (id, label, pid) in extra {
+            procs.push(subtree_metric(
+                id.clone(),
+                label.clone(),
                 *pid,
                 &map,
                 &no_stop,
@@ -334,12 +359,25 @@ impl SharedSampler {
         pids: &[(Uuid, u32)],
         labels: &HashMap<Uuid, String>,
     ) -> SystemMetrics {
+        self.refresh_and_sample_with(app_pid, pids, labels, &[])
+    }
+
+    /// `refresh_and_sample` with extra `(id, label, pid)` roots (language
+    /// servers) refreshed and rolled up alongside the agents.
+    pub fn refresh_and_sample_with(
+        &self,
+        app_pid: u32,
+        pids: &[(Uuid, u32)],
+        labels: &HashMap<Uuid, String>,
+        extra: &[(String, String, u32)],
+    ) -> SystemMetrics {
         let mut s = self.inner.lock().unwrap();
-        let mut roots: Vec<u32> = Vec::with_capacity(pids.len() + 1);
+        let mut roots: Vec<u32> = Vec::with_capacity(pids.len() + extra.len() + 1);
         roots.push(app_pid);
         roots.extend(pids.iter().map(|(_, pid)| *pid));
+        roots.extend(extra.iter().map(|(_, _, pid)| *pid));
         s.sampler.refresh_scoped(&roots);
-        let mut m = s.sampler.sample(app_pid, pids);
+        let mut m = s.sampler.sample_with(app_pid, pids, extra);
         apply_labels(&mut m, labels);
         s.snapshot = Some((m.clone(), Instant::now()));
         m

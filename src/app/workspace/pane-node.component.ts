@@ -25,8 +25,9 @@ import { FileViewComponent } from "./file-view.component";
 import { DropSide, PaneCtx, PaneLeaf, PaneNode, PaneSplit } from "./pane-model";
 import { TerminalComponent } from "./terminal.component";
 import { AgentGitViewComponent } from "./git/agent-git-view.component";
+import { isVirtualUri, virtualFileName } from "./virtual-doc";
 import { UiStore } from "../ui/ui.store";
-import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
+import { KjBadgeComponent, KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
 
 /**
  * One node of a workspace pane tree, rendered recursively. A `leaf` is a single
@@ -38,7 +39,7 @@ import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent 
   selector: "app-pane-node",
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { "(document:mousedown)": "onDocDown($event)" },
-  imports: [IconComponent, ToolBadgeComponent, TerminalComponent, DiffViewComponent, FileViewComponent, AgentGitViewComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
+  imports: [IconComponent, ToolBadgeComponent, TerminalComponent, DiffViewComponent, FileViewComponent, AgentGitViewComponent, KjBadgeComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent],
   template: `
     @if (asLeaf(); as lf) {
       @let ag = agent();
@@ -102,19 +103,25 @@ import { KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent 
               @for (f of lf.files ?? []; track f) {
                 @let onf = lf.view === 'file' && lf.activeFile === f;
                 @let dirty = isDirty(lf, f);
+                @let virt = isVirtual(f);
+                <!-- M3: a virtual read-only doc tab is the design LibDocTab —
+                     box icon, the entry's file name, the "library" badge,
+                     the full uri as its title -->
                 <div
                   class="file-tab"
                   [class.on]="onf"
                   [class.dirty]="dirty"
                   [class.preview]="lf.previewFile === f"
+                  [class.virtual]="virt"
                   [title]="f + (dirty ? ' — unsaved changes' : '') + (lf.previewFile === f ? ' — preview (double-click to pin)' : '')"
                   [attr.data-path]="f"
                   (click)="$event.stopPropagation(); ctx().onFileSelect(lf.id, f)"
                   (dblclick)="$event.stopPropagation(); ctx().onFilePin(lf.id, f)"
                   (contextmenu)="onFileTabContext($event, lf, f)"
                 >
-                  <app-icon size="md" name="file" [color]="onf ? 'var(--ui-ink)' : 'var(--ink-4)'" />
-                  <span class="fn trunc">{{ fname(f) }}</span>
+                  <app-icon size="md" [name]="virt ? 'box' : 'file'" [color]="onf ? 'var(--ui-ink)' : 'var(--ink-4)'" />
+                  <span class="fn trunc">{{ virt ? vname(f) : fname(f) }}</span>
+                  @if (virt) { <kj-badge class="lib-badge" variant="outline">library</kj-badge> }
                   <span class="fdot" aria-label="unsaved changes"></span>
                   <kj-button kjSize="icon" class="fx" kjVariant="ghost" title="Close file" (click)="$event.stopPropagation(); requestFileClose(lf, f)">
                     <app-icon size="sm" name="x" />
@@ -392,6 +399,8 @@ export class PaneNodeComponent {
    *  dialog is really about. */
   readonly confirmClose = signal<{ leafId: string; agentId: string; paths: string[]; dirty: string[] } | null>(null);
   readonly fname = fileName;
+  readonly vname = virtualFileName;
+  readonly isVirtual = isVirtualUri;
   readonly views: { k: "terminal" | "diff"; icon: string }[] = [
     { k: "terminal", icon: "terminal" },
     { k: "diff", icon: "diff" },
@@ -607,8 +616,9 @@ export class PaneNodeComponent {
 
   private closeTab(leafId: string, agentId: string | null, path: string): void {
     // Drop the buffer only when no other leaf still shows this file — the
-    // EditsStore key (agent:path) is shared across panes.
-    if (agentId && !this.fileOpenElsewhere(agentId, path, leafId)) {
+    // EditsStore key (agent:path) is shared across panes. A virtual doc has
+    // no buffer and no scroll state of its own to drop.
+    if (agentId && !isVirtualUri(path) && !this.fileOpenElsewhere(agentId, path, leafId)) {
       this.edits.close(agentId, path);
       this.scroll.clear(agentId, path);
     }
