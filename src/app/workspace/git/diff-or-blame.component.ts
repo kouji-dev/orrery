@@ -60,6 +60,8 @@ import { KjBadgeComponent, KjButtonComponent } from "@kouji-ui/components";
       @if (diff(); as d) {
         <app-code-diff
           style="flex:1;min-height:0"
+          [agent]="agent()"
+          [file]="path()"
           [oldText]="d.old"
           [newText]="d.new"
           [lang]="lang()"

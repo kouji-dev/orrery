@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "id": "server.typescript-language-server",
+  "kind": "server",
+  "version": "6.0.0-1",
+  "label": "TypeScript language server",
+  "languages": ["typescript", "tsx", "javascript"],
+  "transport": "stdio",
+  "target": "any",
+  "requires": ["runtime.node"],
+  "launch": {
+    "runtime": "node",
+    "entry": "server/node_modules/typescript-language-server/lib/cli.mjs",
+    "args": ["--stdio"]
+  },
+  "_initNote": "useSyntaxServer=never: with the default 'auto' tsserver answers definition/hover from the syntax-only server while the project loads (imports resolve to the local alias, not the target file); our router would show that as a wrong location instead of falling back to the index. tsserver.path pins the bundled typescript@6 (typescript 7 is the native port: no tsserver.js).",
+  "initializationOptions": {
+    "tsserver": {
+      "useSyntaxServer": "never",
+      "path": "${extDir}/server/node_modules/typescript/lib/tsserver.js"
+    }
+  },
+  "settings": {},
+  "virtualSchemes": [],
+  "virtualRead": null,
+  "detect": {
+    "path": ["typescript-language-server", "typescript-language-server.cmd"],
+    "env": [],
+    "requires": [{ "program": "node", "minVersion": "18", "env": [] }],
+    "hint": "Optional system fallback: npm install -g typescript-language-server typescript@6"
+  },
+  "minOrreryVersion": "0.24.0"
+}

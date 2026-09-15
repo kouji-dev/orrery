@@ -14,17 +14,24 @@ pub fn project_list(svc: State<'_, ProjectService>) -> AppResult<Vec<Project>> {
 }
 
 /// Blocking pool: may clone a remote (network) / git-init / inspect the repo on disk.
+/// A registered project's library sources (M4: its `Cargo.lock` crates,
+/// `pom.xml` jars, the JDK) start indexing right away.
 #[tauri::command]
 pub async fn project_create<R: Runtime>(
     app: AppHandle<R>,
     svc: State<'_, ProjectService>,
+    libsrc: State<'_, crate::libsrc::LibSrcService>,
     req: ProjectCreateRequest,
 ) -> AppResult<Project> {
     let svc = svc.inner().clone();
+    let libsrc = libsrc.inner().clone();
     let project = tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("project_create", || {
             svc.create(req)
                 .inspect_err(|e| log::error!("project_create failed: {e:?}"))
+        })
+        .inspect(|p| {
+            libsrc.ensure_for_project(&p.id.to_string());
         })
     })
     .await

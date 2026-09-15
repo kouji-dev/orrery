@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "id": "server.jdtls",
+  "kind": "server",
+  "version": "1.61.0-1",
+  "label": "Eclipse JDT LS",
+  "languages": ["java"],
+  "transport": "stdio",
+  "target": "any",
+  "requires": ["runtime.java"],
+  "launch": {
+    "runtime": "java",
+    "entry": "plugins/org.eclipse.equinox.launcher_*.jar",
+    "jvmArgs": [
+      "-Declipse.application=org.eclipse.jdt.ls.core.id1",
+      "-Dosgi.bundles.defaultStartLevel=4",
+      "-Declipse.product=org.eclipse.jdt.ls.core.product",
+      "-Xms256m",
+      "-Xmx1g",
+      "--add-modules=ALL-SYSTEM",
+      "--add-opens",
+      "java.base/java.util=ALL-UNNAMED",
+      "--add-opens",
+      "java.base/java.lang=ALL-UNNAMED"
+    ],
+    "args": ["-configuration", "${extDir}/${jdtlsConfig}", "-data", "${workspaceStorage}"]
+  },
+  "_launchNote": "Direct JVM launch (`<runtime.java>/bin/java <jvmArgs> -jar <entry glob, newest match> <args>`), the way the jdtls README does — bin/jdtls(.bat) is not used. `entry` is a glob: the launcher jar name carries its own version.",
+  "placeholders": {
+    "_doc": "${jdtlsConfig} resolves to the Equinox config dir jdtls ships for the running platform (the pack is `any`, so the host picks at launch).",
+    "jdtlsConfig": {
+      "windows-x86_64": "config_win",
+      "macos-aarch64": "config_mac_arm",
+      "linux-x86_64": "config_linux"
+    }
+  },
+  "initializationOptions": { "extendedClientCapabilities": { "classFileContentsSupport": true } },
+  "settings": {},
+  "virtualSchemes": ["jdt"],
+  "virtualRead": { "method": "java/classFileContents" },
+  "detect": {
+    "path": ["jdtls", "jdtls.bat"],
+    "env": ["JDTLS_HOME"],
+    "requires": [{ "program": "java", "minVersion": "21", "env": ["JAVA_HOME"] }],
+    "hint": "Optional system fallback: a jdtls distribution on PATH/JDTLS_HOME plus a Java 21+ runtime."
+  },
+  "minOrreryVersion": "0.24.0"
+}

@@ -38,6 +38,8 @@
               "node_modules/@kouji-ui/themes/src/density.css",
               "node_modules/@kouji-ui/themes/src/themes/orrery.css",
               "node_modules/@kouji-ui/themes/src/themes/orrery-light.css",
+              "node_modules/@kouji-ui/core/overlay/overlay.css",
+              "node_modules/@kouji-ui/components/src/overlay/overlay.css",
               "src/styles.css",
               {
                 "input": "node_modules/monaco-editor/min/vs/editor/editor.main.css",

@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "server.gopls",
+  "kind": "server",
+  "version": "0.19.1-1",
+  "label": "gopls",
+  "languages": ["go"],
+  "transport": "stdio",
+  "target": "per-target",
+  "requires": [],
+  "launch": { "runtime": null, "entry": "gopls", "args": [] },
+  "_launchNote": "target `per-target` = one zip per platform; build-servers.mjs fills `target` and appends `.exe` to `entry` on Windows.",
+  "initializationOptions": {},
+  "settings": {},
+  "virtualSchemes": [],
+  "virtualRead": null,
+  "detect": {
+    "path": ["gopls", "gopls.exe"],
+    "env": ["GOBIN"],
+    "requires": [{ "program": "go", "minVersion": "1.23", "env": ["GOROOT"] }],
+    "hint": "Optional system fallback: go install golang.org/x/tools/gopls@latest  (lands in $GOPATH/bin or $GOBIN)"
+  },
+  "minOrreryVersion": "0.24.0"
+}

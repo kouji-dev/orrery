@@ -15,6 +15,8 @@ import { DragService } from "../../shared/drag.service";
 import { EditsStore } from "../../stores/edits.store";
 import { ScrollStateService } from "../../workspace/scroll-state.service";
 import { UiStore } from "../../ui/ui.store";
+import { tokenPx } from "../../ui/density";
+import { CommandRegistryService } from "../../commands/command-registry.service";
 import { IconComponent } from "../../shared/icon.component";
 import { KjButtonComponent } from "@kouji-ui/components";
 import { MenuPanelComponent } from "../../context-menu/menu-panel.component";
@@ -49,33 +51,34 @@ function msgOf(e: unknown): string {
         <!-- virtualized: only visible rows are rendered. Data wins over the
              loading flag so background watcher scans never unmount the
              viewport (which would drop its scroll offset and flicker). -->
-        <cdk-virtual-scroll-viewport itemSize="24" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y">
+        <!-- .tree-row is the shared quiet-row recipe in styles.css (design
+             QuietRows): mono 13px, ~21px rows, hover panel-2, open file panel-3.
+             itemSize mirrors --tree-row-h and is recomputed on density switch. -->
+        <cdk-virtual-scroll-viewport [itemSize]="rowH()" minBufferPx="240" maxBufferPx="480" style="flex:1" class="scroll-y mono">
           <div
             *cdkVirtualFor="let row of rows(); trackBy: trackPath"
+            class="tree-row"
+            [class.dir]="row.node.isDir"
+            [class.ignored]="row.node.ignored"
+            [class.sel]="isActive(row.node)"
             (click)="onRow(row.node, $event)"
             (dblclick)="onRowDbl(row.node)"
             (contextmenu)="onContext($event, row.node)"
             [attr.draggable]="row.node.isDir ? null : 'true'"
             (dragstart)="onDragStart($event, row.node)"
             (dragend)="dragSvc.end()"
-            [style.padding-left.px]="8 + row.depth * 13"
+            [style.padding-left.px]="8 + row.depth * 13 + (row.node.isDir ? 0 : 16)"
             [title]="row.node.isDir ? null : row.node.path + ' — click: preview · double-click: pin · Alt+click: split'"
-            style="height:var(--sp-9);display:flex;align-items:center;gap:var(--sp-3);cursor:pointer;padding-right:var(--sp-4);border-radius:5px"
           >
             @if (row.node.isDir) {
-              <app-icon [name]="isOpen(row.node) ? 'chevronD' : 'chevron'" size="sm" color="var(--ink-4)" />
-              <app-icon [name]="isOpen(row.node) ? 'folderOpen' : 'folder'" size="sm" color="var(--ink-4)" />
+              <app-icon name="chevron" size="xs" color="var(--ink-4)" [style.transform]="isOpen(row.node) ? 'rotate(90deg)' : null" style="transition:transform 0.12s" />
+              <app-icon name="folder" size="sm" color="var(--ink-4)" />
             } @else {
-              <span style="width:round(calc(11px * var(--density)), 1px);flex:none"></span>
               <app-icon name="file" size="sm" color="var(--ink-4)" />
             }
-            <span
-              [style.color]="row.node.ignored ? 'var(--ink-4)' : row.node.isDir ? 'var(--ink-2)' : 'var(--ink-3)'"
-              [style.opacity]="row.node.ignored ? 0.7 : 1"
-              style="flex:1;min-width:0;font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-            >{{ row.node.name }}</span>
+            <span class="tree-name">{{ row.node.name }}{{ row.node.isDir ? '/' : '' }}</span>
             @if (!row.node.isDir && isModified(row.node.path)) {
-              <span title="modified in this worktree" style="width:var(--sp-2);height:var(--sp-2);border-radius:50%;background:var(--vcs-modified);flex:none;margin-right:var(--sp-1)"></span>
+              <span class="tree-dot" title="modified in this worktree"></span>
             }
           </div>
         </cdk-virtual-scroll-viewport>
@@ -136,7 +139,26 @@ export class SidebarFileTreeComponent {
   private edits = inject(EditsStore);
   private scroll = inject(ScrollStateService);
   private host = inject(ElementRef<HTMLElement>);
+  private registry = inject(CommandRegistryService);
   readonly dragSvc = inject(DragService);
+
+  /** Virtual-scroll row height: mirrors the `--tree-row-h` token so the
+   *  viewport and the CSS row stay pixel-identical across density switches. */
+  readonly rowH = computed(() => {
+    void this.ui.tweaks().density;
+    return tokenPx("--tree-row-h", 21);
+  });
+
+  /** The file currently shown in the active pane leaf of THIS root — the one
+   *  row that carries the selected ground (design: activePath → panel-3). */
+  readonly activePath = computed<string | null>(() => {
+    const leaf = this.registry.activeFileLeaf();
+    if (!leaf || leaf.agentId !== this.workId()) return null;
+    return (leaf.activeFile ?? "").replace(/\\/g, "/") || null;
+  });
+  isActive(node: FileNode): boolean {
+    return !node.isDir && this.activePath() === node.path.replace(/\\/g, "/");
+  }
 
   /** Root the tree is rooted at: an agent id or `proj:<projectId>`. */
   readonly rootKey = input.required<string>();

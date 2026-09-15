@@ -8,22 +8,16 @@ import {
   signal,
   viewChild,
 } from "@angular/core";
-import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { PeekOverlayComponent } from "../notifications/peek-overlay.component";
-import { ProjectActionsService } from "../projects/project-actions.service";
 import { IconComponent } from "../shared/icon.component";
-import { LookupScopeStore } from "../shared/scope";
-import { ScopeBarComponent } from "../shared/scope-bar.component";
-import { fileDir, fileName } from "../utils";
+import { fileName } from "../utils";
 import { CommandRegistryService } from "./command-registry.service";
 import { EditorNavService } from "./editor-nav.service";
 import { fzMatch, kbdLabel } from "./fuzzy";
 import { fzSegments, OverlayShellComponent } from "./overlay-shell.component";
-import { RecentFilesService } from "./recent-files.service";
 import { FindInFilesComponent } from "./find-in-files.component";
 import { SearchEverywhereComponent } from "./search-everywhere.component";
-import { KjBadgeComponent, KjCommandGroupComponent, KjCommandEmptyComponent,
-  KjCommandItemComponent, KjCommandPaletteComponent, KjCommandPaletteFooter, KjKbdComponent } from "@kouji-ui/components";
+import { KjBadgeComponent, KjCommandGroupComponent, KjCommandItemComponent, KjCommandPaletteComponent, KjCommandPaletteFooter, KjKbdComponent } from "@kouji-ui/components";
 
 // ------------------------------------------------------------ command palette
 /**
@@ -154,135 +148,6 @@ export class CommandPaletteComponent {
   }
 }
 
-// ------------------------------------------------------------- recent files
-/**
- * Recent files on the same kj palette. The list is short and already ranked by
- * recency, so the query only narrows it — same `fzMatch` scoring as the command
- * palette, matched against the file name first and the full path as a fallback.
- */
-@Component({
-  selector: "app-recent-files-overlay",
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, KjKbdComponent, KjCommandPaletteComponent, KjCommandItemComponent, KjCommandEmptyComponent, KjCommandPaletteFooter, KjBadgeComponent, ScopeBarComponent],
-  template: `
-    <kj-command-palette
-      class="orr-palette orr-palette-narrow"
-      kjAriaLabel="Recent files"
-      kjPlaceholder="Recent files…"
-      [kjOpen]="true"
-      (kjOpenChange)="registry.close()"
-      [kjShouldFilter]="false"
-      [(kjQuery)]="q"
-      [kjEscBadge]="false"
-      [kjAutoCloseOnActivate]="false"
-      (kjValueChange)="active.set($event)"
-      (kjActivate)="pick($event.value)"
-    >
-      <!-- WHICH worktree/project the list is narrowed to. role=presentation:
-           the palette's default slot is its listbox, and this row is chrome,
-           not an option. No breadth select — recents are a flat list, the two
-           selects already say "this worktree" vs "this project". -->
-      <div role="presentation" style="padding:var(--sp-3) var(--sp-5);border-bottom:1px solid var(--hair)">
-        <app-scope-bar [scope]="scope" />
-      </div>
-      @if (!items().length) {
-        <!-- the palette owns the empty slot; the hand-rolled div this replaced
-             carried the copy the e2e asserts on -->
-        <kj-command-empty>no files opened yet</kj-command-empty>
-      }
-      @for (it of items(); track it.key) {
-        <kj-command-item [kjValue]="it.key">
-          <app-icon name="file" size="sm" color="var(--ink-3)" />
-          <span class="orr-cmd-label">
-            @for (s of it.segs; track $index) {
-              @if (s.hit) { <b>{{ s.t }}</b> } @else { <span>{{ s.t }}</span> }
-            }
-          </span>
-          <span class="orr-cmd-meta orr-cmd-grow">{{ fdir(it.path) }}</span>
-          <!-- owning project, then the worktree: a bare worktree badge cannot
-               tell two same-named agents in different projects apart -->
-          @if (it.project; as p) {
-            <span style="display:flex;align-items:center;gap:var(--sp-2);flex:none">
-              <app-icon size="sm" [name]="p.icon" [color]="p.color" />
-              <span class="orr-cmd-meta">{{ p.name }}</span>
-            </span>
-          }
-          @if (it.agentName) { <kj-badge class="orr-cmd-chip">{{ it.agentName }}</kj-badge> }
-        </kj-command-item>
-      }
-      <div kjCommandPaletteFooter class="orr-palette-foot">
-        <span><kj-kbd>↑↓</kj-kbd>navigate</span>
-        <span><kj-kbd>⏎</kj-kbd>open</span>
-        <span><kj-kbd>esc</kj-kbd>close</span>
-        <span class="orr-palette-count tnum">{{ items().length }}</span>
-      </div>
-    </kj-command-palette>
-  `,
-})
-export class RecentFilesOverlayComponent {
-  readonly registry = inject(CommandRegistryService);
-  /** The scope shared with the other lookup overlays — the user's pick has to
-   *  survive this overlay being destroyed on close. */
-  readonly scope = inject(LookupScopeStore);
-  private recents = inject(RecentFilesService);
-  private runtime = inject(AgentRuntimeService);
-  private projects = inject(ProjectActionsService);
-  readonly q = signal("");
-  readonly active = signal<unknown>(null);
-  readonly fdir = fileDir;
-  private host: ElementRef<HTMLElement> = inject(ElementRef);
-
-  /** Entries whose agent still exists AND falls inside the scope, tagged with
-   *  the owning project + worktree and fuzzy-scored. */
-  readonly items = computed(() => {
-    const q = this.q();
-    const agents = this.runtime.agents();
-    const kind = this.scope.kind();
-    const scopedAgent = this.scope.realAgent()?.id ?? null;
-    const scopedProject = this.scope.project()?.id ?? null;
-    const rows = this.recents
-      .entries()
-      .map((e) => {
-        const ag = agents.find((a) => a.id === e.agentId);
-        if (!ag) return null;
-        // worktree = that one agent, project = its project's agents, all = every
-        if (kind === "worktree" && scopedAgent && ag.id !== scopedAgent) return null;
-        if (kind === "project" && scopedProject && ag.projectId !== scopedProject) return null;
-        const name = fileName(e.path);
-        const direct = fzMatch(name, q);
-        const m = direct ?? (q ? fzMatch(e.path, q) : { score: 0, idx: [] });
-        if (!m) return null;
-        return {
-          ...e,
-          agentName: ag.name,
-          project: this.projects.projectOf(ag.projectId),
-          key: e.agentId + " " + e.path,
-          score: m.score,
-          segs: fzSegments(name, direct ? direct.idx : []),
-        };
-      })
-      .filter((x): x is NonNullable<typeof x> => !!x);
-    if (q) rows.sort((a, b) => b.score - a.score);
-    return rows;
-  });
-
-  constructor() {
-    afterRenderEffect(() => {
-      this.active();
-      this.host.nativeElement
-        .querySelector<HTMLElement>(".kj-command-item[data-active]")
-        ?.scrollIntoView({ block: "nearest" });
-    });
-  }
-
-  pick(value: unknown) {
-    const it = this.items().find((x) => x.key === value);
-    if (!it) return;
-    this.registry.close();
-    setTimeout(() => this.registry.openFileAt(it.agentId, it.path), 0);
-  }
-}
-
 // ---------------------------------------------------------------- go to line
 /**
  * Left on the hand-rolled OverlayShell on purpose: this overlay has no result
@@ -370,7 +235,6 @@ export class GotoLineOverlayComponent {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     CommandPaletteComponent,
-    RecentFilesOverlayComponent,
     GotoLineOverlayComponent,
     SearchEverywhereComponent,
     FindInFilesComponent,
@@ -382,7 +246,6 @@ export class GotoLineOverlayComponent {
       <!-- 'commands', not 'all': there is no "all" tab, and the component's
            linkedSignal would silently fall back anyway — say what we mean -->
       @case ('search') { <app-search-everywhere [initialTab]="registry.overlay()?.tab ?? 'commands'" /> }
-      @case ('recent') { <app-recent-files-overlay /> }
       @case ('goto') { <app-goto-line-overlay /> }
       @case ('find') { <app-find-in-files /> }
       @case ('peek') { <app-peek-overlay /> }

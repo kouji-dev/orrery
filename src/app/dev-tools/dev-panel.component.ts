@@ -11,7 +11,9 @@ import {
 } from "@angular/core";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectsStore } from "../stores/projects.store";
+import { LibSrcStore } from "../extensions/libsrc.store";
 import { IconComponent } from "../shared/icon.component";
+import { fmtCompact, fmtN } from "../utils";
 import { StatusDotComponent } from "../shared/status-dot.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { PerfStore, PerfRow, PERF_WINDOW_MS } from "../perf/perf.store";
@@ -25,6 +27,7 @@ import {
   Agent,
   AgentStatus,
   EmitAggRow,
+  LibSource,
   ProcessNode,
   ProcessTreeSnapshot,
   Project,
@@ -245,6 +248,21 @@ type Sort = { key: string; dir: number };
                 }
               </tbody>
             </table>
+            <!-- M4 library index: one line per source (JDK / a project's
+                 Cargo.lock crates / pom.xml jars) — automatic elsewhere,
+                 inspectable here -->
+            <div class="dvc-lib" data-testid="lib-index">
+              <div class="up dvc-sl dvc-lib-h">library index · {{ libsrc.sources().length }}<kj-button kjVariant="ghost" class="dvc-lib-btn" [kjDisabled]="libsrc.busy().has('*')" (click)="libsrc.rescan()"><app-icon name="refresh" size="sm" />Re-scan projects</kj-button></div>
+              @for (s of libsrc.sources(); track s.id) {
+                <div class="dvc-lib-row" [attr.data-src-id]="s.id" [attr.data-state]="s.state">
+                  <span class="dvc-fp trunc" [title]="s.path">{{ libLine(s) }}</span>
+                  <kj-button kjVariant="ghost" class="dvc-lib-btn" [kjDisabled]="libsrc.busy().has(s.id) || s.state === 'indexing'" (click)="libsrc.reindex(s.id)"><app-icon name="refresh" size="sm" />Re-index</kj-button>
+                </div>
+              } @empty {
+                <div class="dvc-dim">no library sources for your projects — a project needs a Cargo.lock or pom.xml, or a JDK for Java</div>
+              }
+              @if (libsrc.error(); as e) { <div class="dvc-dim">library sources unavailable — {{ e }}</div> }
+            </div>
             </div>
           }
 
@@ -277,6 +295,10 @@ type Sort = { key: string; dir: number };
                 <span class="tnum" style="color:var(--ink-2)">Orrery <b style="color:var(--ink)">{{ fmtMem(orreryPriv()) }}</b></span>
                 <span style="color:var(--ink-4)">·</span>
                 <span class="tnum" style="color:var(--ink-2)">agents <b style="color:var(--ink)">{{ fmtMem(agentsPriv()) }}</b></span>
+                @if (serversPriv()) {
+                  <span style="color:var(--ink-4)">·</span>
+                  <span class="tnum" style="color:var(--ink-2)" data-testid="res-servers">language servers <b style="color:var(--ink)">{{ fmtMem(serversPriv()) }}</b></span>
+                }
                 <kj-badge variant="outline" style="--kj-badge-font-size:var(--fs-meta)">private working set</kj-badge>
                 <span style="margin-left:auto;font-size:var(--fs-meta);color:var(--ink-4)">job-object accounting · descendants rediscovered at slower cadence</span>
               </div>
@@ -306,10 +328,12 @@ type Sort = { key: string; dir: number };
                         }
                         @if (r.agentRoot && agentOf(r.rootId); as ag) {
                           <span class="dvc-kind" style="background:transparent"><app-tool-badge [tool]="ag.tool" [size]="15" /></span>
+                        } @else if (isServerRoot(r.rootId)) {
+                          <span class="dvc-kind" style="background:transparent" title="language server"><app-icon name="server" size="sm" /></span>
                         } @else {
                           <span class="dvc-pdot" [style.background]="nodeDot(r.n)"></span>
                         }
-                        <span class="dvc-nm trunc" [style.color]="notOurs(r.n) ? 'var(--ink-3)' : 'var(--ink)'" [style.font-weight]="r.depth === 0 ? 600 : null">{{ r.n.name }}</span>
+                        <span class="dvc-nm trunc" [style.color]="notOurs(r.n) ? 'var(--ink-3)' : 'var(--ink)'" [style.font-weight]="r.depth === 0 ? 600 : null">{{ rowName(r) }}</span>
                         @if (r.n.note) { <span style="font-size:var(--fs-meta);color:var(--ink-4);flex:none">{{ r.n.note }}</span> }
                         @if (r.n.detached) { <kj-badge variant="outline" fg="var(--lat-a)" style="--kj-badge-font-size:var(--fs-badge)">detached · found via job object</kj-badge> }
                       </span></td>
@@ -398,7 +422,7 @@ type Sort = { key: string; dir: number };
             <span class="tnum" style="margin-left:auto">live state</span>
           }
           @if (tab() === 'projects') {
-            <span class="tnum">{{ projects().length }} projects · {{ agents().length }} worktrees</span>
+            <span class="tnum">{{ projects().length }} projects · {{ agents().length }} worktrees · {{ libsrc.sources().length }} library sources</span>
             <span class="tnum" style="margin-left:auto">live state</span>
           }
           @if (tab() === 'resources') {
@@ -499,6 +523,11 @@ type Sort = { key: string; dir: number };
 .dvc-sl{color:var(--ink-3);margin-bottom:var(--sp-1);}
 .dvc-files{display:flex;flex-direction:column;gap:1px;}
 .dvc-frow{display:grid;grid-template-columns:16px 1fr auto;gap:var(--sp-4);align-items:center;padding:var(--sp-1) 0;color:var(--ink-2);}
+.dvc-lib{margin-top:var(--sp-6);padding:var(--sp-4) var(--sp-5);border-top:1px solid var(--hair);}
+.dvc-lib-h{display:flex;align-items:center;gap:var(--sp-4);}
+.dvc-lib-row{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-1) 0;color:var(--ink-2);font-size:var(--fs-badge);}
+.dvc-lib-row .dvc-fp{flex:1;min-width:0;}
+.dvc-lib-btn .kj-button{height:var(--sp-8);padding:0 var(--sp-3);font-size:var(--fs-badge);}
 .dvc-task{color:var(--ink-2);line-height:1.5;}
 .dvc-attn{display:inline-flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);border-radius:6px;color:var(--lat-r);background:var(--lat-r-bg);border:1px solid var(--lat-r-ring);align-self:flex-start;}
 .dvc-calls{display:flex;flex-direction:column;gap:1px;}
@@ -578,6 +607,38 @@ export class DevPanelComponent {
   private readonly bridge = inject(BRIDGE);
   /** Raw emit-trace indicator (A0.7) — the Emits tab's record chip + toggle. */
   readonly telemetry = inject(TelemetryStore);
+  /** M4 library index — the Projects tab's read-only status lines. */
+  readonly libsrc = inject(LibSrcStore);
+
+  /** "Cargo · orrery · 647 crates · 2 skipped · indexing 2,341 / 15,502" /
+   *  "JDK 21 (openjdk21) · indexed · 15k files · 315k decls". */
+  libLine(s: LibSource): string {
+    const parts: string[] = [s.label];
+    if (s.kind === "cargo") parts.push(`${fmtN(s.artifacts)} crate${s.artifacts === 1 ? "" : "s"}`);
+    if (s.kind === "maven") parts.push(`${fmtN(s.artifacts)} jar${s.artifacts === 1 ? "" : "s"}`);
+    if (s.missing > 0) parts.push(s.kind === "maven" ? `${s.missing} not downloaded` : `${s.missing} missing`);
+    if (s.skipped > 0) parts.push(`${s.skipped} skipped`);
+    switch (s.state) {
+      case "indexing":
+        parts.push(s.total ? `indexing ${fmtN(s.done ?? 0)} / ${fmtN(s.total)}` : "indexing…");
+        break;
+      case "done":
+        parts.push("indexed", `${fmtCompact(s.files)} files`, `${fmtCompact(s.decls)} decls`);
+        break;
+      case "error":
+        parts.push(s.error ? `error · ${s.error}` : "error");
+        break;
+      case "cancelled":
+        parts.push(s.files ? `cancelled · ${fmtCompact(s.files)} files kept` : "cancelled");
+        break;
+      case "removed":
+        parts.push("removed");
+        break;
+      default:
+        parts.push("not indexed");
+    }
+    return parts.join(" · ");
+  }
 
   /** Build tier — metadata for perf exports only; the panel shows everything in prod too. */
   readonly dev = isDevMode();
@@ -905,15 +966,37 @@ export class DevPanelComponent {
   );
   readonly agentsPriv = computed(() =>
     (this.tree()?.roots ?? [])
-      .filter((r) => r.id !== "app")
+      .filter((r) => r.id !== "app" && !this.isServerRoot(r.id))
       .reduce((a, r) => a + r.node.subtreePrivBytes, 0),
   );
+  /** Language servers are carved-out roots too (`lsp:<extId>:<projectId>`,
+   *  labelled "<server> · <project>"): their own figure in the split, never
+   *  counted as an agent (user, 2026-09-15: show what the servers cost). */
+  readonly serversPriv = computed(() =>
+    (this.tree()?.roots ?? [])
+      .filter((r) => this.isServerRoot(r.id))
+      .reduce((a, r) => a + r.node.subtreePrivBytes, 0),
+  );
+  isServerRoot(id: string): boolean {
+    return id.startsWith("lsp:");
+  }
+  /** A server root row is named by the backend's label ("ts-ls · orrery"),
+   *  not by its binary ("node.exe" says nothing); every other row keeps the
+   *  process name. */
+  rowName(r: { n: ProcessNode; rootId: string; agentRoot: boolean }): string {
+    if (r.agentRoot && this.isServerRoot(r.rootId)) {
+      return this.tree()?.roots.find((x) => x.id === r.rootId)?.label ?? r.n.name;
+    }
+    return r.n.name;
+  }
   /** Why 700MB: the runaway process is usually the dev server / test runner an
    *  agent started and never cleaned up — flag any agent subtree above it. */
   private readonly ALERT_PRIV_BYTES = 700 * 1024 * 1024;
   readonly treeAlerts = computed(() =>
     (this.tree()?.roots ?? [])
-      .filter((r) => r.id !== "app" && r.node.subtreePrivBytes > this.ALERT_PRIV_BYTES)
+      // a language server is expected to be big (tsserver, jdtls) — the alert
+      // is about an agent's runaway child, not about a server doing its job
+      .filter((r) => r.id !== "app" && !this.isServerRoot(r.id) && r.node.subtreePrivBytes > this.ALERT_PRIV_BYTES)
       .map((r) => ({
         id: r.id,
         label: r.label,

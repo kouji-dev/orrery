@@ -11,6 +11,7 @@ import { kbdLabel } from "../commands/fuzzy";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { SettingsStore } from "../settings/settings.store";
+import { ExtensionsStore } from "../extensions/extensions.store";
 import { DragService } from "../shared/drag.service";
 import { UiStore } from "../ui/ui.store";
 import { IconComponent } from "../shared/icon.component";
@@ -205,6 +206,14 @@ import { mix } from "../utils";
               <app-icon [name]="ui.tweaks().theme === 'dark' ? 'sun' : 'moon'" size="sm" />
             </kj-button>
             <span class="pill-div"></span>
+            <!-- Extensions sits immediately left of the gear, behind the same
+                 hairline. The dot is the Settings update dot (amber, glow):
+                 updates available OR a restart pending. -->
+            <kj-button kjSize="icon" kjVariant="ghost" class="pill-seg tb-extensions" (click)="extensions.openModal()" [title]="extensionsTitle" kjAriaLabel="Extensions">
+              <app-icon name="puzzle" size="sm" />
+              @if (extensions.dot()) { <span class="ext-dot" [title]="extensions.restartPending() ? 'Restart pending' : 'Updates available'"></span> }
+            </kj-button>
+            <span class="pill-div"></span>
             <kj-button kjVariant="ghost" class="pill-seg tb-settings" (click)="settings.openModal()" title="Settings" kjAriaLabel="Settings">
               <app-icon name="settings" size="sm" />
               @if (settings.updateKnown()) { <span class="tb-upd-dot" title="Update available"></span> }
@@ -290,6 +299,8 @@ import { mix } from "../utils";
 export class TopBarComponent {
   readonly ui = inject(UiStore);
   readonly settings = inject(SettingsStore);
+  readonly extensions = inject(ExtensionsStore);
+  readonly extensionsTitle = "Extensions · " + kbdLabel("Ctrl+Shift+x");
   readonly runtime = inject(AgentRuntimeService);
   readonly projects = inject(ProjectActionsService);
   readonly agentActions = inject(AgentActionsService);

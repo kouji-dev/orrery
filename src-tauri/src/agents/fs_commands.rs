@@ -14,7 +14,7 @@ use crate::core::errors::{AppError, AppResult};
 use super::service::AgentService;
 
 /// Join `rel` under `workdir`, refusing anything that could resolve outside it.
-fn safe_join(workdir: &Path, rel: &str) -> AppResult<PathBuf> {
+pub(crate) fn safe_join(workdir: &Path, rel: &str) -> AppResult<PathBuf> {
     let rel = rel.trim();
     if rel.is_empty() {
         return Err(AppError::Other("empty path".into()));

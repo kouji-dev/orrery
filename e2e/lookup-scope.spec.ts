@@ -2,10 +2,10 @@ import { expect, Page, test } from "@playwright/test";
 
 /**
  * E2E for the shared LOOKUP SCOPE — the answer to "I can't tell where the app is
- * looking". Ctrl+E (recent files), Ctrl+Shift+F (find in files) and Search
- * Everywhere all render the same <app-scope-bar> naming the project + worktree
- * they read from, and all three share ONE root store, so re-pointing the scope in
- * one overlay is still in force after it is closed and another is opened.
+ * looking". Ctrl+Shift+F (find in files) and Search Everywhere both render the
+ * same <app-scope-bar> naming the project + worktree they read from, and share
+ * ONE root store, so re-pointing the scope in one overlay is still in force
+ * after it is closed and another is opened.
  *
  * Also covers the Symbols lookup (Ctrl+T), which is deliberately distinct from
  * the Files lookup: its own tab, its own 2-character floor, its own empty copy.
@@ -60,16 +60,8 @@ const worktreeSelect = (root: string) =>
 test("every lookup overlay shows the scope it is reading", async ({ page }) => {
   await boot(page);
 
-  // Ctrl+E — recent files names the project + worktree, not just a bare list
-  await blur(page);
-  await page.keyboard.press("Control+E");
-  const recent = page.locator("app-recent-files-overlay");
-  await expect(recent.locator("app-scope-bar")).toBeVisible();
-  await expect(recent.locator("app-scope-bar")).toContainText("ls-proj");
-  await page.keyboard.press("Escape");
-  await expect(recent).toHaveCount(0);
-
   // Ctrl+Shift+F — the badge spells the context out instead of "this worktree"
+  await blur(page);
   await page.keyboard.press("Control+Shift+F");
   const find = page.locator("app-find-in-files");
   await expect(find.locator("app-scope-bar")).toBeVisible();
@@ -92,7 +84,7 @@ test("re-pointing the scope in one overlay survives into the next", async ({ pag
   const find = page.locator("app-find-in-files");
   await expect(find.locator("kj-badge").first()).toContainText("alpha");
 
-  // re-point the worktree — the three overlays share ONE root store
+  // re-point the worktree — the overlays share ONE root store
   await page.locator(worktreeSelect("app-find-in-files")).locator(".kj-select-trigger").click();
   await page.getByRole("option", { name: "beta", exact: true }).click();
   await expect(find.locator("kj-badge").first()).toContainText("beta");
@@ -100,8 +92,8 @@ test("re-pointing the scope in one overlay survives into the next", async ({ pag
 
   // …and it is still beta after the overlay was destroyed and a DIFFERENT one opened
   await blur(page);
-  await page.keyboard.press("Control+E");
-  await expect(page.locator("app-recent-files-overlay app-scope-bar")).toContainText("beta");
+  await page.keyboard.press("Control+K");
+  await expect(page.locator("app-search-everywhere app-scope-bar")).toContainText("beta");
 });
 
 test("Ctrl+T opens the Symbols lookup, distinct from the Files lookup", async ({ page }) => {
@@ -117,9 +109,11 @@ test("Ctrl+T opens the Symbols lookup, distinct from the Files lookup", async ({
   await expect(se).toContainText("start typing to search symbols");
   await expect(se.getByText("Symbols", { exact: true })).toBeVisible();
 
-  // a 1-char query is refused up front (the grep cap would truncate instantly)
+  // a 1-char query is accepted: symbols are one index lookup now, not a grep
+  // that a short query would truncate (the old "type at least 2 characters"
+  // refusal went with the grep)
   await input.fill("h");
-  await expect(se).toContainText("type at least 2 characters");
+  await expect(se).not.toContainText("start typing to search symbols");
 
   // Files is a separate tab with its own copy
   await input.fill("");
@@ -134,9 +128,10 @@ test("Go to Symbol is a real command, distinct from Go to File", async ({ page }
   await boot(page);
   await blur(page);
   await page.keyboard.press("Control+Shift+P");
-  const palette = page.locator("app-command-palette");
-  await expect(palette.locator("input")).toBeFocused();
-  await palette.locator("input").fill("Go to");
-  await expect(palette.getByText("Go to Symbol…")).toBeVisible();
-  await expect(palette.getByText("Go to File…")).toBeVisible();
+  // portalled panel again: input and rows are addressed globally
+  const paletteInput = page.locator(".kj-command-palette__input");
+  await expect(paletteInput).toBeFocused();
+  await paletteInput.fill("Go to");
+  await expect(page.getByText("Go to Symbol…")).toBeVisible();
+  await expect(page.getByText("Go to File…")).toBeVisible();
 });

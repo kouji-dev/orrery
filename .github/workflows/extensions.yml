@@ -1,0 +1,244 @@
+name: Extensions
+
+# Builds the extension registry packs (tree-sitter grammar dylibs, runtime
+# packs, self-contained language servers) and publishes them to
+# kouji-dev/orrery-releases:
+#   - one GitHub release per pack version: `ext-<id>-v<version>` holding the
+#     per-target zips (grammars/runtimes/gopls/rust-analyzer: windows-x86_64 +
+#     macos-aarch64; ts-ls/pyright/jdtls: any)
+#   - the rolling `extensions` release carries `index.json` (stable URL, like
+#     `latest.json` for the app). Previously published packs survive: the
+#     index is merged from the currently published one.
+# Pins live in scripts/extensions/grammars.json + servers.json (+ servers/*.json templates).
+on:
+  workflow_dispatch:
+    inputs:
+      packs:
+        description: "Pack ids to build, comma-separated (e.g. grammar.java,runtime.node,server.jdtls) — or `all`"
+        required: false
+        type: string
+        default: all
+      rev:
+        description: "Pack revision suffix (bump when rebuilding the same upstream tag)"
+        required: false
+        type: string
+        default: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  build-grammars:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x86_64
+          - os: macos-14
+            target: macos-aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Resolve grammar list
+        id: langs
+        shell: bash
+        run: |
+          if [ "${{ inputs.packs }}" = "all" ] || [ -z "${{ inputs.packs }}" ]; then
+            echo "langs=all" >> "$GITHUB_OUTPUT"
+          else
+            langs=$(echo "${{ inputs.packs }}" | tr ',' '\n' | sed -n 's/^grammar\.//p' | paste -sd, -)
+            echo "langs=$langs" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build grammar packs
+        if: steps.langs.outputs.langs != ''
+        shell: bash
+        run: >
+          pnpm ext:build
+          --lang "${{ steps.langs.outputs.langs }}"
+          --target ${{ matrix.target }}
+          --rev "${{ inputs.rev }}"
+          --out dist-ext
+      - uses: actions/upload-artifact@v7
+        if: steps.langs.outputs.langs != ''
+        with:
+          name: ext-packs-${{ matrix.target }}
+          path: dist-ext/*.zip
+          if-no-files-found: error
+
+  # Runtime packs (runtime.node, runtime.java): the pinned Node 22 LTS / Temurin
+  # JRE 21 upstream archives, verified and repackaged — one zip per target.
+  build-runtimes:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x86_64
+          - os: macos-14
+            target: macos-aarch64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve runtime list
+        id: runtimes
+        shell: bash
+        run: |
+          if [ "${{ inputs.packs }}" = "all" ] || [ -z "${{ inputs.packs }}" ]; then
+            echo "only=all" >> "$GITHUB_OUTPUT"
+          else
+            only=$(echo "${{ inputs.packs }}" | tr ',' '\n' | grep '^runtime\.' | paste -sd, -)
+            echo "only=$only" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build runtime packs
+        if: steps.runtimes.outputs.only != ''
+        shell: bash
+        run: >
+          pnpm ext:build:runtimes
+          --only "${{ steps.runtimes.outputs.only }}"
+          --target ${{ matrix.target }}
+          --rev "${{ inputs.rev }}"
+          --out dist-ext
+      - uses: actions/upload-artifact@v7
+        if: steps.runtimes.outputs.only != ''
+        with:
+          name: ext-packs-runtimes-${{ matrix.target }}
+          path: dist-ext/*.zip
+          if-no-files-found: error
+
+  # Server packs. Node and Go on the runner are BUILD tools only: npm installs
+  # the JS servers into the pack, go builds gopls for the runner's platform.
+  # `any` packs (ts-ls, pyright, jdtls) are built once, on the Windows runner;
+  # macOS builds only its platform-specific packs (gopls, rust-analyzer).
+  build-servers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x86_64
+            extra: ""
+          - os: macos-14
+            target: macos-aarch64
+            extra: "--skip-any"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve server list
+        id: servers
+        shell: bash
+        run: |
+          if [ "${{ inputs.packs }}" = "all" ] || [ -z "${{ inputs.packs }}" ]; then
+            echo "only=all" >> "$GITHUB_OUTPUT"
+          else
+            only=$(echo "${{ inputs.packs }}" | tr ',' '\n' | grep '^server\.' | paste -sd, -)
+            echo "only=$only" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build server packs
+        if: steps.servers.outputs.only != ''
+        shell: bash
+        run: >
+          pnpm ext:build:servers
+          --only "${{ steps.servers.outputs.only }}"
+          --target ${{ matrix.target }}
+          --rev "${{ inputs.rev }}"
+          --out dist-ext
+          ${{ matrix.extra }}
+      - uses: actions/upload-artifact@v7
+        if: steps.servers.outputs.only != ''
+        with:
+          name: ext-packs-servers-${{ matrix.target }}
+          path: dist-ext/*.zip
+          if-no-files-found: ignore
+
+  publish:
+    needs: [build-grammars, build-runtimes, build-servers]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+      RELEASES_REPO: kouji-dev/orrery-releases
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ext-packs-*
+          merge-multiple: true
+          path: artifacts
+      - name: "Fetch the currently published index (first run: none)"
+        run: |
+          mkdir -p prev
+          gh release download extensions --repo "$RELEASES_REPO" --pattern index.json --dir prev \
+            || echo "no published index yet — starting fresh"
+      - name: Build index.json (merged with the published one)
+        run: >
+          node scripts/extensions/make-index.mjs
+          --dir artifacts
+          --out artifacts/index.json
+          --repo "$RELEASES_REPO"
+          --prev prev/index.json
+          --releases releases.json
+      - name: Create one release per pack version (skip existing)
+        run: |
+          set -euo pipefail
+          jq -c '.[]' releases.json | while read -r rel; do
+            tag=$(jq -r .tag <<<"$rel")
+            files=$(jq -r '.files[]' <<<"$rel" | sed 's#^#artifacts/#' | paste -sd' ' -)
+            if gh release view "$tag" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
+              echo "release $tag exists — uploading any missing assets"
+              # shellcheck disable=SC2086
+              gh release upload "$tag" $files --repo "$RELEASES_REPO" --clobber
+            else
+              # shellcheck disable=SC2086
+              gh release create "$tag" $files \
+                --repo "$RELEASES_REPO" --target main --title "$tag" \
+                --notes "Orrery extension pack $(jq -r .id <<<"$rel") v$(jq -r .version <<<"$rel")"
+            fi
+          done
+      - name: Publish index.json to the rolling `extensions` release
+        run: |
+          set -euo pipefail
+          if ! gh release view extensions --repo "$RELEASES_REPO" >/dev/null 2>&1; then
+            gh release create extensions --repo "$RELEASES_REPO" --target main \
+              --title "Extensions registry" \
+              --notes "Rolling release: index.json is the Orrery extension registry. Packs live in ext-* releases."
+          fi
+          gh release upload extensions artifacts/index.json --clobber --repo "$RELEASES_REPO"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ext-index
+          path: |
+            artifacts/index.json
+            releases.json

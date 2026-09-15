@@ -57,6 +57,21 @@ sysinfo = "0.39"
 base64 = "0.22"
 regex = "1"
 blake3 = "1"
+# Extension host (extensions/): tree-sitter grammars arrive as prebuilt dylibs
+# (libloading) inside sha256-verified zips fetched from the release registry.
+# reqwest mirrors tauri-plugin-updater's TLS setup exactly (rustls + ring, no
+# provider from reqwest itself) so no second crypto stack lands in the tree.
+tree-sitter = "0.27"
+tree-sitter-language = "0.1"
+libloading = "0.8"
+zip = { version = "4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+sha2 = "0.10"
+semver = "1"
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# LSP host (lsp/): protocol types only — the JSON-RPC transport is a
+# hand-rolled std-thread client over the server's stdio (no async runtime).
+lsp-types = "0.97"
 
 # Windows-only: Job Object APIs so the whole agent process tree dies with us,
 # even on force-kill/crash (kill-on-job-close). Already in the tree via tauri.

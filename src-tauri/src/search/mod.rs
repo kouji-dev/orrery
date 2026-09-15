@@ -345,7 +345,7 @@ fn window_line(line: &str, byte_ranges: &[(usize, usize)]) -> (String, Vec<(usiz
 
 /// Walk one root honoring .gitignore (hidden files INCLUDED, `.git` excluded)
 /// — shared by the search runner and the file-lister.
-fn walker(root: &Path) -> ignore::Walk {
+pub(crate) fn walker(root: &Path) -> ignore::Walk {
     walker_with(root, Some(MAX_FILE_SIZE))
 }
 

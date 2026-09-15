@@ -694,60 +694,11 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   styles: [
     `
 /* ── ORCHESTRA settings — scoped by the .set- prefix (encapsulation: None) ── */
-/* No backdrop here: KjDialog centers this component's host and paints the
-   scrim (see the kouji overlay chrome block in styles.css). .set-modal is the panel box. */
-.set-modal{--set-amber:var(--sem-attn);--set-danger:var(--sem-del);
-  width: round(calc(760px * var(--density)), 1px);max-width:calc(100vw - 56px);height:600px;max-height:84vh;display:flex;
-  background:var(--panel);border:1px solid var(--hair-2);border-radius:15px;overflow:hidden;
-  box-shadow:var(--shadow);
-  font-family:var(--font-ui);color:var(--ink);
-  transform-origin:center;animation:set-pop .22s cubic-bezier(.2,.7,.2,1);}
-/* transform-only entrance: if the frame is throttled and the animation freezes
-   at 0%, content stays visible (just offset) instead of stuck at opacity:0 */
-@keyframes set-pop{from{transform:translateY(10px) scale(.99)}to{transform:none}}
-@media (prefers-reduced-motion:reduce){.set-modal{animation:none}}
-
-/* ── left nav ── */
-.set-nav{width: round(calc(204px * var(--density)), 1px);flex:none;background:var(--panel-2);border-right:1px solid var(--hair);
-  display:flex;flex-direction:column;padding:var(--sp-6) var(--sp-5);}
-.set-brand{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-2) var(--sp-4) var(--sp-6);}
-/* skin from the shared .glyph-plate; size + radius stay per-instance */
-.set-brand .gi{width:var(--ctl-h);height:var(--ctl-h);border-radius:8px;flex:none;}
-.set-brand .bt{font-size:var(--fs-body);}
-.set-brand .bs{font-size:var(--fs-meta);color:var(--ink-4);letter-spacing:.04em;}
-.set-nav-list{display:flex;flex-direction:column;gap:var(--sp-1);}
-/* The rows are kj-list-items now, so the ground, hover and current-row state
-   come from the component (--kj-list-* / [active]). What stays here is only
-   what the list cannot know: the row's height and the accent bar that marks
-   the current section on the panel's edge. */
-.set-nav-list{--kj-list-row-padding:0 var(--sp-5);--kj-list-radius:9px;}
-.set-nav-item{position:relative;height:35px;gap:var(--sp-5);cursor:pointer;}
-.set-nav-item app-icon{color:var(--ink-4);transition:color .12s;}
-.set-nav-item:hover app-icon,
-.set-nav-item[data-active] app-icon{color:var(--ui-ink);}
-.set-nav-item .lb{flex:1;}
-.set-nav-item[data-active]::before{content:"";position:absolute;left:-11px;top:9px;bottom:9px;width:2.5px;
-  border-radius:2px;background:var(--ui-ind);}
-.set-nav-dot{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--set-amber);flex:none;
-  box-shadow:0 0 7px -1px var(--set-amber);}
-
-/* ── right column ── */
-.set-main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel);}
-.set-head{flex:none;display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-7) var(--sp-7) var(--sp-6);
-  border-bottom:1px solid var(--hair);}
-.set-head .ht{font-size:var(--fs-body);}
-.set-head .hs{color:var(--ink-4);margin-top:var(--sp-1);}
-.set-x .kj-button{margin-left:auto;flex:none;width:var(--ctl-h);height:var(--ctl-h);padding:0;border-radius:7px;border:1px solid transparent;
-  background:transparent;color:var(--ink-3);cursor:pointer;display:grid;place-items:center;transition:all .12s;box-shadow:none;}
-.set-x .kj-button:hover{background:var(--panel-3);color:var(--ink);border-color:var(--hair);}
-
-.set-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:var(--sp-2) var(--sp-7) var(--sp-8);}
-
-.set-grp{padding:var(--sp-7) 0 var(--sp-7);border-bottom:1px solid var(--hair);}
-.set-grp:last-child{border-bottom:none;}
-.set-grp-h{color:var(--ink-3);
-  margin-bottom:var(--sp-3);display:flex;align-items:center;gap:var(--sp-4);}
-.set-grp-h::after{content:"";flex:1;height:1px;background:var(--hair);}
+/* The panel shell (.set-modal / nav / head / body / groups / toggle / foot)
+   is the shared "settings / extensions modal shell" recipe in styles.css:
+   the Extensions dialog wears the same classes, and a None-encapsulated
+   component stylesheet is dropped when its last instance is destroyed.
+   What stays here is Settings-only. */
 
 /* ── segmented control ──
    The tray, the chip and the selected state are kouji's pills tabs now
@@ -760,9 +711,6 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   background:color-mix(in oklch,var(--set-danger),transparent 88%);
   box-shadow:0 0 0 1px color-mix(in oklch,var(--set-danger),transparent 52%);}
 .set-seg .kj-tab.dgr[aria-selected="true"] svg{color:var(--set-danger);}
-
-/* ── switch toggle — 34×19 track + 15×15 thumb, the design's fixed geometry ── */
-.set-tgl .kj-toggle--switch{--kj-switch-w:34px;--kj-switch-h:19px;--kj-switch-thumb:15px;flex:none;}
 
 /* ── model combobox / numeric fields / volume slider widths ── */
 .set-model-combo{min-width: round(calc(186px * var(--density)), 1px);}
@@ -868,16 +816,6 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
   background:var(--ui-sel);}
 .set-play .kj-button svg{width:var(--sp-5);height:var(--sp-5);}
 
-/* ── footer ── */
-.set-foot{flex:none;display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-7);border-top:1px solid var(--hair);
-  background:var(--panel-2);color:var(--ink-3);}
-.set-foot .fl{display:inline-flex;align-items:center;gap:var(--sp-3);}
-.set-foot .fd{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--st-done);flex:none;}
-/* .kj-quiet is the bare-label recipe; only the type and hover ink differ */
-.set-foot .reset-all .kj-button{--kj-button-gap:var(--sp-2);font-family:var(--font-mono);}
-.set-foot .reset-all .kj-button:hover:not([aria-disabled="true"]){--kj-button-fg:var(--ui-ink);}
-.set-foot .reset-all .kj-button svg{width:var(--sp-5);height:var(--sp-5);}
-.set-foot-cancel .kj-button{margin-left:auto;}
     `,
   ],
 })

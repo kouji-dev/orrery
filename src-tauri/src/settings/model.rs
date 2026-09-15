@@ -68,6 +68,19 @@ pub struct Settings {
     /// app-data/telemetry/. Auto-disables after 30 min or 200 MB and writes
     /// itself back to `false` so the toggle never lies across restarts.
     pub telemetry_raw_trace: bool,
+    /// Minutes an idle language server stays alive before the reaper stops it.
+    pub lsp_idle_minutes: u32,
+    /// Manual language-server program path per server pack id
+    /// (`server.jdtls` → absolute path). Wins over PATH detection.
+    pub lsp_paths: BTreeMap<String, String>,
+    /// Opt-in: when no server pack is installed, fall back to a server found
+    /// on PATH / known dirs. Off by default — packs are self-contained and a
+    /// stray global install must never launch by surprise.
+    pub lsp_use_system_servers: bool,
+    /// Extension registry `index.json` URL override; `None` = the built-in
+    /// release URL. `https://` only (`file://` accepted in debug builds for
+    /// a local `pnpm ext:build` output).
+    pub ext_registry_url: Option<String>,
 }
 
 /// $ per million tokens for one model (mirrors the frontend rate table shape).
@@ -139,6 +152,10 @@ impl Default for Settings {
             confirm_above_usd: 1.0,
             cost_rates: BTreeMap::new(), // absent = frontend built-in defaults
             telemetry_raw_trace: false,  // tracing a flood amplifies it — always opt-in
+            lsp_idle_minutes: 10,        // long enough to survive a coffee break
+            lsp_paths: BTreeMap::new(),  // absent id = the installed pack
+            lsp_use_system_servers: false, // PATH servers are an explicit opt-in
+            ext_registry_url: None,      // None = the built-in release registry
         }
     }
 }
@@ -165,6 +182,10 @@ mod tests {
             "osNotifications",
             "soundName",
             "telemetryRawTrace",
+            "lspIdleMinutes",
+            "lspPaths",
+            "lspUseSystemServers",
+            "extRegistryUrl",
         ] {
             assert!(v.get(key).is_some(), "camelCase key {key} present: {v}");
         }
@@ -185,6 +206,10 @@ mod tests {
         assert!(s.os_notifications);
         assert_eq!(s.sound_name, "Ping");
         assert_eq!(s.volume, 70);
+        assert_eq!(s.lsp_idle_minutes, 10);
+        assert!(s.lsp_paths.is_empty(), "no manual server paths out of the box");
+        assert!(!s.lsp_use_system_servers, "PATH servers are opt-in");
+        assert_eq!(s.ext_registry_url, None, "None = built-in registry");
     }
 
     // Forward-compat: a document written by a NEWER app version (unknown keys)

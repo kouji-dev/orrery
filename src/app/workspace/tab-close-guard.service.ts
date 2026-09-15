@@ -5,6 +5,7 @@ import { UiStore } from "../ui/ui.store";
 import { FileSaveService } from "./file-save.service";
 import { treeAgentIds } from "./pane-model";
 import { ScrollStateService } from "./scroll-state.service";
+import { isVirtualUri } from "./virtual-doc";
 
 export interface PendingTabClose {
   tabId: string;
@@ -32,7 +33,10 @@ export class TabCloseGuardService {
     const root = this.ui.paneRoots()[tabId];
     const files = root
       ? treeAgentIds(root).flatMap((agentId) =>
-          this.edits.dirtyPaths(agentId).map((path) => ({ agentId, path })),
+          this.edits
+            .dirtyPaths(agentId)
+            .filter((path) => !isVirtualUri(path)) // read-only docs never need saving
+            .map((path) => ({ agentId, path })),
         )
       : [];
     if (files.length === 0) {

@@ -223,6 +223,17 @@ impl WatchService {
                 let paths: Vec<String> = s.changes.iter().map(|c| c.path.clone()).collect();
                 let _ = history.snapshot(id, &history_wt, &paths, "watch");
             }
+            // M2: keep the symbol index in step with saves — A/M/R paths are
+            // re-fingerprinted (reparse only when the content hash moved),
+            // D and the old side of R drop out. No-op for un-indexed roots.
+            if let Some(symbols) = app.try_state::<crate::symbols::SymbolService>() {
+                symbols.invalidate(&history_wt, &s.changes);
+            }
+            // M4: a `Cargo.lock` / `pom.xml` change under a PROJECT root
+            // re-checks its library sources (incremental per artifact).
+            if let Some(libsrc) = app.try_state::<crate::libsrc::LibSrcService>() {
+                libsrc.on_changes(&history_wt, &s.changes);
+            }
             let _ = crate::core::emit::emit_keyed(
                 &app,
                 "agent://changed",

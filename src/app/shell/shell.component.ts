@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, effect, inject, Type, untracked } from '@angular/core';
 import { KjDialogRef, KjDialogService } from '@kouji-ui/components';
 import { InterestService } from '../agents/interest.service';
+import { LspAutoStartService } from '../lsp/lsp-auto-start.service';
+import { LspDocSyncService } from '../lsp/lsp-doc-sync.service';
 import { CommandRegistryService } from '../commands/command-registry.service';
 import { CommandOverlaysComponent } from '../commands/overlays.component';
 import { ContextMenuComponent } from '../context-menu/context-menu.component';
@@ -11,6 +13,8 @@ import { SpawnModalComponent } from '../modals/spawn-modal.component';
 import { UpdateToastComponent } from '../modals/update-toast.component';
 import { WhatsNewModalComponent } from '../modals/whats-new-modal.component';
 import { SettingsStore } from '../settings/settings.store';
+import { ExtensionsModalComponent } from '../extensions/extensions-modal.component';
+import { ExtensionsStore } from '../extensions/extensions.store';
 import { UpdateWatcherService } from '../updater/update-watcher.service';
 import { FileDropService } from '../shared/file-drop.service';
 import { UiStore } from '../ui/ui.store';
@@ -118,6 +122,7 @@ declare const ngDevMode: boolean | undefined;
 export class ShellComponent {
   readonly ui = inject(UiStore);
   readonly settings = inject(SettingsStore);
+  readonly extensions = inject(ExtensionsStore);
   readonly toolWindow = inject(ToolWindowStore);
   private readonly dialog = inject(KjDialogService);
 
@@ -130,6 +135,7 @@ export class ShellComponent {
     this.bindModal(() => this.ui.deletingWorktree(), DeleteWorktreeModalComponent);
     this.bindModal(() => this.settings.open(), SettingsModalComponent);
     this.bindModal(() => this.settings.whatsNewOpen(), WhatsNewModalComponent);
+    this.bindModal(() => this.extensions.open(), ExtensionsModalComponent);
 
     // Route OS file drops (absolute paths) into the terminal / prompt under the
     // drop point. Started here — the shell is the app's root UI surface.
@@ -141,6 +147,8 @@ export class ShellComponent {
     // backend whenever the visible surfaces change — tab switch, pane layout,
     // overview card visibility, window hidden/shown.
     inject(InterestService).start();
+    inject(LspDocSyncService).start();
+    inject(LspAutoStartService).start();
     // Re-check for releases while the app RUNS (poll + on focus). The startup
     // check happens once on the splash screen, so without this an instance that
     // booted before a release shipped would only notice it after a restart.

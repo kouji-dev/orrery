@@ -138,6 +138,11 @@ impl ProjectService {
         Ok(self.record(id)?.path)
     }
 
+    /// Just the display name (no enrichment) — the LSP status rows.
+    pub fn name_of(&self, id: Uuid) -> AppResult<String> {
+        Ok(self.record(id)?.name)
+    }
+
     /// One entry point for both create shapes — the frontend never knows which
     /// ran: a `source_url` routes to the clone flow, otherwise it's a local
     /// folder registration.

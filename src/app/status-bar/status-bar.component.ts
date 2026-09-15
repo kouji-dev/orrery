@@ -17,12 +17,18 @@ import { VersionBadgeComponent } from "../shared/version-badge.component";
 import { SettingsStore, worktreeRootLabel } from "../settings/settings.store";
 import { DiagnosticsService } from "../shared/diagnostics.service";
 import { ToolWindowStore } from "../tool-window/tool-window.store";
+import { IndexChipComponent } from "../symbols/index-chip.component";
+import { IndexStatusStore } from "../symbols/index-status.store";
+import { LibSrcStore } from "../extensions/libsrc.store";
+import { LspChipComponent } from "../lsp/lsp-chip.component";
+import { LspStatusStore } from "../lsp/lsp-status.store";
+import { fmtMem } from "../utils";
 import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
 
 @Component({
   selector: "app-status-bar",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, VersionBadgeComponent, KjButton, KjTooltipContent, KjTooltipTrigger],
+  imports: [IconComponent, VersionBadgeComponent, IndexChipComponent, LspChipComponent, KjButton, KjTooltipContent, KjTooltipTrigger],
   template: `
     <footer
       style="display:flex;align-items:center;gap:var(--sp-6);padding:0 var(--sp-6);background:var(--panel);border-top:1px solid var(--hair);color:var(--ink-3)"
@@ -118,6 +124,19 @@ import { KjButton, KjTooltipContent, KjTooltipTrigger } from "@kouji-ui/core";
           </span>
         </kj-tooltip-content>
       }
+
+      <!-- M2/M3 chips (design LspCluster): the aggregate language-server chip
+           + the transient symbol-index chip. The language-server marker is
+           PERMANENT (user, 2026-09-12) and so is this cluster: a marker that
+           disappears hides exactly the states worth seeing — a crash, a server
+           that never came up. The index chip still renders only while an index
+           runs. Sits between "logs" and the resources gauge (user, 2026-09-15:
+           right next to resources, fit-content only) — the logs button is the
+           right cluster's first member and carries the margin-left:auto. -->
+      <span class="lsp-wrap">
+        <app-lsp-chip />
+        <app-index-chip />
+      </span>
 
       <!-- bottom-right cpu/memory readout; the per-process breakdown lives in
            the dev console's Resources tab — clicking deep-links there -->
@@ -290,6 +309,9 @@ export class StatusBarComponent {
   readonly diag = inject(DiagnosticsService);
   readonly telemetry = inject(TelemetryStore);
   readonly toolWindow = inject(ToolWindowStore);
+  readonly index = inject(IndexStatusStore);
+  readonly lsp = inject(LspStatusStore);
+  readonly libsrc = inject(LibSrcStore);
 
   readonly running = computed(
     () => this.runtime.agents().filter((a) => a.status === "running").length,
@@ -299,9 +321,11 @@ export class StatusBarComponent {
   );
 
   // ---- gauge readout: AGENTS only (fed from the same subtree rollups the
-  // Resources tree drills into — every non-"app" row is an agent subtree) ----
+  // Resources tree drills into — every non-"app", non-"lsp:" row is an agent
+  // subtree; language servers ride along as `lsp:` rows and have their own
+  // footer chip) ----
   private readonly agentProcs = computed(() =>
-    (this.metrics.metrics()?.procs ?? []).filter((p) => p.id !== "app"),
+    (this.metrics.metrics()?.procs ?? []).filter((p) => p.id !== "app" && !p.id.startsWith("lsp:")),
   );
   readonly hasAgentProcs = computed(() => this.agentProcs().length > 0);
   // machine-relative %, to one decimal
@@ -312,15 +336,5 @@ export class StatusBarComponent {
   readonly agentsMemBytes = computed(() =>
     this.agentProcs().reduce((a, p) => a + p.memBytes, 0),
   );
-  readonly agentsMem = computed(() => this.fmtMem(this.agentsMemBytes()));
-
-  /** Human-readable bytes: B / KB / MB / GB, one decimal above KB. */
-  fmtMem(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    const kb = bytes / 1024;
-    if (kb < 1024) return `${Math.round(kb)} KB`;
-    const mb = kb / 1024;
-    if (mb < 1024) return `${mb.toFixed(1)} MB`;
-    return `${(mb / 1024).toFixed(1)} GB`;
-  }
+  readonly agentsMem = computed(() => fmtMem(this.agentsMemBytes()));
 }

@@ -93,7 +93,7 @@ test("quiet tree: modified files get a dot, never a letter badge", async ({ page
   await page.evaluate(seedTree("e2e-sf1"));
   const tree = page.locator("app-sidebar-file-tree");
   // expand src/
-  await tree.getByText("src", { exact: true }).click();
+  await tree.getByText("src/", { exact: true }).click();
   const modified = tree.locator("div", { hasText: "main.ts" }).last();
   await expect(modified.locator("span[title*='modified']")).toBeVisible();
   // no A/M/D letter badges anywhere in the quiet tree

@@ -495,6 +495,271 @@ export interface Settings {
    *  app-data/telemetry (NEVER payload contents). Auto-disables after
    *  30min/200MB — the backend then writes this back to false. */
   telemetryRawTrace: boolean;
+  /** Minutes without a request before a language server is stopped (it
+   *  restarts on the next request). */
+  lspIdleMinutes: number;
+  /** Manual language-server executable paths (pack id → absolute path).
+   *  Absent id = auto-detect on PATH. */
+  lspPaths: Record<string, string>;
+  /** Fall back to a language server found on PATH / a known dir when no pack
+   *  is installed. Off = a server without its pack is "not installed" even
+   *  when a system copy exists (self-contained packs are the norm). */
+  lspUseSystemServers: boolean;
+  /** Override of the extension registry index URL; null = the built-in one. */
+  extRegistryUrl: string | null;
+}
+
+// ---- extensions: grammar packs + language servers (M1) ----
+
+/** `runtime` = a dependency pack a server ships with (Node, Java): auto-
+ *  managed, no enable toggle, pulled in by `ext_install` of the server. */
+export type ExtKind = "grammar" | "server" | "runtime";
+/** Backend-owned lifecycle state of one pack. `installed` + `enabled` on the
+ *  pack say whether it is on disk / loaded; this is the transition it is in. */
+export type ExtState = "available" | "downloading" | "installed" | "pendingRestart" | "error" | "incompatible";
+/** Where a language server's executable was found (server packs only).
+ *  `bundled` = the server pack is installed; `path` is its launch binary. */
+export interface ExtDetection {
+  status: "found" | "missing" | "configured" | "bundled";
+  path: string | null;
+  /** Prerequisite hint ("needs JDK 17+ — JAVA_HOME not set"). */
+  hint: string | null;
+}
+export interface ExtPack {
+  id: string;
+  kind: ExtKind;
+  name: string;
+  description: string;
+  /** Registry (latest) version. */
+  version: string;
+  /** Version on disk; null when not installed. */
+  installedVersion: string | null;
+  languages: string[];
+  sizeBytes: number;
+  /** Pack ids this one needs (a server's runtime packs); `[]` otherwise. */
+  requires: string[];
+  /** Servers: own size + the not-yet-installed packs in `requires` — what an
+   *  Install actually downloads. Other kinds: `sizeBytes`. */
+  bundledSizeBytes: number;
+  installed: boolean;
+  enabled: boolean;
+  /** Registry gate: the pack's ABI / minimum app version fits this build. */
+  compatible: boolean;
+  /** A build exists for this OS/arch. */
+  availableForTarget: boolean;
+  state: ExtState;
+  error: string | null;
+  detection: ExtDetection | null;
+  /** Minimum Orrery version the pack needs (surfaced on incompatible rows). */
+  minAppVersion?: string | null;
+}
+export interface ExtRegistryView {
+  registryUrl: string;
+  /** Unix ms of the last successful index fetch; null = never. */
+  fetchedAt: number | null;
+  /** The last fetch failed — `items` is the cached list. */
+  offline: boolean;
+  items: ExtPack[];
+}
+export interface ExtProgressPayload {
+  /** The REQUESTED pack — a server's dependency downloads stream under the
+   *  server's id, naming the dependency in `dependency`. */
+  id: string;
+  downloaded: number;
+  total: number | null;
+  phase: "download" | "verify" | "unpack" | "activate";
+  /** The pack being fetched right now when it is a dependency of `id`. */
+  dependency: string | null;
+  /** 1-based step of `stepCount` (deps first, the requested pack last). */
+  stepIndex: number;
+  stepCount: number;
+}
+
+// ---- symbols: tree-sitter index + Monaco navigation (M2) ----
+// Every line/col below is 0-BASED (the backend's convention); the Monaco
+// adapters in workspace/nav-providers.ts add the 1 on the way in and out.
+
+export type IndexState = "idle" | "indexing" | "ready" | "error";
+/** `symbols://index` payload + `symbols_index_status` reply — one per root. */
+export interface IndexStatus {
+  /** The root's id: an agent uuid, or the project id for its main checkout. */
+  root: string;
+  state: IndexState;
+  /** Files in the index once ready. */
+  files: number;
+  /** Files parsed so far / to parse in the current run. */
+  done: number;
+  total: number;
+  elapsedMs: number;
+  error?: string | null;
+}
+
+/** One node of a file's outline (`symbols_document`), hierarchical. */
+export interface DocSymbol {
+  name: string;
+  /** Grammar-level kind ("class", "fn", "method", "field", "enum", …). */
+  kind: string;
+  line: number;
+  col: number;
+  endLine: number;
+  endCol: number;
+  /** Where the NAME sits inside the range (the outline's click target). */
+  selLine: number;
+  selCol: number;
+  container?: string | null;
+  children: DocSymbol[];
+}
+
+/** Which roots a `symbols_search` covers. */
+export interface SymbolScope {
+  kind: "worktree" | "project" | "all";
+  agentId?: string | null;
+  projectId?: string | null;
+}
+
+/** One `symbols_search` hit (backend-ranked). `agentId` null = the project
+ *  checkout; `root` is the human label of that root (agent name). */
+export interface SymbolHit {
+  name: string;
+  kind: string;
+  path: string;
+  line: number;
+  col: number;
+  container?: string | null;
+  agentId: string | null;
+  root: string | null;
+}
+
+/** One navigation target. `uri` is the Monaco model uri (`orrery://<id>/<path>`
+ *  or a virtual read-only scheme); `id` + `path` are its parsed halves. */
+export interface NavLocation {
+  uri: string;
+  /** Both null for a library hit (M4): the uri is `orrery-lib://…` and
+   *  `preview` carries the fully-qualified name ("java.util.ArrayList"). */
+  id: string | null;
+  path: string | null;
+  line: number;
+  col: number;
+  endLine: number;
+  endCol: number;
+  kind?: string | null;
+  container?: string | null;
+  preview?: string | null;
+}
+
+export type NavSource = "index" | "lsp";
+/** M3: what the language server was doing when the router answered. */
+export type LspState = null | "starting" | "timeout" | "unavailable";
+
+export interface NavResult {
+  source: NavSource;
+  locations: NavLocation[];
+  lspState: LspState;
+  /** M4: why an EMPTY answer may be empty, when the library index can tell
+   *  — no JDK on this machine, or the pom names jars without a sources jar. */
+  libHint?: LibHint | null;
+}
+
+export type LibHint = "jdk-missing" | "sources-missing";
+
+/** `nav_hover` reply: `contents` is markdown (signature block + meta lines). */
+export interface NavHover {
+  source: NavSource;
+  contents: string;
+  range?: { line: number; col: number; endLine: number; endCol: number } | null;
+  /** M3: set when the server for this language was still starting. */
+  lspState?: LspState;
+}
+
+// ---- language servers (M3) ----
+
+/** One running (or lately running) server process: one per language pack per
+ *  project — every worktree of a project shares it. */
+export type LspServerState = "starting" | "ready" | "idle" | "crashed" | "stopped" | "missing";
+
+export interface LspServer {
+  /** `<extId>:<projectId>`. */
+  id: string;
+  extId: string;
+  /** Short binary/pack label ("jdtls", "rust-analyzer"). */
+  label: string;
+  language: string;
+  /** Project root the server was started in. */
+  root: string;
+  projectId: string;
+  projectName: string;
+  pid: number | null;
+  state: LspServerState;
+  memBytes: number;
+  /** Machine-relative cpu %, one decimal. */
+  cpu: number;
+  restarts: number;
+  /** Unix ms; null until the process is up. */
+  startedAt: number | null;
+  lastError: string | null;
+}
+
+export interface LspStatus {
+  servers: LspServer[];
+}
+
+/** `nav_virtual_read` reply: a read-only document behind a non-`orrery://`
+ *  uri (a jdtls class-file source, a library entry in M4). */
+export interface VirtualDoc {
+  uri: string;
+  /** App language tag (`langId` vocabulary); "" = plain text. */
+  language: string;
+  text: string;
+  /** Human title ("java.util.ArrayList", "List.java"). */
+  title: string;
+}
+
+// ---- library sources (M4) ----
+
+export type LibSourceKind = "jdk" | "maven" | "cargo";
+export type LibSourceState = "idle" | "pending" | "indexing" | "done" | "error" | "cancelled" | "removed";
+
+/** One library source the symbol index covers (`libsrc_sources`): a JDK
+ *  (`jdk:<hash>`), or — per registered project — the crates its `Cargo.lock`
+ *  pins (`cargo:<projectId>`) / the jars its `pom.xml` names (`maven:<projectId>`). */
+export interface LibSource {
+  id: string;
+  kind: LibSourceKind;
+  /** The src.zip / the lockfile ("C:/jdk-21/lib/src.zip", "C:/w/orrery/src-tauri/Cargo.lock"). */
+  path: string;
+  /** Human label ("JDK 21 (openjdk21)", "Cargo · orrery", "Maven · shop"). */
+  label: string;
+  state: LibSourceState;
+  /** Files / declarations in the index once done. */
+  files: number;
+  decls: number;
+  /** Unix ms of the last completed run; null = never. */
+  indexedAt: number | null;
+  sizeBytes: number;
+  /** The owning project (null for a JDK). */
+  projectId: string | null;
+  projectName: string | null;
+  /** Crates / jars the lockfile names (1 for a JDK); not on disk; over a perf guard. */
+  artifacts: number;
+  missing: number;
+  skipped: number;
+  error?: string | null;
+  /** Progress of the current run — merged in from `libsrc://status`, never
+   *  part of the backend's `libsrc_sources` reply. */
+  done?: number;
+  total?: number;
+}
+
+/** `libsrc://status` payload: one source's run, every ~500 files. */
+export interface LibSrcStatus {
+  sourceId: string;
+  label: string;
+  kind: LibSourceKind;
+  state: "indexing" | "done" | "error" | "cancelled";
+  done: number;
+  total: number;
+  decls: number;
+  error?: string | null;
 }
 
 /** An available app update as resolved by `update_check` (date/notes optional —

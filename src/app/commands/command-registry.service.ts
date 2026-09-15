@@ -1,10 +1,12 @@
 import { computed, inject, Injectable, Signal, signal } from "@angular/core";
+import { KjOverlayStack } from "@kouji-ui/core";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
 import { AgentWorkStore } from "../agents/agent-work.store";
 import { BRIDGE, Commands } from "../data-source/bridge";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { SettingsStore } from "../settings/settings.store";
+import { ExtensionsStore } from "../extensions/extensions.store";
 import { EditsStore } from "../stores/edits.store";
 import { UiStore } from "../ui/ui.store";
 import { FileSaveService } from "../workspace/file-save.service";
@@ -13,7 +15,6 @@ import { PaneLeaf, PaneNode } from "../workspace/pane-model";
 import { ToolWindowStore } from "../tool-window/tool-window.store";
 import { EditorNavService } from "./editor-nav.service";
 import { matchBinding } from "./fuzzy";
-import { RecentFilesService } from "./recent-files.service";
 
 /** One registered app action (roadmap B2.2). Everything the palette, Search
  *  Everywhere and the keybinding dispatcher know comes from this record. */
@@ -39,7 +40,7 @@ export interface AppCommand {
   run: () => void;
 }
 
-export type OverlayKind = "palette" | "search" | "recent" | "goto" | "find" | "peek";
+export type OverlayKind = "palette" | "search" | "goto" | "find" | "peek";
 export interface OverlayState {
   kind: OverlayKind;
   /** Initial Search-Everywhere tab (e.g. "files" for Go to File). */
@@ -72,11 +73,12 @@ export function terminalDefaultOf(cmd: Pick<AppCommand, "id" | "kbd" | "kbdAlt">
 export class CommandRegistryService {
   private ui = inject(UiStore);
   private settings = inject(SettingsStore);
+  private extensions = inject(ExtensionsStore);
   private runtime = inject(AgentRuntimeService);
   private agentActions = inject(AgentActionsService);
   private work = inject(AgentWorkStore);
   private projects = inject(ProjectActionsService);
-  private recents = inject(RecentFilesService);
+  private overlayStack = inject(KjOverlayStack);
   private editorNav = inject(EditorNavService);
   private toolWindow = inject(ToolWindowStore);
   private saver = inject(FileSaveService);
@@ -95,6 +97,22 @@ export class CommandRegistryService {
   }
   close(): void {
     this.overlay.set(null);
+  }
+
+  /** Overlay kinds whose shell IS a `<kj-command-palette>`, and therefore
+   *  occupies one level of kouji's overlay stack themselves. The rest (Search
+   *  Everywhere included) are the hand-rolled `OverlayShellComponent` and
+   *  register nothing — counting one of them here made its open scope select
+   *  look like the overlay's own level, so the first Escape closed the whole
+   *  overlay and orphaned the listbox (e2e overlay-stacking, 2026-09-15). */
+  private static readonly PALETTE_BACKED: ReadonlySet<OverlayKind> = new Set<OverlayKind>(["palette"]);
+
+  /** Is a kouji overlay open ABOVE the one we own? (see the Escape handler) */
+  private nestedOverlayOpen(): boolean {
+    const kind = this.overlay()?.kind;
+    if (!kind) return false;
+    const own = CommandRegistryService.PALETTE_BACKED.has(kind) ? 1 : 0;
+    return this.overlayStack.stackSize > own;
   }
 
   /** The active pane leaf currently showing a file (drives Go to Line). */
@@ -122,7 +140,6 @@ export class CommandRegistryService {
   /** Open `path` in `agentId`'s workspace, optionally jumping to a line. */
   openFileAt(agentId: string, path: string, line?: number, col = 1): void {
     this.ui.openFileInWorkspace(agentId, path);
-    this.recents.record(agentId, path);
     if (line && line > 0) this.editorNav.goTo(agentId, path, line, col);
   }
 
@@ -149,7 +166,6 @@ export class CommandRegistryService {
       // ---- navigate ----
       c({ id: "search.everywhere", label: "Search Everywhere", group: "Navigate", icon: "search", kbd: "Ctrl+k", kbdAlt: "Shift Shift", run: () => this.open("search") }),
       c({ id: "palette.open", label: "Show All Commands", group: "Navigate", icon: "bolt", kbd: "Ctrl+Shift+p", kbdAlt: "Ctrl+Shift+a", run: () => this.open("palette") }),
-      c({ id: "recent.files", label: "Recent Files", group: "Navigate", icon: "clock", kbd: "Ctrl+e", run: () => this.open("recent") }),
       c({ id: "goto.line", label: "Go to Line…", group: "Navigate", icon: "enter", kbd: "Ctrl+l", enabled: !!fileLeaf, run: () => this.open("goto") }),
       c({ id: "goto.file", label: "Go to File…", group: "Navigate", icon: "file", kbd: "Ctrl+Shift+o", enabled: !!ag, run: () => this.open("search", "files") }),
       // Ctrl+T (IntelliJ/VS Code "Go to Symbol"), Ctrl+Alt+Shift+O as the alt.
@@ -222,6 +238,7 @@ export class CommandRegistryService {
 
       // ---- tools ----
       c({ id: "settings.open", label: "Settings", group: "Tools", icon: "settings", kbd: "Ctrl+,", run: () => this.settings.openModal() }),
+      c({ id: "extensions.open", label: "Extensions", group: "Tools", icon: "puzzle", kbd: "Ctrl+Shift+x", run: () => this.extensions.openModal() }),
       c({ id: "app.whatsNew", label: "What's New", group: "Tools", icon: "flag", run: () => this.settings.openWhatsNew() }),
     ].map((cmd) => {
       // B6.2 keymap: a user override replaces the default binding (and its alt
@@ -273,9 +290,15 @@ export class CommandRegistryService {
     this.shiftArmed = false;
 
     if (e.key === "Escape" && this.overlay()) {
-      e.preventDefault();
-      e.stopPropagation();
-      this.close();
+      // A kouji overlay opened from INSIDE ours (a scope select's listbox, a
+      // confirm popup) is the topmost one, and the library closes just that
+      // one on Escape. This window-level handler must not fire then, or the
+      // first Escape would take the whole overlay down with it.
+      if (!this.nestedOverlayOpen()) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.close();
+      }
       return;
     }
 

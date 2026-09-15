@@ -200,6 +200,77 @@ export const Commands = {
   HistoryFile: 'history_file',
   /** Restore files to a snapshot (guard-snapshots current content first). */
   HistoryRestore: 'history_restore',
+  // ---- extensions: grammar packs + language servers (M1) ----
+  /** The registry view (`ExtRegistryView`); `{refresh:true}` re-fetches the
+   *  index, `false` answers from the cache. */
+  ExtRegistryList: 'ext_registry_list',
+  /** Download + verify + unpack a pack; progress streams on `ext://progress`,
+   *  every state change on `ext://status`. */
+  ExtInstall: 'ext_install',
+  ExtUninstall: 'ext_uninstall',
+  /** `{id, enabled}` — a disabled pack stays on disk but is not loaded. */
+  ExtSetEnabled: 'ext_set_enabled',
+  /** `{id, path|null}` — manual server executable ("Locate…"); null clears. */
+  ExtSetPath: 'ext_set_path',
+  // ---- symbols: tree-sitter index + Monaco navigation (M2) ----
+  /** `{id}` → `IndexStatus` of one root (agent uuid or project id). */
+  SymbolsIndexStatus: 'symbols_index_status',
+  /** `{id, force?}` — idempotent: a root already indexed/indexing is a no-op
+   *  unless `force`. Progress streams on `symbols://index`. */
+  SymbolsIndexStart: 'symbols_index_start',
+  SymbolsIndexStop: 'symbols_index_stop',
+  /** `{id, path, text?}` → hierarchical `DocSymbol[]` (the outline). */
+  SymbolsDocument: 'symbols_document',
+  /** `{scope:{kind, agentId?, projectId?}, query, limit}` → `SymbolHit[]`
+   *  ranked by the backend — the Search Everywhere symbols corpus. */
+  SymbolsSearch: 'symbols_search',
+  /** `{id, path, line, col, word, text?}` → `NavResult` (0-based in + out). */
+  NavDefinition: 'nav_definition',
+  /** `{…, includeDeclaration}` → `NavResult`. */
+  NavReferences: 'nav_references',
+  /** `{id, path, line, col, word}` → `NavHover | null`. */
+  NavHover: 'nav_hover',
+  /** Alias of `symbols_document` kept for the router's sake. */
+  NavDocumentSymbols: 'nav_document_symbols',
+  /** `{uri}` → `VirtualDoc` for any location uri that is not `orrery://`
+   *  (`jdt://…` from jdtls, `orrery-lib://…` library sources in M4). */
+  NavVirtualRead: 'nav_virtual_read',
+  // ---- language servers (M3) ----
+  /** `{}` → `LspStatus` (the full snapshot; `lsp://status` pushes the same). */
+  LspStatus: 'lsp_status',
+  /** `{extId, id}` — start the server pack for the root `id`'s project. */
+  LspStart: 'lsp_start',
+  /** `{extId, projectId}` — stop ONE instance. */
+  LspStop: 'lsp_stop',
+  /** `{extId, projectId}` — stop + start ONE instance. */
+  LspRestart: 'lsp_restart',
+  /** `{}` — stop every running instance. */
+  LspStopAll: 'lsp_stop_all',
+  /** `{id, path, text, languageId}` — didOpen for a root file (no-op when no
+   *  server owns that language for the root's project). */
+  LspDocOpen: 'lsp_doc_open',
+  /** `{id, path, text, version}` — full-text didChange. */
+  LspDocChange: 'lsp_doc_change',
+  /** `{id, path}` — didClose. */
+  LspDocClose: 'lsp_doc_close',
+  /** `{id, pinned}` → `string[]` (pack ids acquired). An agent runs in the
+   *  project owning `id`: auto-start the servers of the languages the project
+   *  uses and hold them out of the idle reaper; `pinned:false` releases them. */
+  LspPinProject: 'lsp_pin_project',
+  // ---- library sources (M4) ----
+  /** `{}` → `LibSource[]` — every discovered source with its index state. */
+  LibSrcSources: 'libsrc_sources',
+  /** `{id}` (a ROOT id) — discover + index the sources that root needs
+   *  (JDK for Java files, cargo for a Cargo.toml…); the backend decides. */
+  LibSrcEnsure: 'libsrc_ensure',
+  /** `{sourceId}` — drop the rows and index again; progress on `libsrc://status`. */
+  LibSrcReindex: 'libsrc_reindex',
+  /** `{}` → `LibSource[]` — discovery from scratch + every project's sources ensured (dev console). */
+  LibSrcRescan: 'libsrc_rescan',
+  /** `{sourceId}` — stop the current run (state → cancelled). */
+  LibSrcCancel: 'libsrc_cancel',
+  /** `{sourceId}` — forget the source and its rows. */
+  LibSrcRemove: 'libsrc_remove',
 } as const;
 
 /** One local-history snapshot (B4.4). */
@@ -343,6 +414,19 @@ export const Events = {
   SearchResults: 'search://results',
   /** A search finished: `{searchId, files, matches, truncated, cancelled}`. */
   SearchDone: 'search://done',
+  /** The whole registry view again (`ExtRegistryView`) after any pack state
+   *  change — replaces the frontend's copy. */
+  ExtStatus: 'ext://status',
+  /** Per-pack download/verify/unpack progress (`ExtProgressPayload`). */
+  ExtProgress: 'ext://progress',
+  /** Symbol-index progress of one root (`IndexStatus`), keyed by `root`. */
+  SymbolsIndex: 'symbols://index',
+  /** Language-server snapshot (`LspStatus`): every instance, on each state
+   *  change and every ~5s with fresh memBytes/cpu. Replaces the store's copy. */
+  LspStatus: 'lsp://status',
+  /** Library-source index progress (`LibSrcStatus`), keyed by `sourceId`,
+   *  every ~500 files and on each state change. */
+  LibSrcStatus: 'libsrc://status',
 } as const;
 
 // ---- find-in-files payloads (serde camelCase from src-tauri/src/search) ----

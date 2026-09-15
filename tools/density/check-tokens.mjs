@@ -127,12 +127,14 @@ export const ALLOWLIST = [
   { file: "settings-modal.component.ts", value: "15px" },
   // .set-modal height is a fixed structural viewport constraint (600px) — the modal
   // is designed for an 84vh max with a 600px preferred height. This is not a control
-  // height token; it is a bespoke panel dimension.
-  { file: "settings-modal.component.ts", value: "600px" },
+  // height token; it is a bespoke panel dimension. (Shell recipe shared with the
+  // Extensions dialog — lives in styles.css now.)
+  { file: "styles.css", value: "600px" },
   // .set-nav-item height is 35px — sits between ctl-h-lg (34px) and topbar-h (44px).
   // It is a bespoke nav sidebar row height that intentionally exceeds ctl-h-lg by 1px
   // for comfortable tap targets and does not map to a standard control-height token.
-  { file: "settings-modal.component.ts", value: "35px" },
+  // (Shell recipe shared with the Extensions dialog — lives in styles.css now.)
+  { file: "styles.css", value: "35px" },
   // .set-slider track (4px) and thumb (14×14) are a tightly-coupled fixed-geometry
   // slider mini-widget. The 128px track width and 14px thumb diameter determine the
   // slider's travel range (128−14=114px); altering any single dimension independently
@@ -299,7 +301,8 @@ export const ALLOWLIST = [
   { file: "review-comments.monaco.ts", value: "24px" },
   { file: "rich-editor.component.ts", value: "56px" },
   { file: "send-review.component.ts", value: "54px" },
-  { file: "settings-modal.component.ts", value: "2.5px" },
+  // .set-nav-item current-row accent bar (2.5px, as the sidebar's) — styles.css shell.
+  { file: "styles.css", value: "2.5px" },
   { file: "settings-modal.component.ts", value: "30px" },
   { file: "settings-modal.component.ts", value: "34px" },
   { file: "settings-modal.component.ts", value: "9px" },

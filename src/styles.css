@@ -27,6 +27,7 @@
 @property --ctl-h       { syntax: "<length>"; inherits: true; initial-value: 28px; }
 @property --ctl-h-lg    { syntax: "<length>"; inherits: true; initial-value: 34px; }
 @property --row-h       { syntax: "<length>"; inherits: true; initial-value: 30px; }
+@property --tree-row-h  { syntax: "<length>"; inherits: true; initial-value: 21px; }
 @property --topbar-h    { syntax: "<length>"; inherits: true; initial-value: 44px; }
 @property --statusbar-h { syntax: "<length>"; inherits: true; initial-value: 24px; }
 
@@ -171,6 +172,8 @@
   --ctl-h:    round(calc(28px * var(--density)), 1px);
   --ctl-h-lg: round(calc(34px * var(--density)), 1px);
   --row-h:    round(calc(30px * var(--density)), 1px);
+  /* quiet tree rows (sidebar files): design QuietRows = 2.5px pad + 13px mono line */
+  --tree-row-h: round(calc(21px * var(--density)), 1px);
   --topbar-h:    round(calc(44px * var(--density)), 1px);
   --statusbar-h: round(calc(24px * var(--density)), 1px);
 
@@ -621,8 +624,8 @@ h4 {
    text, which is why `overflow:hidden` alone silently does nothing inside a
    row. Written out ~68 times across the app before this. */
 .trunc,
-.orr-palette .orr-cmd-label,
-.orr-palette .orr-cmd-meta {
+.orr-cmd-label,
+.orr-cmd-meta {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1219,6 +1222,50 @@ kj-button.menu-item,
 .tree-row:hover,
 .proj-row:hover {
   background: var(--panel-2);
+}
+
+/* Quiet tree row (sidebar files) — the design's QuietRows: mono 13px line,
+   ~21px tall, hover = panel-2, the open file = panel-3 ground in --ink. Dirs
+   sit one ink step quieter than files and carry a trailing slash. Indent is
+   set inline per depth (8 + depth × 13, files +16 for the missing chevron). */
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--tree-row-h);
+  padding-right: var(--sp-4);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: var(--fs-meta);
+  color: var(--ink-2);
+  user-select: none;
+}
+.tree-row.dir {
+  color: var(--ink-3);
+}
+.tree-row.ignored {
+  color: var(--ink-4);
+  opacity: 0.7;
+}
+.tree-row.sel,
+.tree-row.sel:hover {
+  background: var(--panel-3);
+  color: var(--ink);
+}
+.tree-row > .tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-row > .tree-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--vcs-modified);
+  flex: none;
+  margin-right: var(--sp-1);
 }
 
 /* A selectable list row: inset from its scroller so the rounded hover/selected
@@ -2153,12 +2200,12 @@ app-version-badge .tag .kj-badge {
    defaults are swapped for Orrery tokens, and the box is put back on the
    density ramp (a palette frozen in px keeps its width while its text grows,
    which is how a panel ends up clipping its own contents). */
-.orr-palette .kj-command-palette__backdrop {
+.kj-command-palette__shell .kj-command-palette__backdrop {
   background: var(--scrim);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
 }
-.orr-palette .kj-command-palette__dialog {
+.kj-command-palette__shell .kj-command-palette__dialog {
   top: 12vh;
   width: round(calc(600px * var(--density)), 1px);
   max-width: calc(100% - var(--sp-8) * 2);
@@ -2168,34 +2215,30 @@ app-version-badge .tag .kj-badge {
   border-radius: var(--r-lg);
   box-shadow: var(--shadow);
 }
-.orr-palette-narrow .kj-command-palette__dialog {
-  top: 16vh;
-  width: round(calc(480px * var(--density)), 1px);
-}
-.orr-palette .kj-command-palette__input-wrapper {
+.kj-command-palette__shell .kj-command-palette__input-wrapper {
   gap: var(--sp-5);
   padding: var(--sp-6) var(--sp-7);
   border-bottom: 1px solid var(--hair);
 }
-.orr-palette .kj-command-palette__search-icon {
+.kj-command-palette__shell .kj-command-palette__search-icon {
   width: var(--fs-md);
   height: var(--fs-md);
   color: var(--ui-ink);
 }
-.orr-palette .kj-command-palette__input {
+.kj-command-palette__shell .kj-command-palette__input {
   font-family: var(--font-mono);
   font-size: var(--fs-md);
   color: var(--ink);
 }
-.orr-palette .kj-command-palette__input::placeholder {
+.kj-command-palette__input::placeholder {
   color: var(--ink-4);
 }
-.orr-palette .kj-command-palette__list {
+.kj-command-palette__shell .kj-command-palette__list {
   flex: 1;
   max-height: none;
   padding: var(--sp-3) 0;
 }
-.orr-palette .kj-command-palette__empty {
+.kj-command-palette__shell .kj-command-palette__empty {
   padding: var(--sp-8) var(--sp-7);
   text-align: left;
   font-family: var(--font-mono);
@@ -2203,18 +2246,18 @@ app-version-badge .tag .kj-badge {
   color: var(--ink-4);
 }
 /* kj ships no `display` on the group host, and a bare custom element is inline. */
-.orr-palette .kj-command-group {
+.kj-command-palette__shell .kj-command-group {
   display: block;
   padding-block: 0;
 }
-.orr-palette .kj-command-group__label {
+.kj-command-palette__shell .kj-command-group__label {
   padding: var(--sp-4) var(--sp-7) var(--sp-2);
   font-family: var(--font-mono);
   font-size: var(--fs-3xs);
   font-weight: var(--fw-normal);
   color: var(--ink-4);
 }
-.orr-palette .kj-command-item {
+.kj-command-palette__shell .kj-command-item {
   min-height: 0;
   gap: var(--sp-5);
   padding: var(--sp-3) var(--sp-7);
@@ -2222,43 +2265,43 @@ app-version-badge .tag .kj-badge {
   font-size: var(--fs-ui);
   color: var(--ink-2);
 }
-.orr-palette .kj-command-item:hover,
-.orr-palette .kj-command-item[data-active] {
+.kj-command-item:hover,
+.kj-command-palette__shell .kj-command-item[data-active] {
   background: var(--panel-3);
   border-inline-start-color: var(--ui-focus);
   color: var(--ink);
 }
-.orr-palette .kj-command-item.danger {
+.kj-command-palette__shell .kj-command-item.danger {
   color: var(--st-blocked);
 }
-.orr-palette .kj-command-item[aria-disabled="true"] {
+.kj-command-palette__shell .kj-command-item[aria-disabled="true"] {
   opacity: 0.42;
 }
-.orr-palette .orr-cmd-label b {
+.orr-cmd-label b {
   color: var(--ui-ink);
   font-weight: var(--fw-medium);
 }
 /* truncation body comes from `.trunc` above; only the deltas live here */
-.orr-palette .orr-cmd-meta {
+.orr-cmd-meta {
   flex: none;
   font-size: var(--fs-2xs);
   color: var(--ink-4);
 }
 /* the one child that eats the leftover row width (label here, path there) */
-.orr-palette .orr-cmd-grow {
+.orr-cmd-grow {
   flex: 1;
 }
 /* NOTE the extra level: `.orr-cmd-chip` sits on the <kj-badge> HOST, which is
    display:contents and paints nothing — padding/font-size set there never
    rendered. The knobs have to dress kouji's inner span, exactly as
    `app-sha-chip .kj-badge` above does. */
-.orr-palette .orr-cmd-chip .kj-badge {
+.orr-cmd-chip .kj-badge {
   flex: none;
   --kj-badge-padding-y: 1px;
   --kj-badge-padding-x: var(--sp-3);
   --kj-badge-font-size: var(--fs-3xs);
 }
-.orr-palette .orr-palette-foot {
+.orr-palette-foot {
   display: flex;
   flex: none;
   align-items: center;
@@ -2269,12 +2312,12 @@ app-version-badge .tag .kj-badge {
   font-size: var(--fs-2xs);
   color: var(--ink-4);
 }
-.orr-palette .orr-palette-foot span {
+.orr-palette-foot span {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
 }
-.orr-palette .orr-palette-count {
+.orr-palette-count {
   margin-left: auto;
 }
 
@@ -2368,11 +2411,20 @@ app-version-badge .tag .kj-badge {
    act on. The panel stayed position:static while the backdrop is fixed,
    and a positioned element paints above a static sibling, so the
    backdrop covered the dialog: only controls that were themselves
-   positioned remained clickable. */
+   positioned remained clickable.
+   The z-index READS THE STACK: KjOverlayStack writes `--kj-overlay-z` on
+   each wrapper (one step above whatever was open) and kouji's own panel
+   sheets read it — but they sit in @layer kj.component and this unlayered
+   literal `z-index: 1` used to beat them. Because the wrapper is
+   display:contents, every panel competes in the CONTAINER's stacking
+   context, so a nested select's listbox at z 1 painted UNDER the command
+   palette's backdrop (z 1000) — the scope dropdown showed behind the Recent
+   Files palette (user, 2026-09-15). Reading the variable puts each panel
+   at its own overlay level, above every earlier overlay's chrome. */
 .kj-overlay-wrapper > *:not(kj-backdrop) {
   pointer-events: auto;
   position: relative;
-  z-index: 1;
+  z-index: var(--kj-overlay-z, 1);
 }
 /* …but only a MODAL panel gets the viewport cap. kouji's portalled popup
    panels (.kj-select-content, .kj-popover-content, …) land in this same
@@ -2570,3 +2622,325 @@ kj-backdrop {
 .md-card .ft { display: flex; align-items: center; margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--hair); }
 .md-card .ft .btn { margin-left: auto; color: var(--ink-3); }
 .md-card .ft .btn:hover { color: var(--ink); }
+
+/* ---------- settings / extensions modal shell ----------
+   The Settings and Extensions dialogs share one panel — nav · head · body ·
+   foot and the group / switch chrome inside it. It used to live in the
+   Settings component's (encapsulation: None) stylesheet, which Angular
+   removes when the last Settings modal is destroyed — a second dialog
+   wearing the same classes rendered naked. One recipe here, both read it.
+   The :root-relative knobs (--set-amber / --set-danger) stay on .set-modal
+   so the Settings-only rules that read them keep working. */
+/* No backdrop here: KjDialog centers this component's host and paints the
+   scrim (see the kouji overlay chrome block in styles.css). .set-modal is the panel box. */
+.set-modal{--set-amber:var(--sem-attn);--set-danger:var(--sem-del);
+  width: round(calc(760px * var(--density)), 1px);max-width:calc(100vw - 56px);height:600px;max-height:84vh;display:flex;
+  background:var(--panel);border:1px solid var(--hair-2);border-radius:15px;overflow:hidden;
+  box-shadow:var(--shadow);
+  font-family:var(--font-ui);color:var(--ink);
+  transform-origin:center;animation:set-pop .22s cubic-bezier(.2,.7,.2,1);}
+/* transform-only entrance: if the frame is throttled and the animation freezes
+   at 0%, content stays visible (just offset) instead of stuck at opacity:0 */
+@keyframes set-pop{from{transform:translateY(10px) scale(.99)}to{transform:none}}
+@media (prefers-reduced-motion:reduce){.set-modal{animation:none}}
+
+/* ── left nav ── */
+.set-nav{width: round(calc(204px * var(--density)), 1px);flex:none;background:var(--panel-2);border-right:1px solid var(--hair);
+  display:flex;flex-direction:column;padding:var(--sp-6) var(--sp-5);}
+.set-brand{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-2) var(--sp-4) var(--sp-6);}
+/* skin from the shared .glyph-plate; size + radius stay per-instance */
+.set-brand .gi{width:var(--ctl-h);height:var(--ctl-h);border-radius:8px;flex:none;}
+.set-brand .bt{font-size:var(--fs-body);}
+.set-brand .bs{font-size:var(--fs-meta);color:var(--ink-4);letter-spacing:.04em;}
+.set-nav-list{display:flex;flex-direction:column;gap:var(--sp-1);}
+/* The rows are kj-list-items now, so the ground, hover and current-row state
+   come from the component (--kj-list-* / [active]). What stays here is only
+   what the list cannot know: the row's height and the accent bar that marks
+   the current section on the panel's edge. */
+.set-nav-list{--kj-list-row-padding:0 var(--sp-5);--kj-list-radius:9px;}
+.set-nav-item{position:relative;height:35px;gap:var(--sp-5);cursor:pointer;}
+.set-nav-item app-icon{color:var(--ink-4);transition:color .12s;}
+.set-nav-item:hover app-icon,
+.set-nav-item[data-active] app-icon{color:var(--ui-ink);}
+.set-nav-item .lb{flex:1;}
+.set-nav-item[data-active]::before{content:"";position:absolute;left:-11px;top:9px;bottom:9px;width:2.5px;
+  border-radius:2px;background:var(--ui-ind);}
+.set-nav-dot{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--set-amber);flex:none;
+  box-shadow:0 0 7px -1px var(--set-amber);}
+
+/* ── right column ── */
+.set-main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--panel);}
+.set-head{flex:none;display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-7) var(--sp-7) var(--sp-6);
+  border-bottom:1px solid var(--hair);}
+.set-head .ht{font-size:var(--fs-body);}
+.set-head .hs{color:var(--ink-4);margin-top:var(--sp-1);}
+.set-x .kj-button{margin-left:auto;flex:none;width:var(--ctl-h);height:var(--ctl-h);padding:0;border-radius:7px;border:1px solid transparent;
+  background:transparent;color:var(--ink-3);cursor:pointer;display:grid;place-items:center;transition:all .12s;box-shadow:none;}
+.set-x .kj-button:hover{background:var(--panel-3);color:var(--ink);border-color:var(--hair);}
+
+.set-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:var(--sp-2) var(--sp-7) var(--sp-8);}
+
+.set-grp{padding:var(--sp-7) 0 var(--sp-7);border-bottom:1px solid var(--hair);}
+.set-grp:last-child{border-bottom:none;}
+.set-grp-h{color:var(--ink-3);
+  margin-bottom:var(--sp-3);display:flex;align-items:center;gap:var(--sp-4);}
+.set-grp-h::after{content:"";flex:1;height:1px;background:var(--hair);}
+
+/* ── switch toggle — 34×19 track + 15×15 thumb, the design's fixed geometry ── */
+.set-tgl .kj-toggle--switch{--kj-switch-w:34px;--kj-switch-h:19px;--kj-switch-thumb:15px;flex:none;}
+
+/* ── footer ── */
+.set-foot{flex:none;display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-5) var(--sp-7);border-top:1px solid var(--hair);
+  background:var(--panel-2);color:var(--ink-3);}
+.set-foot .fl{display:inline-flex;align-items:center;gap:var(--sp-3);}
+.set-foot .fd{width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--st-done);flex:none;}
+/* .kj-quiet is the bare-label recipe; only the type and hover ink differ */
+.set-foot .reset-all .kj-button{--kj-button-gap:var(--sp-2);font-family:var(--font-mono);}
+.set-foot .reset-all .kj-button:hover:not([aria-disabled="true"]){--kj-button-fg:var(--ui-ink);}
+.set-foot .reset-all .kj-button svg{width:var(--sp-5);height:var(--sp-5);}
+.set-foot-cancel .kj-button{margin-left:auto;}
+
+/* ---------- Extensions ----------
+   design/orrery-v2.html EXT_STYLE (≈13801), the M1 slice: top-bar dot, nav
+   count, pack/server rows, badges, empty states, uninstall confirm, footer
+   registry line. Where the design styled a raw .btn / .meter / span badge,
+   the rule reaches kouji's inner .kj-button / .kj-progress-bar / .kj-badge
+   through its knobs — the <kj-*> hosts are display:contents and paint
+   nothing. Unlayered, so it wins over kouji's @layer kj.component. */
+
+/* the dot's anchor is kouji's inner button, exactly as .tb-settings above */
+.tb-extensions .kj-button{position:relative;}
+.ext-dot{position:absolute;top:var(--sp-3);right:var(--sp-3);width:var(--sp-3);height:var(--sp-3);border-radius:50%;background:var(--sem-attn);box-shadow:0 0 7px -1px var(--sem-attn);pointer-events:none;}
+.ext-count{min-width:calc(var(--ctl-h-sm) - var(--sp-2));height:calc(var(--ctl-h-sm) - var(--sp-2));padding:0 var(--sp-2);border-radius:999px;background:var(--ui-sel);color:var(--ui-ink);font-size:var(--fs-micro);font-weight:var(--fw-strong);display:grid;place-items:center;font-variant-numeric:tabular-nums;flex:none;}
+.set-nav-foot{margin-top:auto;padding:var(--sp-5) var(--sp-4) var(--sp-2);display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-badge);color:var(--ink-4);border-top:1px solid var(--hair);}
+.set-nav-foot app-icon{color:var(--ink-4);}
+
+/* ── rows ── */
+.ext-row{display:flex;flex-direction:column;gap:var(--sp-4);padding:var(--sp-5) var(--sp-6);border:1px solid var(--hair);border-radius:var(--r-md);background:var(--panel-2);transition:border-color .12s,opacity .12s;}
+.ext-row+.ext-row{margin-top:var(--sp-4);}
+.ext-row.dim{opacity:.55;}
+.ext-row.err{border-color:color-mix(in oklch,var(--sem-del),transparent 62%);}
+.ext-top{display:flex;align-items:center;gap:var(--sp-5);min-width:0;}
+.ext-ic{width:var(--ctl-h);height:var(--ctl-h);border-radius:var(--r-md);display:grid;place-items:center;flex:none;color:var(--ink-3);background:var(--panel-3);border:1px solid var(--hair);}
+.ext-id{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--sp-1);}
+.ext-name{font-size:var(--fs-body);color:var(--ink);font-weight:var(--fw-medium);display:flex;align-items:center;gap:var(--sp-4);flex-wrap:wrap;line-height:1.25;}
+.ext-meta{font-size:var(--fs-badge);color:var(--ink-4);display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;min-width:0;}
+.ext-meta .mono{font-family:var(--font-mono);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ext-langs{display:inline-flex;gap:var(--sp-2);}
+.ext-lang{font-family:var(--font-mono);font-size:var(--fs-micro);letter-spacing:.04em;padding:0 var(--sp-2);border-radius:var(--r-sm);border:1px solid var(--hair);color:var(--ink-3);background:var(--panel);line-height:1.6;}
+.ext-act{display:flex;align-items:center;gap:var(--sp-4);flex:none;position:relative;}
+.ext-act .kj-button{--kj-button-padding-y:var(--sp-2);--kj-button-padding-x:var(--sp-5);--kj-button-font-size:var(--fs-badge);height:var(--ctl-h);}
+/* the design's inline "Enabled <Toggle/>" pair */
+.ext-enabled{display:inline-flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-badge);color:var(--ink-3);}
+.ext-bar{display:flex;align-items:center;gap:var(--sp-5);padding-left:calc(var(--ctl-h) + var(--sp-5));}
+.ext-bar .kj-progress-bar{flex:1;}
+.ext-fig{font-family:var(--font-mono);font-size:var(--fs-badge);color:var(--ink-3);font-variant-numeric:tabular-nums;flex:none;}
+.ext-line{display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-badge);padding-left:calc(var(--ctl-h) + var(--sp-5));line-height:1.45;color:var(--ink-3);min-width:0;}
+.ext-line.warn{color:var(--sem-attn);} .ext-line.err{color:var(--sem-del);}
+.ext-line svg{width:var(--sp-6);height:var(--sp-6);flex:none;}
+.ext-line .mono{font-family:var(--font-mono);color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.ext-line.warn .mono,.ext-line.err .mono{color:inherit;}
+.ext-line .sp{flex:1;}
+.ext-line .lb{white-space:nowrap;flex:none;}
+/* system copy found but ignored (Use system servers off): quieter than the line */
+.ext-line.mute{color:var(--ink-4);}
+/* wraps a locked Uninstall so its reason shows on hover (a disabled kj-button takes no pointer events) */
+.ext-lock{display:inline-flex;cursor:not-allowed;}
+.ext-line .kj-button{--kj-button-padding-y:0;--kj-button-padding-x:var(--sp-4);--kj-button-font-size:var(--fs-badge);height:var(--ctl-h-sm);}
+/* link-styled action ("Restart now", the inline "Locate…") — after the row
+   and line rules on purpose: same specificity, so the later one wins */
+.ext-link .kj-button{--kj-button-bg:transparent;--kj-button-border-color:transparent;--kj-button-fg:var(--ui-link);--kj-button-padding-x:0;--kj-button-padding-y:0;--kj-button-font-size:var(--fs-badge);height:auto;min-height:0;box-shadow:none;text-decoration:underline;text-decoration-color:color-mix(in oklch,var(--ui-link),transparent 60%);text-underline-offset:2px;}
+.ext-link .kj-button:hover:not([aria-disabled="true"]){--kj-button-bg:transparent;--kj-button-fg:var(--ui-link);text-decoration-color:var(--ui-link);}
+.ext-line .ext-link .kj-button{font-size:inherit;--kj-button-font-size:inherit;}
+
+/* ── state badges (kj-badge wearing the design's .ext-badge pill) ── */
+.ext-badge .kj-badge{--kj-badge-radius:999px;--kj-badge-padding-x:var(--sp-3);--kj-badge-padding-y:0;--kj-badge-font-size:var(--fs-micro);--kj-badge-bg:var(--panel);--kj-badge-fg:var(--ink-3);--kj-badge-border-color:var(--hair);height:calc(var(--ctl-h-sm) - var(--sp-2));letter-spacing:.06em;text-transform:uppercase;font-weight:var(--fw-strong);white-space:nowrap;}
+.ext-badge.attn .kj-badge{--kj-badge-fg:var(--sem-attn);--kj-badge-border-color:color-mix(in oklch,var(--sem-attn),transparent 55%);--kj-badge-bg:color-mix(in oklch,var(--sem-attn),transparent 90%);}
+.ext-badge.live .kj-badge{--kj-badge-fg:var(--st-running);--kj-badge-border-color:color-mix(in oklch,var(--st-running),transparent 55%);--kj-badge-bg:color-mix(in oklch,var(--st-running),transparent 90%);}
+.ext-badge.err .kj-badge{--kj-badge-fg:var(--sem-del);--kj-badge-border-color:color-mix(in oklch,var(--sem-del),transparent 55%);--kj-badge-bg:color-mix(in oklch,var(--sem-del),transparent 90%);}
+.ext-badge.idle .kj-badge{--kj-badge-fg:var(--ink-4);}
+/* the compact variant for dense rows (the language-server popover's
+   instance line — user, 2026-09-15: smaller tags on the active server line) */
+.ext-badge.sm .kj-badge{--kj-badge-font-size:calc(var(--fs-micro) - 1.5px);--kj-badge-padding-x:var(--sp-2);--kj-badge-dot-size:5px;height:auto;line-height:1.5;letter-spacing:.04em;}
+.ext-badge.sm .kj-badge .kj-spinner{width:7px;height:7px;}
+.ext-up{font-family:var(--font-mono);font-size:var(--fs-badge);color:var(--ink-2);font-variant-numeric:tabular-nums;}
+.ext-up b{color:var(--ui-ink);font-weight:var(--fw-medium);}
+
+/* ── empty states ── */
+.ext-empty{padding:var(--sp-11) var(--sp-6);text-align:center;font-size:var(--fs-meta);color:var(--ink-3);display:flex;flex-direction:column;align-items:center;gap:var(--sp-4);}
+.ext-empty app-icon{color:var(--ink-4);}
+.ext-empty .h{color:var(--ink-2);font-weight:var(--fw-medium);}
+.ext-empty .kj-button{margin-top:var(--sp-2);--kj-button-font-size:var(--fs-badge);}
+/* section-top help line (Library sources): what the section indexes */
+.ext-help{margin:0 0 var(--sp-5);font-size:var(--fs-badge);color:var(--ink-4);line-height:1.5;}
+
+/* ── uninstall confirm: kouji's popup panel wearing the design's card ── */
+.ext-confirm.kj-confirm-popup-content{--kj-confirm-popup-bg:var(--elev);--kj-confirm-popup-border-color:var(--hair-2);--kj-confirm-popup-radius:var(--r-lg);--kj-confirm-popup-shadow:var(--shadow);--kj-confirm-popup-padding-x:var(--sp-6);--kj-confirm-popup-padding-y:var(--sp-6);width: round(calc(260px * var(--density)), 1px);max-width:min(round(calc(260px * var(--density)), 1px),calc(100vw - var(--sp-7)));font-family:var(--font-ui);text-align:left;}
+.ext-confirm .kj-confirm-popup-message{display:flex;flex-direction:column;gap:var(--sp-4);margin:0 0 var(--sp-4);}
+.ext-confirm .h{display:flex;align-items:center;gap:var(--sp-3);color:var(--ink);font-size:var(--fs-body);font-weight:var(--fw-medium);}
+.ext-confirm .h svg{color:var(--sem-del);}
+.ext-confirm .b{font-size:var(--fs-badge);color:var(--ink-3);line-height:1.5;}
+.ext-confirm .kj-confirm-popup-actions{display:flex;gap:var(--sp-3);justify-content:flex-end;}
+.ext-confirm .kj-button{--kj-button-padding-y:var(--sp-2);--kj-button-padding-x:var(--sp-5);--kj-button-font-size:var(--fs-badge);}
+
+/* ── footer registry line ── */
+.set-foot .sp{flex:1;}
+.ext-off{color:var(--sem-attn);}
+.ext-off svg{width:var(--sp-6);height:var(--sp-6);}
+/* idle-shutdown stepper + unit, the .set-num-rate width */
+.ext-unit{font-size:var(--fs-badge);color:var(--ink-4);}
+.set-num-idle .kj-number-input{width: round(calc(96px * var(--density)), 1px);}
+.set-num-idle .kj-number-input__field{width:100%;min-width:0;}
+
+/* ---------- Symbol navigation (M2) ----------
+   design/orrery-v2.html EXT_STYLE: NavHoverCard, NavPeek, NavHint, IndexChip,
+   SymbolRow. The hover card and the peek are Monaco's own widgets (content
+   hover, reference zone widget) re-skinned onto graphite tokens — Monaco
+   paints their theme colours as inline styles / runtime-injected CSS, which
+   is why the colour props carry !important (same story as the Monaco
+   surfaces block above). Everything else is a plain shared recipe. */
+
+/* the Ctrl+hover link (design .nav-ident) */
+.monaco-editor .goto-definition-link{color:var(--ui-ink) !important;text-decoration:underline;text-decoration-color:var(--ui-ink);text-underline-offset:3px;}
+
+/* ── hover card (design .nav-card) ── */
+.monaco-editor .monaco-hover{background:var(--elev) !important;border:1px solid var(--hair-2) !important;border-radius:var(--r-md);box-shadow:var(--shadow) !important;color:var(--ink-3) !important;font-family:var(--font-ui);font-size:var(--fs-badge);max-width:round(calc(340px * var(--density)), 1px);overflow:hidden;}
+.monaco-editor .monaco-hover .hover-row.markdown-hover .hover-contents{padding:var(--sp-3) var(--sp-5) var(--sp-4);}
+.monaco-editor .monaco-hover .hover-contents p{margin:var(--sp-1) 0;}
+/* the signature block: mono, ink, its own hairline like .nav-card-sig */
+.monaco-editor .monaco-hover .monaco-tokenized-source,
+.monaco-editor .monaco-hover pre{font-family:var(--font-mono) !important;font-size:var(--fs-meta);color:var(--ink) !important;background:transparent !important;padding:var(--sp-2) 0 var(--sp-4);margin:0 0 var(--sp-3);border:none;border-bottom:1px solid var(--hair);white-space:pre-wrap;line-height:1.5;}
+/* the inline `index` / `language server` badge (design .ext-badge.src) */
+.monaco-editor .monaco-hover code{font-family:var(--font-mono);font-size:var(--fs-micro);color:var(--ink-3) !important;background:var(--panel) !important;border:1px solid var(--hair);border-radius:999px;padding:0 var(--sp-3);}
+.monaco-editor .monaco-hover .monaco-tokenized-source code,
+.monaco-editor .monaco-hover pre code{border:none;background:transparent !important;padding:0;font-size:inherit;color:inherit !important;}
+.monaco-editor .monaco-hover hr{border-color:var(--hair) !important;}
+.monaco-editor .monaco-hover a{color:var(--ui-link) !important;}
+
+/* ── peek (design .nav-peek) ── */
+.monaco-editor .zone-widget .zone-widget-container{border-top-color:var(--ui-line) !important;border-bottom-color:var(--ui-line) !important;}
+.monaco-editor .peekview-widget .head{background:var(--panel-2) !important;border-bottom:1px solid var(--hair);font-family:var(--font-ui);font-size:var(--fs-badge);color:var(--ink-2) !important;}
+.monaco-editor .peekview-widget .head .peekview-title .filename{color:var(--ink) !important;font-weight:var(--fw-medium);}
+.monaco-editor .peekview-widget .head .peekview-title .dirname{font-family:var(--font-mono);color:var(--ink-4) !important;}
+.monaco-editor .peekview-widget .head .peekview-title .meta{color:var(--ink-4) !important;font-variant-numeric:tabular-nums;}
+.monaco-editor .peekview-widget>.body{background:var(--panel) !important;}
+.monaco-editor .reference-zone-widget .preview .monaco-editor,
+.monaco-editor .reference-zone-widget .preview .monaco-editor .margin,
+.monaco-editor .reference-zone-widget .preview .monaco-editor .monaco-editor-background{background:var(--panel-2) !important;}
+.monaco-editor .reference-zone-widget .preview .reference-decoration{background:var(--ui-sel) !important;}
+.monaco-editor .reference-zone-widget .ref-tree{background:var(--panel) !important;border-left:1px solid var(--hair);font-family:var(--font-ui);font-size:var(--fs-meta);color:var(--ink-2) !important;}
+.monaco-editor .reference-zone-widget .ref-tree .reference-file{color:var(--ink-3) !important;font-size:var(--fs-micro);letter-spacing:.07em;text-transform:uppercase;}
+.monaco-editor .reference-zone-widget .ref-tree .reference-file .count{color:var(--ink-4) !important;background:transparent !important;font-variant-numeric:tabular-nums;}
+.monaco-editor .reference-zone-widget .ref-tree .reference{color:var(--ink-2) !important;font-family:var(--font-mono);}
+.monaco-editor .reference-zone-widget .ref-tree .referenceMatch .highlight{background:var(--ui-sel) !important;color:var(--ui-ink) !important;border:none;}
+.monaco-editor .reference-zone-widget .ref-tree .monaco-list-row{border-left:2px solid transparent;}
+.monaco-editor .reference-zone-widget .ref-tree .monaco-list-row:hover{background:var(--panel-3) !important;}
+.monaco-editor .reference-zone-widget .ref-tree .monaco-list-row.selected,
+.monaco-editor .reference-zone-widget .ref-tree .monaco-list-row.focused,
+.monaco-editor .reference-zone-widget .ref-tree .monaco-list:focus .monaco-list-row.selected{background:var(--ui-sel) !important;color:var(--ink) !important;border-left-color:var(--ui-focus);outline:none !important;}
+.monaco-editor .reference-zone-widget .messages{color:var(--ink-3) !important;font-family:var(--font-ui);font-size:var(--fs-meta);}
+
+/* ── NavHint: the quiet bottom-right chip of the file editor ── */
+.nav-hint{position:absolute;right:var(--sp-5);bottom:var(--sp-5);z-index:10;pointer-events:none;display:inline-flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);border-radius:var(--r-sm);background:var(--elev);border:1px solid var(--hair);color:var(--ink-3);font-size:var(--fs-badge);font-family:var(--font-ui);box-shadow:var(--shadow);white-space:nowrap;animation:nav-fade 3.4s ease forwards;}
+.nav-hint.hold{animation:none;}
+.nav-hint app-icon{color:var(--ink-4);}
+@keyframes nav-fade{0%,72%{opacity:1}100%{opacity:0}}
+/* while our hint is up, Monaco's own "No definition found" box stays down */
+.nav-hinting .monaco-editor .monaco-editor-overlaymessage{display:none !important;}
+
+/* ── footer chips (design .lsp-chip; the LSP chip itself lands in M3) ── */
+.lsp-chip{display:inline-flex;align-items:center;gap:var(--sp-2);flex:none;white-space:nowrap;cursor:pointer;color:var(--ink-3);border:none;background:transparent;padding:0;font-family:var(--font-ui);font-size:var(--fs-badge);transition:color .12s;line-height:1;}
+.lsp-chip:hover,.lsp-chip.open{color:var(--ink);}
+.lsp-chip.idle{color:var(--ink-4);} .lsp-chip.error{color:var(--st-blocked);}
+/* the marker is permanent: with nothing running it stays as the quietest
+   line in the footer rather than disappearing (a vanished marker hides the
+   states worth seeing — a crash, a server that never came up) */
+.lsp-chip.none{color:var(--ink-4);}
+.lsp-chip.none:hover,.lsp-chip.none.open{color:var(--ink-2);}
+.lsp-chip .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
+.lsp-empty{padding:var(--sp-9) var(--sp-6);display:flex;flex-direction:column;gap:var(--sp-3);font-size:var(--fs-badge);color:var(--ink-4);line-height:1.5;}
+.lsp-empty .h{color:var(--ink-2);font-size:var(--fs-meta);font-weight:var(--fw-medium);}
+.lsp-chip app-icon{color:currentColor;}
+.lsp-chip .meter{width:calc(var(--sp-11) + var(--sp-6));flex:none;}
+.lsp-chip.idx{cursor:default;}
+
+/* ── M3: the rest of the design's .lsp-* family — the footer cluster and the
+   language-server popover. `<kj-popover-content>` supplies the surface again
+   (kouji-ui core 0.8.4 / components 0.9.3 ship the overlay stylesheets, and
+   angular.json loads both), so the .static variant drops its own chrome rather
+   than drawing a second border inside the first. ── */
+.lsp-wrap{display:inline-flex;align-items:center;gap:var(--sp-4);flex:none;white-space:nowrap;}
+.lsp-chip .kj-spinner{width:9px;height:9px;}
+.lsp-chip.starting{color:var(--ink-2);}
+.lsp-pop{position:fixed;z-index:92;width:round(calc(420px * var(--density)), 1px);max-width:calc(100vw - var(--sp-7));display:flex;flex-direction:column;max-height:calc(100vh - var(--topbar-h) - var(--statusbar-h) - var(--sp-9));background:var(--elev);border:1px solid var(--hair-2);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:var(--sp-5) var(--sp-6);font-size:var(--fs-meta);color:var(--ink-2);text-align:left;white-space:normal;font-family:var(--font-ui);}
+.lsp-pop.static{position:static;animation:none;max-width:100%;border:none;box-shadow:none;background:transparent;max-height:min(64vh, calc(100vh - var(--topbar-h) - var(--statusbar-h) - var(--sp-9)));}
+.lsp-pop-h{display:flex;align-items:center;gap:var(--sp-4);padding-bottom:var(--sp-4);border-bottom:1px solid var(--hair);margin-bottom:var(--sp-2);flex:none;}
+.lsp-pop-h app-icon{color:var(--ink-3);flex:none;}
+.lsp-pop-h .nm{font-weight:var(--fw-medium);color:var(--ink);font-family:var(--font-ui);font-size:var(--fs-body);flex:none;}
+.lsp-pop-h .tot{font-family:var(--font-mono);font-size:var(--fs-badge);color:var(--ink-3);font-variant-numeric:tabular-nums;flex:1;min-width:0;}
+.lsp-pop-h .kj-button{--kj-button-padding-y:0;--kj-button-padding-x:var(--sp-4);--kj-button-font-size:var(--fs-badge);height:var(--ctl-h-sm);flex:none;}
+.lsp-list{flex:1;min-height:0;overflow-y:auto;max-height:calc(var(--row-h) * 7.5);margin:0 calc(-1 * var(--sp-3));padding:0 var(--sp-3);}
+.lsp-g{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-4) var(--sp-3) var(--sp-1);font-size:var(--fs-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);position:sticky;top:0;background:var(--elev);z-index:1;}
+.lsp-g app-icon{color:var(--ink-4);}
+.lsp-g .n{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--ink-4);letter-spacing:0;}
+.lsp-row{border-radius:var(--r-sm);}
+.lsp-row:hover{background:var(--panel-3);}
+.lsp-row.dim{color:var(--ink-4);}
+.lsp-row-m{display:flex;align-items:center;gap:var(--sp-3);min-height:var(--row-h);padding:0 var(--sp-3);font-size:var(--fs-badge);color:var(--ink-2);}
+.lsp-row-m>app-icon{color:var(--ink-4);flex:none;}
+.lsp-row-m .nm{font-family:var(--font-mono);color:var(--ink);flex:1;min-width:7ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lsp-row.dim .nm{color:var(--ink-3);}
+.lsp-row-m .fig{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink-3);flex:none;min-width:calc(var(--sp-11) + var(--sp-3));text-align:right;white-space:nowrap;}
+.lsp-row-m .fig.sub{color:var(--ink-4);min-width:0;}
+.lsp-row-m .acts{display:inline-flex;gap:var(--sp-1);flex:none;opacity:0;transition:opacity .12s;}
+.lsp-row:hover .acts,.lsp-row:focus-within .acts,[data-density="compact"] .lsp-row .acts{opacity:1;}
+@media (hover:none){.lsp-row .acts{opacity:1;}}
+.lsp-row-m .acts .kj-button{width:var(--ctl-h-sm);height:var(--ctl-h-sm);min-height:0;padding:0;}
+.lsp-err{margin-top:var(--sp-4);padding:var(--sp-3) var(--sp-4);border-radius:var(--r-sm);background:color-mix(in oklch,var(--sem-del),transparent 88%);color:var(--sem-del);font-family:var(--font-mono);font-size:var(--fs-micro);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-line;}
+.lsp-row .lsp-err{margin:0 var(--sp-3) var(--sp-3) calc(var(--sp-6) + var(--sp-6));}
+.lsp-pop-f{flex:none;padding-top:var(--sp-4);margin-top:var(--sp-2);border-top:1px solid var(--hair);font-size:var(--fs-badge);display:flex;}
+.lsp-kv{display:grid;grid-template-columns:auto 1fr;gap:var(--sp-2) var(--sp-6);font-size:var(--fs-badge);margin:0;}
+.lsp-kv dt{color:var(--ink-4);} .lsp-kv dd{margin:0;color:var(--ink-2);font-family:var(--font-mono);font-variant-numeric:tabular-nums;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* the LiveBadge dot/spinner inside a state badge, and the NavHint's spinner */
+.ext-badge .kj-badge .kj-spinner{width:9px;height:9px;}
+.nav-hint .kj-spinner{width:9px;height:9px;flex:none;}
+
+/* ── M3: live server instances under a server row (design .ext-insts) ── */
+.ext-insts{display:flex;flex-direction:column;gap:var(--sp-1);margin-left:calc(var(--ctl-h) + var(--sp-5));border-top:1px solid var(--hair);padding-top:var(--sp-3);}
+.ext-inst{display:flex;align-items:center;gap:var(--sp-4);flex-wrap:wrap;min-height:var(--ctl-h);padding:0 var(--sp-3);border-radius:var(--r-sm);font-size:var(--fs-badge);color:var(--ink-2);}
+.ext-inst:hover{background:var(--panel-3);}
+.ext-inst.dim{color:var(--ink-4);} .ext-inst.dim .pj{color:var(--ink-3);}
+.ext-inst>app-icon{color:var(--ink-4);flex:none;}
+.ext-inst .pj{color:var(--ink);font-weight:var(--fw-medium);flex:none;}
+.ext-inst .pj.mono{font-family:var(--font-mono);font-weight:var(--fw-normal);}
+.ext-inst .fig{color:var(--ink-3);flex:none;font-variant-numeric:tabular-nums;}
+.ext-inst .sp{flex:1;}
+.ext-inst .kj-button{--kj-button-padding-y:0;--kj-button-padding-x:var(--sp-3);--kj-button-font-size:var(--fs-badge);--kj-button-fg:var(--ink-3);height:var(--ctl-h-sm);}
+.ext-inst .ie{flex-basis:100%;padding-left:calc(var(--sp-6) + var(--sp-4));margin-bottom:var(--sp-2);white-space:pre-line;align-items:flex-start;}
+.ext-inst .ie .mono{white-space:pre-line;overflow:visible;text-overflow:clip;}
+.ext-inst .ie app-icon{margin-top:var(--sp-1);}
+.ext-inst.sum{background:transparent;border:1px dashed var(--hair-2);cursor:pointer;font-family:var(--font-ui);width:100%;text-align:left;color:var(--ink-2);}
+.ext-inst.sum:hover{background:var(--panel-3);border-style:solid;}
+.ext-inst .more{display:inline-flex;align-items:center;gap:var(--sp-1);color:var(--ui-link);font-size:var(--fs-badge);}
+
+/* ── M3: virtual read-only docs (design .lib-*) — the tab badge, the
+   toolbar, the banner above the editor ── */
+.lib-badge .kj-badge{--kj-badge-radius:var(--r-sm);--kj-badge-padding-x:var(--sp-2);--kj-badge-padding-y:0;--kj-badge-font-size:var(--fs-micro);--kj-badge-bg:transparent;--kj-badge-fg:var(--ink-3);--kj-badge-border-color:var(--hair);font-family:var(--font-ui);letter-spacing:.06em;text-transform:uppercase;line-height:1.6;white-space:nowrap;font-weight:var(--fw-normal);}
+.file-tab.virtual .lib-badge .kj-badge{font-size:var(--fs-micro);}
+.lib-bar{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-6);background:var(--panel);border-bottom:1px solid var(--hair);font-size:var(--fs-meta);overflow:hidden;white-space:nowrap;flex:none;min-width:0;}
+.lib-bar app-icon.ch{color:var(--ink-4);flex:none;}
+.lib-bar .c{color:var(--ink-3);flex:none;} .lib-bar .c.on{color:var(--ink);flex:0 1 auto;min-width:0;}
+.lib-bar .r{margin-left:auto;display:flex;align-items:center;gap:var(--sp-4);flex:none;}
+.lib-banner{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-6);background:var(--panel);border-bottom:1px solid var(--hair);color:var(--ink-3);font-size:var(--fs-badge);flex:none;min-width:0;}
+.lib-banner app-icon{color:var(--ink-4);flex:none;}
+.lib-banner .mono{font-family:var(--font-mono);color:var(--ink-4);margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+
+/* ── Search Everywhere symbol row (design .sym-row) ── */
+.sym-row{display:flex;align-items:center;gap:var(--sp-5);padding:var(--sp-3) var(--sp-7);cursor:pointer;border-left:2px solid transparent;min-width:0;}
+.sym-row.on{background:var(--panel-3);border-left-color:var(--ui-focus);}
+.sym-row app-icon{flex:none;color:var(--ink-3);}
+.sym-row.on app-icon{color:var(--ui-ink);}
+.sym-row .nm{font-size:var(--fs-body);font-family:var(--font-mono);color:var(--ink);flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sym-row .ct{font-size:var(--fs-badge);color:var(--ink-3);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sym-row .root{font-size:var(--fs-micro);color:var(--ink-3);border:1px solid var(--hair);border-radius:var(--r-sm);padding:0 var(--sp-2);flex:none;white-space:nowrap;line-height:1.6;}
+.sym-row .pth{font-family:var(--font-mono);font-size:var(--fs-badge);color:var(--ink-4);flex:none;text-align:right;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;}
