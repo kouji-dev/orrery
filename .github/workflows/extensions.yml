@@ -224,8 +224,13 @@ jobs:
               gh release upload "$tag" $files --repo "$RELEASES_REPO" --clobber
             else
               # shellcheck disable=SC2086
+              # --prerelease --latest=false: the app updater reads
+              # releases/latest/download/latest.json, and GitHub picks "latest"
+              # by commit date among non-prereleases — a pack release created
+              # after an app release hijacked it (2026-09-15: every update
+              # install failed with a 404 until the pack releases were demoted).
               gh release create "$tag" $files \
-                --repo "$RELEASES_REPO" --target main --title "$tag" \
+                --repo "$RELEASES_REPO" --target main --title "$tag" --prerelease --latest=false \
                 --notes "Orrery extension pack $(jq -r .id <<<"$rel") v$(jq -r .version <<<"$rel")"
             fi
           done
@@ -234,7 +239,7 @@ jobs:
           set -euo pipefail
           if ! gh release view extensions --repo "$RELEASES_REPO" >/dev/null 2>&1; then
             gh release create extensions --repo "$RELEASES_REPO" --target main \
-              --title "Extensions registry" \
+              --title "Extensions registry" --prerelease --latest=false \
               --notes "Rolling release: index.json is the Orrery extension registry. Packs live in ext-* releases."
           fi
           gh release upload extensions artifacts/index.json --clobber --repo "$RELEASES_REPO"

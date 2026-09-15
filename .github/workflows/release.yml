@@ -176,6 +176,7 @@ jobs:
           gh release create "v${{ needs.prepare.outputs.version }}"
           --repo kouji-dev/orrery-releases
           --target main
+          --latest
           --title "v${{ needs.prepare.outputs.version }}"
           --notes-file notes.md
           artifacts/*-setup.exe artifacts/*.msi artifacts/*.dmg artifacts/*.app.tar.gz artifacts/latest.json
