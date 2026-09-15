@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
   closeSync,
-  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -264,9 +263,65 @@ function pickQuery(pin, repoRoot, name) {
   return existsSync(upstream) ? upstream : null;
 }
 
-export async function buildPack(pin, { target, packRev = 1, outDir, src, buildRoot }) {
+/** The pack revision: `--rev` on the CLI, else the pin's `packRev`, else 1.
+ *  A pin bumps its own revision when its ARTIFACT changes without an
+ *  upstream tag change (a query fix) — the app's parsed-symbol cache is
+ *  keyed by pack version, so the bump is what makes every file reparse. */
+export function packRevOf(pin, cliRev) {
+  if (cliRev !== undefined && cliRev !== null) return Number(cliRev);
+  return Number(pin.packRev ?? 1);
+}
+
+/**
+ * One query file out of several sources, in order. tree-sitter-typescript's
+ * `tree-sitter.json` lists `tags: ["queries/tags.scm",
+ * "node_modules/tree-sitter-javascript/queries/tags.scm"]` for both
+ * `typescript` and `tsx`: the repo's own file holds ONLY the TypeScript
+ * additions (interfaces, signatures, abstract classes, modules), and every
+ * class / function / method / variable definition comes from the JavaScript
+ * query it composes with. Shipping the first half alone indexed nothing but
+ * interfaces (user, 2026-09-15: Symbols tab empty on a TypeScript worktree).
+ * Same shape as tree-sitter's own loader: the texts are concatenated, first
+ * source first, each part labelled so the shipped file says where it came
+ * from.
+ */
+export function composeQuery(parts) {
+  return parts
+    .map(({ label, text }) => `; ---- ${label} ----\n${text.replace(/\s+$/, '')}\n`)
+    .join('\n');
+}
+
+/** The resolved sources of one query (`tags.scm` / `locals.scm`) for a pin:
+ *  its own (override or upstream) first, then the inherited pin's, per its
+ *  `inherits` field. `null` when neither exists. */
+function queryParts(pin, repoRoot, name, inherited) {
+  const parts = [];
+  const own = pickQuery(pin, repoRoot, name);
+  if (own) parts.push({ label: `${pin.id} ${name} (${pin.repo} ${pin.tag})`, text: readFileSync(own, 'utf8') });
+  if (inherited) {
+    const theirs = pickQuery(inherited.pin, inherited.repoRoot, name);
+    if (theirs) {
+      parts.push({
+        label: `inherited from ${inherited.pin.id} ${name} (${inherited.pin.repo} ${inherited.pin.tag})`,
+        text: readFileSync(theirs, 'utf8'),
+      });
+    }
+  }
+  return parts.length ? parts : null;
+}
+
+export async function buildPack(pin, { target, packRev = 1, outDir, src, buildRoot, pins }) {
   const buildDir = join(buildRoot, pin.language);
   const repoRoot = src ? resolve(src) : await fetchSource(pin, buildDir);
+  // `inherits`: the sibling pin whose queries compose UNDER this grammar's
+  // own (see composeQuery). Fetched like any other pin; its own build is not
+  // needed, only its `queries/`.
+  let inherited = null;
+  if (pin.inherits) {
+    const base = (pins ?? loadPins()).find((p) => p.language === pin.inherits);
+    if (!base) throw new Error(`${pin.id}: inherits "${pin.inherits}" but no such pin in ${PINS_FILE}`);
+    inherited = { pin: base, repoRoot: await fetchSource(base, join(buildRoot, base.language)) };
+  }
   const grammarDir = pin.subdir ? join(repoRoot, pin.subdir) : repoRoot;
   const srcDir = join(grammarDir, 'src');
   if (!existsSync(join(srcDir, 'parser.c'))) throw new Error(`no parser.c in ${srcDir}`);
@@ -289,15 +344,15 @@ export async function buildPack(pin, { target, packRev = 1, outDir, src, buildRo
   );
   if (!existsSync(libOut)) throw new Error(`compiler produced no ${libOut}`);
 
-  const tags = pickQuery(pin, repoRoot, 'tags.scm');
+  const tags = queryParts(pin, repoRoot, 'tags.scm', inherited);
   if (!tags) {
     throw new Error(`${pin.id}: no queries/tags.scm upstream and no override in scripts/extensions/queries/${pin.language}/`);
   }
-  copyFileSync(tags, join(stage, 'queries', 'tags.scm'));
+  writeFileSync(join(stage, 'queries', 'tags.scm'), composeQuery(tags));
   if (pin.hasLocals) {
-    const locals = pickQuery(pin, repoRoot, 'locals.scm');
+    const locals = queryParts(pin, repoRoot, 'locals.scm', inherited);
     if (!locals) throw new Error(`${pin.id}: hasLocals is set but no queries/locals.scm found`);
-    copyFileSync(locals, join(stage, 'queries', 'locals.scm'));
+    writeFileSync(join(stage, 'queries', 'locals.scm'), composeQuery(locals));
   }
   const manifestJson = JSON.stringify(manifest, null, 2) + '\n';
   writeFileSync(join(stage, 'manifest.json'), manifestJson);
@@ -324,18 +379,18 @@ export async function buildPack(pin, { target, packRev = 1, outDir, src, buildRo
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const a = parseArgs(process.argv.slice(2));
   const target = a.target ?? (process.platform === 'win32' ? 'windows-x86_64' : 'macos-aarch64');
-  const pins = selectPins(loadPins(), a.lang ?? 'all');
+  const allPins = loadPins();
+  const pins = selectPins(allPins, a.lang ?? 'all');
   if (a.src && pins.length !== 1) {
     console.error('--src applies to exactly one --lang');
     process.exit(1);
   }
   const outDir = resolve(a.out ?? 'dist-ext');
   const buildRoot = resolve(a.build ?? '.ext-build');
-  const packRev = Number(a.rev ?? 1);
   let failed = false;
   for (const pin of pins) {
     try {
-      await buildPack(pin, { target, packRev, outDir, src: a.src, buildRoot });
+      await buildPack(pin, { target, packRev: packRevOf(pin, a.rev), outDir, src: a.src, buildRoot, pins: allPins });
     } catch (e) {
       failed = true;
       console.error(`${pin.id}: ${e.message}`);

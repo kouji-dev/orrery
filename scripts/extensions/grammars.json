@@ -20,7 +20,9 @@
     "language": "typescript",
     "monacoLanguage": "javascript",
     "fileExtensions": ["ts", "mts", "cts"],
-    "hasLocals": true
+    "hasLocals": true,
+    "inherits": "javascript",
+    "packRev": 2
   },
   {
     "id": "grammar.tsx",
@@ -32,7 +34,9 @@
     "language": "tsx",
     "monacoLanguage": "javascript",
     "fileExtensions": ["tsx"],
-    "hasLocals": true
+    "hasLocals": true,
+    "inherits": "javascript",
+    "packRev": 2
   },
   {
     "id": "grammar.javascript",

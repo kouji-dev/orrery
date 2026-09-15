@@ -3,9 +3,11 @@ import { sep } from 'node:path';
 import {
   buildManifest,
   compileArgs,
+  composeQuery,
   libraryName,
   loadPins,
   packName,
+  packRevOf,
   packVersion,
   parseAbi,
   parseArgs,
@@ -118,6 +120,30 @@ describe('parseAbi', () => {
   });
 });
 
+describe('composeQuery', () => {
+  it('concatenates the parts in order, each under a label line, one blank line apart', () => {
+    const out = composeQuery([
+      { label: 'grammar.typescript tags.scm (tree-sitter/tree-sitter-typescript v0.23.2)', text: '(interface_declaration\n  name: (type_identifier) @name) @definition.interface\n\n\n' },
+      { label: 'inherited from grammar.javascript tags.scm (tree-sitter/tree-sitter-javascript v0.25.0)', text: '(class_declaration\n  name: (_) @name) @definition.class' },
+    ]);
+    expect(out).toBe(
+      '; ---- grammar.typescript tags.scm (tree-sitter/tree-sitter-typescript v0.23.2) ----\n' +
+        '(interface_declaration\n  name: (type_identifier) @name) @definition.interface\n' +
+        '\n' +
+        '; ---- inherited from grammar.javascript tags.scm (tree-sitter/tree-sitter-javascript v0.25.0) ----\n' +
+        '(class_declaration\n  name: (_) @name) @definition.class\n',
+    );
+  });
+});
+
+describe('packRevOf', () => {
+  it('prefers the CLI --rev, then the pin, then 1', () => {
+    expect(packRevOf({ packRev: 2 }, '3')).toBe(3);
+    expect(packRevOf({ packRev: 2 }, undefined)).toBe(2);
+    expect(packRevOf({}, undefined)).toBe(1);
+  });
+});
+
 describe('parseArgs', () => {
   it('reads pairs and bare flags', () => {
     expect(parseArgs(['--lang', 'java', '--local', '--out', 'x'])).toEqual({ lang: 'java', local: true, out: 'x' });
@@ -143,6 +169,18 @@ describe('grammars.json pins', () => {
       expect(p.symbol).toBe(`tree_sitter_${p.language}`);
       expect(p.fileExtensions.length).toBeGreaterThan(0);
     }
+  });
+
+  it('typescript and tsx compose their queries with javascript (upstream tree-sitter.json lists both files) at pack rev 2', () => {
+    // rev 2 because the shipped tags.scm changed under the same upstream tag —
+    // the app's parsed-symbol cache is keyed by pack version
+    for (const lang of ['typescript', 'tsx']) {
+      const pin = selectPins(pins, lang)[0];
+      expect(pin.inherits).toBe('javascript');
+      expect(pins.some((p: { language: string }) => p.language === pin.inherits)).toBe(true);
+      expect(packRevOf(pin, undefined)).toBe(2);
+    }
+    for (const p of pins) if (!p.inherits) expect(packRevOf(p, undefined)).toBe(1);
   });
 
   it('selectPins resolves by language, id, csv, and all', () => {
