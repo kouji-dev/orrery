@@ -253,11 +253,17 @@ export class CommitGraphPanelComponent {
   /** Row index in filtered() a shift-range stretches from. -1 = no anchor yet.
    *  Plain field, not a signal: nothing renders from it. */
   private anchor = -1;
+  /** The shas the LAST shift-click contributed. A second shift-click swaps
+   *  this run for the new one, so re-stretching never leaves the old tail
+   *  behind — while everything picked before the run (ctrl-clicks) stays. */
+  private shiftRun: string[] = [];
 
   /**
-   * Multi-select over filtered(), matching the changed-file list's convention:
-   * click picks one, ctrl/cmd toggles one, shift takes the contiguous run from
-   * the anchor. No cap — the range backend accepts N shas and sorts them itself.
+   * Multi-select over filtered(): click picks one, ctrl/cmd toggles one, shift
+   * ADDS the contiguous run between the last plain/ctrl-clicked row (the
+   * anchor) and this one. Earlier ctrl-picks survive a shift-click — the run
+   * joins the selection, it does not replace it. No cap — the range backend
+   * accepts N shas and sorts them itself.
    */
   toggleSel(sha: string, i: number, ev: MouseEvent): void {
     const rows = this.filtered();
@@ -265,9 +271,16 @@ export class CommitGraphPanelComponent {
       // anchor deliberately stays put so a second shift-click re-stretches the
       // same run instead of walking the selection down the list
       const [lo, hi] = this.anchor <= i ? [this.anchor, i] : [i, this.anchor];
-      this.sel.set(rows.slice(lo, hi + 1).map((c) => c.sha));
+      const run = rows.slice(lo, hi + 1).map((c) => c.sha);
+      const prev = this.shiftRun;
+      this.shiftRun = run;
+      this.sel.update((s) => {
+        const kept = s.filter((x) => !prev.includes(x));
+        return [...kept, ...run.filter((x) => !kept.includes(x))];
+      });
       return;
     }
+    this.shiftRun = [];
     if (ev.ctrlKey || ev.metaKey) {
       this.sel.update((s) => (s.includes(sha) ? s.filter((x) => x !== sha) : [...s, sha]));
       this.anchor = i;
@@ -280,6 +293,7 @@ export class CommitGraphPanelComponent {
   clearSel(): void {
     this.sel.set([]);
     this.anchor = -1;
+    this.shiftRun = [];
   }
 
   openCommit(sha: string): void {
