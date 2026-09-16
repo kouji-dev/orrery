@@ -1,0 +1,108 @@
+/* ─────────────────────────────────────────────────────────────
+   orrery theme — shared layer
+   Graphite: a dense IDE palette. Chroma is held flat at ~0.005 OKLCH
+   across the whole neutral ramp — elevation is a lightness step plus a
+   hairline, never a hue shift. The single violet accent carries meaning;
+   everything else stays grey or semantic.
+   ──────────────────────────────────────────────────────────── */
+
+@layer kj.shared {
+  [data-theme="orrery"] {
+    /* ── shape ── */
+    --kj-radius-box:      0.5rem;
+    --kj-radius-box-lg:   0.75rem;
+    --kj-radius-field:    0.3125rem;
+    --kj-radius-selector: 0.3125rem;
+    --kj-border:          var(--kj-base-border-1);
+    --kj-depth:           1;
+
+    /* ── type — Inter for chrome, JetBrains Mono for code, paths, shas and
+       figures. Display is sans: an IDE has no headline face. ── */
+    --kj-font-sans:      'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --kj-font-mono:      'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --kj-font-display:   var(--kj-font-sans);
+    --kj-display-weight: 600;
+    --kj-letter-spacing: -0.01em;
+
+    /* ── motion ── */
+    --kj-transition: var(--kj-base-transition-fast);
+
+    /* ── neutral surfaces — the graphite ramp ── */
+    --kj-bg-body:      #121315;
+    --kj-bg-surface:   #17181a;
+    --kj-bg-field:     #232427;
+    --kj-bg-elevated:  #2c2d30;
+    --kj-bg-overlay:   rgba(4, 5, 9, 0.58);
+    --kj-bg-inverse:   #f2f2f2;
+    --kj-bg-disabled:  #232427;
+
+    /* ── intent surfaces ──
+       Accent aliases primary: graphite is a single-hue system. The `-subtle`
+       fills are mixed INTO the body rather than made translucent, so a subtle
+       surface stays opaque over any parent. */
+    --kj-bg-primary:        #b082f7;
+    --kj-bg-primary-subtle: color-mix(in oklch, #b082f7 14%, #121315);
+    --kj-bg-accent:         #b082f7;
+    --kj-bg-accent-subtle:  color-mix(in oklch, #b082f7 14%, #121315);
+
+    --kj-bg-info:            #5e9cf5;
+    --kj-bg-info-subtle:     color-mix(in oklch, #5e9cf5 14%, #121315);
+    --kj-bg-success:         #57c98a;
+    --kj-bg-success-subtle:  color-mix(in oklch, #57c98a 14%, #121315);
+    --kj-bg-warning:         #d9a441;
+    --kj-bg-warning-subtle:  color-mix(in oklch, #d9a441 14%, #121315);
+    --kj-bg-danger:          #e06c7a;
+    --kj-bg-danger-subtle:   color-mix(in oklch, #e06c7a 14%, #121315);
+
+    /* ── fg class A — the ink ramp, contrast-checked against bg-field ── */
+    --kj-fg-default:  #dee0e2;  /* 12.6:1 */
+    --kj-fg-muted:    #b0b1b3;  /*  7.8:1 */
+    --kj-fg-subtle:   #8a8b8c;  /*  4.9:1 */
+    --kj-fg-disabled: #68696b;  /*  3.0:1 — non-text / disabled only */
+
+    /* ── fg class B — ink ON a solid intent fill.
+       Every intent hue here is a light pastel (they double as ink on the dark
+       body), so near-black is the only choice that clears AA on the fill —
+       white would land near 2:1 on all of them. */
+    --kj-fg-on-primary: #0d0d0f;
+    --kj-fg-on-accent:  #0d0d0f;
+    --kj-fg-on-info:    #0d0d0f;
+    --kj-fg-on-success: #0d0d0f;
+    --kj-fg-on-warning: #0d0d0f;
+    --kj-fg-on-danger:  #0d0d0f;
+    --kj-fg-on-inverse: #3b3b3b;
+
+    /* ── fg class C — intent as text on the body ── */
+    --kj-fg-primary: #c39afc;
+    --kj-fg-accent:  #c39afc;
+    --kj-fg-info:    #5e9cf5;
+    --kj-fg-success: #57c98a;
+    --kj-fg-warning: #d9a441;
+    --kj-fg-danger:  #e06c7a;
+
+    /* ── borders — hairlines, not boxes ── */
+    --kj-border-default:  #353739;
+    --kj-border-muted:    #232427;
+    --kj-border-strong:   #444548;
+    --kj-border-focus:    #a855f7;
+    --kj-border-disabled: #353739;
+    --kj-border-primary:  #a855f7;
+    --kj-border-danger:   #e06c7a;
+
+    /* ── shadows — long and soft, lifted off pure black ── */
+    --kj-shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.5);
+    --kj-shadow-md:    0 8px 24px -10px rgba(0, 0, 0, 0.65);
+    --kj-shadow-lg:    0 16px 40px -12px rgba(0, 0, 0, 0.72);
+    --kj-shadow-focus: 0 0 0 3px color-mix(in oklch, #a855f7, transparent 84%);
+
+    /* ── chart palette — the lane identity colours.
+       Series need identity, not intent: six distinguishable hues at matched
+       lightness beat six semantic colours that all mean something else. */
+    --kj-chart-1: #8f7bd6;
+    --kj-chart-2: #5e8fb8;
+    --kj-chart-3: #67a888;
+    --kj-chart-4: #c09a54;
+    --kj-chart-5: #b8798f;
+    --kj-chart-6: #6f8fc4;
+  }
+}

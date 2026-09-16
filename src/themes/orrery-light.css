@@ -1,0 +1,103 @@
+/* ─────────────────────────────────────────────────────────────
+   orrery-light theme — shared layer
+   "Paper": One Light's structure and soft ink, shifted down into real grey.
+   Pure neutral (chroma 0.0000). Elevation goes DOWN, not up — the editor is
+   the single brightest surface and everything else recedes, and `elevated`
+   is capped short of white so popovers never glare.
+   ──────────────────────────────────────────────────────────── */
+
+@layer kj.shared {
+  [data-theme="orrery-light"] {
+    /* ── shape ── */
+    --kj-radius-box:      0.5rem;
+    --kj-radius-box-lg:   0.75rem;
+    --kj-radius-field:    0.3125rem;
+    --kj-radius-selector: 0.3125rem;
+    --kj-border:          var(--kj-base-border-1);
+    --kj-depth:           1;
+
+    /* ── type ── */
+    --kj-font-sans:      'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --kj-font-mono:      'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --kj-font-display:   var(--kj-font-sans);
+    --kj-display-weight: 600;
+    --kj-letter-spacing: -0.01em;
+
+    /* ── motion ── */
+    --kj-transition: var(--kj-base-transition-fast);
+
+    /* ── neutral surfaces ── */
+    --kj-bg-body:      #dedede;
+    --kj-bg-surface:   #e8e8e8;
+    --kj-bg-field:     #e4e4e4;
+    --kj-bg-elevated:  #f7f7f7;
+    --kj-bg-overlay:   rgba(30, 30, 30, 0.34);
+    --kj-bg-inverse:   #1d1e20;
+    --kj-bg-disabled:  #e4e4e4;
+
+    /* ── intent surfaces ──
+       One Light's own syntax palette fails AA on light (#50a14f = 2.86:1,
+       #4078f2 = 3.62:1), so these keep its muted character while clearing
+       4.6:1. They are dark enough to carry white ink. */
+    --kj-bg-primary:        #752cb3;
+    --kj-bg-primary-subtle: color-mix(in oklch, #752cb3 12%, #dedede);
+    --kj-bg-accent:         #752cb3;
+    --kj-bg-accent-subtle:  color-mix(in oklch, #752cb3 12%, #dedede);
+
+    --kj-bg-info:            #1c6dc8;
+    --kj-bg-info-subtle:     color-mix(in oklch, #1c6dc8 12%, #dedede);
+    --kj-bg-success:         #1e7d3e;
+    --kj-bg-success-subtle:  color-mix(in oklch, #1e7d3e 12%, #dedede);
+    --kj-bg-warning:         #996100;
+    --kj-bg-warning-subtle:  color-mix(in oklch, #996100 12%, #dedede);
+    --kj-bg-danger:          #bf4240;
+    --kj-bg-danger-subtle:   color-mix(in oklch, #bf4240 12%, #dedede);
+
+    /* ── fg class A — soft foreground, not near-black (~10:1, not 16:1) ── */
+    --kj-fg-default:  #3b3b3b;  /* 10.0:1 */
+    --kj-fg-muted:    #515151;  /*  7.1:1 */
+    --kj-fg-subtle:   #6e6e6e;  /*  4.6:1 */
+    --kj-fg-disabled: #8c8c8c;  /*  3.0:1 — non-text / disabled only */
+
+    /* ── fg class B — every intent fill here is dark enough for white ink,
+       which is the inverse of the dark theme's pastel fills. ── */
+    --kj-fg-on-primary: #ffffff;
+    --kj-fg-on-accent:  #ffffff;
+    --kj-fg-on-info:    #ffffff;
+    --kj-fg-on-success: #ffffff;
+    --kj-fg-on-warning: #ffffff;
+    --kj-fg-on-danger:  #ffffff;
+    --kj-fg-on-inverse: #dee0e2;
+
+    /* ── fg class C — intent as text on the body ── */
+    --kj-fg-primary: #8d4dcc;  /* 4.6:1 */
+    --kj-fg-accent:  #8d4dcc;
+    --kj-fg-info:    #1c6dc8;
+    --kj-fg-success: #1e7d3e;
+    --kj-fg-warning: #996100;
+    --kj-fg-danger:  #bf4240;
+
+    /* ── borders ── */
+    --kj-border-default:  #d1d1d1;
+    --kj-border-muted:    #e4e4e4;
+    --kj-border-strong:   #bababa;
+    --kj-border-focus:    #8d4dcc;
+    --kj-border-disabled: #d1d1d1;
+    --kj-border-primary:  #8d4dcc;
+    --kj-border-danger:   #bf4240;
+
+    /* ── shadows — shorter and weaker than dark; light elevation recedes ── */
+    --kj-shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.12);
+    --kj-shadow-md:    0 6px 18px -10px rgba(0, 0, 0, 0.28);
+    --kj-shadow-lg:    0 14px 32px -12px rgba(0, 0, 0, 0.34);
+    --kj-shadow-focus: 0 0 0 3px color-mix(in oklch, #8d4dcc, transparent 80%);
+
+    /* ── chart palette — lane identity, darkened for the paper ground ── */
+    --kj-chart-1: #6b53b8;
+    --kj-chart-2: #3f6d96;
+    --kj-chart-3: #3f8664;
+    --kj-chart-4: #9a7530;
+    --kj-chart-5: #96566c;
+    --kj-chart-6: #4d6da2;
+  }
+}
