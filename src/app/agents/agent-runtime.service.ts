@@ -441,9 +441,13 @@ export class AgentRuntimeService {
         this.ui.flash(e?.message ?? "start failed");
       });
   }
-  stopProcess(id: string) {
+  /** Stop the agent's process. Returns the backend round-trip so a caller that
+   *  must RE-start the agent (the edit dialog's provider switch) can wait for
+   *  the old CLI to be gone — launching a second PTY under the same agent id
+   *  while the first is still dying leaves the terminal wired to the corpse. */
+  stopProcess(id: string): Promise<void> {
     this.stoppingByUser[id] = true; // a user stop is not a "finished work" event
-    void this.agentsStore.stop(id).catch(() => {});
+    return this.agentsStore.stop(id).catch(() => {});
   }
 
   // ---- v2 project shells (plain shell in the MAIN worktree, keyed by the

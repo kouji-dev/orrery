@@ -8,6 +8,7 @@ import { CommandOverlaysComponent } from '../commands/overlays.component';
 import { ContextMenuComponent } from '../context-menu/context-menu.component';
 import { AddProjectModalComponent } from '../modals/add-project-modal.component';
 import { DeleteWorktreeModalComponent } from '../modals/delete-worktree-modal.component';
+import { EditAgentModalComponent } from '../modals/edit-agent-modal.component';
 import { SettingsModalComponent } from '../modals/settings-modal.component';
 import { SpawnModalComponent } from '../modals/spawn-modal.component';
 import { UpdateToastComponent } from '../modals/update-toast.component';
@@ -91,8 +92,8 @@ declare const ngDevMode: boolean | undefined;
       <app-status-bar />
     </div>
 
-    <!-- The five modals are service-launched (see bindModal) — they mount into
-         kj's body-level overlay root, not here. -->
+    <!-- The service-launched modals (see bindModal) mount into kj's body-level
+         overlay root, not here. -->
     <app-update-toast />
     <app-command-overlays />
     <app-context-menu />
@@ -133,6 +134,7 @@ export class ShellComponent {
     this.bindModal(() => this.ui.spawning(), SpawnModalComponent);
     this.bindModal(() => this.ui.addingProject(), AddProjectModalComponent);
     this.bindModal(() => this.ui.deletingWorktree(), DeleteWorktreeModalComponent);
+    this.bindModal(() => this.ui.editingAgent(), EditAgentModalComponent);
     this.bindModal(() => this.settings.open(), SettingsModalComponent);
     this.bindModal(() => this.settings.whatsNewOpen(), WhatsNewModalComponent);
     this.bindModal(() => this.extensions.open(), ExtensionsModalComponent);

@@ -2790,7 +2790,9 @@ kj-backdrop {
 /* the compact variant for dense rows (the language-server popover's
    instance line — user, 2026-09-15: smaller tags on the active server line) */
 .ext-badge.sm .kj-badge{--kj-badge-font-size:calc(var(--fs-micro) - 1.5px);--kj-badge-padding-x:var(--sp-2);--kj-badge-dot-size:5px;height:auto;line-height:1.5;letter-spacing:.04em;}
-.ext-badge.sm .kj-badge .kj-spinner{width:7px;height:7px;}
+/* --ico-xs, not 7px: the glyph sits beside 9px type and must shrink with it at
+   compact density; a frozen px did not (the density linter flags it) */
+.ext-badge.sm .kj-badge .kj-spinner{width:var(--ico-xs);height:var(--ico-xs);}
 .ext-up{font-family:var(--font-mono);font-size:var(--fs-badge);color:var(--ink-2);font-variant-numeric:tabular-nums;}
 .ext-up b{color:var(--ui-ink);font-weight:var(--fw-medium);}
 

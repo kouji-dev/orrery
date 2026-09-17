@@ -134,6 +134,15 @@ import { KjBadgeComponent, KjButtonComponent, KjTabComponent, KjTabListComponent
             @if (ag.worktree) {
               <kj-button kjSize="xs" kjVariant="ghost" (click)="$event.stopPropagation(); diagnostics.openWorktree(ag.worktree)" title="Open worktree folder"><app-icon size="lg" name="folderOpen" /></kj-button>
             }
+            <!-- the agent's tool/model/effort were frozen at spawn and every
+                 launch AND resume forwarded them; this is the one place in the
+                 pane header that can move an agent off its creation-time model.
+                 Not for the v2 project pseudo-agent: its id is a PROJECT id, it
+                 has no stored record to patch, and its "tool" is a plain shell
+                 with no model or effort to choose. -->
+            @if (ag.tool !== 'shell') {
+              <kj-button kjSize="xs" kjVariant="ghost" (click)="$event.stopPropagation(); ui.openEditAgent(ag.id)" [title]="'Edit agent · ' + ag.tool + ' / ' + ag.model"><app-icon size="lg" name="rename" /></kj-button>
+            }
             @if (ag.sessionId && ag.status !== 'running') {
               <kj-button kjSize="xs" kjVariant="ghost" (click)="$event.stopPropagation(); continueSession(ag.id)" [title]="'Continue last session · ' + ag.tool + ' (' + ag.sessionId + ')'"><app-icon size="lg" name="refresh" /></kj-button>
             }

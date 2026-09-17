@@ -558,6 +558,17 @@ export class UiStore {
   closeAddProject() {
     this.addingProject.set(false);
   }
+  /** Agent id whose tool / model / effort is being edited (null = modal
+   *  closed). Held by id, not by record: the agent's own signal keeps updating
+   *  underneath the open dialog (status flips, a run ends) and a snapshot would
+   *  go stale exactly where the dialog's running/idle branch reads it. */
+  readonly editingAgent = signal<string | null>(null);
+  openEditAgent(id: string) {
+    this.editingAgent.set(id);
+  }
+  closeEditAgent() {
+    this.editingAgent.set(null);
+  }
   /** Agent id awaiting delete-worktree confirmation (null = modal closed). */
   readonly deletingWorktree = signal<string | null>(null);
   openDeleteWorktree(id: string) {

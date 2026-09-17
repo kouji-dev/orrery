@@ -15,6 +15,7 @@ import { TicketsStore } from "../stores/tickets.store";
 import { IconComponent } from "../shared/icon.component";
 import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { UiStore } from "../ui/ui.store";
+import { AgentToolControlsComponent } from "../shared/agent-tool-controls.component";
 import { SpawnModalComponent } from "./spawn-modal.component";
 
 beforeAll(() => {
@@ -176,6 +177,13 @@ function setup(
   TestBed.overrideComponent(SpawnModalComponent, {
     remove: { imports: [IconComponent, ToolBadgeComponent] },
     add: { imports: [IconStub, ToolBadgeStub] },
+  });
+  // The tiles / model picker / effort pills moved into the shared control group
+  // (app-agent-tool-controls), which this dialog renders — so its own brand
+  // badge needs the same stub, or every tile throws NG0950 under JIT.
+  TestBed.overrideComponent(AgentToolControlsComponent, {
+    remove: { imports: [ToolBadgeComponent] },
+    add: { imports: [ToolBadgeStub] },
   });
   const fixture = TestBed.createComponent(SpawnModalComponent);
   fixture.detectChanges();
