@@ -47,3 +47,29 @@ test("menu items highlight on hover; danger gets its own tint; Escape closes", a
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
 });
+
+test("menu rows are sized by their padding, not kouji's 44px touch-target floor", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForSelector("app-top-bar");
+  await page.evaluate(
+    ui(`.openMenu(
+      { clientX: 120, clientY: 120, preventDefault() {}, stopPropagation() {} },
+      [
+        { label: "Alpha", icon: "file", onClick() {} },
+        { label: "Beta", icon: "file", kbd: "Ctrl+B", onClick() {} },
+      ],
+    )`),
+  );
+  const beta = page.locator(".menu-panel").getByRole("menuitem", { name: "Beta" });
+  await expect(beta).toBeVisible();
+  const m = await beta.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { height: el.getBoundingClientRect().height, minHeight: cs.minHeight, pad: parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) };
+  });
+  expect(m.minHeight).toBe("0px");
+  // 6px of padding above and below the tallest child (icon / kbd chip / line
+  // box) — about 32px at the default density; the kouji floor alone was 44px
+  expect(m.pad).toBe(12);
+  expect(m.height).toBeLessThan(36);
+  await page.keyboard.press("Escape");
+});

@@ -150,12 +150,38 @@ describe("ExtensionsStore seed + feeds", () => {
     const dep: ExtProgressPayload = { id: "tsserver", downloaded: 5, total: 32, phase: "download", dependency: "runtime.node", stepIndex: 1, stepCount: 2 };
     bridge.emit("ext://progress", dep);
     expect(store.progress()["tsserver"]).toEqual(dep);
-    expect(store.progress()["runtime.node"]).toBeUndefined();
+    // the dependency's row is not `downloading` in this status → its copy is dropped on the next snapshot
     bridge.emit("ext://status", downloading);
     expect(store.progress()["tsserver"]?.dependency).toBe("runtime.node");
+    expect(store.progress()["runtime.node"]).toBeUndefined();
     // the server lands → its progress goes with it
     bridge.emit("ext://status", VIEW);
     expect(store.progress()["tsserver"]).toBeUndefined();
+  });
+
+  it("a dependency's ticks also fill the dependency's OWN row while the backend marks it downloading", async () => {
+    const { store, bridge } = make();
+    await tick();
+    const both = {
+      ...VIEW,
+      items: [
+        ...VIEW.items.map((p) => (p.id === "tsserver" ? { ...p, state: "downloading" as const } : p)),
+        pack({ id: "runtime.node", kind: "runtime", state: "downloading" }),
+      ],
+    };
+    bridge.emit("ext://status", both);
+    const dep: ExtProgressPayload = { id: "tsserver", downloaded: 5, total: 32, phase: "download", dependency: "runtime.node", stepIndex: 1, stepCount: 2 };
+    bridge.emit("ext://progress", dep);
+    // the runtime row reads as a plain single-step download of its own
+    expect(store.progress()["runtime.node"]).toEqual({ ...dep, id: "runtime.node", dependency: null, stepIndex: 1, stepCount: 1 });
+    expect(store.progress()["tsserver"]).toEqual(dep);
+    // the runtime lands (installed) while the server keeps downloading → only the runtime's copy goes
+    bridge.emit("ext://status", {
+      ...both,
+      items: both.items.map((p) => (p.id === "runtime.node" ? { ...p, state: "installed" as const, installed: true } : p)),
+    });
+    expect(store.progress()["runtime.node"]).toBeUndefined();
+    expect(store.progress()["tsserver"]).toEqual(dep);
   });
 
   it("connect() drops the earlier subscriptions and re-seeds", async () => {

@@ -81,6 +81,23 @@ test("double-Shift opens Search Everywhere with the Commands corpus", async ({ p
   await expect(se).toHaveCount(0);
 });
 
+test("holding Shift (auto-repeat) does not open Search Everywhere", async ({ page }) => {
+  await ready(page);
+  // Playwright's keyboard never auto-repeats; synthesize what the OS sends
+  // while a key is held: one real keydown, then a burst of `repeat` ones.
+  await page.evaluate(() => {
+    const down = (repeat: boolean) => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", repeat, bubbles: true, cancelable: true }));
+    down(false);
+    for (let i = 0; i < 5; i++) down(true);
+  });
+  await page.waitForTimeout(100);
+  await expect(page.locator("app-search-everywhere")).toHaveCount(0);
+  // genuine presses still open it
+  await page.keyboard.press("Shift");
+  await page.keyboard.press("Shift");
+  await expect(page.locator("app-search-everywhere input")).toBeVisible();
+});
+
 test("topbar Search Everywhere button opens the overlay", async ({ page }) => {
   await ready(page);
   const btn = page.locator("app-top-bar .tb-search");

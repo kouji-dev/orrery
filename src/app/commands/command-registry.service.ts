@@ -276,6 +276,10 @@ export class CommandRegistryService {
     // design) EXCEPT inside a terminal: bare Shift emits no bytes, so it is
     // the one app chord no PTY program can possibly want — always available.
     if (e.key === "Shift" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      // HOLDING Shift auto-repeats keydown (Windows: after ~500 ms, then every
+      // ~30 ms) — those are not presses. Ignore them outright, or a held Shift
+      // opened the overlay on its own.
+      if (e.repeat) return;
       const now = Date.now();
       if ((!typing || inTerminal) && this.shiftArmed && now - this.lastShift < DOUBLE_SHIFT_MS) {
         this.shiftArmed = false;
