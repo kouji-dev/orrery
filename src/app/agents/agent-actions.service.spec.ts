@@ -117,3 +117,132 @@ describe("AgentActionsService pending transitions", () => {
     expect(overlay["a1"]).toBeUndefined();
   });
 });
+
+/**
+ * Editing an existing agent. Before this, tool/model/effort were frozen at
+ * spawn and every launch AND resume forwarded them — so the only guarantee
+ * worth pinning here is that the edit reaches the record, and that the one case
+ * which costs a live process (a provider switch on a RUNNING agent) stops
+ * before it updates and starts again after.
+ */
+describe("AgentActionsService — applyAgentEdit", () => {
+  let svc: AgentActionsService;
+  let flashes: string[];
+  let calls: string[];
+  let update: ReturnType<typeof vi.fn>;
+  let startProcess: ReturnType<typeof vi.fn>;
+  let stopProcess: ReturnType<typeof vi.fn>;
+  let closeEditAgent: ReturnType<typeof vi.fn>;
+  let openEditAgent: ReturnType<typeof vi.fn>;
+  let current: Agent;
+
+  function build(ag: Agent, updateImpl?: () => Promise<Agent>) {
+    current = ag;
+    flashes = [];
+    calls = [];
+    update = vi.fn(() => {
+      calls.push("update");
+      return updateImpl ? updateImpl() : Promise.resolve(ag);
+    });
+    startProcess = vi.fn(() => calls.push("start"));
+    // the real stopProcess resolves the backend round-trip; applyAgentEdit
+    // AWAITS it, so the stub has to be a promise or the ordering assertion
+    // below would pass by accident
+    stopProcess = vi.fn(() => {
+      calls.push("stop");
+      return Promise.resolve();
+    });
+    closeEditAgent = vi.fn();
+    openEditAgent = vi.fn();
+    const injector = Injector.create({
+      providers: [
+        { provide: AgentsStore, useValue: { update } as unknown as AgentsStore },
+        {
+          provide: AgentRuntimeService,
+          useValue: { agents: () => [current], startProcess, stopProcess } as unknown as AgentRuntimeService,
+        },
+        {
+          provide: UiStore,
+          useValue: { closeEditAgent, openEditAgent, flash: (m: string) => flashes.push(m) } as unknown as UiStore,
+        },
+        { provide: ProjectActionsService, useValue: { all: () => [{ id: "p1", name: "proj", branch: "main" }] } },
+        { provide: TerminalService, useValue: {} },
+        { provide: NotificationStore, useValue: {} },
+        { provide: AgentWorkStore, useValue: { changesFor: () => ({ data: [] }) } },
+        { provide: ConflictStore, useValue: {} },
+        AgentActionsService,
+      ],
+    });
+    svc = injector.get(AgentActionsService);
+  }
+
+  const patch = { tool: "codex" as const, model: "gpt-5.6-sol", effort: "high" };
+
+  it("sends tool, model and effort in ONE update — the backend resets the last two on a tool change", async () => {
+    build(agent({ tool: "claude", model: "opus", effort: "xhigh" }));
+    await svc.applyAgentEdit("a1", patch);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith("a1", patch);
+  });
+
+  it("sends effort explicitly as null so a knobless tool does not inherit the old level", async () => {
+    build(agent({ tool: "claude", model: "opus", effort: "xhigh" }));
+    await svc.applyAgentEdit("a1", { tool: "cursor", model: "composer-2.5", effort: null });
+    const sent = update.mock.calls[0][1] as Record<string, unknown>;
+    expect("effort" in sent).toBe(true); // an OMITTED key means "leave alone"
+    expect(sent.effort).toBeNull();
+  });
+
+  it("an idle agent is only updated — nothing is stopped or started", async () => {
+    build(agent({ status: "idle" }));
+    await svc.applyAgentEdit("a1", patch);
+    expect(calls).toEqual(["update"]);
+    expect(stopProcess).not.toHaveBeenCalled();
+    expect(startProcess).not.toHaveBeenCalled();
+  });
+
+  it("restart stops, updates, then starts — in that order, and never resumes", async () => {
+    build(agent({ status: "running", started: true, sessionId: "sess-1" }));
+    await svc.applyAgentEdit("a1", patch, true);
+    expect(calls).toEqual(["stop", "update", "start"]);
+    // a fresh launch, not a resume: the update drops the session id with the
+    // tool it belonged to, so resuming would hand the new CLI a foreign id
+    expect(startProcess).toHaveBeenCalledWith("a1");
+    expect(flashes.some((f) => f.includes("restarted"))).toBe(true);
+  });
+
+  it("a failed restart leaves the agent stopped and says so instead of starting it anyway", async () => {
+    build(agent({ status: "running" }), () => Promise.reject(new Error("tool unknown")));
+    await svc.applyAgentEdit("a1", patch, true);
+    expect(calls).toEqual(["stop", "update"]);
+    expect(startProcess).not.toHaveBeenCalled();
+    expect(flashes).toContain("tool unknown");
+    expect(flashes.some((f) => f.includes("is stopped"))).toBe(true);
+  });
+
+  it("a model-only edit on a RUNNING agent says when it lands, rather than implying it already did", async () => {
+    build(agent({ status: "running", tool: "claude", model: "opus" }));
+    await svc.applyAgentEdit("a1", { tool: "claude", model: "sonnet", effort: "high" });
+    expect(calls).toEqual(["update"]); // the live process is untouched
+    expect(flashes.some((f) => f.includes("applies on next start"))).toBe(true);
+  });
+
+  it("the agent context menu carries an Edit agent item that opens the dialog", () => {
+    build(agent());
+    const items = svc.agentMenu("a1");
+    const edit = items.find((i) => i.label === "Edit agent")!;
+    expect(edit).toBeTruthy();
+    // project rule: every context-menu item leads with an app-icon then its text
+    expect(edit.icon).toBeTruthy();
+    edit.onClick!();
+    expect(openEditAgent).toHaveBeenCalledWith("a1");
+    // …and it is not the branch-rename item, which now carries its own glyph so
+    // the two pencils can't be told apart only by reading their labels
+    expect(items.find((i) => i.label === "Rename branch")?.icon).not.toBe(edit.icon);
+  });
+
+  it("offers the edit for a RUNNING agent too — the provider switch is the point", () => {
+    build(agent({ status: "running" }));
+    expect(svc.agentMenu("a1").some((i) => i.label === "Edit agent" && !i.disabled)).toBe(true);
+  });
+});

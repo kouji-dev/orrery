@@ -88,6 +88,7 @@ describe("PaneNodeComponent header actions", () => {
     setGitView: vi.fn(),
     paneRoots: () => ({}),
     flash: vi.fn(),
+    openEditAgent: vi.fn(),
     openMenu: (e: MouseEvent, items: import("../models").MenuItem[]) => {
       e.preventDefault();
       menuState = { x: 0, y: 0, items };
@@ -174,6 +175,31 @@ describe("PaneNodeComponent header actions", () => {
     // play stays a fresh start/resume, not a session continue
     btn(f, "Resume agent")!.click();
     expect(actions.toggleRun).toHaveBeenCalled();
+  });
+
+  it("offers the edit pen in the header cluster and opens the edit dialog for THIS agent", () => {
+    const f = render(makeAgent());
+    const pen = btn(f, "Edit agent")!;
+    expect(pen).not.toBeNull();
+    // the title names what the agent is on today — the dialog is the only way
+    // off a model that was frozen at spawn
+    expect(pen.title).toContain("claude");
+    expect(pen.title).toContain("opus");
+    pen.click();
+    expect(ui.openEditAgent).toHaveBeenCalledWith("a1");
+    // editing is not a run-control verb: nothing is started, stopped or acted on
+    expect(actions.act).not.toHaveBeenCalled();
+    expect(actions.toggleRun).not.toHaveBeenCalled();
+  });
+
+  it("keeps the edit pen for a RUNNING agent — the provider switch is the point", () => {
+    const f = render(makeAgent({ status: "running" }));
+    expect(btn(f, "Edit agent")).not.toBeNull();
+  });
+
+  it("hides the edit pen for the project pseudo-agent — its id is a PROJECT id", () => {
+    const f = render(makeAgent({ tool: "shell", model: "", sessionId: undefined }));
+    expect(btn(f, "Edit agent")).toBeNull();
   });
 
   it("hides Continue while running or without a captured session", () => {

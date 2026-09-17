@@ -285,6 +285,54 @@ export class AgentActionsService {
     });
   }
 
+  // ---- edit (tool / model / effort) ----
+  /**
+   * Apply an edit from the edit-agent dialog. `tool`, `model` and `effort`
+   * always travel together in ONE update: the backend resets model + effort
+   * whenever the tool changes and applies supplied replacements after that
+   * reset, so a split call would land the model pick on the pre-reset record
+   * and then throw it away. `effort` is sent even when null — an omitted key
+   * means "leave alone", which would let the previous tool's level survive onto
+   * a tool that has no effort knob.
+   *
+   * `restart` is the RUNNING-agent provider switch, and only ever arrives after
+   * the dialog's own confirm: the live PTY is the OLD CLI, so it is stopped
+   * before the update and a fresh process is started after it. Never a resume —
+   * the update drops the captured session id with the tool it belonged to.
+   */
+  async applyAgentEdit(
+    id: string,
+    patch: { tool: Agent["tool"]; model: string; effort: string | null },
+    restart = false,
+  ): Promise<void> {
+    const ag = this.agents().find((a) => a.id === id);
+    if (!ag) return;
+    const label = ag.name;
+    const running = ag.status === "running";
+    this.ui.closeEditAgent();
+    // Stop FIRST and wait: the update clears the session id, and a start racing
+    // an unfinished stop would attach the terminal to the dying process.
+    if (restart) await this.runtime.stopProcess(id);
+    try {
+      await this.agentsStore.update(id, patch);
+    } catch (e) {
+      this.ui.flash((e as { message?: string })?.message ?? "update failed");
+      // The stop already happened, so say so rather than leaving the user to
+      // discover a silently paused agent.
+      if (restart) this.ui.flash("update failed — " + label + " is stopped");
+      return;
+    }
+    if (restart) {
+      this.runtime.startProcess(id);
+      this.ui.flash("restarted " + label + " on " + toolMeta(patch.tool).name);
+      return;
+    }
+    // A model/effort change cannot reach a process that is already running —
+    // the flags were spent at launch. Say when it takes effect instead of
+    // letting the flash imply the live run just changed model.
+    this.ui.flash(running ? "updated " + label + " — applies on next start" : "updated " + label);
+  }
+
   /** Confirmed worktree delete: stop the agent, close its tabs, drop the
    *  worktree, then tear down local state. Called by the delete-worktree
    *  confirm modal — never directly from a menu item.
@@ -359,7 +407,8 @@ export class AgentActionsService {
         onClick: () => this.act(id, "merge"),
       },
       { sep: true },
-      { label: "Rename branch", icon: "rename", onClick: () => this.ui.flash("rename " + ag.branch) },
+      { label: "Edit agent", icon: "rename", onClick: () => this.ui.openEditAgent(id) },
+      { label: "Rename branch", icon: "branch", onClick: () => this.ui.flash("rename " + ag.branch) },
       { label: "Duplicate agent", icon: "dup", onClick: () => this.duplicateAgent(ag) },
       { sep: true },
       {

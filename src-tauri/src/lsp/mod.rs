@@ -1113,9 +1113,19 @@ mod tests {
         assert_eq!(st.servers[0].ext_id, "server.jdtls");
         assert_eq!(st.servers[0].project_id, Uuid::from_u128(2));
         assert_eq!(seen.lock().unwrap().first().map(|s| s.servers[0].state.clone()).as_deref(), Some("starting"));
-        // pinning again is idempotent: same handle, no second start
-        assert_eq!(lsp.pin_project(project), vec!["server.jdtls".to_string()]);
-        assert_eq!(lsp.status_snapshot().servers.len(), 1);
+        // pinning again is idempotent: same handle, no second start. The fixture
+        // cannot launch (no launch block, system servers off), so the start thread
+        // parks the handle as `missing` microseconds after acquire returns —
+        // re-pinning before that is a race with a thread, not a test. Wait for the
+        // park, then pin: a parked server is left alone, as `pin_project` says —
+        // nothing acquired, and still one handle.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while lsp.status_snapshot().servers[0].state != "missing" {
+            assert!(std::time::Instant::now() < deadline, "never reached missing: {:?}", lsp.status_snapshot().servers[0].state);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(lsp.pin_project(project).is_empty(), "a parked server is not re-acquired");
+        assert_eq!(lsp.status_snapshot().servers.len(), 1, "and no second handle is made for it");
         lsp.unpin_project(Uuid::from_u128(2));
         assert!(!lsp.is_pinned(Uuid::from_u128(2)));
         assert_eq!(lsp.status_snapshot().servers.len(), 1, "unpin releases to the reaper, it does not stop");

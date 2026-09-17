@@ -108,9 +108,26 @@ export class AgentsStore {
   }): Promise<Agent> {
     return this.bridge.invoke<Agent>(Commands.AgentSpawn, { req });
   }
+  /**
+   * Patch a stored agent. An OMITTED key is left alone; `effort: null` CLEARS
+   * it, which is why the edit dialog always sends effort explicitly — a tool
+   * with no effort knob would otherwise inherit the previous tool's level.
+   *
+   * Changing `tool` resets model + effort backend-side and drops the captured
+   * CLI session id (that id belongs to the old CLI and would resume the wrong
+   * process). Replacements supplied in the SAME call are applied after that
+   * reset, so tool and model must travel together to be honoured.
+   */
   update(
     id: string,
-    patch: { status?: string; task?: string; model?: string; name?: string },
+    patch: {
+      status?: string;
+      task?: string;
+      tool?: string;
+      model?: string;
+      effort?: string | null;
+      name?: string;
+    },
   ): Promise<Agent> {
     return this.bridge.invoke<Agent>(Commands.AgentUpdate, { id, req: patch });
   }

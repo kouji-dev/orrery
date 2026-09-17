@@ -268,6 +268,26 @@ impl AgentService {
         Ok(self.enrich(rec))
     }
 
+    /// Apply a partial edit. Everything here beyond "write the fields that were
+    /// sent" exists because a run config is TOOL-SCOPED, and an agent can be
+    /// retargeted at another CLI after it has already run:
+    ///
+    /// * a new `tool` clears `session_id`. The id was minted by the CLI that ran
+    ///   the session and means nothing to any other one, so `pi --resume
+    ///   <claude-id>` either errors out or — the bad case — silently opens a
+    ///   blank session while the UI still promises the old conversation. It is
+    ///   cleared in the SAME statement that writes the tool so no error path can
+    ///   ever leave a row pointing at a foreign session.
+    /// * a new `tool` also drops `model`/`effort` when the caller sent no
+    ///   replacements. Model ids are tool-scoped (`claude-opus-5` is not a thing
+    ///   under pi, and `tool_command` would faithfully launch `--model
+    ///   claude-opus-5`), and the effort knob may not exist on the new tool at
+    ///   all. Blanking is not data loss: `pin_run_config` refills an empty
+    ///   model/effort from the NEW tool's defaults on the next launch, so the
+    ///   agent lands on exactly the config a fresh spawn under that tool gets.
+    ///
+    /// A model-only or effort-only edit keeps `session_id` — same CLI, so the
+    /// session is still addressable and the new flags just ride along on resume.
     pub fn update(&self, id: Uuid, req: AgentUpdateRequest) -> AppResult<Agent> {
         let mut rec = self.record(id)?;
         if let Some(status) = req.status {
@@ -278,19 +298,55 @@ impl AgentService {
         if let Some(task) = req.task {
             rec.task = task;
         }
-        if let Some(model) = req.model {
-            rec.model = model;
-        }
         if let Some(name) = req.name {
             if !name.trim().is_empty() {
                 rec.name = name;
             }
         }
+        // Re-sending the SAME tool is not a change: the frontend posts the whole
+        // form back, and a no-op resubmit must not throw away a live session.
+        let tool_changed = match req.tool {
+            Some(tool) if !tool.trim().is_empty() && tool != rec.tool => {
+                rec.tool = tool;
+                true
+            }
+            _ => false,
+        };
+        if tool_changed {
+            rec.session_id = None;
+            rec.model = String::new();
+            rec.effort = None;
+        }
+        // Explicit picks land after the reset, so a tool+model edit sent together
+        // keeps the model the user actually chose for the new tool.
+        if let Some(model) = req.model {
+            rec.model = model;
+        }
+        if let Some(effort) = req.effort {
+            rec.effort = effort.filter(|e| !e.trim().is_empty());
+        }
         {
             let c = self.db.lock().unwrap();
+            // `session_id` is touched ONLY on the tool-change path. Status flips
+            // fire on every launch and stop, and a hook can persist a session id
+            // (set_session) between the `record()` read above and this write —
+            // writing the stale value back on those paths would erase it.
+            let sql = if tool_changed {
+                "UPDATE agents SET status = ?2, task = ?3, model = ?4, name = ?5, tool = ?6, effort = ?7, session_id = NULL WHERE id = ?1"
+            } else {
+                "UPDATE agents SET status = ?2, task = ?3, model = ?4, name = ?5, tool = ?6, effort = ?7 WHERE id = ?1"
+            };
             c.execute(
-                "UPDATE agents SET status = ?2, task = ?3, model = ?4, name = ?5 WHERE id = ?1",
-                rusqlite::params![id.to_string(), rec.status, rec.task, rec.model, rec.name],
+                sql,
+                rusqlite::params![
+                    id.to_string(),
+                    rec.status,
+                    rec.task,
+                    rec.model,
+                    rec.name,
+                    rec.tool,
+                    rec.effort,
+                ],
             )
             .map_err(DbError::Sqlite)?;
         }
@@ -960,6 +1016,11 @@ mod tests {
         let db: DB = Arc::new(std::sync::Mutex::new(Connection::open_in_memory().unwrap()));
         let wt_root = std::env::temp_dir().join(format!("orrery-wt-{}", Uuid::new_v4()));
         let settings = SettingsService::new(db.clone());
+        // `get()` on an unknown id falls through to the project pseudo record
+        // (`SELECT … FROM projects`), a table only ProjectService creates. Without
+        // it the read dies with "no such table" (a DbError the code rightly does
+        // not swallow) instead of NotFound — so boot the schema as lib.rs does.
+        let _ = crate::projects::service::ProjectService::new(db.clone(), GitService::new());
         let svc = AgentService::new(db, GitService::new(), wt_root, settings.clone());
         (svc, settings)
     }
@@ -1089,12 +1150,193 @@ mod tests {
         let a = s.spawn(req(Uuid::new_v4(), "io"), &nogit()).unwrap();
         let upd = AgentUpdateRequest {
             status: Some("running".into()),
-            task: None,
-            model: None,
-            name: None,
+            ..Default::default()
         };
         assert_eq!(s.update(a.id, upd).unwrap().status, "running");
         assert_eq!(s.get(a.id).unwrap().status, "running");
+    }
+
+    // A session id is minted by ONE CLI: resuming a claude session id under pi
+    // either fails or silently starts a blank session, so the tool write and the
+    // session clear must be inseparable.
+    #[test]
+    fn update_tool_change_clears_the_session_id() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "swap"), &nogit()).unwrap();
+        s.set_session(a.id, "claude-abc").unwrap();
+        let out = s
+            .update(
+                a.id,
+                AgentUpdateRequest {
+                    tool: Some("codex".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(out.tool, "codex");
+        assert_eq!(out.session_id, None, "the returned agent is already clear");
+        assert_eq!(
+            s.get(a.id).unwrap().session_id,
+            None,
+            "and the row was written that way in the same statement"
+        );
+    }
+
+    // Same tool re-sent by a form that posts every field back: not a change, so
+    // a live session must survive it.
+    #[test]
+    fn update_same_tool_keeps_the_session_id() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "resend"), &nogit()).unwrap();
+        s.set_session(a.id, "claude-abc").unwrap();
+        s.update(
+            a.id,
+            AgentUpdateRequest {
+                tool: Some("claude".into()),
+                model: Some("sonnet".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(s.get(a.id).unwrap().session_id.as_deref(), Some("claude-abc"));
+    }
+
+    // A model or effort change within one tool still resumes — the session is
+    // the same CLI's, the new flags just ride along on the resume argv.
+    #[test]
+    fn update_model_or_effort_only_keeps_the_session_id() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "retune"), &nogit()).unwrap();
+        s.set_session(a.id, "claude-abc").unwrap();
+
+        let m = s
+            .update(
+                a.id,
+                AgentUpdateRequest {
+                    model: Some("sonnet".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!((m.model.as_str(), m.session_id.as_deref()), ("sonnet", Some("claude-abc")));
+
+        let e = s
+            .update(
+                a.id,
+                AgentUpdateRequest {
+                    effort: Some(Some("high".into())),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!((e.effort.as_deref(), e.session_id.as_deref()), (Some("high"), Some("claude-abc")));
+    }
+
+    // `effort` is three-state: absent leaves it, a string sets it, `null` erases
+    // it — a tool with no effort knob must be able to drop a stale value.
+    #[test]
+    fn update_effort_can_be_set_and_cleared() {
+        let s = svc();
+        let a = s.spawn(req(Uuid::new_v4(), "effortful"), &nogit()).unwrap();
+        let set = s
+            .update(
+                a.id,
+                AgentUpdateRequest {
+                    effort: Some(Some("xhigh".into())),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(set.effort.as_deref(), Some("xhigh"));
+
+        let cleared = s
+            .update(
+                a.id,
+                AgentUpdateRequest {
+                    effort: Some(None),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(cleared.effort, None, "an explicit null erases it");
+        assert_eq!(s.get(a.id).unwrap().effort, None);
+    }
+
+    // The wire shape has to carry that same distinction: `{}` must not read as
+    // "clear the effort", and `{"effort": null}` must not read as "absent".
+    #[test]
+    fn update_request_distinguishes_absent_effort_from_null() {
+        let absent: AgentUpdateRequest = serde_json::from_str("{}").unwrap();
+        assert_eq!(absent.effort, None, "absent = leave alone");
+        let null: AgentUpdateRequest = serde_json::from_str(r#"{"effort":null}"#).unwrap();
+        assert_eq!(null.effort, Some(None), "explicit null = clear");
+        let set: AgentUpdateRequest = serde_json::from_str(r#"{"effort":"high"}"#).unwrap();
+        assert_eq!(set.effort, Some(Some("high".into())));
+    }
+
+    #[test]
+    fn update_leaves_absent_fields_untouched() {
+        let s = svc();
+        let mut r = req(Uuid::new_v4(), "keep");
+        r.effort = Some("medium".into());
+        let a = s.spawn(r, &nogit()).unwrap();
+        s.set_session(a.id, "claude-abc").unwrap();
+        let out = s
+            .update(
+                a.id,
+                AgentUpdateRequest {
+                    status: Some("running".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(out.tool, "claude");
+        assert_eq!(out.model, "opus");
+        assert_eq!(out.effort.as_deref(), Some("medium"));
+        assert_eq!(out.name, "keep");
+        assert_eq!(out.task, "do the thing");
+        assert_eq!(out.session_id.as_deref(), Some("claude-abc"));
+    }
+
+    // A model id is tool-scoped: left alone, `claude-opus-5` would be handed to
+    // codex as `--model claude-opus-5`. Blanking is safe because pin_run_config
+    // refills an empty model/effort from the NEW tool's defaults at launch.
+    #[test]
+    fn update_tool_change_resets_model_and_effort_unless_supplied() {
+        let s = svc();
+        let mut r = req(Uuid::new_v4(), "retarget");
+        r.model = "claude-opus-5".into();
+        r.effort = Some("xhigh".into());
+        let a = s.spawn(r, &nogit()).unwrap();
+
+        let out = s
+            .update(
+                a.id,
+                AgentUpdateRequest {
+                    tool: Some("codex".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(out.model, "", "no foreign model id survives the swap");
+        assert_eq!(out.effort, None);
+        // and the next launch re-pins it from the new tool's defaults
+        let pinned = s.pin_run_config(a.id, Some("gpt-5"), Some("low")).unwrap();
+        assert_eq!((pinned.model.as_str(), pinned.effort.as_deref()), ("gpt-5", Some("low")));
+
+        // a tool + model edit sent together keeps the user's explicit pick
+        let both = s
+            .update(
+                a.id,
+                AgentUpdateRequest {
+                    tool: Some("claude".into()),
+                    model: Some("sonnet".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(both.model, "sonnet");
+        assert_eq!(both.effort, None, "the effort it was not given still resets");
     }
 
     #[test]
@@ -1191,9 +1433,7 @@ mod tests {
         let done = s.spawn(req(Uuid::new_v4(), "done"), &nogit()).unwrap();
         let upd = |st: &str| AgentUpdateRequest {
             status: Some(st.into()),
-            task: None,
-            model: None,
-            name: None,
+            ..Default::default()
         };
         s.update(run.id, upd("running")).unwrap();
         s.update(block.id, upd("blocked")).unwrap();
@@ -1501,9 +1741,7 @@ mod tests {
         let idle = s.spawn(req(Uuid::new_v4(), "idle"), &nogit()).unwrap();
         let upd = |st: &str| AgentUpdateRequest {
             status: Some(st.into()),
-            task: None,
-            model: None,
-            name: None,
+            ..Default::default()
         };
         s.update(run.id, upd("running")).unwrap();
         s.update(wait.id, upd("waiting")).unwrap();

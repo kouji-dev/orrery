@@ -84,12 +84,38 @@ pub struct AgentSpawnRequest {
     pub ticket_id: Option<Uuid>,
 }
 
-/// Partial update — only provided fields are written.
-#[derive(Debug, Clone, Deserialize)]
+/// Partial update — only provided fields are written. `Default` so the many
+/// single-field call sites (status flips on launch/stop) don't have to spell
+/// out every field and break each time one is added.
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentUpdateRequest {
     pub status: Option<String>,
     pub task: Option<String>,
     pub model: Option<String>,
     pub name: Option<String>,
+    /// Retargeting the agent at another CLI. Handled specially by
+    /// [`AgentService::update`](crate::agents::service::AgentService::update):
+    /// a session id — and a model id — belong to the tool that issued them.
+    pub tool: Option<String>,
+    /// Reasoning effort, as a THREE-state field: absent = leave alone,
+    /// `null` = erase, a string = set. Erasing is not a nicety — cursor and
+    /// gemini expose no effort flag at all (see `AgentAdapter::effort_args`),
+    /// so a value carried over from claude would otherwise be stuck on the
+    /// record and resurface the moment the agent moved back to a tool that
+    /// reads it. A bare `Option<Option<String>>` cannot say this: serde folds
+    /// an explicit `null` into the OUTER `None`, making "erase" indistinguishable
+    /// from "absent" — hence the deserializer below, which only ever yields the
+    /// outer `None` when the key is missing entirely.
+    #[serde(default, deserialize_with = "present_option")]
+    pub effort: Option<Option<String>>,
+}
+
+/// Deserialize a present value (possibly `null`) into `Some(..)`, leaving the
+/// outer `None` to mean "the key was absent" via `#[serde(default)]`.
+fn present_option<'de, D>(de: D) -> Result<Option<Option<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(de).map(Some)
 }

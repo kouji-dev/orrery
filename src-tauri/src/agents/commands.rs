@@ -384,9 +384,7 @@ pub fn agent_start<R: Runtime>(
             id,
             AgentUpdateRequest {
                 status: Some("running".into()),
-                task: None,
-                model: None,
-                name: None,
+                ..Default::default()
             },
         )?;
         emit_entity(&app, "agent", Change::Updated, updated);
@@ -438,9 +436,7 @@ pub fn agent_stop<R: Runtime>(
             id,
             AgentUpdateRequest {
                 status: Some("idle".into()),
-                task: None,
-                model: None,
-                name: None,
+                ..Default::default()
             },
         )?;
         emit_entity(&app, "agent", Change::Updated, updated);
