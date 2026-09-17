@@ -542,6 +542,49 @@ impl AgentService {
         Ok(())
     }
 
+    /// Pin the agent's RUN CONFIG (model + reasoning effort) on its first launch.
+    ///
+    /// The pair is what the CLI is launched with, and a fresh (non-resumed) run
+    /// must reuse exactly what the agent's FIRST session ran on — otherwise an
+    /// agent whose record never carried a model/effort (rows written before the
+    /// picker existed, or a spawn that left one blank) re-resolves the ambient
+    /// default on every run, so changing the per-tool default in Settings would
+    /// silently switch an existing agent's model mid-life.
+    ///
+    /// Fill-only and write-once: a value already on the record is NEVER
+    /// rewritten, so this is a no-op for every agent spawned with an explicit
+    /// choice. Returns the record as the launch should use it.
+    pub fn pin_run_config(
+        &self,
+        id: Uuid,
+        fallback_model: Option<&str>,
+        fallback_effort: Option<&str>,
+    ) -> AppResult<Agent> {
+        let mut rec = self.record(id)?;
+        let mut dirty = false;
+        if rec.model.trim().is_empty() {
+            if let Some(m) = fallback_model.map(str::trim).filter(|m| !m.is_empty()) {
+                rec.model = m.to_string();
+                dirty = true;
+            }
+        }
+        if rec.effort.as_deref().unwrap_or("").trim().is_empty() {
+            if let Some(e) = fallback_effort.map(str::trim).filter(|e| !e.is_empty()) {
+                rec.effort = Some(e.to_string());
+                dirty = true;
+            }
+        }
+        if dirty {
+            let c = self.db.lock().unwrap();
+            c.execute(
+                "UPDATE agents SET model = ?2, effort = ?3 WHERE id = ?1",
+                rusqlite::params![id.to_string(), rec.model, rec.effort],
+            )
+            .map_err(DbError::Sqlite)?;
+        }
+        Ok(self.enrich(rec))
+    }
+
     /// Persist the tool's CLI session id (captured from a hook), so a later
     /// "Continue session" can relaunch with `claude --resume <session_id>`.
     pub fn set_session(&self, id: Uuid, session_id: &str) -> AppResult<()> {
@@ -1075,6 +1118,52 @@ mod tests {
         assert!(
             started > spawned,
             "every launch/resume restamps last_run_at ({started} !> {spawned})"
+        );
+    }
+
+    // A fresh (non-resumed) run must launch on the config the agent's FIRST run
+    // used: pin_run_config fills a missing model/effort ONCE from the per-tool
+    // defaults and never rewrites it afterwards, so later runs can't drift onto
+    // whatever the settings say today.
+    #[test]
+    fn pin_run_config_fills_missing_model_and_effort_once() {
+        let s = svc();
+        let mut r = req(Uuid::new_v4(), "unpinned");
+        r.model = String::new(); // a record that never carried a run config
+        r.effort = None;
+        let a = s.spawn(r, &nogit()).unwrap();
+
+        // first run: the gaps are filled from the tool defaults and persisted
+        let first = s.pin_run_config(a.id, Some("opus"), Some("high")).unwrap();
+        assert_eq!((first.model.as_str(), first.effort.as_deref()), ("opus", Some("high")));
+        assert_eq!(
+            (s.get(a.id).unwrap().model.as_str(), s.get(a.id).unwrap().effort.as_deref()),
+            ("opus", Some("high")),
+            "the first run's config is persisted on the record"
+        );
+
+        // a later run with different defaults (settings changed) keeps the pin
+        let again = s.pin_run_config(a.id, Some("sonnet"), Some("low")).unwrap();
+        assert_eq!(
+            (again.model.as_str(), again.effort.as_deref()),
+            ("opus", Some("high")),
+            "a pinned run config is never re-resolved from the current defaults"
+        );
+    }
+
+    // An agent spawned WITH an explicit choice is never touched — the pin is
+    // fill-only, so the spawn modal's picks stay authoritative.
+    #[test]
+    fn pin_run_config_never_overwrites_an_explicit_choice() {
+        let s = svc();
+        let mut r = req(Uuid::new_v4(), "picked");
+        r.model = "claude-opus-5".into();
+        r.effort = Some("xhigh".into());
+        let a = s.spawn(r, &nogit()).unwrap();
+        let pinned = s.pin_run_config(a.id, Some("haiku"), Some("low")).unwrap();
+        assert_eq!(
+            (pinned.model.as_str(), pinned.effort.as_deref()),
+            ("claude-opus-5", Some("xhigh"))
         );
     }
 

@@ -16,6 +16,7 @@ import { AutoApprovePolicy, CostRate, SettingsEvents } from "../models";
 import { COST_FEATURES_ENABLED } from "../cost/cost-flags";
 import { DEFAULT_RATES } from "../cost/estimate.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { ModelCatalogService } from "../agents/model-catalog.service";
 import { AppCommand, CommandRegistryService, terminalDefaultOf } from "../commands/command-registry.service";
 import { bindingFromEvent, kbdLabel } from "../commands/fuzzy";
 import { DiagnosticsService } from "../shared/diagnostics.service";
@@ -477,10 +478,10 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                     @if (isCustomModel()) { <kj-badge variant="outline">custom</kj-badge> }
                     <kj-combobox class="set-model-combo" [freeText]="true" placeholder="model-id…"
                       [value]="effModel()" (valueChange)="onModelChange($event)">
-                      @for (m of modelTool().models; track m.id) {
+                      @for (m of modelChoices(); track m.id) {
                         <kj-combobox-option [value]="m.id">{{ m.label }}<span class="set-model-id">{{ m.id }}</span></kj-combobox-option>
                       }
-                      <kj-combobox-empty>Custom — CLIs don’t expose a list. Enter applies the typed id.</kj-combobox-empty>
+                      <kj-combobox-empty>Custom — this CLI doesn’t expose a list. Enter applies the typed id.</kj-combobox-empty>
                     </kj-combobox>
                   </div>
                 </app-set-row>
@@ -824,6 +825,7 @@ export class SettingsModalComponent {
   readonly costEnabled = COST_FEATURES_ENABLED;
   readonly store = inject(SettingsStore);
   readonly runtime = inject(AgentRuntimeService);
+  private readonly catalog = inject(ModelCatalogService);
   readonly version = inject(VersionService);
   private readonly bridge = inject(BRIDGE);
   private readonly alerts = inject(NotificationAlertService);
@@ -837,6 +839,9 @@ export class SettingsModalComponent {
       // clear the store flag) whichever side closed it.
       this.close();
     });
+    // Tools that enumerate their own models (pi `--list-models`) feed the model
+    // combobox from that probe — kick it once per session on open.
+    for (const t of AGENT_TOOLS) if (t.dynamicModels) this.catalog.load(t.id);
   }
 
   // ---- Keymap (B6.2) ----
@@ -965,6 +970,18 @@ export class SettingsModalComponent {
   });
   /** The effective model isn't in the curated list — a free-text override. */
   readonly isCustomModel = computed(() => !modelOption(this.modelTool(), this.effModel()));
+  /** Options for the model combobox: for a tool that enumerates its own models
+   *  (pi `--list-models`, `cursor-agent models`) whatever its CLI reported, and
+   *  the curated catalog whenever that probe is empty or failed. Free-text entry
+   *  stays available either way. */
+  readonly modelChoices = computed<{ id: string; label: string }[]>(() => {
+    const tool = this.modelTool();
+    if (tool.dynamicModels) {
+      const probed = this.catalog.models(tool.id);
+      if (probed.length) return probed.map((id) => ({ id, label: id }));
+    }
+    return tool.models;
+  });
   readonly detectedTools = computed(() => AGENT_TOOLS.filter((t) => this.runtime.toolAvailable(t.id)));
   readonly branchPreview = computed(() => {
     const s = this.store.settings();

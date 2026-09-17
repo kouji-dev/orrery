@@ -27,4 +27,14 @@ describe("menu chrome", () => {
     expect(block).toMatch(/--kj-button-height:\s*auto;/);
     expect(block).toMatch(/--kj-dropdown-menu-item-min-height:\s*0;/);
   });
+
+  it("the app-menu-panel host is out of flow — a menu never becomes a grid item in the panel it opens over", () => {
+    // regression: <app-menu-panel> sits as a direct child of .diff-grid
+    // (232px 6px 1fr). As an in-flow inline box it counted as a 4th grid item,
+    // wrapping the diff body onto row 2 — the code view vanished below the fold.
+    const block = css.match(/\napp-menu-panel \{([^}]*)\}/)?.[1] ?? "";
+    expect(block).toMatch(/position:\s*fixed;/);
+    expect(block).toMatch(/width:\s*0;/);
+    expect(block).toMatch(/height:\s*0;/);
+  });
 });

@@ -56,6 +56,9 @@ export const DEFAULT_RATES: Record<string, CostRate> = {
   "gemini-3-flash-preview": { in: 0.3, out: 1.2 },
   "gemini-2.5-pro": { in: 1.25, out: 10 },
   "gemini-2.5-flash": { in: 0.3, out: 2.5 },
+  // Pi is BYOK and enumerates its models at runtime (`pi --list-models`), so its
+  // `provider/model` ids are unknowable here and fall to `default` — the user's
+  // own `costRates` map is the place to price the ones they actually run.
   default: { in: 3, out: 15 },
 };
 

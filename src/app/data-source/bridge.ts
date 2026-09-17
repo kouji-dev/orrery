@@ -79,6 +79,9 @@ export const Commands = {
   CommentAdd: 'comment_add',
   DetectTools: 'detect_tools',
   VerifyToolPath: 'verify_tool_path',
+  /** Ask a tool's CLI which models it accepts (pi `--list-models`); Err when
+   *  the tool has no listing command. See ModelCatalogService. */
+  ListToolModels: 'list_tool_models',
   SystemMetrics: 'system_metrics',
   /** A7.7 recursive process tree (Orrery + each agent PTY child as roots).
    *  PULL-based: poll only while the perf panel is open (A1.7 gating). */

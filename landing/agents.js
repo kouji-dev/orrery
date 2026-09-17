@@ -18,6 +18,7 @@
     codex: { icon: "i-codex", label: "Codex" },
     cursor: { icon: "i-cursor", label: "Cursor" },
     gemini: { icon: "i-gemini", label: "Gemini" },
+    pi: { icon: "i-pi", label: "Pi" },
     more: { icon: "i-more", label: "and more" }
   };
   var SVG_NS = "http://www.w3.org/2000/svg";

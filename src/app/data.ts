@@ -24,6 +24,8 @@ const CLAUDE_EFFORT_46 = ["low", "medium", "high", "max"];
 const CLAUDE_XHIGH = { defaultEffort: "xhigh" };
 /** codex `--config model_reasoning_effort=…`; `max` is Sol-only. */
 const CODEX_EFFORT = ["low", "medium", "high", "xhigh"];
+/** pi `--thinking <level>` — the full documented set (pi README). */
+const PI_THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 export const AGENT_TOOLS: AgentTool[] = [
   {
@@ -72,7 +74,10 @@ export const AGENT_TOOLS: AgentTool[] = [
     name: "Cursor",
     short: "cursor",
     accent: "var(--tool-cursor)",
-    // cursor-agent takes any slug of the account's model pool; no effort flag
+    // cursor-agent takes any slug of the account's model pool; no effort flag.
+    // `cursor-agent models` reports that pool when logged in, so these curated
+    // entries are the FALLBACK for a signed-out / offline probe, not the truth.
+    dynamicModels: true,
     models: [
       m("composer-2.5", "Composer 2.5", "Cursor"),
       m("composer-2.5-fast", "Composer 2.5 Fast", "Cursor"),
@@ -103,6 +108,19 @@ export const AGENT_TOOLS: AgentTool[] = [
       m("gemini-2.5-flash", "Gemini 2.5 Flash", "Gemini 2.5"),
     ],
     effort: false,
+  },
+  {
+    id: "pi",
+    name: "Pi",
+    short: "pi",
+    accent: "var(--tool-pi)",
+    // NO curated models on purpose: pi is BYOK across ~20 providers, so the
+    // real vocabulary is whatever the user's own keys unlock. It is the one
+    // supported CLI that can say — `pi --list-models` — so the picker is fed
+    // from that probe (ModelCatalogService) and stays free-text besides.
+    models: [],
+    dynamicModels: true,
+    effort: PI_THINKING,
   },
 ];
 

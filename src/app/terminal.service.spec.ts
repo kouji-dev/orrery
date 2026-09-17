@@ -95,6 +95,45 @@ describe("TerminalService typing-focus sentinel (local, post-A0.2)", () => {
   });
 });
 
+// A stopped/finished process is torn down the moment it ends: the pane goes
+// visibly empty right there (the backend destroys the matching scrollback ring
+// on the same event), and every session-scoped bit of state goes with it.
+describe("TerminalService.exit teardown", () => {
+  it("empties the pane when the process ends", async () => {
+    const svc = makeService();
+    svc.write("a", "dead-run\r\n", 5);
+    await flush(svc, "a");
+    expect(svc.tail("a", 10)).toEqual(["dead-run"]);
+
+    svc.exit("a");
+    await flush(svc, "a");
+    expect(svc.tail("a", 10)).toEqual([]); // now, not on the next open
+  });
+
+  it("drops the stale mark and snapshot dedup so a relaunch streams clean", async () => {
+    const store = {
+      ...stubStore,
+      snapshot: () => Promise.resolve({ text: "ring\r\n", endSeq: 10 }),
+    } as unknown as AgentsStore;
+    const svc = makeService(store);
+    svc.write("a", "x", 1);
+    // @ts-expect-error private — leaves minSeq at the snapshot's endSeq (10)
+    await svc["recover"]("a");
+    svc.markStale("a");
+
+    svc.exit("a");
+
+    // @ts-expect-error read the private stale set
+    expect(svc["stale"].has("a")).toBe(false);
+    // @ts-expect-error read the private dedup map
+    expect(svc["minSeq"].has("a")).toBe(false);
+    // the relaunch's stream restarts at seq 1 — a surviving minSeq would eat it
+    svc.write("a", "new-run\r\n", 1);
+    await flush(svc, "a");
+    expect(svc.tail("a", 10)).toEqual(["new-run"]);
+  });
+});
+
 // A1.2 recovery: replaying a backend snapshot must (1) replace the buffer
 // content, (2) drop live chunks that are already inside the snapshot
 // (seq <= endSeq), and (3) let newer chunks through — including ones that
@@ -147,6 +186,35 @@ describe("TerminalService snapshot recovery (A1.2)", () => {
     expect(tail).toContain("ring");
     expect(tail).toContain("after-snapshot");
     expect(tail).not.toContain("inside-snapshot");
+  });
+
+  // The user-visible rule: re-opening an agent shows NO historical PTY dump.
+  // The backend withholds the scrollback ring of a session whose PTY is gone
+  // (dead/detached run) — recovery then gets an empty snapshot, which must
+  // neither dump history nor wipe what a live terminal already holds.
+  it("re-opening an agent with no live session replays no history", async () => {
+    const { svc, release } = withSnapshot({ text: "", endSeq: 0 });
+    // the attach() path for a fresh handle (webview reload / re-opened tab)
+    // @ts-expect-error drive the private recovery entry point directly
+    const done = svc["recover"]("a") as Promise<void>;
+    release();
+    await done;
+    await flush(svc, "a");
+    expect(svc.tail("a", 10)).toEqual([]); // opens empty, not a stale dump
+  });
+
+  it("keeps the current run's output when the snapshot is empty", async () => {
+    const { svc, release } = withSnapshot({ text: "", endSeq: 0 });
+    svc.write("a", "current-run\r\n", 12);
+    await flush(svc, "a");
+    // @ts-expect-error private
+    const done = svc["recover"]("a") as Promise<void>;
+    release();
+    await done;
+    await flush(svc, "a");
+    svc.write("a", "still-streaming\r\n", 20); // live stream stays intact
+    await flush(svc, "a");
+    expect(svc.tail("a", 10)).toEqual(["current-run", "still-streaming"]);
   });
 
   it("marks the terminal stale again when the snapshot invoke fails", async () => {

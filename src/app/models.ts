@@ -65,7 +65,7 @@ export interface ModelOption {
 }
 
 export interface AgentTool {
-  id: "claude" | "codex" | "cursor" | "gemini";
+  id: "claude" | "codex" | "cursor" | "gemini" | "pi";
   name: string;
   short: string;
   accent: string;
@@ -74,6 +74,14 @@ export interface AgentTool {
   /** Effort levels the tool's CLI flag accepts (`false` = no knob at all).
    *  Also the fallback for a custom model id typed in Settings. */
   effort: false | string[];
+  /** True when the CLI can enumerate its own `--model` vocabulary at runtime —
+   *  `pi --list-models`, `cursor-agent models` — read through
+   *  `ModelCatalogService`. The PROBE wins whenever it returns anything; when it
+   *  comes back empty (no auth, no API keys) or fails, `models` above is the
+   *  fallback. cursor keeps a curated list for exactly that case; pi's is empty
+   *  by design (BYOK across ~20 providers — curating one would be inventing it).
+   *  claude / codex / gemini have no listing command at all and stay curated. */
+  dynamicModels?: boolean;
 }
 
 export interface Project {
