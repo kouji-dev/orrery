@@ -9,8 +9,9 @@
  * design's diagram box (toolbar over the SVG) or, when mermaid rejects the
  * source, the design's error box that shows the parse message and keeps the
  * source one click away. Source + theme ride on `el.dataset` (set from JS,
- * never through the sanitizer) so a theme toggle re-renders in place without
- * re-parsing the markdown, and the toolbar's Copy reads the source back.
+ * never through the sanitizer) so switching the app theme re-renders the
+ * diagram in place without re-parsing the markdown, and the toolbar's Copy
+ * reads the source back.
  *
  * mermaid (~2.5MB) loads as a lazy chunk on the first document that needs it —
  * same pattern as the Monaco loader, including retry after a failed load.
@@ -39,7 +40,6 @@ export const MD_ICON: Record<string, string> = {
   alert: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 8v5M12 16h.01",
   dup: "M9 9h10v10H9zM5 15V5h10",
   maximize: "M5 9V5h4M19 9V5h-4M5 15v4h4M19 15v4h-4",
-  palette: "M12 3a9 9 0 100 18c1.5 0 2-1 2-2s-1-2 0-3 3 0 4-1 1-2 1-3a9 9 0 00-7-9zM7.5 12h.01M10 8h.01M14 8h.01",
   chevron: "M9 6l6 6-6 6",
   chat: "M4 5h16v10H9l-4 4V5z",
 };
@@ -58,8 +58,6 @@ function diagramBox(svg: string, src: string, theme: string): HTMLElement {
     `<div class="box-tb" role="toolbar" aria-label="Diagram">` +
     `<button data-act="copy">${svgIcon("dup")}Copy source</button>` +
     `<button data-act="full">${svgIcon("maximize")}Open full size</button>` +
-    `<span class="div"></span>` +
-    `<button data-act="theme" title="Diagram theme follows the app theme">${svgIcon("palette")}Theme<span class="dim">· app</span></button>` +
     `</div><div class="box-scroll mmd">${svg}</div>`;
   box.dataset["mmdSrc"] = src;
   box.dataset["mmdTheme"] = theme;
@@ -94,8 +92,8 @@ let seq = 0;
 /**
  * Hydrate every mermaid block inside `host` for the given theme: pending
  * placeholders from marked, plus already-rendered diagrams whose theme no
- * longer matches (theme toggle). Error boxes are final — a parse failure does
- * not depend on the theme, so they are never retried.
+ * longer matches (the app theme changed). Error boxes are final — a parse
+ * failure does not depend on the theme, so they are never retried.
  */
 export async function renderMermaidBlocks(host: HTMLElement, theme: "dark" | "light"): Promise<void> {
   const fresh = Array.from(host.querySelectorAll<HTMLElement>(".md-box.diagram.pending"));
