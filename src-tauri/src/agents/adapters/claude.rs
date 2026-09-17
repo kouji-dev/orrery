@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::AgentAdapter;
 
@@ -24,6 +24,17 @@ impl AgentAdapter for ClaudeAdapter {
     }
     fn binary(&self) -> &str {
         "claude"
+    }
+
+    /// `claude migrate-installer` moves an npm install into a versioned tree at
+    /// `~/.claude/local` and points PATH at it — the one claude-specific
+    /// location, and only reachable when our inherited PATH predates that edit.
+    /// `~/.local/bin`, where the native installer script writes, is not listed
+    /// here: it is a verified entry of the shared sweep already. Nothing else
+    /// (`~/.claude/bin` among them) has ever been observed to hold a launcher,
+    /// and a directory named on a hunch only costs stats and false positives.
+    fn extra_dirs(&self) -> Vec<PathBuf> {
+        super::in_home(&[".claude", "local"]).into_iter().collect()
     }
 
     fn base_argv(&self) -> Vec<String> {

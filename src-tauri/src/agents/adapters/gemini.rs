@@ -35,6 +35,12 @@ impl AgentAdapter for GeminiAdapter {
         true
     }
 
+    // No gemini-specific install location: the CLI is npm-distributed and the
+    // shared sweep derives every npm prefix. `~/.gemini/bin` was convention —
+    // `~/.gemini` is the settings tree we WRITE hooks into, and it survives an
+    // uninstall by design, so listing it invites a hit on a directory that
+    // proves nothing.
+
     fn base_argv(&self) -> Vec<String> {
         vec!["gemini".to_string()]
     }

@@ -23,6 +23,7 @@ import {
   MonacoApi,
   monacoDensityOptions,
   monacoLanguage,
+  monacoScrollbarOptions,
 } from "./monaco-loader";
 
 /** Stable per-author hue (mirrors AuthorAvatarComponent / file-blame). */
@@ -238,6 +239,7 @@ export class CodeDiffComponent {
         scrollBeyondLastLine: false,
         automaticLayout: true,
         ...monacoDensityOptions(),
+        ...monacoScrollbarOptions(),
         fixedOverflowWidgets: true,
         renderLineHighlight: "none",
         stickyScroll: { enabled: false },

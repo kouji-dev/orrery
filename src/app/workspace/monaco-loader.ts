@@ -86,6 +86,18 @@ export function applyMonacoTheme(monaco: MonacoApi, appTheme: "dark" | "light"):
   // green/red the rest of the app uses for added/removed.
   put("diffEditorOverview.insertedForeground", "--code-add-ink");
   put("diffEditorOverview.removedForeground", "--code-del-ink");
+  // The scrollbar slider is the one piece of Monaco chrome that sits right
+  // beside an app scrollbar (editor pane next to the file tree), so a mismatch
+  // reads as two different widgets. Same tokens styles.css gives
+  // ::-webkit-scrollbar-thumb; Monaco has no hover/active default that lands
+  // anywhere near --hair-2, so all three states are pinned.
+  put("scrollbarSlider.background", "--hair-2");
+  put("scrollbarSlider.hoverBackground", "--ink-4");
+  put("scrollbarSlider.activeBackground", "--ink-4");
+  // Belt and braces with monacoScrollbarOptions()' overviewRulerBorder:false —
+  // any surface that leaves the rule on gets the app hairline rather than
+  // Monaco's default, which is a hard seam against --panel.
+  put("editorOverviewRuler.border", "--hair-2");
   const name = `orrery-${appTheme}`;
   monaco.editor.defineTheme(name, {
     base: appTheme === "dark" ? "vs-dark" : "vs",
@@ -114,6 +126,44 @@ export function diffOverviewRulerOptions(): {
   overviewRulerBorder: boolean;
 } {
   return { renderOverviewRuler: true, overviewRulerBorder: false };
+}
+
+/**
+ * Scrollbar geometry that matches the app's own bars (styles.css
+ * `::-webkit-scrollbar`, 9px lane / 5px visible thumb). Monaco's defaults are
+ * 14px vertical and 12px horizontal with the slider filling the whole lane,
+ * which next to a native bar reads as a different widget entirely.
+ *
+ * The app fakes its 5px thumb with a 2px transparent border + background-clip;
+ * Monaco can't do that, but VerticalScrollbar centres the slider in the lane
+ * ((scrollbarSize - sliderSize) / 2), so a 9/5 pair lands in the same place.
+ * Slider size has to be given explicitly — it defaults to the scrollbar size,
+ * not to a padded fraction of it.
+ *
+ * `useShadows` kills the drop shadow Monaco casts over scrolled-away content,
+ * which the app has nowhere else and which dirties --panel. The slider colours
+ * come from the `scrollbarSlider.*` theme keys applyMonacoTheme() resolves.
+ */
+export function monacoScrollbarOptions(): {
+  scrollbar: {
+    verticalScrollbarSize: number;
+    horizontalScrollbarSize: number;
+    verticalSliderSize: number;
+    horizontalSliderSize: number;
+    useShadows: boolean;
+  };
+  overviewRulerBorder: boolean;
+} {
+  return {
+    scrollbar: {
+      verticalScrollbarSize: 9,
+      horizontalScrollbarSize: 9,
+      verticalSliderSize: 5,
+      horizontalSliderSize: 5,
+      useShadows: false,
+    },
+    overviewRulerBorder: false,
+  };
 }
 
 // ------------------------------------------------------------- languages ----

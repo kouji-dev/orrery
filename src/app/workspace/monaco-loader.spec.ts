@@ -4,6 +4,7 @@ import {
   applyMonacoTheme,
   diffOverviewRulerOptions,
   monacoLanguage,
+  monacoScrollbarOptions,
   type MonacoApi,
 } from "./monaco-loader";
 
@@ -122,5 +123,41 @@ describe("diff overview ruler", () => {
 
     expect(colors["diffEditorOverview.insertedForeground"]).toBeUndefined();
     expect(colors["diffEditorOverview.removedForeground"]).toBeUndefined();
+  });
+});
+
+describe("scrollbar", () => {
+  it("matches the app bar: 9px lane, 5px slider, no shadow", () => {
+    const { scrollbar, overviewRulerBorder } = monacoScrollbarOptions();
+
+    // styles.css gives ::-webkit-scrollbar a 9px lane and fakes a 5px thumb
+    // with a 2px transparent border; Monaco centres the slider in the lane,
+    // so 9/5 puts the bar in the same place at the same weight.
+    expect(scrollbar.verticalScrollbarSize).toBe(9);
+    expect(scrollbar.horizontalScrollbarSize).toBe(9);
+    expect(scrollbar.verticalSliderSize).toBe(5);
+    expect(scrollbar.horizontalSliderSize).toBe(5);
+    // the slider size defaults to the scrollbar size, so an omitted pair is a
+    // silently fat bar rather than a type error
+    expect(scrollbar.verticalSliderSize).toBeLessThan(scrollbar.verticalScrollbarSize);
+    expect(scrollbar.useShadows).toBe(false);
+    expect(overviewRulerBorder).toBe(false);
+  });
+
+  it("paints the slider from the same tokens as the app thumb", () => {
+    const root = document.documentElement;
+    root.setAttribute("data-theme", "dark");
+    root.style.setProperty("--hair-2", "#232733");
+    root.style.setProperty("--ink-4", "#7c8598");
+    const defineTheme = vi.fn();
+    const api = { editor: { defineTheme, setTheme: vi.fn() } } as unknown as MonacoApi;
+
+    applyMonacoTheme(api, "dark");
+
+    const [, data] = defineTheme.mock.calls[0] as [string, { colors: Record<string, string> }];
+    expect(data.colors["scrollbarSlider.background"]).toBe("#232733");
+    // hover AND active — Monaco's own defaults for those two are nowhere near
+    expect(data.colors["scrollbarSlider.hoverBackground"]).toBe("#7c8598");
+    expect(data.colors["scrollbarSlider.activeBackground"]).toBe("#7c8598");
   });
 });

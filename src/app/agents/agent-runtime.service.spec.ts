@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-browser/testing";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { Agent, Settings } from "../models";
+import { Agent, Settings, ToolDetection } from "../models";
 import { AgentDigestEntry, AgentPtyStatusPayload } from "../data-source/bridge";
 import { settingsDefaults, SettingsStore } from "../settings/settings.store";
 import { AgentsStore } from "../stores/agents.store";
@@ -59,14 +59,20 @@ afterEach(() => {
 
 function setup(
   agents: Agent[],
-  opts: { settings?: Partial<Settings>; interrupted?: string[] } = {},
+  opts: {
+    settings?: Partial<Settings>;
+    interrupted?: string[];
+    /** Lets a case hold the startup detection sweep open (it resolves at once
+     *  otherwise, which is invisible to a "still checking" assertion). */
+    detectTools?: () => Promise<ToolDetection[]>;
+  } = {},
 ): AgentRuntimeService {
   const settings: Settings = { ...settingsDefaults(), ...opts.settings };
   const agentsStore = {
     all: signal(agents),
     ready: () => Promise.resolve(),
     interrupted: vi.fn(() => Promise.resolve(opts.interrupted ?? [])),
-    detectTools: () => Promise.resolve([]),
+    detectTools: opts.detectTools ?? (() => Promise.resolve([])),
     watch: () => Promise.resolve(),
     onScan: () => new Promise<() => void>(() => {}),
     onPermission: () => Promise.resolve(() => {}),
@@ -366,5 +372,33 @@ describe("AgentRuntimeService — settings auto-resume", () => {
     };
     expect(store.interrupted).not.toHaveBeenCalled();
     expect(store.start).not.toHaveBeenCalled();
+  });
+});
+
+describe("tool detection — checking vs. absent", () => {
+  const DET: ToolDetection = {
+    id: "claude", status: "ok", available: true, path: "/usr/bin/claude",
+    version: "1.0.0", source: "path", reason: null, shim: false,
+  };
+
+  it("a tool with no verdict yet is PENDING, not missing", async () => {
+    let land!: (l: ToolDetection[]) => void;
+    const svc = setup([], { detectTools: () => new Promise((r) => (land = r)) });
+    // detection() is null in both states — only detectionPending() separates them
+    expect(svc.detection("claude")).toBeNull();
+    expect(svc.detectionPending("claude")).toBe(true);
+
+    land([DET]);
+    await vi.waitFor(() => expect(svc.detection("claude")).not.toBeNull());
+    expect(svc.detectionPending("claude")).toBe(false);
+    // a tool the sweep didn't report is now genuinely absent, not pending
+    expect(svc.detectionPending("gemini")).toBe(false);
+  });
+
+  it("a sweep that THREW still ends the pending state", async () => {
+    // plain `ng serve` has no backend; spinning forever would be worse than
+    // the optimistic fallback the catch already leaves in place.
+    const svc = setup([], { detectTools: () => Promise.reject(new Error("no backend")) });
+    await vi.waitFor(() => expect(svc.detectionPending("claude")).toBe(false));
   });
 });

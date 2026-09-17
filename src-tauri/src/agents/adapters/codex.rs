@@ -31,6 +31,12 @@ impl AgentAdapter for CodexAdapter {
         "codex"
     }
 
+    // No codex-specific install location: it ships as an npm package, and the
+    // shared sweep derives every npm prefix. `~/.codex/bin` used to be listed
+    // here on the assumption that the config tree doubles as a bin dir — never
+    // observed, and `~/.codex` outliving an uninstall is exactly the shape that
+    // turns a hopeful directory into a false "found, but broken" report.
+
     fn base_argv(&self) -> Vec<String> {
         vec!["codex".to_string()]
     }

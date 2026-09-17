@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::AgentAdapter;
 
@@ -24,6 +24,21 @@ impl AgentAdapter for CursorAdapter {
     }
     fn binary(&self) -> &str {
         "cursor-agent"
+    }
+
+    /// cursor-agent's install script does not use a package manager: it unpacks
+    /// into `%LOCALAPPDATA%\cursor-agent` and then edits PATH — the edit our
+    /// inherited environment block can predate. VERIFIED: this directory holds a
+    /// real install on the developer's machine. Off Windows the same script
+    /// leaves its launcher in `~/.local/bin`, which the shared sweep covers, so
+    /// the `~/.local/share/cursor-agent` version tree (whose binaries sit one
+    /// level further down, under `versions/<v>/`) and `~/.cursor/bin` (never
+    /// observed) are both gone rather than guessed at.
+    fn extra_dirs(&self) -> Vec<PathBuf> {
+        std::env::var_os("LOCALAPPDATA")
+            .map(|d| PathBuf::from(d).join("cursor-agent"))
+            .into_iter()
+            .collect()
     }
 
     fn base_argv(&self) -> Vec<String> {
