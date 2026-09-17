@@ -1,0 +1,169 @@
+# 04 · Tool registry — one namespace, one resolver, one dispatch path
+
+**Goal.** Every tool from every source — builtin, extension, MCP, skill — held under a namespaced id, resolved by a documented precedence, shown to the model as a deliberate subset, and dispatched through exactly one function that cannot skip the policy check. When this is done, two extensions claiming `search` coexist and the model sees a tool list that is a real subset rather than a promise in a prompt.
+
+**Covers.** §4.4 in full · the registration half of §4.11's MCP decision 1.
+
+**Crates.** `core/crates/orrery-tools`.
+
+**Depends on.** [`01`](01-proto-shared-types.md), [`06`](06-extension-host.md) (the `ToolHost` it dispatches to), [`07`](07-policy-broker-audit.md) (the check it cannot skip — stub with allow-all until then).
+
+---
+
+## Constraints
+
+From [`00-overview.md`](00-overview.md):
+
+- **Namespacing, precedence and the single dispatch path are ours.** Nothing reaches a tool around the registry — that is what makes the policy check unavoidable.
+- `visible()` ordering is `indexmap`-stable. An unstable prompt prefix silently kills provider caching.
+- Denial is a value: `dispatch` returns `Result<Outcome, ToolError>` with `Outcome::Denied` in the `Ok` arm.
+- Ambiguity resolves **closest layer first** and is **logged, never fatal** — Pi's fatal duplicate-name exit is objective 2's named failure.
+- Note the direction: for a **name** the closest layer wins; for a **permission** a managed deny is final (§4.8). Naming is a convenience, permission is a boundary. The doc comment must say this.
+
+---
+
+## Architecture
+
+```rust
+pub struct Registry { /* IndexMap<ToolRef, Entry>, alias table, layer index */ }
+
+impl Registry {
+    pub fn resolve(&self, call_name: &str, scope: &AgentScope) -> Resolution;
+    pub async fn dispatch(&self, r: &ToolRef, input: serde_json::Value, ctx: CallCtx)
+        -> Result<Outcome, ToolError>;
+    pub fn visible(&self, scope: &AgentScope) -> Vec<ToolDescriptor>;
+}
+
+#[non_exhaustive]
+pub enum Resolution {
+    Ok        { r#ref: ToolRef },
+    Ambiguous { candidates: Vec<ToolRef>, chose: ToolRef },   // resolved AND reported
+    Unknown   { name: String, did_you_mean: Vec<String> },
+}
+```
+
+`Ambiguous` carries what it chose, not just the candidates: the call proceeds, and the event stream records that a choice was made. Objective 2 is "a duplicate tool name must not exit 1".
+
+### Names
+
+- Full form is always `ext.name` — `ripgrep.search`, `mcp.jira.create_issue`, `builtin.read`.
+- Short names are shown where unambiguous. Where two extensions provide `search`, the model sees `ripgrep.search` and `semantic.search`, never a bare `search`.
+- `ToolRef::from_str` splits on the **last** dot (plan 01), which is what makes the three-segment MCP form work with no second scheme.
+- An MCP server needs no special case: it registers as extension id `mcp.<server>` and inherits namespacing, precedence, policy and audit unchanged (§4.11 decision 1).
+
+### Precedence
+
+Closest layer first: project → workspace → user → organisation → managed. The winner takes the short name; every loser is recorded in the ledger with its layer.
+
+### `visible(scope)`
+
+This is what makes a sub-agent's tool list real. It intersects:
+
+1. the tools that exist,
+2. the scope's `tools` glob list,
+3. what the policy engine would not categorically deny for this subject,
+4. extensions currently `Live` (not `Draining`/`Dead`).
+
+and returns them in a **stable order** — registration order within a layer, layers in precedence order. Never a `HashMap` iteration.
+
+```rust
+pub struct ToolDescriptor {
+    pub name: String,              // the form the model should emit
+    pub description: String,
+    pub input_schema: serde_json::Value,   // JSON Schema, validated at the boundary
+    pub atomic: bool,
+}
+```
+
+### Budgets ride on every dispatch
+
+```rust
+pub struct ToolBudget {
+    pub wall_clock_ms: u64,
+    pub output_bytes: u64,     // applied WHILE reading, never after
+    pub memory_bytes: Option<u64>,   // spawned processes only
+}
+```
+
+Objective 5, concretely. The registry carries it; the broker enforces it (plan 07). The registry's job is to make it impossible to dispatch without one.
+
+### Dispatch, in order
+
+1. `tool.resolve` interceptors (plan 05).
+2. Input validated against `input_schema` — a malformed call is `Outcome::Failed`, never a panic and never passed to the extension.
+3. `tool.before` interceptors. A `Deny` here narrows.
+4. **Policy check.** No path around this; `dispatch` is the only public entry.
+5. Mint token, call the host with `CallCtx`.
+6. `tool.after` interceptors.
+7. Audit, return.
+
+---
+
+## File structure
+
+**Create**
+
+- `harness/core/crates/orrery-tools/src/{lib,registry,resolve,visible,dispatch,budget,descriptor,error}.rs`
+- `harness/core/crates/orrery-tools/tests/{resolve,visible,dispatch}.rs`
+
+---
+
+## Tasks
+
+### Task 1 · Registration and the name table
+
+Files: `src/registry.rs`, `tests/resolve.rs`
+
+- [ ] **Failing test first.** `resolve::two_extensions_claiming_search` — register `ripgrep.search` and `semantic.search`; both resolve by full name; a bare `search` returns `Ambiguous` with both candidates and a chosen ref; **nothing errors**.
+- [ ] `resolve::closest_layer_wins` — the same tool at project and user layers; the project one is chosen and the user one is in the ledger.
+- [ ] `resolve::unknown_suggests` — `serch` returns `Unknown` with `search` in `did_you_mean`.
+- [ ] `resolve::mcp_three_segments` — `mcp.jira.create_issue` resolves to `ExtId("mcp.jira") + "create_issue"`.
+- [ ] Implement `Registry`, `Entry`, registration from `Contribution`s, the alias table.
+
+### Task 2 · `visible`
+
+Files: `src/visible.rs`, `tests/visible.rs`
+
+- [ ] **Failing test first.** `visible::order_is_stable` — build twice from the same registry, assert byte-identical descriptor lists. Run it 20 times to catch hash ordering.
+- [ ] `visible::scope_is_a_real_subset` — a scope with `tools = ["git.*"]` sees only git tools, and a dispatch of a non-visible tool is refused.
+- [ ] `visible::draining_extension_is_hidden`.
+- [ ] Implement, backed by `IndexMap`.
+
+### Task 3 · Dispatch
+
+Files: `src/dispatch.rs`, `tests/dispatch.rs`
+
+- [ ] **Failing test first.** `dispatch::is_the_only_path` — a compile-level check: the `ToolHost` field is private and no public method returns it. Pair with a doc test showing the intended call.
+- [ ] `dispatch::validates_input` — a call whose input violates `input_schema` returns `Outcome::Failed` and the host is never invoked.
+- [ ] `dispatch::denial_is_ok_arm` — a denied call returns `Ok(Outcome::Denied)`, and a test asserts `ToolError` has no `Denied` variant.
+- [ ] `dispatch::budget_is_always_present` — constructing a dispatch without a `ToolBudget` does not compile.
+- [ ] Implement the seven-step order above.
+
+### Task 4 · Budgets
+
+Files: `src/budget.rs`
+
+- [ ] **Failing test first.** `budget::derives_from_scope_and_manifest` — the effective budget is the minimum of the profile's, the agent's and the tool's declared ceiling.
+- [ ] Implement.
+
+### Task 5 · Ledger integration
+
+Files: `src/registry.rs`
+
+- [ ] **Failing test first.** `resolve::ambiguity_is_recorded` — after an ambiguous resolution, the ledger holds an entry naming both candidates and the winner.
+- [ ] Wire to `orrery-audit`.
+
+---
+
+## Done when
+
+- `cargo test -p orrery-tools` green.
+- Two extensions claiming `search` both dispatch; the ledger explains the short-name winner.
+- `visible()` is provably stable across runs.
+- There is no public way to reach a `ToolHost` except `dispatch`.
+
+## Open questions
+
+1. **`did_you_mean` cost.** Levenshtein over every registered name on every unknown call is fine at 50 tools and silly at 5000. Cap it, or precompute a trigram index? Cap for now.
+2. **Schema validation placement.** Validating in the registry means `jsonschema` is a dependency of a hot crate. Alternative: validate in the host, once per runtime. Registry is better for uniformity — confirm the feature-gate keeps it out of lean builds.
+3. **Short-name aliases in config.** §7 says "short-name aliases" are the user's. That is a config feature (plan 10) that writes into this table. Confirm the table has a place for user-declared aliases now, so plan 10 does not need to change this crate.
