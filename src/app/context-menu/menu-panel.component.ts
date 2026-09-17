@@ -1,15 +1,20 @@
 import {
+  afterNextRender,
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
+  inject,
   input,
   linkedSignal,
   output,
+  signal,
   viewChild,
 } from "@angular/core";
 import { KjDropdownMenu, KjListNavigator, KjTypeAhead } from "@kouji-ui/core";
 import { DismissDirective } from "../shared/dismiss.directive";
+import { MenuPlacement, placeMenu } from "./place";
 
 /**
  * Shared chrome for every context-menu surface: the fixed elevated box at a
@@ -30,6 +35,15 @@ import { DismissDirective } from "../shared/dismiss.directive";
  * focus with `kjFocusMode="roving"` (plus `role="menu"` + a label on the
  * element); consumers that project non-menu content (rename fields, custom
  * rows) register no items and the directives stay inert.
+ *
+ * WHY THE PANEL IS SIZED IN CSS (`width: max-content` on `.menu-panel`): a
+ * position:fixed box with only `left` set is shrink-to-fit against the space
+ * LEFT of the viewport edge. Opened near the right edge it therefore rendered
+ * at its min-content width — labels wrapped, the box read as "cut off" — and
+ * its width then depended on where the clamp had just moved it, so the one-shot
+ * measurement below clamped against a width that no longer existed and the menu
+ * ended up flush with the viewport edge. `max-content` makes the measurement
+ * placement-independent, so the flip/clamp converges in a single pass.
  */
 @Component({
   selector: "app-menu-panel",
@@ -70,34 +84,65 @@ export class MenuPanelComponent {
   readonly closed = output<void>();
 
   /** Panel position — re-seeds from the requested click point whenever the
-   *  menu re-anchors, then the clamp below nudges it into the viewport.
+   *  menu re-anchors, then the flip/clamp below nudges it into the viewport.
    *  bottom != null = dropup: pinned via CSS `bottom` so late content growth
    *  (font settle, async rows) keeps the panel's bottom on the anchor. */
-  readonly pos = linkedSignal<{ x: number; y: number; bottom: number | null }>(() => ({
+  readonly pos = linkedSignal<MenuPlacement>(() => ({
     x: this.x(),
     y: this.y(),
     bottom: null,
   }));
   private box = viewChild.required<ElementRef<HTMLDivElement>>("box");
+  /** Bumped whenever the measurement the placement rests on goes stale: the
+   *  panel's own box resized (mode swap actions → rename → delete, async rows,
+   *  font settle) or the window did. afterRenderEffect only re-runs for signals
+   *  it read, and neither of those is one. */
+  private readonly stale = signal(0);
+  private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
-    // clamp into the viewport after the menu is laid out
+    // place into the viewport after the menu is laid out
     afterRenderEffect(() => {
+      this.stale();
       const el = this.box().nativeElement;
       const r = el.getBoundingClientRect();
-      let nx = this.alignX() === "right" ? this.x() - r.width : this.x();
-      let ny = this.y();
-      let bottom: number | null = null;
-      if (ny + r.height > window.innerHeight - 8) {
-        const fy = this.flipY();
-        // dropup when the caller gave an anchor top; plain clamp otherwise
-        if (fy != null) bottom = window.innerHeight - fy;
-        else ny = window.innerHeight - r.height - 8;
-      }
-      if (nx + r.width > window.innerWidth - 8) nx = window.innerWidth - r.width - 8;
-      if (nx < 8) nx = 8;
+      const next = placeMenu(
+        { x: this.x(), y: this.y(), alignX: this.alignX(), flipY: this.flipY() },
+        { w: r.width, h: r.height },
+        { w: window.innerWidth, h: window.innerHeight },
+      );
       const cur = this.pos();
-      if (cur.x !== nx || cur.y !== ny || cur.bottom !== bottom) this.pos.set({ x: nx, y: ny, bottom });
+      if (cur.x !== next.x || cur.y !== next.y || cur.bottom !== next.bottom) this.pos.set(next);
+    });
+
+    afterNextRender(() => {
+      const el = this.box().nativeElement;
+      const bump = () => this.stale.update((n) => n + 1);
+
+      // content swaps and font settle change the box without touching any
+      // signal this component reads
+      const ro = new ResizeObserver(bump);
+      ro.observe(el);
+      window.addEventListener("resize", bump);
+
+      // Scroll-while-open: the menu is anchored to a POINT, and the row it was
+      // opened from has just moved out from under it. Re-placing would leave it
+      // pointing at the wrong row, so dismiss — the same thing every native menu
+      // does. Registering here (after the first render) skips the scroll events
+      // a freshly mounted pane fires. Scrolling INSIDE the panel is exempt: a
+      // menu taller than the viewport scrolls its own items.
+      const onScroll = (e: Event) => {
+        const t = e.target as Node | null;
+        if (t && (t === el || (t instanceof Node && el.contains(t)))) return;
+        this.closed.emit();
+      };
+      window.addEventListener("scroll", onScroll, true);
+
+      this.destroyRef.onDestroy(() => {
+        ro.disconnect();
+        window.removeEventListener("resize", bump);
+        window.removeEventListener("scroll", onScroll, true);
+      });
     });
   }
 }

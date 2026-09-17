@@ -112,6 +112,53 @@ test("Rename commits a new path via file_rename", async ({ page }) => {
   });
 });
 
+/** Read the open menu's box plus whether it is the element actually painted at
+ *  its own top-centre (i.e. nothing in the diff panel stacks over it). */
+const menuBox = `(() => {
+  const el = document.querySelector(".menu-panel");
+  if (!el) return null;
+  const q = el.getBoundingClientRect();
+  const hit = document.elementFromPoint(q.left + q.width / 2, q.top + 10);
+  return {
+    left: q.left, right: q.right, top: q.top, bottom: q.bottom, width: q.width,
+    vw: window.innerWidth, vh: window.innerHeight,
+    onTop: !!hit && !!hit.closest(".menu-panel"),
+  };
+})()`;
+
+test("a menu opened at the far right of the diff panel stays whole and inside the viewport", async ({ page }) => {
+  // narrow enough that the file list's right edge is close to the window's:
+  // this is the reported repro — the menu used to render at its MIN-content
+  // width (labels wrapped, the box read as clipped by the panel) and come to
+  // rest flush against the viewport edge.
+  await page.setViewportSize({ width: 640, height: 600 });
+  await openCommitDiffWithFile(page);
+  const row = page.locator("app-diff-file-list").getByText("report.html");
+  const rb = (await row.boundingBox())!;
+
+  // reference: the same menu opened where there is room to spare
+  await row.click({ button: "right", position: { x: 2, y: 4 } });
+  await expect(page.locator(".menu-panel")).toBeVisible();
+  const roomy = (await page.evaluate(menuBox))!;
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".menu-panel")).toHaveCount(0);
+
+  // now at the row's far right edge
+  await row.click({ button: "right", position: { x: Math.floor(rb.width) - 2, y: 4 } });
+  await expect(page.locator(".menu-panel")).toBeVisible();
+  const edge = (await page.evaluate(menuBox))!;
+
+  // same box, just flipped — not squeezed into whatever room was left
+  expect(edge.width).toBe(roomy.width);
+  // fully inside the viewport, gutter included
+  expect(edge.left).toBeGreaterThanOrEqual(8);
+  expect(edge.right).toBeLessThanOrEqual(edge.vw - 8);
+  expect(edge.top).toBeGreaterThanOrEqual(8);
+  expect(edge.bottom).toBeLessThanOrEqual(edge.vh - 8);
+  // and floating above the panel it was opened from
+  expect(edge.onTop).toBe(true);
+});
+
 test("Delete asks for confirmation, then sends file_delete", async ({ page }) => {
   await openCommitDiffWithFile(page);
   await page.locator("app-diff-file-list").getByText("report.html").click({ button: "right" });

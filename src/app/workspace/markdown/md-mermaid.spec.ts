@@ -39,9 +39,12 @@ describe("renderMermaidBlocks", () => {
     expect(box).not.toBeNull();
     expect(box.classList.contains("pending")).toBe(false);
     expect(box.querySelector(".box-scroll.mmd > svg.mmd-out")).not.toBeNull();
-    // design toolbar: copy · full · | · theme
+    // design toolbar: copy · full. No theme button — diagrams follow the app
+    // theme on their own (stale boxes re-render), so a toggle here did nothing.
     const acts = Array.from(box.querySelectorAll<HTMLElement>(".box-tb [data-act]")).map((b) => b.dataset["act"]);
-    expect(acts).toEqual(["copy", "full", "theme"]);
+    expect(acts).toEqual(["copy", "full"]);
+    expect(box.querySelectorAll(".box-tb button")).toHaveLength(2);
+    expect(box.querySelector('[data-act="theme"]')).toBeNull();
     expect(box.dataset["mmdSrc"]).toBe(SRC);
     expect(box.dataset["mmdTheme"]).toBe("dark");
     expect(el.querySelector("code.language-mermaid")).toBeNull();

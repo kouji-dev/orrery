@@ -18,6 +18,7 @@ import { UiStore } from "../../ui/ui.store";
 import { fileDir } from "../../utils";
 import { ScrollStateService } from "../scroll-state.service";
 import { createMarked } from "./marked.config";
+import { renderCodeBlocks } from "./md-code";
 import { applyHighlight } from "./md-highlight";
 import { renderMermaidBlocks } from "./md-mermaid";
 import { MdReviewOverlayComponent } from "./md-review-overlay.component";
@@ -53,7 +54,7 @@ import { blockSpans, stampBlocks } from "./md-source-map";
                              [renderGen]="renderGen()" (changed)="onOverlayChanged()" />
     </div>
     @if (full()) {
-      <div (click)="closeFull()"
+      <div role="dialog" aria-modal="true" aria-label="Diagram, full size" (click)="closeFull()"
            style="position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:var(--scrim);backdrop-filter:blur(3px);padding:var(--sp-11)">
         <div #fullBox class="surface md-full" (click)="$event.stopPropagation()"
              style="padding:var(--sp-8);max-width:92vw;max-height:88vh;overflow:auto;box-shadow:var(--shadow)"></div>
@@ -134,10 +135,11 @@ export class MarkdownPreviewComponent {
       if (this.bodyKey) this.saveBodyScroll(this.bodyKey);
     });
 
-    // Stamp source lines and hydrate mermaid once the document is in the DOM.
-    // The [innerHTML] binding lands during change detection, so wait two
-    // frames before touching the DOM; re-runs on a theme toggle to restyle
-    // already-rendered diagrams (the html string itself is unchanged then).
+    // Stamp source lines, hydrate mermaid and colour the code fences once the
+    // document is in the DOM. The [innerHTML] binding lands during change
+    // detection, so wait two frames before touching the DOM; re-runs on a
+    // theme toggle to restyle already-rendered diagrams and re-colour the
+    // fences (the html string itself is unchanged then).
     // Also re-runs on the overlay's `gen` and on the comment list (design
     // deps [html, key, gen]) — those keep the same html string, so the DOM is
     // rebuilt from it by hand before stamping, dropping stale wraps.
@@ -154,13 +156,18 @@ export class MarkdownPreviewComponent {
           if (this.lastHtml === html) body.innerHTML = html;
           this.lastHtml = html;
           stampBlocks(body, untracked(() => this.spans()));
-          if (!html.includes("language-mermaid")) {
+          // Both hydration steps are lazy chunks, so they are asked for only
+          // when the html actually holds the block they own.
+          const work: Promise<unknown>[] = [];
+          if (html.includes("language-mermaid")) work.push(renderMermaidBlocks(body, theme));
+          if (html.includes("md-box fence")) work.push(renderCodeBlocks(body, theme));
+          if (work.length === 0) {
             this.finishPass(body);
             return;
           }
           // a hydrated box replaces its placeholder in place — same index, no
           // stamp: re-stamp so the diagram carries its lines too
-          void renderMermaidBlocks(body, theme).then(() => {
+          void Promise.all(work).then(() => {
             if (pass !== this.passId) return;
             stampBlocks(body, untracked(() => this.spans()));
             this.finishPass(body);
@@ -240,12 +247,13 @@ export class MarkdownPreviewComponent {
         void navigator.clipboard?.writeText(src).catch(() => {});
         this.ui.flash(`copied diagram source · ${src.split("\n").length} lines`);
         break;
-      case "full":
-        this.full.set(box?.querySelector("svg") ?? null);
+      case "full": {
+        // guard: an error box (or a diagram that lost its SVG) must not open an
+        // empty scrim — leave the click as a no-op instead
+        const svg = diagramSvg(box);
+        if (svg) this.full.set(svg);
         break;
-      case "theme":
-        this.ui.flash("diagram theme follows the app theme");
-        break;
+      }
       case "toggle-src": {
         const pre = box?.querySelector<HTMLElement>("pre.src");
         if (!pre) break;
@@ -292,6 +300,19 @@ export class MarkdownPreviewComponent {
     if (hit) hit.scrollIntoView({ block: "start" });
     else this.ui.flash("no heading matches #" + anchor);
   }
+}
+
+/**
+ * The mermaid drawing inside a diagram box — and only that.
+ *
+ * `.md-box.diagram` opens with its toolbar, whose buttons carry 12px `<svg>`
+ * icons (md-mermaid `svgIcon`); those come FIRST in document order, so a plain
+ * `box.querySelector("svg")` hands back the Copy-source icon and "Open full
+ * size" showed a tiny glyph in the scrim. The diagram lives in the `.mmd`
+ * scroll container, so anchor the lookup there.
+ */
+export function diagramSvg(box: HTMLElement | null | undefined): SVGElement | null {
+  return box?.querySelector<SVGElement>(".box-scroll.mmd svg") ?? null;
 }
 
 /** GitHub-style heading slug: lower-case, punctuation dropped, each space →

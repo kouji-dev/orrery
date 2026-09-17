@@ -727,6 +727,22 @@ app-menu-panel {
   position: fixed;
   z-index: 80;
   min-width: round(calc(196px * var(--density)), 1px);
+  /* WIDTH IS LOAD-BEARING. A position:fixed box with only `left` set is
+     shrink-to-fit against the room between `left` and the viewport's right
+     edge: opened near that edge the menu collapsed to its MIN-content width —
+     labels wrapped, the box read as "cut off by the panel" — and worse, its
+     width then depended on where the flip/clamp had just put it, so
+     MenuPanelComponent measured a width that stopped existing the moment it
+     moved the panel and the menu came to rest flush against the edge.
+     `max-content` makes the intrinsic width placement-independent, so one
+     measure-and-place pass converges. The two caps keep a very wide or very
+     long menu inside the viewport instead of hanging off it; the panel scrolls
+     its own items rather than overflowing the screen. */
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--elev);
   border: 1px solid var(--hair-2);
   border-radius: var(--r-md);
@@ -1601,6 +1617,13 @@ kj-button.menu-item,
 /* the card IS the code block's edge — drop the shared .rte-view pre chrome (bg/border/wrap) inside it */
 .md-box.fence pre { margin: 0; padding: var(--sp-5) var(--sp-6); font-family: var(--font-mono); font-size: var(--fs-badge); line-height: 1.6; color: var(--ink-2); overflow-x: auto; white-space: pre; background: transparent; border: 0; border-radius: 0; }
 .md-box.fence pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+/* Monaco `colorize` output (md-code.ts): `<span class="mtkN"><br/>` only. Its
+   `.mtkN` COLOUR rules are global (monaco's `monaco-colors` sheet) and are what
+   paints the syntax, so they are deliberately left alone; everything else about
+   the text stays the fence's — the spans take this card's mono font/size, never
+   the metrics monaco.css carries for a real editor. mtkb/mtki keep their weight
+   and slant because only the family and size are pinned here. */
+.md-box.fence pre code span { font-family: inherit; font-size: inherit; line-height: inherit; background: none; }
 /* full-screen diagram overlay keeps the same svg palette */
 .md-full .mmd text { font-family: var(--font-ui); font-size: var(--fs-meta); fill: var(--ink); }
 .md-full .mmd text.lbl { font-family: var(--font-mono); font-size: var(--fs-micro); fill: var(--ink-3); }
