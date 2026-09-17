@@ -139,6 +139,34 @@ impl AgentAdapter for PiAdapter {
         out
     }
 
+    /// Pi declares CUSTOM providers (Ollama, vLLM, LM Studio, any gateway
+    /// speaking a supported API) in `~/.pi/agent/models.json`. When that file
+    /// cannot be loaded, `listModels` prints
+    /// `Warning: errors loading models.json:\n<detail>` on stderr, then carries
+    /// on and prints an EMPTY table — exit code 0 throughout
+    /// (pi `src/cli/list-models.ts`, the `modelRuntime.getError()` branch).
+    ///
+    /// Without this, that lands in the picker as an ordinary empty list, which
+    /// the frontend reads as "signed out" and answers with "run /login" — useless
+    /// advice for a user whose providers ARE configured and whose config simply
+    /// has a typo in it. Hand back pi's own complaint instead, detail included:
+    /// it names the file and usually the parse position.
+    fn models_error(&self, output: &str) -> Option<String> {
+        use super::strip_ansi;
+        let clean = strip_ansi(output);
+        let at = clean.find("errors loading models.json")?;
+        // Keep the warning and the lines under it (pi puts the detail there),
+        // bounded — a schema dump can run long and this lands in a picker footer.
+        let detail: String = clean[at..]
+            .lines()
+            .take(4)
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        Some(format!("pi couldn’t read models.json — {detail}"))
+    }
+
     /// No-op: pi has no hook config file to merge into (see the type docs).
     /// Never reached in practice — `install_global_hooks` skips adapters whose
     /// `supports_hooks()` is false — but the trait requires an impl.
@@ -290,6 +318,40 @@ mod tests {
         );
     }
 
+    /// A CUSTOM provider table. pi reads user-declared providers from
+    /// `~/.pi/agent/models.json` (Ollama, vLLM, LM Studio, any gateway speaking a
+    /// supported API) and prints them through the same padded table as the
+    /// built-ins, so nothing about the parse changes — but the VALUES do, and
+    /// each of these once looked like a plausible way to break a column split:
+    /// a provider id with hyphens, a model id with capitals, and a model id
+    /// carrying an Ollama-style `:tag`. None contains a space, which is the only
+    /// thing the parse actually rejects.
+    const CUSTOM_LIST_MODELS: &str = concat!(
+        "provider            model                 context  max-out  thinking  images\n",
+        "abc-deepseek-flash  DeepSeek-V4-Flash     128K     8K       yes       no    \n",
+        "abc-deepseek-flash  DeepSeek-V4-Thinking  128K     32K      yes       no    \n",
+        "anthropic           claude-opus-5         1M       128K     yes       yes   \n",
+        "ollama              qwen3-coder:30b       256K     32K      no        no    \n",
+    );
+
+    /// Custom providers reach the picker exactly like the built-in ones. Worth
+    /// pinning because the opposite report ("my custom models never show up") is
+    /// almost always pi not knowing about them — no `models.json`, so the CLI
+    /// itself lists nothing — and a test here says plainly that the parse is not
+    /// where such a case goes wrong.
+    #[test]
+    fn parse_models_keeps_custom_providers_and_tagged_ids() {
+        assert_eq!(
+            PiAdapter.parse_models(CUSTOM_LIST_MODELS),
+            vec![
+                "abc-deepseek-flash/DeepSeek-V4-Flash",
+                "abc-deepseek-flash/DeepSeek-V4-Thinking",
+                "anthropic/claude-opus-5",
+                "ollama/qwen3-coder:30b",
+            ],
+        );
+    }
+
     /// pi's real signed-out response: it EXITS 0 and explains itself, so this is
     /// truth ("no provider authenticated"), not a failure. It must parse to an
     /// empty list — never to a phantom model built out of the message's own
@@ -305,6 +367,34 @@ mod tests {
             "pi-coding-agent\\docs\\models.md\n",
         );
         assert!(PiAdapter.parse_models(signed_out).is_empty());
+    }
+
+    /// A BROKEN `models.json` is not an empty account. pi warns on stderr, then
+    /// prints an empty table and exits 0, so the two are byte-identical to
+    /// anything that only counts rows — and telling this user to "sign in" sends
+    /// them to fix something that was never wrong.
+    #[test]
+    fn a_broken_models_json_is_an_error_not_an_empty_catalogue() {
+        let out = concat!(
+            "Warning: errors loading models.json:\n",
+            "  Unexpected token } in JSON at position 412\n",
+        );
+        let err = PiAdapter.models_error(out).expect("the warning must be surfaced");
+        assert!(err.contains("models.json"), "{err}");
+        assert!(err.contains("position 412"), "the detail is what makes it fixable: {err}");
+    }
+
+    /// …and a HEALTHY listing must not be mistaken for a broken one, or every
+    /// working setup would report a config error instead of its models.
+    #[test]
+    fn a_healthy_listing_reports_no_error() {
+        assert!(PiAdapter.models_error(REAL_LIST_MODELS).is_none());
+        assert!(PiAdapter.models_error(CUSTOM_LIST_MODELS).is_none());
+        // signed out is honest emptiness, NOT a config failure — it must stay an
+        // empty list so the picker can say "sign in" rather than "broken file"
+        assert!(PiAdapter
+            .models_error("No models available. Use /login to log into a provider.")
+            .is_none());
     }
 
     #[test]

@@ -43,6 +43,8 @@ interface Mocks {
   verifyToolPath: ReturnType<typeof vi.fn>;
   setDetection: ReturnType<typeof vi.fn>;
   refreshDetections: ReturnType<typeof vi.fn>;
+  /** The idempotent first-demand sweep the row asks for when it mounts. */
+  ensureDetections: ReturnType<typeof vi.fn>;
   pickFile: ReturnType<typeof vi.fn>;
 }
 
@@ -57,6 +59,7 @@ function mount(detection: ToolDetection | null, pending = false): {
     verifyToolPath: vi.fn(),
     setDetection: vi.fn(),
     refreshDetections: vi.fn(async () => {}),
+    ensureDetections: vi.fn(),
     pickFile: vi.fn(async () => null),
   };
   TestBed.configureTestingModule({
@@ -71,6 +74,7 @@ function mount(detection: ToolDetection | null, pending = false): {
           verifyToolPath: m.verifyToolPath,
           setDetection: m.setDetection,
           refreshDetections: m.refreshDetections,
+          ensureDetections: m.ensureDetections,
         },
       },
       { provide: BRIDGE, useValue: { pickFile: m.pickFile } },
@@ -163,10 +167,18 @@ describe("RuntimeRowComponent", () => {
     expect(cmp.fail()).toContain("Enter the full path");
   });
 
-  it("revert: clears the override and re-detects on PATH", async () => {
+  it("revert: clears the override and FORCES a re-detect, not the idempotent demand", async () => {
     const { cmp, m } = mount(det({ status: "ok", path: "/opt/cursor", source: "manual" }));
+    m.ensureDetections.mockClear(); // the mount already spent the first demand
     await cmp.revert();
     expect(m.setMap).toHaveBeenCalledWith("toolPath", "cursor", null);
     expect(m.refreshDetections).toHaveBeenCalled();
+    // ensureDetections would no-op here — a reverted path MUST be re-probed
+    expect(m.ensureDetections).not.toHaveBeenCalled();
+  });
+
+  it("mounting the row demands the sweep — nothing detects at boot any more", () => {
+    const { m } = mount(det({ status: "ok", path: "/opt/cursor", source: "path" }));
+    expect(m.ensureDetections).toHaveBeenCalledTimes(1);
   });
 });

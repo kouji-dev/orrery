@@ -143,11 +143,17 @@ export class SettingsStore {
   readonly installPhase = signal<"downloading" | "installing" | null>(null);
   readonly lastCheckedAt = signal<number | null>(null);
   readonly updateInfo = signal<UpdateInfo | null>(null);
-  private readonly updateDismissed = signal(false);
+  private readonly toastDismissed = signal(false);
   /** An update is KNOWN (nav dot) — survives "Later". */
   readonly updateKnown = computed(() => this.updateInfo() !== null);
-  /** The update card's content, or null after "Later" hid it. */
-  readonly updateCard = computed(() => (this.updateDismissed() ? null : this.updateInfo()));
+  /** The offer for the INTERRUPTING surface (the bottom-center toast), or null
+   *  once "Later" silenced it. Only this one honours the dismissal. */
+  readonly updateForToast = computed(() => (this.toastDismissed() ? null : this.updateInfo()));
+  /** The offer for the Settings → Version CARD. Deliberately NOT gated on the
+   *  dismissal: the nav dot points at that section, so an update silenced in the
+   *  toast must still be installable at the destination — merging these two back
+   *  into one signal makes the dot advertise a card that isn't there. */
+  readonly updateForCard = computed(() => this.updateInfo());
   /** The in-app "What's new" / release-notes modal is open. */
   readonly whatsNewOpen = signal(false);
 
@@ -293,7 +299,7 @@ export class SettingsStore {
       });
       const info: UpdateInfo | null = typeof r === "string" ? { version: r } : (r ?? null);
       this.updateInfo.set(info);
-      if (info) this.updateDismissed.set(false);
+      if (info) this.toastDismissed.set(false); // an explicit check re-arms the toast
       this.lastCheckedAt.set(Date.now());
     } catch {
       this.ui.flash("update check failed");
@@ -388,21 +394,24 @@ export class SettingsStore {
    *  Unlike "Check now", this must not undo a "Later": re-arming the toast on
    *  every poll would make the dismissal meaningless. The dismissal is therefore
    *  cleared only when the offered version actually CHANGED — a newer release
-   *  earns a fresh prompt, the same one the user already waved off does not. */
+   *  earns a fresh prompt, the same one the user already waved off does not.
+   *  (The Settings card never depended on this either way — see `updateForCard`.) */
   noteBackgroundUpdate(info: UpdateInfo | null): void {
     this.lastCheckedAt.set(Date.now());
     if (!info) {
       this.updateInfo.set(null);
-      this.updateDismissed.set(false);
+      this.toastDismissed.set(false);
       return;
     }
-    if (this.updateInfo()?.version !== info.version) this.updateDismissed.set(false);
+    if (this.updateInfo()?.version !== info.version) this.toastDismissed.set(false);
     this.updateInfo.set(info);
   }
 
-  /** "Later": hide the card; the nav dot (update KNOWN) stays. */
-  dismissUpdate(): void {
-    this.updateDismissed.set(true);
+  /** "Later" on the toast: stop interrupting, nothing more. The nav dot (update
+   *  KNOWN) and the Settings → Version card both stay — the update must remain
+   *  actionable at the place the dot sends the user. */
+  dismissUpdateToast(): void {
+    this.toastDismissed.set(true);
   }
 
   /** Open / close the in-app "What's new" release-notes modal. */

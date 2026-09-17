@@ -174,7 +174,8 @@ describe("SettingsStore update check/install", () => {
     await store.checkNow();
     expect(invoke).toHaveBeenCalledWith("update_check", { channel: "beta" });
     expect(store.updateInfo()).toEqual(info);
-    expect(store.updateCard()).toEqual(info);
+    expect(store.updateForCard()).toEqual(info);
+    expect(store.updateForToast()).toEqual(info);
     expect(store.updateKnown()).toBe(true);
     expect(store.lastCheckedAt()).not.toBeNull();
     expect(store.checking()).toBe(false);
@@ -205,17 +206,21 @@ describe("SettingsStore update check/install", () => {
     expect(store.updateInfo()).toBeNull();
   });
 
-  it("'Later' hides the card but the update stays known (nav dot)", async () => {
+  // "Later" is the TOAST's off switch only. Gating the Settings card on it too
+  // (as one merged signal once did) left the nav dot pointing at a section with
+  // nothing in it — the update became unreachable short of "Check now".
+  it("'Later' silences the toast but leaves the card and the nav dot", async () => {
     const { store } = make({ update: { version: "2.0.0" } });
     await store.ready();
     await store.checkNow();
-    expect(store.updateCard()).toEqual({ version: "2.0.0" });
-    store.dismissUpdate();
-    expect(store.updateCard()).toBeNull();
+    expect(store.updateForToast()).toEqual({ version: "2.0.0" });
+    store.dismissUpdateToast();
+    expect(store.updateForToast()).toBeNull();
+    expect(store.updateForCard()).toEqual({ version: "2.0.0" }); // still actionable in Settings
     expect(store.updateKnown()).toBe(true); // the nav dot survives "Later"
-    // a fresh positive check re-surfaces the card
+    // a fresh explicit check re-arms the toast
     await store.checkNow();
-    expect(store.updateCard()).toEqual({ version: "2.0.0" });
+    expect(store.updateForToast()).toEqual({ version: "2.0.0" });
   });
 
   // The background poll (UpdateWatcherService) settles through a separate door:
@@ -225,17 +230,19 @@ describe("SettingsStore update check/install", () => {
     const { store } = make({ update: { version: "2.0.0" } });
     await store.ready();
     await store.checkNow();
-    store.dismissUpdate();
-    expect(store.updateCard()).toBeNull();
+    store.dismissUpdateToast();
+    expect(store.updateForToast()).toBeNull();
 
-    // same version on the next poll → still dismissed, still known
+    // same version on the next poll → still silenced, still known, still carded
     store.noteBackgroundUpdate({ version: "2.0.0" });
-    expect(store.updateCard()).toBeNull();
+    expect(store.updateForToast()).toBeNull();
+    expect(store.updateForCard()).toEqual({ version: "2.0.0" });
     expect(store.updateKnown()).toBe(true);
 
     // a NEWER release earns a fresh prompt
     store.noteBackgroundUpdate({ version: "2.1.0" });
-    expect(store.updateCard()).toEqual({ version: "2.1.0" });
+    expect(store.updateForToast()).toEqual({ version: "2.1.0" });
+    expect(store.updateForCard()).toEqual({ version: "2.1.0" });
   });
 
   // The offer disappearing (installed elsewhere, release pulled) clears both the
@@ -247,7 +254,8 @@ describe("SettingsStore update check/install", () => {
     expect(store.updateKnown()).toBe(true);
     store.noteBackgroundUpdate(null);
     expect(store.updateKnown()).toBe(false);
-    expect(store.updateCard()).toBeNull();
+    expect(store.updateForCard()).toBeNull();
+    expect(store.updateForToast()).toBeNull();
   });
 
   it("install invokes update_install with the channel and flashes on failure", async () => {

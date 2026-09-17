@@ -6,11 +6,12 @@ import { KjButtonComponent, KjMuted, KjToastComponent } from "@kouji-ui/componen
 
 /**
  * Bottom-center "update available" toast — the prominent, global warning that an
- * update is ready, complementing the card buried in Settings → Updates. Visible
- * while an update is KNOWN and not yet dismissed (`updateCard`), and hidden while
- * the settings modal is open (the card shows the same thing there). "Later"
- * dismisses the toast but the nav dot (update known) stays"Install" runs the
- * same install flow as the card.
+ * update is ready, complementing the card in Settings → Updates. Visible while
+ * `updateForToast` has an offer (i.e. KNOWN and not yet silenced), and hidden
+ * while the settings modal is open (the card shows the same thing there).
+ * "Later" is the interruption's OFF switch and nothing else: it silences this
+ * toast only — the nav dot and the Settings card both stay, so the update is
+ * still installable where the dot points. "Install" runs the card's flow.
  *
  * Faithful port of the design's UpdateToast (design/app.html `.wn-toast`):
  * rocket tile · title/sub column · quiet "Later" + primary "Install". kj-toast
@@ -22,7 +23,7 @@ import { KjButtonComponent, KjMuted, KjToastComponent } from "@kouji-ui/componen
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, KjButtonComponent, KjMuted, KjToastComponent],
   template: `
-    @if (!store.open() && store.updateCard(); as upd) {
+    @if (!store.open() && store.updateForToast(); as upd) {
       <div class="ut">
         <kj-toast>
           <span class="ut-ic glyph-plate"><app-icon name="rocket" /></span>
@@ -34,7 +35,7 @@ import { KjButtonComponent, KjMuted, KjToastComponent } from "@kouji-ui/componen
           </div>
           <div class="ut-act">
             <kj-button kjVariant="quiet" (click)="store.openWhatsNew()" title="See what's new">What's new</kj-button>
-            <kj-button kjVariant="quiet" (click)="store.dismissUpdate()">Later</kj-button>
+            <kj-button kjVariant="quiet" (click)="store.dismissUpdateToast()">Later</kj-button>
             <kj-button kjVariant="default" [kjDisabled]="store.installing()" (click)="store.install()">
               <app-icon name="stage" size="sm" />
               {{ store.installing() ? (store.installPhase() === 'installing' ? 'Installing…' : 'Downloading ' + pct() + '%') : 'Install' }}
