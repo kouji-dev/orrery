@@ -119,8 +119,15 @@ export class ExtensionsStore {
     });
   }
 
+  /** A tick lands on the requested pack's row, and — while it fetches a
+   *  dependency — on the dependency's own row too, as a plain one-step
+   *  stream (the backend marks that row `downloading` for the duration). */
   private onProgress(p: ExtProgressPayload): void {
-    this.progress.update((cur) => ({ ...cur, [p.id]: p }));
+    this.progress.update((cur) => {
+      const next = { ...cur, [p.id]: p };
+      if (p.dependency) next[p.dependency] = { ...p, id: p.dependency, dependency: null, stepIndex: 1, stepCount: 1 };
+      return next;
+    });
   }
 
   private async load(refresh: boolean): Promise<void> {

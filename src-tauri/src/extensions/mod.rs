@@ -116,6 +116,42 @@ enum Job {
     Error(String),
 }
 
+/// Floor between two `ext://progress` events of the same step (a 50 MB pack
+/// arrives in thousands of chunks; the bar cannot show more than ~10 ticks a
+/// second anyway).
+const PROGRESS_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// Rate limit for one job's progress stream: a tick passes when the step
+/// (phase / dependency / index) changed, when the download completed, or when
+/// `min_interval` elapsed since the last admitted tick — so every state
+/// change and the final byte count reach the panel, the chunks in between are
+/// sampled.
+struct ProgressGate {
+    min_interval: std::time::Duration,
+    last_at: Option<std::time::Instant>,
+    last_key: Option<(String, Option<String>, usize)>,
+}
+
+impl ProgressGate {
+    fn new(min_interval: std::time::Duration) -> Self {
+        Self { min_interval, last_at: None, last_key: None }
+    }
+
+    fn admit(&mut self, p: &ExtProgress) -> bool {
+        let key = (p.phase.clone(), p.dependency.clone(), p.step_index);
+        let now = std::time::Instant::now();
+        let step_changed = self.last_key.as_ref() != Some(&key);
+        let complete = p.total.is_some_and(|t| p.downloaded >= t);
+        let due = self.last_at.is_none_or(|at| now.duration_since(at) >= self.min_interval);
+        if !(step_changed || complete || due) {
+            return false;
+        }
+        self.last_at = Some(now);
+        self.last_key = Some(key);
+        true
+    }
+}
+
 /// Everything one `pack_view` reads besides its own row.
 #[derive(Clone, Copy)]
 struct ViewCtx<'a> {
@@ -785,8 +821,10 @@ impl ExtensionService {
 
     // ---- mutations ----
 
-    /// Start an install job; returns once the job thread is running. Progress
-    /// and the final snapshot arrive as events.
+    /// Start an install job; returns once the job thread is running. A status
+    /// snapshot goes out at once (the row flips to `downloading` before the
+    /// first byte), progress streams while it runs, and the final snapshot
+    /// closes it.
     pub fn install(&self, app: tauri::AppHandle, id: String) -> AppResult<()> {
         manifest::validate_id(&id).map_err(other)?;
         {
@@ -796,16 +834,21 @@ impl ExtensionService {
             }
             jobs.insert(id.clone(), Job::Downloading);
         }
+        self.emit_status(&app);
         let svc = self.clone();
         let job_id = id.clone();
         std::thread::Builder::new()
             .name(format!("ext-install-{id}"))
             .spawn(move || {
                 let id = job_id;
+                let mut gate = ProgressGate::new(PROGRESS_MIN_INTERVAL);
                 let mut progress = |p: ExtProgress| {
-                    let _ = crate::core::emit::emit_tracked(&app, EV_PROGRESS, &p);
+                    if gate.admit(&p) {
+                        let _ = crate::core::emit::emit_tracked(&app, EV_PROGRESS, &p);
+                    }
                 };
-                let result = svc.run_install(&id, &mut progress);
+                let mut on_change = || svc.emit_status(&app);
+                let result = svc.run_install_with(&id, &mut progress, &mut on_change);
                 {
                     let mut jobs = svc.0.jobs.lock().unwrap();
                     match &result {
@@ -827,12 +870,30 @@ impl ExtensionService {
         Ok(())
     }
 
+    /// [`Self::run_install_with`] without a status hook — tests and the smoke
+    /// runner, which read the outcome directly.
+    #[cfg(test)]
+    pub fn run_install(&self, id: &str, progress: &mut dyn FnMut(ExtProgress)) -> Result<(), String> {
+        self.run_install_with(id, progress, &mut || {})
+    }
+
     /// The install job for `id`: every dependency it `requires` (transitively)
     /// that is not installed yet, deepest first, then the pack itself — all on
     /// this thread, one `ExtProgress` stream tagged with the current step. A
     /// failing dependency aborts before the pack is touched; the deps already
     /// installed stay (they are complete packs on their own).
-    pub fn run_install(&self, id: &str, progress: &mut dyn FnMut(ExtProgress)) -> Result<(), String> {
+    ///
+    /// Each dependency holds its OWN `Job` while its step runs, so its row
+    /// reads `downloading` (then `installed` / `error`) like a pack the user
+    /// asked for — `on_change` fires at every such transition so the panel
+    /// can re-snapshot. A dependency another job is already fetching aborts
+    /// this one instead of downloading it twice.
+    pub fn run_install_with(
+        &self,
+        id: &str,
+        progress: &mut dyn FnMut(ExtProgress),
+        on_change: &mut dyn FnMut(),
+    ) -> Result<(), String> {
         let (index, _, _) = self.index(false, true);
         let index = index.ok_or_else(|| "registry unavailable (offline?)".to_string())?;
         let deps = manifest::resolve_requires(&index, id)?;
@@ -843,6 +904,14 @@ impl ExtensionService {
         let step_count = missing.len() + 1;
         for (i, dep) in missing.iter().enumerate() {
             log::info!("extensions: {id} requires {dep} — installing it first ({}/{step_count})", i + 1);
+            {
+                let mut jobs = self.0.jobs.lock().unwrap();
+                if matches!(jobs.get(dep.as_str()), Some(Job::Downloading)) {
+                    return Err(format!("{id}: dependency {dep}: install already in progress"));
+                }
+                jobs.insert(dep.clone(), Job::Downloading);
+            }
+            on_change();
             let mut tagged = |mut p: ExtProgress| {
                 p.id = id.to_string();
                 p.dependency = Some(dep.clone());
@@ -850,8 +919,20 @@ impl ExtensionService {
                 p.step_count = step_count;
                 progress(p);
             };
-            self.run_install_one(&index, dep, &mut tagged)
-                .map_err(|e| format!("{id}: dependency {dep}: {e}"))?;
+            let result = self.run_install_one(&index, dep, &mut tagged);
+            {
+                let mut jobs = self.0.jobs.lock().unwrap();
+                match &result {
+                    Ok(()) => {
+                        jobs.remove(dep.as_str());
+                    }
+                    Err(e) => {
+                        jobs.insert(dep.clone(), Job::Error(e.clone()));
+                    }
+                }
+            }
+            on_change();
+            result.map_err(|e| format!("{id}: dependency {dep}: {e}"))?;
         }
         let mut tagged = |mut p: ExtProgress| {
             p.step_index = step_count;
@@ -1336,6 +1417,118 @@ mod tests {
         f.svc.uninstall(TS).unwrap();
         f.svc.uninstall("runtime.node").unwrap();
         assert!(f.svc.row("runtime.node").unwrap().is_none());
+    }
+
+    #[test]
+    fn a_dependency_holds_its_own_job_while_its_step_runs() {
+        let f = fixture("0.30.0");
+        let (szip, rzip) = (bundled_server_zip(), runtime_zip());
+        let target = registry::target_key();
+        publish_with_requires(
+            &f,
+            &[
+                (TS, "server", "6.0.0-1", &szip, "any", &["runtime.node"]),
+                ("runtime.node", "runtime", "22.12.0-1", &rzip, target.as_str(), &[]),
+            ],
+        );
+        // what the panel sees at every status hook: (runtime state, server state)
+        let mut seen: Vec<(String, String)> = Vec::new();
+        f.svc
+            .run_install_with(TS, &mut |_| {}, &mut || {
+                let v = f.svc.snapshot();
+                seen.push((item(&v, "runtime.node").state.clone(), item(&v, TS).state.clone()));
+            })
+            .unwrap();
+        // the runtime row is `downloading` during its step and `installed` right after it,
+        // BEFORE the server's own bytes arrive (the job thread marks the server itself)
+        assert_eq!(
+            seen,
+            vec![("downloading".into(), "available".into()), ("installed".into(), "available".into())]
+        );
+        assert!(f.svc.0.jobs.lock().unwrap().get("runtime.node").is_none(), "no stale job");
+    }
+
+    #[test]
+    fn a_failing_dependency_leaves_an_error_on_its_own_row() {
+        let f = fixture("0.30.0");
+        let (szip, rzip) = (bundled_server_zip(), runtime_zip());
+        let target = registry::target_key();
+        publish_with_requires(
+            &f,
+            &[
+                (TS, "server", "6.0.0-1", &szip, "any", &["runtime.node"]),
+                ("runtime.node", "runtime", "22.12.0-1", &rzip, target.as_str(), &[]),
+            ],
+        );
+        // the runtime's artifact vanishes from the fetcher → its download fails
+        f.svc.view(false); // caches the index, so only the artifact download fails below
+        f.fetcher.set_fail(true);
+        let mut hooks = 0;
+        let err = f
+            .svc
+            .run_install_with(TS, &mut |_| {}, &mut || hooks += 1)
+            .unwrap_err();
+        assert!(err.contains("dependency runtime.node"), "{err}");
+        assert_eq!(hooks, 2, "downloading → error");
+        let v = f.svc.snapshot();
+        let r = item(&v, "runtime.node");
+        assert_eq!(r.state, "error");
+        assert!(r.error.is_some());
+        assert!(f.svc.row(TS).unwrap().is_none(), "the server itself is never touched");
+    }
+
+    #[test]
+    fn a_dependency_another_job_is_fetching_aborts_instead_of_downloading_twice() {
+        let f = fixture("0.30.0");
+        let (szip, rzip) = (bundled_server_zip(), runtime_zip());
+        let target = registry::target_key();
+        publish_with_requires(
+            &f,
+            &[
+                (TS, "server", "6.0.0-1", &szip, "any", &["runtime.node"]),
+                ("runtime.node", "runtime", "22.12.0-1", &rzip, target.as_str(), &[]),
+            ],
+        );
+        f.svc.view(false); // caches the index — the only fetch this test allows
+        f.svc.0.jobs.lock().unwrap().insert("runtime.node".into(), Job::Downloading);
+        let hits = f.fetcher.hits();
+        let err = f.svc.run_install(TS, &mut |_| {}).unwrap_err();
+        assert!(err.contains("runtime.node: install already in progress"), "{err}");
+        assert_eq!(f.fetcher.hits(), hits, "nothing downloaded");
+        assert!(
+            matches!(f.svc.0.jobs.lock().unwrap().get("runtime.node"), Some(Job::Downloading)),
+            "the other job's marker survives"
+        );
+    }
+
+    fn tick(phase: &str, dependency: Option<&str>, step_index: usize, downloaded: u64, total: Option<u64>) -> ExtProgress {
+        ExtProgress {
+            id: TS.into(),
+            downloaded,
+            total,
+            phase: phase.into(),
+            dependency: dependency.map(str::to_string),
+            step_index,
+            step_count: 2,
+        }
+    }
+
+    #[test]
+    fn progress_gate_samples_chunks_but_passes_every_step_change_and_the_last_byte() {
+        // a huge interval: only step changes and completion get through
+        let mut g = ProgressGate::new(std::time::Duration::from_secs(3600));
+        assert!(g.admit(&tick("download", Some("runtime.node"), 1, 1, Some(100))), "first tick");
+        assert!(!g.admit(&tick("download", Some("runtime.node"), 1, 2, Some(100))), "same step, too soon");
+        assert!(!g.admit(&tick("download", Some("runtime.node"), 1, 50, Some(100))));
+        assert!(g.admit(&tick("download", Some("runtime.node"), 1, 100, Some(100))), "complete");
+        assert!(g.admit(&tick("verify", Some("runtime.node"), 1, 100, Some(100))), "phase changed");
+        assert!(g.admit(&tick("download", None, 2, 1, Some(10))), "next step");
+        assert!(!g.admit(&tick("download", None, 2, 2, Some(10))));
+        assert!(!g.admit(&tick("download", None, 2, 3, None)), "unknown total never counts as complete");
+        // a zero interval passes everything
+        let mut g = ProgressGate::new(std::time::Duration::ZERO);
+        assert!(g.admit(&tick("download", None, 2, 1, Some(10))));
+        assert!(g.admit(&tick("download", None, 2, 2, Some(10))));
     }
 
     #[test]

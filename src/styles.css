@@ -718,6 +718,13 @@ h4 {
   align-items: center;
   gap: var(--sp-4);
   width: 100%;
+  /* A row is sized by its padding alone. kouji's dropdown-menu sheet (loaded
+     app-wide with overlay.css since 0.9.3) gives every [kjDropdownMenuItem]
+     a 44px AAA touch-target floor — right for a phone, twice the height of a
+     desktop menu row. Its rules sit in @layer kj.component, so this unlayered
+     zero wins. */
+  --kj-dropdown-menu-item-min-height: 0;
+  min-height: 0;
   text-align: left;
   padding: var(--sp-3) var(--sp-4);
   border: none;
@@ -763,6 +770,7 @@ kj-button.menu-item,
   --kj-button-radius: 6px;
   --kj-button-height: auto;
   --kj-button-hover-translate: 0;
+  --kj-dropdown-menu-item-min-height: 0;
 }
 .row .kj-button {
   width: 100%;
