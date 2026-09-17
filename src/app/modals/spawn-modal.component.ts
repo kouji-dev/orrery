@@ -728,6 +728,11 @@ export class SpawnModalComponent {
     // teardown so the two can never drift.
     inject(DestroyRef).onDestroy(() => this.ui.closeSpawn());
 
+    // The tiles are the first screen in the app that needs a detection verdict,
+    // and the sweep no longer runs at boot — demand it here, not from tools()/
+    // runnable(), which change detection re-reads on every pass.
+    this.runtime.ensureDetections();
+
     // Opening the dialog refreshes the branch lists — branches created since
     // the last project load (by agents, or outside the app) must be offerable.
     void this.refreshBranches();

@@ -306,7 +306,11 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                   </div>
                 </app-set-row>
 
-                @if (store.updateCard(); as upd) {
+                <!-- No "Later" here: this card is the nav dot's destination, so it
+                     renders for as long as an update is known — updateForCard
+                     ignores the toast dismissal. A defer button that cannot hide
+                     what it sits on would do nothing the modal's × doesn't. -->
+                @if (store.updateForCard(); as upd) {
                   <app-set-row [wide]="true">
                     <ng-container row-label>Update available</ng-container>
                     <ng-container row-help>A newer build is ready to install.</ng-container>
@@ -326,7 +330,6 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                           <app-icon name="stage" size="sm" />
                           {{ !store.installing() ? 'Install & relaunch' : store.installPhase() === 'installing' ? 'Installing…' : 'Downloading ' + installPct() + '%' }}
                         </kj-button>
-                        <kj-button kjVariant="outline" (click)="store.dismissUpdate()">Later</kj-button>
                       </div>
                       @if (store.installing()) {
                         <kj-progress-bar class="set-upd-bar" [kjValue]="$any(installBarValue())" kjAriaLabel="Update download progress" />
@@ -866,6 +869,10 @@ export class SettingsModalComponent {
       // clear the store flag) whichever side closed it.
       this.close();
     });
+    // Agent defaults renders a runtime row per tool and gates the default-tool
+    // list on `toolAvailable` — neither has an answer until a sweep runs, and
+    // boot no longer starts one. Idempotent, so reopening costs nothing.
+    this.runtime.ensureDetections();
     // Tools that enumerate their own models (pi `--list-models`) feed the model
     // combobox from that probe — kick it once per session on open.
     for (const t of AGENT_TOOLS) if (t.dynamicModels) this.catalog.load(t.id);

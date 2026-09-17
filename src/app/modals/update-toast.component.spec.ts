@@ -14,12 +14,12 @@ class IconStub {}
 function makeStore() {
   return {
     open: signal(false),
-    updateCard: signal<UpdateInfo | null>(null),
+    updateForToast: signal<UpdateInfo | null>(null),
     installing: signal(false),
     installPhase: signal<string | null>(null),
     installProgress: signal(0),
     install: vi.fn(),
-    dismissUpdate: vi.fn(),
+    dismissUpdateToast: vi.fn(),
     openWhatsNew: vi.fn(),
   };
 }
@@ -55,7 +55,7 @@ describe("UpdateToastComponent", () => {
 
   it("shows the version + from-version and wires the three actions", () => {
     const f = TestBed.createComponent(UpdateToastComponent);
-    store.updateCard.set({ version: "0.9.4", date: "Jun 18, 2026" });
+    store.updateForToast.set({ version: "0.9.4", date: "Jun 18, 2026" });
     f.detectChanges();
     const text = f.nativeElement.textContent as string;
     expect(text).toContain("Update available");
@@ -65,15 +65,29 @@ describe("UpdateToastComponent", () => {
     btn(f.nativeElement, "What's new").click();
     expect(store.openWhatsNew).toHaveBeenCalled();
     btn(f.nativeElement, "Later").click();
-    expect(store.dismissUpdate).toHaveBeenCalled();
+    expect(store.dismissUpdateToast).toHaveBeenCalled();
     btn(f.nativeElement, "Install").click();
     expect(store.install).toHaveBeenCalled();
   });
 
   it("hides while the settings modal is open (the card shows it there)", () => {
     const f = TestBed.createComponent(UpdateToastComponent);
-    store.updateCard.set({ version: "0.9.4" });
+    store.updateForToast.set({ version: "0.9.4" });
     store.open.set(true);
+    f.detectChanges();
+    expect(f.nativeElement.querySelector(".ut")).toBeNull();
+  });
+
+  // The toast reads `updateForToast`, never the card's signal: "Later" is a
+  // silence, and wiring the toast to a shared "is an update known" flag is what
+  // used to take the Settings card down with it.
+  it("disappears once 'Later' empties the toast offer, whatever the card shows", () => {
+    const f = TestBed.createComponent(UpdateToastComponent);
+    store.updateForToast.set({ version: "0.9.4" });
+    f.detectChanges();
+    expect(f.nativeElement.querySelector(".ut")).not.toBeNull();
+
+    store.updateForToast.set(null); // what dismissUpdateToast() does to the store
     f.detectChanges();
     expect(f.nativeElement.querySelector(".ut")).toBeNull();
   });

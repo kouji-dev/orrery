@@ -62,7 +62,7 @@ function setup(
   opts: {
     settings?: Partial<Settings>;
     interrupted?: string[];
-    /** Lets a case hold the startup detection sweep open (it resolves at once
+    /** Lets a case hold the detection sweep open (it resolves at once
      *  otherwise, which is invisible to a "still checking" assertion). */
     detectTools?: () => Promise<ToolDetection[]>;
   } = {},
@@ -384,6 +384,7 @@ describe("tool detection — checking vs. absent", () => {
   it("a tool with no verdict yet is PENDING, not missing", async () => {
     let land!: (l: ToolDetection[]) => void;
     const svc = setup([], { detectTools: () => new Promise((r) => (land = r)) });
+    svc.ensureDetections();
     // detection() is null in both states — only detectionPending() separates them
     expect(svc.detection("claude")).toBeNull();
     expect(svc.detectionPending("claude")).toBe(true);
@@ -399,6 +400,59 @@ describe("tool detection — checking vs. absent", () => {
     // plain `ng serve` has no backend; spinning forever would be worse than
     // the optimistic fallback the catch already leaves in place.
     const svc = setup([], { detectTools: () => Promise.reject(new Error("no backend")) });
+    svc.ensureDetections();
     await vi.waitFor(() => expect(svc.detectionPending("claude")).toBe(false));
+  });
+});
+
+describe("tool detection — demand-driven lifecycle", () => {
+  const DET: ToolDetection = {
+    id: "claude", status: "ok", available: true, path: "/usr/bin/claude",
+    version: "1.0.0", source: "path", reason: null, shim: false,
+  };
+  it("booting the service probes NOTHING — detection is off the startup path", async () => {
+    const detectTools = vi.fn(() => Promise.resolve([DET]));
+    const svc = setup([], { detectTools });
+    await flushMicrotasks();
+    expect(detectTools).not.toHaveBeenCalled();
+    // and with no demand nothing may spin: there is no sweep to wait for
+    expect(svc.detectionPending("claude")).toBe(false);
+  });
+
+  it("the first demand sweeps once; every later demand is a no-op", async () => {
+    const detectTools = vi.fn(() => Promise.resolve([DET]));
+    const svc = setup([], { detectTools });
+    svc.ensureDetections();
+    expect(detectTools).toHaveBeenCalledTimes(1);
+    // a second consumer opening while the first sweep is still in flight
+    svc.ensureDetections();
+    expect(detectTools).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(svc.detection("claude")).not.toBeNull());
+    // …and once it has landed — reopening a dialog must not respawn 5 CLIs
+    svc.ensureDetections();
+    expect(detectTools).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshDetections() still FORCES a sweep past the idempotent guard", async () => {
+    const detectTools = vi.fn(() => Promise.resolve([DET]));
+    const svc = setup([], { detectTools });
+    svc.ensureDetections();
+    await vi.waitFor(() => expect(svc.detection("claude")).not.toBeNull());
+    // the settings "revert to PATH" flow — a stale verdict is the whole bug
+    await svc.refreshDetections();
+    expect(detectTools).toHaveBeenCalledTimes(2);
+  });
+
+  it("a forced re-probe does NOT flash a settled tool back to checking", async () => {
+    let land!: (l: ToolDetection[]) => void;
+    const detectTools = vi.fn(() => Promise.resolve([DET]));
+    const svc = setup([], { detectTools });
+    svc.ensureDetections();
+    await vi.waitFor(() => expect(svc.detection("claude")).not.toBeNull());
+    detectTools.mockImplementation(() => new Promise((r) => (land = r)));
+    void svc.refreshDetections();
+    expect(svc.detectionPending("claude")).toBe(false); // last verdict keeps rendering
+    land([DET]);
+    await flushMicrotasks();
   });
 });

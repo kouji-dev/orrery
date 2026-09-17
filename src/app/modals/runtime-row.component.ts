@@ -173,10 +173,17 @@ export class RuntimeRowComponent {
   private readonly runtime = inject(AgentRuntimeService);
   private readonly bridge = inject(BRIDGE);
 
-  /** This tool's live detection (null until startup detection completes). */
+  constructor() {
+    // Detection is demand-driven now, and this row is the only thing that can
+    // be mounted standalone (host outside Settings) — so it asks for itself
+    // rather than trusting a parent to have asked. Idempotent per session.
+    this.runtime.ensureDetections();
+  }
+
+  /** This tool's live detection (null until a sweep answers for it). */
   readonly det = computed(() => this.runtime.detection(this.toolId()));
   readonly isOk = computed(() => this.det()?.status === "ok");
-  /** The startup sweep hasn't answered for this tool yet — no verdict exists,
+  /** The requested sweep hasn't answered for this tool yet — no verdict exists,
    *  so neither the status line nor the locate editor may claim one. */
   readonly probing = computed(() => this.runtime.detectionPending(this.toolId()));
 

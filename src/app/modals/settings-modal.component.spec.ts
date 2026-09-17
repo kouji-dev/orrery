@@ -38,6 +38,8 @@ interface Setup {
   el: HTMLElement;
   store: SettingsStore;
   pickDirectory: ReturnType<typeof vi.fn>;
+  /** The demand-driven sweep the modal (and each runtime row) asks for on open. */
+  ensureDetections: ReturnType<typeof vi.fn>;
 }
 
 // claude/codex/cursor/pi detected; gemini missing — mirrors the design fixture.
@@ -57,6 +59,7 @@ async function setup(
 ): Promise<Setup> {
   const detections = opts.detections ?? DETECTIONS;
   const pickDirectory = vi.fn(async () => "C:/picked/worktrees");
+  const ensureDetections = vi.fn();
   const bridge: Bridge = {
     invoke: vi.fn(async (cmd: string) => (cmd === "settings_get" ? stored : null)) as Bridge["invoke"],
     on: async () => () => {},
@@ -75,6 +78,7 @@ async function setup(
           toolAvailable: (id: string) => detections[id]?.available ?? false,
           detection: (id: string) => detections[id] ?? null,
           detectionPending: (id: string) => opts.pending?.(id) ?? false,
+          ensureDetections,
           refreshDetections: async () => {},
           verifyToolPath: vi.fn(),
           setDetection: vi.fn(),
@@ -103,7 +107,7 @@ async function setup(
   store.openModal();
   const fixture = TestBed.createComponent(SettingsModalComponent);
   fixture.detectChanges();
-  return { fixture, el: fixture.nativeElement as HTMLElement, store, pickDirectory };
+  return { fixture, el: fixture.nativeElement as HTMLElement, store, pickDirectory, ensureDetections };
 }
 
 const click = (fixture: ComponentFixture<unknown>, target: Element | null) => {
@@ -116,6 +120,11 @@ const byText = (root: HTMLElement, selector: string, text: string) =>
   Array.from(root.querySelectorAll(selector)).find((b) => b.textContent?.includes(text)) ?? null;
 
 describe("SettingsModal sections render", () => {
+  it("opening Settings DEMANDS the detection sweep — it no longer runs at boot", async () => {
+    const s = await setup();
+    expect(s.ensureDetections).toHaveBeenCalled();
+  });
+
   it("opens on Updates: nav, header, channel/policy segs, version chip", async () => {
     const s = await setup();
     expect(s.el.querySelectorAll(".set-nav-item")).toHaveLength(5); // + Keymap (B6.2)
@@ -264,8 +273,11 @@ describe("SettingsModal danger confirm (Everything)", () => {
 });
 
 describe("SettingsModal updates card + nav dot", () => {
-  it("shows the card and the amber dot only once an update is known; Later hides the card", async () => {
+  it("shows the card and the amber dot only once an update is known", async () => {
     const s = await setup();
+    expect(s.el.querySelector(".set-nav-dot")).toBeNull();
+    expect(s.el.querySelector(".set-upd")).toBeNull();
+
     s.store.noteUpdate({ version: "9.9.9", date: "Jun 9, 2026" });
     s.fixture.detectChanges();
 
@@ -275,10 +287,21 @@ describe("SettingsModal updates card + nav dot", () => {
     expect(card.textContent).toContain("released Jun 9, 2026");
     expect(card.textContent).toContain("Install & relaunch");
     expect(card.textContent).not.toContain("MB"); // no size — by design
+  });
 
-    click(s.fixture, byText(card as HTMLElement, "button", "Later"));
-    expect(s.el.querySelector(".set-upd")).toBeNull();
-    expect(s.el.querySelector(".set-nav-dot")).not.toBeNull(); // dot survives Later
+  // The regression: "Later" on the toast used to null the one signal both
+  // surfaces read, so the dot advertised an update that had vanished from the
+  // very section it links to. The card must outlive the dismissal.
+  it("keeps the card and the dot after the toast's 'Later'", async () => {
+    const s = await setup();
+    s.store.noteUpdate({ version: "9.9.9" });
+    s.store.dismissUpdateToast();
+    s.fixture.detectChanges();
+
+    expect(s.el.querySelector(".set-upd")!.textContent).toContain("v9.9.9");
+    expect(s.el.querySelector(".set-nav-dot")).not.toBeNull();
+    // and the card offers no defer of its own — it cannot hide itself
+    expect(byText(s.el.querySelector(".set-upd") as HTMLElement, "button", "Later")).toBeNull();
   });
 });
 

@@ -60,6 +60,8 @@ interface Setup {
   spawn: ReturnType<typeof vi.fn>;
   /** The model-catalog re-probe the modal fires on open (one per probe-backed tool). */
   refreshModels: ReturnType<typeof vi.fn>;
+  /** The demand-driven CLI detection sweep the modal asks for on open. */
+  ensureDetections: ReturnType<typeof vi.fn>;
 }
 
 const PROJECT = {
@@ -139,6 +141,7 @@ function setup(
   const settings = signal<Settings>({ ...settingsDefaults(), ...opts.settings });
   const spawn = vi.fn();
   const refreshModels = vi.fn();
+  const ensureDetections = vi.fn();
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -150,6 +153,7 @@ function setup(
           toolAvailable: opts.available ?? (() => true),
           detection: (id: string) => opts.detections?.[id] ?? null,
           detectionPending: (id: string) => opts.pending?.(id) ?? false,
+          ensureDetections,
         },
       },
       // The probe-backed model pickers (pi, cursor) read ModelCatalogService →
@@ -175,7 +179,7 @@ function setup(
   });
   const fixture = TestBed.createComponent(SpawnModalComponent);
   fixture.detectChanges();
-  return { cmp: fixture.componentInstance, fixture, spawn, refreshModels };
+  return { cmp: fixture.componentInstance, fixture, spawn, refreshModels, ensureDetections };
 }
 
 describe("SpawnModal — settings prefill", () => {
@@ -346,6 +350,11 @@ describe("SpawnModal — why the dynamic picker is empty", () => {
 describe("SpawnModal — tool tile detection states", () => {
   const tiles = (f: ComponentFixture<unknown>) =>
     Array.from((f.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(".tool-tile"));
+
+  it("opening the dialog DEMANDS the sweep — it no longer runs at boot", () => {
+    const { ensureDetections } = setup();
+    expect(ensureDetections).toHaveBeenCalledTimes(1);
+  });
 
   it("an unprobed tool spins instead of being declared missing", () => {
     const { fixture } = setup({ pending: () => true, available: () => false });

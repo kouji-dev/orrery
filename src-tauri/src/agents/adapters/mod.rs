@@ -289,6 +289,21 @@ pub trait AgentAdapter: Send + Sync {
         Vec::new()
     }
 
+    /// A reason this listing output must NOT be read as "the tool has no models",
+    /// when the CLI said so itself. `None` (the default) = take the parse at face
+    /// value.
+    ///
+    /// Exists because these CLIs report a BROKEN CONFIG the same way they report
+    /// an empty one: a warning on stderr and exit 0. An empty list is meaningful
+    /// — it is how a signed-out tool answers honestly — so the frontend tells the
+    /// user to sign in, which is precisely the wrong advice when the real cause is
+    /// a config file the tool could not read. Surfacing the CLI's own complaint
+    /// keeps "nothing configured" and "configured, but broken" apart.
+    fn models_error(&self, output: &str) -> Option<String> {
+        let _ = output;
+        None
+    }
+
     // ── detection: each adapter owns how its tool reports + how we read it ──
 
     /// Args that make the binary print its version. Default `["--version"]`;
@@ -501,16 +516,42 @@ pub fn models_for(id: &str, manual: Option<&str>) -> Result<Vec<String>, String>
         return Err(format!("`{id}` is not installed"));
     };
     let first_failure = match run_probe_for(&first.display().to_string(), &args, MODELS_TIMEOUT) {
-        Ok(out) => return Ok(adapter.parse_models(&out)),
+        Ok(out) => return finish_models(&*adapter, &out),
         Err(reason) => reason,
     };
     for cand in rest {
         if let Ok(out) = run_probe_for(&cand.display().to_string(), &args, FALLBACK_MODELS_TIMEOUT)
         {
-            return Ok(adapter.parse_models(&out));
+            return finish_models(&*adapter, &out);
         }
     }
     Err(first_failure)
+}
+
+/// Turn one listing command's output into ids, honouring the adapter's own
+/// [`models_error`](AgentAdapter::models_error) verdict first.
+///
+/// An empty result that the tool did NOT explain is logged with the raw output.
+/// "My models don't show up" is otherwise unanswerable after the fact: the list
+/// is empty for a signed-out tool, a misconfigured one and a parser that missed
+/// the table, and only the bytes tell them apart. Bounded, because a full
+/// catalogue is thousands of lines and this is a diagnostic, not a record.
+fn finish_models(adapter: &dyn AgentAdapter, out: &str) -> Result<Vec<String>, String> {
+    if let Some(reason) = adapter.models_error(out) {
+        return Err(reason);
+    }
+    let models = adapter.parse_models(out);
+    if models.is_empty() {
+        let text = strip_ansi(out);
+        let text = text.trim();
+        log::info!(
+            "{}: model listing parsed to nothing. Raw output was:
+{}",
+            adapter.id(),
+            &text[..text.len().min(2000)],
+        );
+    }
+    Ok(models)
 }
 
 /// Strip ANSI SGR/CSI escapes from CLI output. Tools colour their tables (pi uses

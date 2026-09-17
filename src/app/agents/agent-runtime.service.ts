@@ -62,6 +62,12 @@ export class AgentRuntimeService {
   /** Full per-tool detection (path/version/status/reason), driving the Settings
    *  → Agent defaults runtime rows. Keyed by tool id. */
   readonly detections = signal<Record<string, ToolDetection>>({});
+  /** Has ANY sweep been asked for yet? Detection is demand-driven (see
+   *  {@link ensureDetections}), so "no verdict" is the resting state of a fresh
+   *  app, not a probe in flight — without this flag `detectionPending` would
+   *  report every tool as checking forever and spin tiles against a sweep that
+   *  is never coming. Doubles as the idempotency guard. */
+  private readonly sweepRequested = signal(false);
   /** Has the FIRST backend detection sweep returned? Until it has, no tool has
    *  a verdict — and a tile that paints "not found" there is guessing, which
    *  reads as fact (the reported "why does it say not installed when it is?"
@@ -139,8 +145,11 @@ export class AgentRuntimeService {
   readonly digests = signal<Record<string, string[]>>({});
 
   constructor() {
-    // detect installed CLI tools once (path + version + ok/error/missing)
-    void this.refreshDetections();
+    // NOTE: tool detection is deliberately NOT kicked here. It fans out to five
+    // backend probes that sweep PATH and SPAWN real CLIs (~2.3s cold) while boot
+    // is already resuming PTYs, starting language servers and watching worktrees
+    // — and nothing on the default screen reads a verdict. The three surfaces
+    // that do (spawn dialog, settings, runtime rows) call ensureDetections().
 
     // Watch EVERY agent's worktree — the backend watcher runs the initial scan
     // and pushes results (changes + HEAD), so no eager pull is needed here.
@@ -291,16 +300,33 @@ export class AgentRuntimeService {
     return this.detections()[id] ?? null;
   }
 
-  /** True while this tool has never been given a verdict: the first sweep is
-   *  still out. Callers MUST render this as in-progress, never as "missing" —
-   *  `detection()` returning null here means "not asked yet", not "absent". */
+  /** True while a REQUESTED sweep still owes this tool a verdict. All three
+   *  clauses matter: no demand yet → not pending (nothing is running, so a
+   *  spinner would never resolve); the first sweep back → not pending; a later
+   *  re-probe → not pending for a tool that already has a verdict, so a path
+   *  save doesn't flash every settled row back to a spinner.
+   *  Callers MUST render this as in-progress, never as "missing" — `detection()`
+   *  returning null here means "not answered yet", not "absent". */
   detectionPending(id: string): boolean {
-    return !this.sweepDone() && !this.detections()[id];
+    return this.sweepRequested() && !this.sweepDone() && !this.detections()[id];
+  }
+
+  /** Run the detection sweep the FIRST time a surface actually needs verdicts,
+   *  and be a no-op every time after (including while one is in flight). Every
+   *  consumer calls this on open; the boot path deliberately does not. Call it
+   *  from a constructor/ngOnInit, NEVER from a template-read accessor — change
+   *  detection re-reads those, which would launch sweeps in a loop. */
+  ensureDetections(): void {
+    if (this.sweepRequested()) return;
+    void this.refreshDetections();
   }
 
   /** Re-run backend detection for all tools (honors saved manual path
-   *  overrides). Called on startup and after a path is set/reverted. */
+   *  overrides). The FORCED variant — it re-probes even once a sweep has run,
+   *  which is what the "revert to PATH" flows in settings need; first-demand
+   *  callers want {@link ensureDetections} instead. */
   async refreshDetections(): Promise<void> {
+    this.sweepRequested.set(true);
     try {
       const list = await this.agentsStore.detectTools();
       this.applyDetections(list);
