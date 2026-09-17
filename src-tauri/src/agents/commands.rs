@@ -319,6 +319,16 @@ pub fn agent_start<R: Runtime>(
     crate::perf::timed("agent_start", || {
         let agent = svc.get(id)?;
         let cfg = settings.get().unwrap_or_default();
+        // The run config (model + effort) is pinned to the agent on its FIRST
+        // launch and reused by every later run, resumed or not: a fresh run must
+        // continue on what the agent's first session ran on, never on whatever
+        // the per-tool default happens to be today. Fill-only — an agent spawned
+        // with an explicit model/effort keeps it untouched.
+        let agent = svc.pin_run_config(
+            id,
+            cfg.tool_model.get(&agent.tool).map(String::as_str),
+            cfg.tool_effort.get(&agent.tool).map(String::as_str),
+        )?;
         // per-tool autoApprove policy → the adapter's skip-permissions flag
         // ("off" when unset/unreadable — the tool's own flow is the safe default)
         let approve_policy = cfg
@@ -1010,6 +1020,40 @@ pub async fn detect_tools(
     })
     .await
     .map_err(|e| AppError::Other(format!("join: {e}")))
+}
+
+/// Enumerate the models a tool's CLI accepts by asking the CLI itself — pi's
+/// `pi --list-models` is the only one today (`AgentAdapter::list_models_args`).
+/// The path is the user's manual override when set, else the PATH lookup, so it
+/// matches exactly what a spawn would launch. Returns the ids in the spelling
+/// `--model` takes; an Err (no listing command / probe failed) leaves the
+/// frontend on its curated catalog + free-text entry. Blocking pool: shells out.
+#[tauri::command]
+pub async fn list_tool_models(
+    settings: State<'_, SettingsService>,
+    id: String,
+) -> AppResult<Vec<String>> {
+    let manual = settings
+        .get()
+        .unwrap_or_default()
+        .tool_paths
+        .get(&id)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::perf::timed("list_tool_models", || {
+            let path = match manual {
+                Some(p) => p,
+                None => super::adapters::adapter_for(&id)
+                    .and_then(|a| super::adapters::which_path(a.binary()))
+                    .map(|p| p.display().to_string())
+                    .ok_or_else(|| AppError::Other(format!("`{id}` is not installed")))?,
+            };
+            super::adapters::models_at(&id, &path).map_err(AppError::Other)
+        })
+    })
+    .await
+    .map_err(|e| AppError::Other(format!("join: {e}")))?
 }
 
 /// Verify a candidate executable path for a tool by running `<path> --version`.

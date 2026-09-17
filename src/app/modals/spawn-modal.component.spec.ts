@@ -6,6 +6,7 @@ import { BrowserTestingModule, platformBrowserTesting } from "@angular/platform-
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { ModelCatalogService } from "../agents/model-catalog.service";
 import { Settings, Ticket } from "../models";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { settingsDefaults, SettingsStore } from "../settings/settings.store";
@@ -36,6 +37,8 @@ interface Setup {
   cmp: SpawnModalComponent;
   fixture: ComponentFixture<SpawnModalComponent>;
   spawn: ReturnType<typeof vi.fn>;
+  /** The model-catalog re-probe the modal fires on open (one per probe-backed tool). */
+  refreshModels: ReturnType<typeof vi.fn>;
 }
 
 const PROJECT = {
@@ -94,16 +97,31 @@ function setup(
     tickets?: Ticket[];
     spawnTicketId?: string | null;
     project?: Partial<typeof PROJECT> & { defaultBranch?: string };
+    /** What each model-enumerating CLI reported, per tool id
+     *  (pi `--list-models`, `cursor-agent models`). */
+    discovered?: Record<string, string[]>;
   } = {},
 ): Setup {
   const settings = signal<Settings>({ ...settingsDefaults(), ...opts.settings });
   const spawn = vi.fn();
+  const refreshModels = vi.fn();
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       { provide: UiStore, useValue: makeUiStore({ spawnTicketId: opts.spawnTicketId }) },
       { provide: ProjectActionsService, useValue: { all: signal([{ ...PROJECT, ...opts.project }]) } },
       { provide: AgentRuntimeService, useValue: { toolAvailable: opts.available ?? (() => true) } },
+      // The probe-backed model pickers (pi, cursor) read ModelCatalogService →
+      // the Tauri bridge; stub it so these specs stay bridge-free.
+      {
+        provide: ModelCatalogService,
+        useValue: {
+          models: (tool: string) => opts.discovered?.[tool] ?? [],
+          isProbed: () => true,
+          load: () => {},
+          refresh: refreshModels,
+        },
+      },
       { provide: AgentActionsService, useValue: { spawn } },
       { provide: SettingsStore, useValue: { settings } },
       { provide: TicketsStore, useValue: makeTicketsStore(opts.tickets ?? []) },
@@ -115,7 +133,7 @@ function setup(
   });
   const fixture = TestBed.createComponent(SpawnModalComponent);
   fixture.detectChanges();
-  return { cmp: fixture.componentInstance, fixture, spawn };
+  return { cmp: fixture.componentInstance, fixture, spawn, refreshModels };
 }
 
 describe("SpawnModal — settings prefill", () => {
@@ -205,6 +223,65 @@ describe("SpawnModal — settings prefill", () => {
     });
     expect(cmp.model()).toBe("claude-opus-4-6");
     expect(cmp.effort()).toBe("high"); // 4.6 has no xhigh
+  });
+});
+
+describe("SpawnModal — pi's discovered model catalog", () => {
+  const DISCOVERED = ["anthropic/claude-opus-4-5", "openai/gpt-5.1"];
+
+  it("feeds the picker from the CLI probe, not a hardcoded list", async () => {
+    const { cmp, fixture } = setup({ discovered: { pi: DISCOVERED } });
+    cmp.setTool("pi");
+    await fixture.whenStable();
+    expect(cmp.discoveredModels()).toEqual(DISCOVERED);
+    // the dynamic tool swaps the app-select for the free-text kouji combobox
+    expect(fixture.nativeElement.querySelector("kj-combobox")).toBeTruthy();
+  });
+
+  it("prefills the first discovered model when no override is stored", () => {
+    const { cmp } = setup({ discovered: { pi: DISCOVERED } });
+    cmp.setTool("pi");
+    expect(cmp.model()).toBe("anthropic/claude-opus-4-5");
+  });
+
+  it("keeps a stored BYOK id even though it is in no curated catalog", () => {
+    const { cmp } = setup({
+      settings: { toolModel: { pi: "groq/kimi-k2.5" } },
+      discovered: { pi: DISCOVERED },
+    });
+    cmp.setTool("pi");
+    expect(cmp.model()).toBe("groq/kimi-k2.5");
+    // …and it still gets pi's own --thinking levels (nothing narrows them)
+    expect(cmp.effortLevels()).toEqual(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+  });
+
+  it("falls back to the CLI's own default (empty model) when nothing is discovered", () => {
+    const { cmp } = setup({ discovered: { pi: [] } });
+    cmp.setTool("pi");
+    expect(cmp.model()).toBe("");
+  });
+});
+
+describe("SpawnModal — cursor's probed pool vs. its curated fallback", () => {
+  it("the probe wins when the account reported a pool", () => {
+    const { cmp } = setup({ discovered: { cursor: ["composer-3", "grok-5"] } });
+    cmp.setTool("cursor");
+    expect(cmp.modelChoices().map((m) => m.id)).toEqual(["composer-3", "grok-5"]);
+    expect(cmp.model()).toBe("composer-3");
+  });
+
+  it("an EMPTY probe (signed out / no models) falls back to the curated list", () => {
+    // `cursor-agent models` prints "No models available for this account." and
+    // exits 0 — the picker must not go empty.
+    const { cmp } = setup({ discovered: { cursor: [] } });
+    cmp.setTool("cursor");
+    expect(cmp.modelChoices().length).toBeGreaterThan(0);
+    expect(cmp.model()).toBe("composer-2.5"); // the curated default
+  });
+
+  it("re-probes every model-enumerating tool on open, and only those", () => {
+    const { refreshModels } = setup();
+    expect(refreshModels.mock.calls.map((c) => c[0]).sort()).toEqual(["cursor", "pi"]);
   });
 });
 

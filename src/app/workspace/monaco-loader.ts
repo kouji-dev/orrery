@@ -79,6 +79,13 @@ export function applyMonacoTheme(monaco: MonacoApi, appTheme: "dark" | "light"):
   put("editorLineNumber.activeForeground", "--ink-2");
   put("diffEditor.insertedTextBackground", "--code-add-bg");
   put("diffEditor.removedTextBackground", "--code-del-bg");
+  // Anchor marks in the diff overview ruler (the strip beside the vertical
+  // scrollbar). Monaco would otherwise derive them from the *TextBackground
+  // pair above, which is a ~90%-transparent row tint and all but invisible as
+  // a 15px-wide mark — so they get the solid diff INK tokens instead, the same
+  // green/red the rest of the app uses for added/removed.
+  put("diffEditorOverview.insertedForeground", "--code-add-ink");
+  put("diffEditorOverview.removedForeground", "--code-del-ink");
   const name = `orrery-${appTheme}`;
   monaco.editor.defineTheme(name, {
     base: appTheme === "dark" ? "vs-dark" : "vs",
@@ -87,6 +94,26 @@ export function applyMonacoTheme(monaco: MonacoApi, appTheme: "dark" | "light"):
     colors,
   });
   monaco.editor.setTheme(name);
+}
+
+/**
+ * Diff-surface options that turn on Monaco's OWN diff overview ruler: a strip
+ * beside the vertical scrollbar carrying one mark per changed region (removed
+ * on the original lane, inserted on the modified lane), so a long file shows
+ * where its changes are at a glance and the strip can be clicked/dragged to
+ * scroll straight to one. Monaco owns the marks — nothing here hand-rolls a
+ * scrollbar overlay. Their colours are the two `diffEditorOverview.*` theme
+ * keys applyMonacoTheme() resolves from --code-add-ink / --code-del-ink, which
+ * is what keeps them correct in both the light and the dark theme.
+ *
+ * `overviewRulerBorder: false` drops the inner editors' own 1px ruler rule,
+ * which would otherwise draw a second vertical line right next to the strip.
+ */
+export function diffOverviewRulerOptions(): {
+  renderOverviewRuler: boolean;
+  overviewRulerBorder: boolean;
+} {
+  return { renderOverviewRuler: true, overviewRulerBorder: false };
 }
 
 // ------------------------------------------------------------- languages ----

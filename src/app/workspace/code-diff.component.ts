@@ -18,6 +18,7 @@ import { NavProvidersService } from "./nav-providers.service";
 import {
   applyMonacoDensity,
   applyMonacoTheme,
+  diffOverviewRulerOptions,
   loadMonaco,
   MonacoApi,
   monacoDensityOptions,
@@ -240,7 +241,7 @@ export class CodeDiffComponent {
         fixedOverflowWidgets: true,
         renderLineHighlight: "none",
         stickyScroll: { enabled: false },
-        renderOverviewRuler: false,
+        ...diffOverviewRulerOptions(),
       });
       const agent = this.agent();
       const file = this.file();

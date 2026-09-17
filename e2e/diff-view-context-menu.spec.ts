@@ -233,3 +233,23 @@ test("a deleted file has nothing on disk: both hand-offs are disabled", async ({
   await expect(m.getByRole("button", { name: "Rename…" })).toBeEnabled();
 });
 
+
+test("opening the menu leaves the diff body alone — the code view never wraps below the file list", async ({ page }) => {
+  await openDiff(page, "flat");
+  await row(page, "report.html").click();
+  const head = page.locator("app-diff-view .diff-head");
+  await expect(head).toBeVisible();
+  const before = (await head.boundingBox())!;
+
+  await row(page, "report.html").click({ button: "right" });
+  await expect(menu(page)).toBeVisible();
+
+  // regression: <app-menu-panel> renders as a direct child of .diff-grid. As an
+  // in-flow box it counted as a 4th item of the `232px 6px 1fr` track list,
+  // wrapping the diff body onto row 2 — the code view dropped off the bottom of
+  // the pane and the open file looked empty. The host is out of flow now.
+  const after = (await head.boundingBox())!;
+  expect(after.x).toBeCloseTo(before.x, 0);
+  expect(after.y).toBeCloseTo(before.y, 0);
+  await expect(head).toBeInViewport();
+});

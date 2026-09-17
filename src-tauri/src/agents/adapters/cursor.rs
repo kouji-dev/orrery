@@ -64,6 +64,46 @@ impl AgentAdapter for CursorAdapter {
         "\x1b"
     }
 
+    /// cursor-agent can enumerate the models the ACCOUNT may run:
+    /// `cursor-agent models` (the global `--list-models` flag is an alias).
+    /// Needs auth + network. There is no `--json` form.
+    fn list_models_args(&self) -> Option<Vec<&'static str>> {
+        Some(vec!["models"])
+    }
+
+    /// The output is one bare model name per line, wrapped in spinner/ANSI
+    /// redraws: a repainted `Loading models…` line first, then the names. An
+    /// unauthenticated / empty account prints `No models available for this
+    /// account.` and still EXITS 0, so empty must be read out of the TEXT and
+    /// never from the status.
+    ///
+    /// So: strip ANSI, then keep only lines that are a single bare token — a
+    /// model slug never contains whitespace. That alone drops the spinner line,
+    /// the "No models available for this account." notice and any other prose.
+    fn parse_models(&self, output: &str) -> Vec<String> {
+        use super::strip_ansi;
+        let mut out: Vec<String> = Vec::new();
+        // A spinner redraws in place with `\r`, so split on both terminators and
+        // judge each repaint on its own instead of one concatenated line.
+        for line in strip_ansi(output).split(['\n', '\r']) {
+            let line = line.trim();
+            // one bare token only: prose, the spinner line and the empty notice
+            // all carry whitespace; blank lines carry nothing.
+            if line.is_empty() || line.contains(char::is_whitespace) {
+                continue;
+            }
+            // a one-word spinner frame ("Loading…") is not a model
+            if line.ends_with('…') || line.ends_with("...") {
+                continue;
+            }
+            let id = line.to_string();
+            if !out.contains(&id) {
+                out.push(id);
+            }
+        }
+        out
+    }
+
     fn install_hooks(&self, home: &Path, hook_bin: &Path) -> std::io::Result<()> {
         use super::merge_json_hooks;
         use crate::cli::hook::hook_command;
@@ -171,6 +211,48 @@ mod tests {
     fn read_hooks(home: &Path) -> serde_json::Value {
         let body = std::fs::read_to_string(home.join(".cursor/hooks.json")).unwrap();
         serde_json::from_str(&body).unwrap()
+    }
+
+    /// A faithful `cursor-agent models` capture: the spinner repainting its
+    /// "Loading models…" line over `\r` with colour codes, then one bare name
+    /// per line, then a trailing blank.
+    const MODELS_OUT: &str = concat!(
+        "\x1b[?25l\x1b[36m⠋ Loading models…\x1b[0m\r",
+        "\x1b[36m⠙ Loading models…\x1b[0m\r\x1b[2K",
+        "composer-2.5\n",
+        "composer-2.5-fast\n",
+        "auto\n",
+        "claude-sonnet-5\n",
+        "\n\x1b[?25h",
+    );
+
+    #[test]
+    fn cursor_lists_models_via_its_own_models_subcommand() {
+        assert_eq!(CursorAdapter.list_models_args(), Some(vec!["models"]));
+    }
+
+    #[test]
+    fn parse_models_keeps_bare_names_and_drops_spinner_noise() {
+        assert_eq!(
+            CursorAdapter.parse_models(MODELS_OUT),
+            vec!["composer-2.5", "composer-2.5-fast", "auto", "claude-sonnet-5"],
+            "ANSI stripped, spinner repaints dropped, one name per line"
+        );
+    }
+
+    // The empty case EXITS 0, so it must be read out of the text: the notice is
+    // prose (it carries whitespace) and yields nothing — the frontend then falls
+    // back to the curated catalog rather than showing an empty picker.
+    #[test]
+    fn parse_models_is_empty_for_the_no_models_notice() {
+        assert!(CursorAdapter
+            .parse_models("\x1b[2KNo models available for this account.\n")
+            .is_empty());
+        assert!(CursorAdapter.parse_models("").is_empty());
+        assert!(CursorAdapter.parse_models("\n\n  \n").is_empty());
+        assert!(CursorAdapter
+            .parse_models("You are not logged in. Run cursor-agent login.\n")
+            .is_empty());
     }
 
     #[test]

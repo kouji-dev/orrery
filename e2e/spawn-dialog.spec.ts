@@ -185,10 +185,15 @@ test("the Initial prompt types at the same size as the Name field", async ({ pag
   expect(parseFloat(prompt)).toBeCloseTo(parseFloat(baseline as string), 1);
 });
 
-test("Agent picker renders four equal tiles, badge stacked over the name", async ({ page }) => {
+/** Agents in the picker (data.ts AGENT_TOOLS): claude, codex, gemini, cursor, pi.
+ *  The picker must show one tile per agent, all on a single row — the count is
+ *  named once here so adding an agent updates both assertions together. */
+const TOOL_COUNT = 5;
+
+test("Agent picker renders one equal tile per agent, badge stacked over the name", async ({ page }) => {
   await openSpawn(page);
   const tiles = page.locator("app-spawn-modal .spawn-tools .kj-button");
-  await expect(tiles).toHaveCount(4);
+  await expect(tiles).toHaveCount(TOOL_COUNT);
 
   const first = tiles.first();
   await expect(first).toHaveCSS("flex-direction", "column");
@@ -205,17 +210,17 @@ test("Agent picker renders four equal tiles, badge stacked over the name", async
     // stacked, not side by side
     expect(t.badge).toBeLessThanOrEqual(t.label + 1);
   }
-  // one grid of four equal cells — a "not found" tile must not grow taller
+  // one grid of equal cells — a "not found" tile must not grow taller
   expect(new Set(geom.map((t) => t.w)).size).toBe(1);
   expect(new Set(geom.map((t) => t.h)).size).toBe(1);
 });
 
-test("the four agent tiles stay on one row", async ({ page }) => {
+test("every agent tile stays on one row", async ({ page }) => {
   await openSpawn(page);
   const tops = await page
     .locator("app-spawn-modal .tool-tile .kj-button")
     .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
-  expect(tops).toHaveLength(4);
+  expect(tops).toHaveLength(TOOL_COUNT);
   expect(new Set(tops).size).toBe(1);
 });
 

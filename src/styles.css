@@ -126,6 +126,10 @@
   --tool-codex: #10a37f;
   --tool-cursor: #6e9bff;
   --tool-gemini: #8a7cff;
+  /* pi ships no brand mark or brand colour (nothing in simple-icons, nothing
+     in its repo), so it borrows the neutral ink token rather than a made-up
+     accent — its badge is a drawn π glyph. */
+  --tool-pi: var(--ink-3);
 
   /* ink that sits on a solid semantic or danger fill */
   --on-solid: #ffffff;
@@ -699,6 +703,22 @@ h4 {
   border: 1px solid var(--hair-2);
   border-radius: var(--r-md);
   box-shadow: var(--shadow);
+}
+/* The <app-menu-panel> HOST must never take part in its parent's layout. The
+   panel inside it is position:fixed, but an unstyled custom element is still an
+   inline box in the flow — and inside a grid parent it becomes a grid ITEM. That
+   is how opening the diff panel's file menu used to shove the diff body (the
+   code view) out of the 232px/6px/1fr row and down into a second row. Taking the
+   host out of flow at zero size costs nothing: .menu-panel is fixed, so it is
+   positioned against the viewport either way, and unlike display:contents the
+   host keeps its box — the store-driven menu's role="menu" + aria-label stay in
+   the a11y tree. */
+app-menu-panel {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
 }
 /* .menu-panel = .popover + the menu's own layout. The surface declarations are
    repeated in the selector list above rather than required at the call site,

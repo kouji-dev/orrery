@@ -40,12 +40,13 @@ interface Setup {
   pickDirectory: ReturnType<typeof vi.fn>;
 }
 
-// claude/codex/cursor detected; gemini missing — mirrors the design fixture.
+// claude/codex/cursor/pi detected; gemini missing — mirrors the design fixture.
 const DETECTIONS: Record<string, ToolDetection> = {
   claude: { id: "claude", status: "ok", available: true, path: "/usr/local/bin/claude", version: "1.4.2", source: "path", reason: null, shim: false },
   codex: { id: "codex", status: "ok", available: true, path: "/usr/local/bin/codex", version: "0.31.0", source: "path", reason: null, shim: false },
   cursor: { id: "cursor", status: "ok", available: true, path: "/usr/local/bin/cursor-agent", version: null, source: "path", reason: null, shim: false },
   gemini: { id: "gemini", status: "missing", available: false, path: null, version: null, source: null, reason: null, shim: false },
+  pi: { id: "pi", status: "ok", available: true, path: "/usr/local/bin/pi", version: "0.9.3", source: "path", reason: null, shim: false },
 };
 
 async function setup(stored: Partial<Settings> = {}): Promise<Setup> {
@@ -125,7 +126,7 @@ describe("SettingsModal sections render", () => {
     navTo(s, "Agent defaults");
     expect(s.el.querySelector(".set-head .ht")?.textContent).toContain("Agent defaults");
     const tools = Array.from(s.el.querySelectorAll<HTMLButtonElement>(".set-tool"));
-    expect(tools).toHaveLength(4);
+    expect(tools).toHaveLength(5); // claude/codex/cursor/gemini/pi
     const gemini = tools[3];
     expect(gemini.classList.contains("off")).toBe(true);
     // tiles are now selectable even when not runnable (you pick one to fix its path)
@@ -144,7 +145,7 @@ describe("SettingsModal sections render", () => {
     navTo(s, "Permissions");
     expect(s.el.querySelector(".set-head .ht")?.textContent).toContain("Permissions & safety");
     const segs = s.el.querySelectorAll(".set-seg");
-    expect(segs).toHaveLength(3); // claude/codex/cursor — gemini is undetected
+    expect(segs).toHaveLength(4); // claude/codex/cursor/pi — gemini is undetected
     expect(s.el.textContent).toContain("Approve from notifications");
   });
 

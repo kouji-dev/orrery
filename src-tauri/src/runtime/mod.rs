@@ -426,6 +426,20 @@ impl RuntimeService {
             if let Some(entry) = mux_exit.take(&exit_id) {
                 emit_output_frame(&app_exit, vec![entry]);
             }
+            // SESSION TEARDOWN — the single point that covers BOTH exit paths
+            // (natural/crash, and an explicit stop()/stop_all() kill, which also
+            // lands here once `child.wait()` returns). The batcher is joined, so
+            // nothing can append any more, and the mux entry was just taken: the
+            // scrollback ring is the last per-session buffer left, so it dies
+            // here too. No dead PTY state survives a stopped agent — there is
+            // nothing to serve, and the ring's 1MB goes back.
+            //
+            // Guarded on the proc map: a relaunch between our kill and this line
+            // has already re-registered the id (and reset the ring for the NEW
+            // run) — dropping it then would throw away live output.
+            if !procs.lock().unwrap().contains_key(&id) {
+                scrollback::rings().remove(&exit_id);
+            }
             // Ticket lifecycle: only complete the ticket on a natural exit
             // (agent ran to completion). When the user calls agent_stop → rt.stop(),
             // stop() removes the proc from the map before killing, so
@@ -461,6 +475,12 @@ impl RuntimeService {
         Ok(())
     }
 
+    /// Stop an agent's PTY and destroy its session state.
+    ///
+    /// The ring goes NOW, not "whenever the wait thread gets there": a stopped
+    /// agent must leave nothing behind that could be replayed. The wait thread's
+    /// teardown still runs afterwards (it also covers natural exits) and drops
+    /// the few bytes the batcher's final flush may append behind us.
     pub fn stop(&self, id: Uuid) {
         // Take the entry under the map lock, but kill + drop it OUTSIDE — the
         // child signal and the ConPTY teardown on drop are blocking OS calls,
@@ -469,6 +489,8 @@ impl RuntimeService {
         if let Some(mut p) = removed {
             kill_proc(&mut p);
         }
+        scrollback::rings().remove(&id.to_string());
+        let _ = mux().take(&id.to_string()); // pending frame bytes die with the run
     }
 
     /// Kill every running PTY process (called on app shutdown so none orphan).
@@ -509,7 +531,18 @@ impl RuntimeService {
     /// A1.2: current scrollback snapshot for an agent — the renderer's
     /// recovery source (stale/hidden terminal shown again, webview reload,
     /// none→stream resubscribe). Empty default when the agent never ran.
+    ///
+    /// Only a LIVE session is served. A ring is reset at (re)launch, never at
+    /// exit, so it outlives the process that filled it: once the PTY is gone
+    /// its content is stale scrollback from a dead/detached run, not live
+    /// output. Replaying that into a terminal the user just re-opened dumps a
+    /// finished run's history into what should be an empty (or current-run)
+    /// terminal. So a dead — or never-started — agent snapshots to the empty
+    /// default, and its terminal stays empty until the next run streams in.
     pub fn snapshot(&self, id: Uuid) -> scrollback::Snapshot {
+        if !self.is_running(id) {
+            return scrollback::Snapshot::default();
+        }
         scrollback::rings()
             .snapshot(&id.to_string())
             .unwrap_or_default()
@@ -1161,6 +1194,19 @@ mod tests {
         );
     }
 
+    // A FRESH run of an already-started agent (no prompt — it was delivered on the
+    // first launch — and no resume) still carries the agent's pinned run config:
+    // the model + effort it first ran on, not the tool's own default.
+    #[test]
+    fn tool_command_fresh_relaunch_keeps_the_pinned_run_config() {
+        let cmd = tool_command("claude", "t", "claude-opus-5", Some("max"), false, None, "off");
+        assert_eq!(
+            argv_of(&cmd),
+            vec!["claude", "--model", "claude-opus-5", "--effort", "max"],
+            "a re-run launches on the agent's own model + effort, prompt-free"
+        );
+    }
+
     #[test]
     fn stop_removes_entry_and_clears_is_running() {
         let svc = RuntimeService::new();
@@ -1175,6 +1221,59 @@ mod tests {
             !svc.is_running(id),
             "stop() must remove the entry so the agent is restartable"
         );
+    }
+
+    // Re-opening an agent must NOT replay a finished run's PTY output: the ring
+    // survives the process (it is reset at launch, not at exit), so `snapshot()`
+    // serves it only while the PTY is alive. A dead/detached session snapshots
+    // empty; a live one still gets the full ring (stream recovery intact).
+    #[test]
+    fn snapshot_is_withheld_for_a_dead_session_and_served_while_running() {
+        let svc = RuntimeService::new();
+        let id = Uuid::new_v4();
+        scrollback::rings().append(&id.to_string(), "old run output", 14);
+
+        assert_eq!(
+            svc.snapshot(id),
+            scrollback::Snapshot::default(),
+            "no live PTY → stale scrollback is never replayed"
+        );
+
+        svc.procs.lock().unwrap().insert(id, fake_proc());
+        let live = svc.snapshot(id);
+        assert_eq!(live.text, "old run output", "a running session still recovers");
+        assert_eq!(live.end_seq, 14);
+
+        svc.stop(id); // exit → the ring is there, but withheld again
+        assert_eq!(svc.snapshot(id), scrollback::Snapshot::default());
+        scrollback::rings().remove(&id.to_string());
+    }
+
+    // Stopping an agent DESTROYS its session state instead of leaving a dead
+    // buffer around to be withheld later: the ring itself is gone, so there is
+    // nothing a re-open (or a stray snapshot call) could ever replay.
+    #[test]
+    fn stop_destroys_the_agents_scrollback_ring() {
+        let svc = RuntimeService::new();
+        let id = Uuid::new_v4();
+        let key = id.to_string();
+        svc.procs.lock().unwrap().insert(id, fake_proc());
+        scrollback::rings().append(&key, "output from the run", 19);
+        assert_eq!(
+            svc.snapshot(id).text,
+            "output from the run",
+            "a live session recovers normally"
+        );
+
+        svc.stop(id);
+
+        assert!(!svc.is_running(id));
+        assert_eq!(
+            scrollback::rings().snapshot(&key),
+            None,
+            "stop drops the ring — no dead per-session buffer survives"
+        );
+        assert_eq!(svc.snapshot(id), scrollback::Snapshot::default());
     }
 
     #[test]

@@ -402,6 +402,7 @@ pub fn run() {
             agents::commands::shell_stop,
             agents::commands::detect_tools,
             agents::commands::verify_tool_path,
+            agents::commands::list_tool_models,
             agents::commands::agent_commit_diff,
             agents::commands::agent_commit_file_diff,
             agents::commands::agent_range_files,

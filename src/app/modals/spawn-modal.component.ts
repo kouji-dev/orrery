@@ -13,6 +13,7 @@ import { AGENT_TOOLS, defaultEffortFor, effortLevelsFor, modelOption } from "../
 import { Agent, AgentTool, Project, Ticket } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
+import { ModelCatalogService } from "../agents/model-catalog.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { effectiveModel, SettingsStore, worktreeRootLabel } from "../settings/settings.store";
 import { TicketsStore } from "../stores/tickets.store";
@@ -23,6 +24,9 @@ import { ToolBadgeComponent } from "../shared/tool-badge.component";
 import { mix } from "../utils";
 import {
   KjButtonComponent,
+  KjComboboxComponent,
+  KjComboboxEmptyComponent,
+  KjComboboxOptionComponent,
   KjDialogComponent,
   KjFieldComponent,
   KjFieldHelpComponent,
@@ -84,6 +88,9 @@ function slugName(title: string): string {
   imports: [
     IconComponent,
     SelectComponent,
+    KjComboboxComponent,
+    KjComboboxEmptyComponent,
+    KjComboboxOptionComponent,
     ToolBadgeComponent,
     KjButtonComponent,
     KjDialogComponent,
@@ -209,7 +216,21 @@ function slugName(title: string): string {
           <div style="display:flex;gap:var(--sp-6)">
             <kj-field class="spawn-field" style="flex:1">
               <kj-field-label>Model</kj-field-label>
-              <app-select [value]="model()" [options]="modelOptions()" (valueChange)="setModel($event)" />
+              @if (currentTool().dynamicModels) {
+                <!-- A tool that enumerates its own models (pi --list-models):
+                     the options ARE the probe result, and the same kouji
+                     combobox Settings uses stays free-text so a BYOK
+                     provider/model id can always be typed. -->
+                <kj-combobox [freeText]="true" placeholder="provider/model…"
+                  [value]="model()" (valueChange)="onComboModel($event)">
+                  @for (m of modelChoices(); track m.id) {
+                    <kj-combobox-option [value]="m.id">{{ m.label }}</kj-combobox-option>
+                  }
+                  <kj-combobox-empty>{{ discoveryHint() }}</kj-combobox-empty>
+                </kj-combobox>
+              } @else {
+                <app-select [value]="model()" [options]="modelOptions()" (valueChange)="setModel($event)" />
+              }
             </kj-field>
             @if (effortLevels(); as levels) {
               <kj-field class="spawn-field" style="flex:1">
@@ -322,11 +343,17 @@ function slugName(title: string): string {
         outline: none;
         --kj-textarea-border-color: var(--ui-focus);
       }
-      /* The four agents stay on ONE row here — the dialog is a fixed 540px and
-         the picker reads as a single choice set, so it must not reflow into a
-         2x2 at a larger --fs-scale. minmax(0,…) lets each track shrink under
-         its label; .tn's ellipsis (shared recipe) absorbs the rest. */
-      .spawn-tools { --tile-cols: repeat(4, minmax(0, 1fr)); }
+      /* EVERY agent stays on ONE row here — the dialog is a fixed 540px and the
+         picker reads as a single choice set, so it must not reflow into a grid
+         at a larger --fs-scale. Column auto-flow instead of a repeat(N) track
+         list: N was pinned at 4 and adding pi silently wrapped the 5th tile onto
+         a second row. This cannot go stale. minmax(0,…) lets each track shrink
+         under its label; .tn's ellipsis (shared recipe) absorbs the rest. */
+      .spawn-tools {
+        --tile-cols: none;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+      }
       /* the effort tray fills its column, same size step as Settings' .set-seg */
       .spawn-seg { --kj-tab-padding-x: var(--sp-6); --kj-tab-font-size: var(--fs-meta); }
       .spawn-seg ::ng-deep .kj-tab-list { width: 100%; }
@@ -342,6 +369,7 @@ export class SpawnModalComponent {
   readonly runtime = inject(AgentRuntimeService);
   readonly agentActions = inject(AgentActionsService);
   private readonly settingsStore = inject(SettingsStore);
+  private readonly catalog = inject(ModelCatalogService);
   private readonly ticketsStore = inject(TicketsStore);
   readonly tools = AGENT_TOOLS;
   readonly mix = mix;
@@ -391,6 +419,30 @@ export class SpawnModalComponent {
     // a single unnamed group is just a flat list
     return groups.length === 1 && !groups[0].label ? groups[0].options : groups;
   });
+  /** Raw probe output for the current tool (pi `--list-models`, `cursor-agent
+   *  models`) — the ids exactly as its `--model` flag takes them. Empty until
+   *  the probe lands, and legitimately empty when the CLI is absent, signed out
+   *  or has no API keys. */
+  readonly discoveredModels = computed(() =>
+    this.currentTool().dynamicModels ? this.catalog.models(this.toolId()) : [],
+  );
+  /** What the picker actually offers: the PROBE when it reported anything, else
+   *  the tool's curated catalog. cursor keeps a curated list for exactly this
+   *  fallback; pi's is empty by design, so its picker is free-text only. */
+  readonly modelChoices = computed(() => this.modelChoicesFor(this.currentTool()));
+  private modelChoicesFor(tool: AgentTool): { id: string; label: string }[] {
+    if (tool.dynamicModels) {
+      const probed = this.catalog.models(tool.id);
+      if (probed.length) return probed.map((id) => ({ id, label: id }));
+    }
+    return tool.models;
+  }
+  /** Empty-state copy for the dynamic picker: probing vs. genuinely nothing. */
+  readonly discoveryHint = computed(() =>
+    this.catalog.isProbed(this.toolId())
+      ? "No models reported — check the CLI's sign-in or API keys. Enter applies the typed id."
+      : "Asking the CLI for its models… Enter applies the typed id.",
+  );
   /** Effort levels the PICKED model accepts (per model: Haiku none, Opus 4.6
    *  no `xhigh`); false hides the tray. */
   readonly effortLevels = computed(() => effortLevelsFor(this.currentTool(), this.model()));
@@ -469,8 +521,19 @@ export class SpawnModalComponent {
    *  (a stale persisted id must not produce an unselectable <option>);
    *  otherwise the tool's first curated model — the old hardcoded default. */
   private prefillModel(tool: AgentTool): string {
-    const m = effectiveModel(this.settingsStore.settings(), tool.id);
-    return modelOption(tool, m) ? m : tool.models[0].id;
+    const s = this.settingsStore.settings();
+    const choices = this.modelChoicesFor(tool);
+    // An EXPLICIT per-tool override (not `effectiveModel`, which already folds
+    // in the curated default) survives even when it is in neither the probe nor
+    // the curated list — a probe-backed picker is free-text, so a BYOK id the
+    // user typed must not be silently rewritten.
+    const stored = s.toolModel[tool.id];
+    if (stored && (tool.dynamicModels || choices.some((c) => c.id === stored))) return stored;
+    const eff = effectiveModel(s, tool.id);
+    if (choices.some((c) => c.id === eff)) return eff;
+    // else the first id actually on offer (the probe's, or the curated list's);
+    // a probe-backed tool with nothing at all launches on the CLI's own default.
+    return choices[0]?.id ?? (tool.dynamicModels ? "" : tool.models[0].id);
   }
   /** The user's explicit settings effort when the prefilled MODEL accepts it,
    *  else that model's own default; null when it takes no effort (Haiku). The
@@ -483,6 +546,15 @@ export class SpawnModalComponent {
     const override = this.settingsStore.settings().toolEffort[tool.id];
     return override && levels.includes(override) ? override : defaultEffortFor(tool, model);
   }
+  /** Combobox commit (probed pick or free-text Enter). kouji's combobox emits
+   *  `unknown` — it carries whatever an option's [value] held — so the id is
+   *  narrowed here rather than with `$any` in the template, which would switch
+   *  template checking off for the whole binding. Mirrors the settings modal. */
+  onComboModel(v: unknown): void {
+    const id = String(v ?? "").trim();
+    if (id) this.setModel(id);
+  }
+
   /** Picking a model re-validates the effort against what IT accepts: keep
    *  the level when offered, else fall to the model's default (or none). */
   setModel(id: string) {
@@ -503,6 +575,12 @@ export class SpawnModalComponent {
     // Opening the dialog refreshes the branch lists — branches created since
     // the last project load (by agents, or outside the app) must be offerable.
     void this.refreshBranches();
+
+    // …and RE-asks every model-enumerating CLI (pi, cursor-agent) for its
+    // models on every open: an account pool or an API key can change under us,
+    // so a per-session cache would go stale. Stale-while-revalidate — the last
+    // known list keeps rendering until the fresh one lands.
+    for (const t of AGENT_TOOLS) if (t.dynamicModels) this.catalog.refresh(t.id);
 
     // Consume the dispatch ticket id (set by ui.dispatchTicket) and clear it
     // so it doesn't leak into subsequent manual spawns.
@@ -577,6 +655,8 @@ export class SpawnModalComponent {
   setTool(id: Agent["tool"]) {
     this.toolId.set(id);
     const tool = this.currentTool();
+    // a tool that owns its model list: ask its CLI (cached per session)
+    if (tool.dynamicModels) this.catalog.load(tool.id);
     // switching tool applies THAT tool's settings defaults (or the curated ones)
     this.model.set(this.prefillModel(tool));
     this.effort.set(this.prefillEffort(tool));

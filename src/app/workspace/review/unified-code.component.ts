@@ -20,6 +20,7 @@ import { registerEditor } from "../editor-cap";
 import {
   applyMonacoDensity,
   applyMonacoTheme,
+  diffOverviewRulerOptions,
   loadMonaco,
   MonacoApi,
   monacoDensityOptions,
@@ -260,7 +261,7 @@ export class UnifiedCodeComponent {
           ...common,
           renderSideBySide: false, // unified/inline — deletions fold in as rows
           hideUnchangedRegions: { enabled: true, contextLineCount: 3, minimumLineCount: 4 },
-          renderOverviewRuler: false,
+          ...diffOverviewRulerOptions(),
         });
         const original = monaco.editor.createModel(oldText, langId);
         const modified = monaco.editor.createModel(newText, langId, this.navUri(monaco));

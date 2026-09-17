@@ -300,6 +300,16 @@ export class TerminalService {
       const snap = await this.agents.snapshot(id);
       const h = this.handles.get(id);
       if (!h) return;
+      // Nothing live to replay. The backend withholds the ring of a session
+      // whose PTY is gone (dead/detached run) and of one that never started,
+      // so an empty snapshot means "this terminal has no current-run history".
+      // Leave the terminal untouched: a re-opened agent opens EMPTY instead of
+      // dumping a finished run's scrollback, and a terminal that already holds
+      // its own output keeps it (a reset here would wipe it for nothing).
+      if (!snap.text) {
+        this.minSeq.set(id, snap.endSeq);
+        return; // `finally` still flushes anything parked mid-recovery
+      }
       discardTerminalQueue(id); // queued pre-snapshot backlog is inside `text`
       // Why reset(), not clear(): xterm's clear() deliberately KEEPS the
       // current (bottom) line — an un-terminated live chunk would survive the
@@ -357,10 +367,29 @@ export class TerminalService {
     }
   }
 
-  /** Note in the terminal view that the process ended. */
+  /**
+   * The agent's process ended (stopped by the user, finished, or crashed):
+   * tear its terminal state down HERE, while the pane is on screen — don't
+   * leave a dead run's text sitting in the buffer until the next open. The
+   * backend destroys the matching session state (scrollback ring + pending mux
+   * bytes) on the same event, so there is nothing left to replay either way.
+   *
+   * Everything session-scoped goes: the hidden-write queue, chunks parked by an
+   * in-flight recovery, and the snapshot dedup/stale marks. `reset()` (full RIS)
+   * rather than `clear()` — clear() keeps the current line and leaves parser/SGR
+   * state behind. The handle itself survives: a relaunch reuses this terminal.
+   */
   exit(id: string) {
-    flushTerminalQueue(id); // queued output lands before the exit notice
-    this.handles.get(id)?.term.write("\r\n\x1b[2m▪ process exited\x1b[0m\r\n");
+    discardTerminalQueue(id); // nothing queued belongs to a live run any more
+    this.recovering.delete(id); // parked chunks die with the session
+    this.minSeq.delete(id);
+    this.stale.delete(id);
+    // Chain the reset behind xterm's write queue instead of calling it inline:
+    // reset() is synchronous, while writes parse on a timer, so the run's final
+    // frames (the backend force-drains the mux just BEFORE `agent://exit`)
+    // would otherwise parse afterwards and re-dirty the wiped pane.
+    const h = this.handles.get(id);
+    h?.term.write("", () => h.term.reset()); // pane goes visibly empty
     // the focused agent stopped → release the mux fast path (clicking back
     // into the terminal after a restart re-claims it via the focus listener)
     if (this.sentFocusId === id) this.setFocused(null);

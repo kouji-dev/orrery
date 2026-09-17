@@ -236,6 +236,7 @@ export const TOOL_GLYPH: Record<string, string> = {
   codex: "◆",
   cursor: "▸",
   gemini: "✦",
+  pi: "π",
 };
 
 // color-mix helper to keep templates terse

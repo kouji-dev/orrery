@@ -17,11 +17,13 @@ mod claude;
 mod codex;
 mod cursor;
 mod gemini;
+mod pi;
 
 pub use claude::ClaudeAdapter;
 pub use codex::CodexAdapter;
 pub use cursor::CursorAdapter;
 pub use gemini::GeminiAdapter;
+pub use pi::PiAdapter;
 
 /// Identity + connection a orrery-launched agent's hook needs to broker with the
 /// bridge. Stamped onto the agent process env at launch (the `ORRERY_*` vars);
@@ -267,6 +269,23 @@ pub trait AgentAdapter: Send + Sync {
         format!("{choice}\r")
     }
 
+    // ── model catalog: tools that can enumerate their own `--model` vocabulary ──
+
+    /// Args that make the binary print the models it accepts, when the tool has
+    /// such a command. `None` (the default) = no listing command exists, so the
+    /// frontend falls back to its curated catalog / free-text entry. Only pi
+    /// ships one today (`pi --list-models`).
+    fn list_models_args(&self) -> Option<Vec<&'static str>> {
+        None
+    }
+
+    /// Parse the model ids out of that command's output, in the exact spelling
+    /// the tool's `--model` flag accepts. Default: nothing (no listing command).
+    fn parse_models(&self, output: &str) -> Vec<String> {
+        let _ = output;
+        Vec::new()
+    }
+
     // ── detection: each adapter owns how its tool reports + how we read it ──
 
     /// Args that make the binary print its version. Default `["--version"]`;
@@ -299,6 +318,7 @@ pub fn registry() -> Vec<Box<dyn AgentAdapter>> {
         Box::new(CodexAdapter),
         Box::new(CursorAdapter),
         Box::new(GeminiAdapter),
+        Box::new(PiAdapter),
     ]
 }
 
@@ -378,6 +398,52 @@ pub fn detect_at(id: &str, path: &str) -> ToolStatus {
             Err(reason) => ToolStatus::error(id.into(), path.into(), "manual", reason),
         },
     }
+}
+
+/// Enumerate the models `id`'s CLI accepts by running its own listing command at
+/// `path` (see [`AgentAdapter::list_models_args`]). `Ok(ids)` in the spelling the
+/// tool's `--model` flag takes; `Err(reason)` when the tool has no listing command,
+/// is unknown, or the probe failed. Never invents entries — an empty `Ok` means the
+/// tool ran and reported none (no API keys configured, typically).
+pub fn models_at(id: &str, path: &str) -> Result<Vec<String>, String> {
+    let adapter = adapter_for(id).ok_or_else(|| format!("unknown tool `{id}`"))?;
+    let args = adapter
+        .list_models_args()
+        .ok_or_else(|| format!("`{id}` has no model-listing command"))?;
+    let out = run_probe(path, &args)?;
+    Ok(adapter.parse_models(&out))
+}
+
+/// Strip ANSI SGR/CSI escapes from CLI output. Tools colour their tables (pi uses
+/// chalk), and the colour codes would otherwise land inside the parsed columns.
+pub fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '' {
+            out.push(c);
+            continue;
+        }
+        // ESC [ … <final byte @-~>  (also tolerates ESC ] … BEL / ESC <one char>)
+        match chars.next() {
+            Some('[') => {
+                for c in chars.by_ref() {
+                    if ('@'..='~').contains(&c) {
+                        break;
+                    }
+                }
+            }
+            Some(']') => {
+                for c in chars.by_ref() {
+                    if c == '' {
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 /// Shared probe infra: run `<path> <args…>` (best-effort, bounded on a worker
@@ -876,10 +942,10 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn registry_has_the_four_known_tools() {
+    fn registry_has_the_known_tools() {
         let reg = registry();
         let ids: Vec<&str> = reg.iter().map(|a| a.id()).collect();
-        assert_eq!(ids, vec!["claude", "codex", "cursor", "gemini"]);
+        assert_eq!(ids, vec!["claude", "codex", "cursor", "gemini", "pi"]);
     }
 
     #[test]
@@ -891,7 +957,7 @@ mod tests {
     #[test]
     fn installed_reports_every_known_tool() {
         let report = installed(&BTreeMap::new());
-        assert_eq!(report.len(), 4);
+        assert_eq!(report.len(), registry().len());
         for t in &report {
             assert!(
                 matches!(t.status.as_str(), "ok" | "error" | "missing"),
