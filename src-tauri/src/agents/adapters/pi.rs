@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::AgentAdapter;
 
@@ -33,6 +33,20 @@ impl AgentAdapter for PiAdapter {
     }
     fn binary(&self) -> &str {
         "pi"
+    }
+
+    /// Pi is an npm global (`@earendil-works/pi-coding-agent`), which the shared
+    /// sweep's derived npm prefixes cover. The one pi-specific hint is DERIVED
+    /// from the user's own environment rather than assumed: `PI_CODING_AGENT_DIR`
+    /// relocates pi's tree, and a self-managed install puts its launcher there
+    /// or in its `bin`. The former default `~/.pi/bin` is gone — `~/.pi` is a
+    /// config tree that outlives an uninstall, so a hit there proves nothing.
+    fn extra_dirs(&self) -> Vec<PathBuf> {
+        let cfg = std::env::var_os("PI_CODING_AGENT_DIR").map(PathBuf::from);
+        [cfg.clone(), cfg.map(|d| d.join("bin"))]
+            .into_iter()
+            .flatten()
+            .collect()
     }
 
     fn base_argv(&self) -> Vec<String> {
@@ -236,6 +250,61 @@ mod tests {
             ],
             "header dropped, ANSI stripped, first two columns joined"
         );
+    }
+
+    /// The bytes `pi --list-models` ACTUALLY printed, captured 2026-09-17 from
+    /// pi 0.85.1 on a machine signed in to Anthropic by OAuth. Kept verbatim,
+    /// trailing padding and all, because two details only show up in real output
+    /// and both can break a column parser:
+    ///
+    /// * every cell is `padEnd`ed to its column's widest value, so a narrow cell
+    ///   carries run-on spaces that `split("  ")` turns into EMPTY fields — the
+    ///   `filter(|c| !c.is_empty())` is what makes that survivable, and the
+    ///   `claude-haiku-4-5` row (200K/64K against 1M/128K neighbours) is the one
+    ///   that exercises it;
+    /// * the widest cell in a column gets NO padding at all, so its separator is
+    ///   the bare two-space join — `claude-sonnet-4-5-20250929` is that row here,
+    ///   and it is the case a "three or more spaces" split would drop.
+    const REAL_LIST_MODELS: &str = concat!(
+        "provider   model                       context  max-out  thinking  images\n",
+        "anthropic  claude-fable-5              1M       128K     yes       yes   \n",
+        "anthropic  claude-haiku-4-5            200K     64K      yes       yes   \n",
+        "anthropic  claude-opus-4-5-20251101    200K     64K      yes       yes   \n",
+        "anthropic  claude-sonnet-4-5-20250929  1M       64K      yes       yes   \n",
+    );
+
+    /// Pins the parser to the shape pi really emits rather than to a
+    /// hand-written approximation of it. Aliases and dated pins both survive,
+    /// the header is dropped, and every id comes back in the `provider/model`
+    /// spelling `--model` accepts.
+    #[test]
+    fn parse_models_handles_real_pi_output() {
+        assert_eq!(
+            PiAdapter.parse_models(REAL_LIST_MODELS),
+            vec![
+                "anthropic/claude-fable-5",
+                "anthropic/claude-haiku-4-5",
+                "anthropic/claude-opus-4-5-20251101",
+                "anthropic/claude-sonnet-4-5-20250929",
+            ],
+        );
+    }
+
+    /// pi's real signed-out response: it EXITS 0 and explains itself, so this is
+    /// truth ("no provider authenticated"), not a failure. It must parse to an
+    /// empty list — never to a phantom model built out of the message's own
+    /// words — because the frontend tells the two apart to decide between "sign
+    /// in to a provider" and "the probe broke".
+    #[test]
+    fn parse_models_reads_the_real_signed_out_message_as_no_models() {
+        let signed_out = concat!(
+            "No models available. Use /login to log into a provider via OAuth or API key. See:\n",
+            "  C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@earendil-works\\",
+            "pi-coding-agent\\docs\\providers.md\n",
+            "  C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@earendil-works\\",
+            "pi-coding-agent\\docs\\models.md\n",
+        );
+        assert!(PiAdapter.parse_models(signed_out).is_empty());
     }
 
     #[test]

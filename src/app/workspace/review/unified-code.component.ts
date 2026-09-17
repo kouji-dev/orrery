@@ -25,6 +25,7 @@ import {
   MonacoApi,
   monacoDensityOptions,
   monacoLanguage,
+  monacoScrollbarOptions,
 } from "../monaco-loader";
 import { diffModelUri } from "../nav-providers";
 import { NavProvidersService } from "../nav-providers.service";
@@ -251,6 +252,7 @@ export class UnifiedCodeComponent {
         scrollBeyondLastLine: false,
         automaticLayout: true,
         ...monacoDensityOptions(),
+        ...monacoScrollbarOptions(),
         fixedOverflowWidgets: true,
         renderLineHighlight: "none",
         stickyScroll: { enabled: false },

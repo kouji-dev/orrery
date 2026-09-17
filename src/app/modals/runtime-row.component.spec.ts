@@ -46,7 +46,7 @@ interface Mocks {
   pickFile: ReturnType<typeof vi.fn>;
 }
 
-function mount(detection: ToolDetection | null): {
+function mount(detection: ToolDetection | null, pending = false): {
   cmp: RuntimeRowComponent;
   fixture: ComponentFixture<RuntimeRowComponent>;
   el: HTMLElement;
@@ -67,6 +67,7 @@ function mount(detection: ToolDetection | null): {
         provide: AgentRuntimeService,
         useValue: {
           detection: () => detection,
+          detectionPending: () => pending,
           verifyToolPath: m.verifyToolPath,
           setDetection: m.setDetection,
           refreshDetections: m.refreshDetections,
@@ -117,6 +118,17 @@ describe("RuntimeRowComponent", () => {
     const { el } = mount(det({ status: "missing" }));
     expect(el.querySelector(".set-rt-input")).not.toBeNull();
     expect(el.querySelector('kj-button[kjVariant="default"]')?.textContent).toContain("Use this path");
+  });
+
+  it("probe still out: says checking, and offers no locate editor yet", () => {
+    // detection() is null both before the sweep answers and when the tool is
+    // genuinely absent — only detectionPending() tells the two apart, and
+    // prompting for a path for a tool that may well be on PATH is noise.
+    const { el } = mount(null, true);
+    expect(el.querySelector(".set-rt-st")?.textContent).toContain("checking");
+    expect(el.querySelector(".set-rt-st kj-spinner")).not.toBeNull();
+    expect(el.textContent).not.toContain("not installed");
+    expect(el.querySelector(".set-rt-input")).toBeNull();
   });
 
   it("verify success: persists toolPath + folds in the detection + closes editor", async () => {

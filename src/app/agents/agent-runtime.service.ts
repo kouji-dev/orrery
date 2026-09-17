@@ -62,6 +62,13 @@ export class AgentRuntimeService {
   /** Full per-tool detection (path/version/status/reason), driving the Settings
    *  → Agent defaults runtime rows. Keyed by tool id. */
   readonly detections = signal<Record<string, ToolDetection>>({});
+  /** Has the FIRST backend detection sweep returned? Until it has, no tool has
+   *  a verdict — and a tile that paints "not found" there is guessing, which
+   *  reads as fact (the reported "why does it say not installed when it is?"
+   *  confusion). A LATER re-probe (after a path save) deliberately leaves this
+   *  true: the last known verdict keeps rendering instead of flashing back to
+   *  a spinner on every save. */
+  private readonly sweepDone = signal(false);
   // Per-agent ROLLING list of hook-driven activity entries — each
   // `{detail, event, kind}` where detail is the latest message content scraped
   // from the agent's transcript (assistant text / thinking / tool use) or the
@@ -284,6 +291,13 @@ export class AgentRuntimeService {
     return this.detections()[id] ?? null;
   }
 
+  /** True while this tool has never been given a verdict: the first sweep is
+   *  still out. Callers MUST render this as in-progress, never as "missing" —
+   *  `detection()` returning null here means "not asked yet", not "absent". */
+  detectionPending(id: string): boolean {
+    return !this.sweepDone() && !this.detections()[id];
+  }
+
   /** Re-run backend detection for all tools (honors saved manual path
    *  overrides). Called on startup and after a path is set/reverted. */
   async refreshDetections(): Promise<void> {
@@ -292,6 +306,10 @@ export class AgentRuntimeService {
       this.applyDetections(list);
     } catch {
       // backend unavailable (plain `ng serve`) — leave tools optimistically on
+    } finally {
+      // Also on the failure path: the probe is OVER. Staying "checking" forever
+      // would spin a tile that will never get an answer.
+      this.sweepDone.set(true);
     }
   }
 

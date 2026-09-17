@@ -12,11 +12,11 @@ import {
 } from "@angular/core";
 import { AGENT_TOOLS, effortLevelsFor, modelOption } from "../data";
 import { BRIDGE } from "../data-source/bridge";
-import { AutoApprovePolicy, CostRate, SettingsEvents } from "../models";
+import { AutoApprovePolicy, CostRate, SettingsEvents, ToolDetection } from "../models";
 import { COST_FEATURES_ENABLED } from "../cost/cost-flags";
 import { DEFAULT_RATES } from "../cost/estimate.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
-import { ModelCatalogService } from "../agents/model-catalog.service";
+import { modelDiscoveryHint, ModelCatalogService } from "../agents/model-catalog.service";
 import { AppCommand, CommandRegistryService, terminalDefaultOf } from "../commands/command-registry.service";
 import { bindingFromEvent, kbdLabel } from "../commands/fuzzy";
 import { DiagnosticsService } from "../shared/diagnostics.service";
@@ -441,24 +441,39 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                   <div class="tool-tiles">
                     @for (tl of tools; track tl.id) {
                       @let e = runtime.detection(tl.id);
+                      @let checking = runtime.detectionPending(tl.id);
                       @let runnable = e?.status === 'ok';
+                      @let broken = e?.status === 'error';
                       @let on = s.defaultTool === tl.id;
+                      <!-- "checking" is NOT a verdict: until the backend probe
+                           answers, this tile must not dim, badge or warn — a
+                           guess drawn in the "not found" style is read as fact. -->
                       <kj-button kjVariant="ghost" class="tool-tile set-tool"
-                        [class.on]="on" [class.warn]="on && !runnable" [class.off]="!runnable && !on"
-                        [title]="runnable ? e?.path : (e?.status === 'error' ? 'Found but can’t run — set its path below' : 'Not installed — locate it below')"
+                        [class.on]="on" [class.warn]="on && !runnable && !checking" [class.off]="!runnable && !on && !checking"
+                        [title]="checking ? 'Checking your PATH for this binary…' : (runnable ? e?.path : (broken ? reasonOf(e) : 'Not installed — locate it below'))"
                         (click)="store.set({ defaultTool: tl.id })">
                         <app-tool-badge [tool]="tl.id" [size]="22" />
                         <div class="tn">{{ tl.name }}</div>
                         <div class="ts">
-                          @if (runnable) {
+                          @if (checking) {
+                            <kj-spinner kjSize="xs" [kjAriaLabel]="'Checking whether ' + tl.name + ' is installed'" />checking…
+                          } @else if (runnable) {
                             <span class="dot done" style="width:var(--sp-2);height:var(--sp-2)"></span>detected{{ e?.version ? ' · v' + e?.version : '' }}
-                          } @else if (e?.status === 'error') {
+                          } @else if (broken) {
                             <span style="color:var(--set-amber)">can’t run</span>
                           } @else { not installed }
                         </div>
+                        <!-- The backend already knows WHY (timed out / couldn't
+                             launch / exited N + stderr). Burying that in the
+                             [title] made a failing tool look like a mystery, so
+                             the reason is on the tile; the tooltip keeps the
+                             untruncated text for the tail a 3-line clamp eats. -->
+                        @if (broken) { <div class="ts rz" [title]="reasonOf(e)">{{ reasonOf(e) }}</div> }
                         @if (on) { <span class="pick"><app-icon size="md" name="check" /></span> }
-                        @if (!runnable && !on) {
-                          <span class="nf" [class.amber]="e?.status === 'error'">{{ e?.status === 'error' ? 'needs path' : 'not found' }}</span>
+                        @if (checking) {
+                          <span class="nf">checking</span>
+                        } @else if (!runnable && !on) {
+                          <span class="nf" [class.amber]="broken">{{ broken ? 'can’t run' : 'not found' }}</span>
                         }
                       </kj-button>
                     }
@@ -481,7 +496,11 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
                       @for (m of modelChoices(); track m.id) {
                         <kj-combobox-option [value]="m.id">{{ m.label }}<span class="set-model-id">{{ m.id }}</span></kj-combobox-option>
                       }
-                      <kj-combobox-empty>Custom — this CLI doesn’t expose a list. Enter applies the typed id.</kj-combobox-empty>
+                      <!-- A tool that CAN enumerate (pi, cursor) gets the probe's
+                           own story — absent CLI vs. failed probe vs. signed out
+                           all used to render as this one "doesn't expose a list"
+                           line, which is only true for the curated tools. -->
+                      <kj-combobox-empty>{{ modelTool().dynamicModels ? discoveryHint() : 'Custom — this CLI doesn’t expose a list. Enter applies the typed id.' }}</kj-combobox-empty>
                     </kj-combobox>
                   </div>
                 </app-set-row>
@@ -757,6 +776,14 @@ const EVENTS: ReadonlyArray<{ k: keyof SettingsEvents; label: string; help: stri
      collided with the icon, so it takes the micro step (design uses 8px) */
   max-width:calc(100% - var(--sp-9));overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .set-tool .nf.amber{color:var(--set-amber);border-color:color-mix(in oklch,var(--set-amber),transparent 55%);}
+/* The failure reason, ON the tile. It opts OUT of the shared one-line ellipsis
+   (.tool-tile .ts in styles.css) — a single clipped line of "found, but exited
+   with code 127 — bash: pi: command not found" shows nothing but "found, but".
+   Three wrapped lines carry the whole sentence at this width; the [title] holds
+   the remainder for the rare longer stderr. Out-specifies the shared rule
+   (0,3,0 vs 0,2,0) rather than tying on it, so stylesheet order can't decide. */
+.set-tool .ts.rz{white-space:normal;overflow:hidden;text-overflow:clip;font-size:var(--fs-micro);line-height:1.35;
+  color:var(--set-amber);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;}
 
 /* ── chips / amber / fields ── */
 .set-warn{display:inline-flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-5);border-radius:8px;
@@ -982,6 +1009,23 @@ export class SettingsModalComponent {
     }
     return tool.models;
   });
+  /** Why the SELECTED tool's dynamic picker is empty — probing / CLI absent /
+   *  probe failed / ran fine but signed out. See `modelDiscoveryHint`. */
+  readonly discoveryHint = computed(() => {
+    const tool = this.modelTool();
+    return modelDiscoveryHint(tool, {
+      probed: this.catalog.isProbed(tool.id),
+      error: this.catalog.error(tool.id),
+      empty: !this.catalog.models(tool.id).length,
+      detection: this.runtime.detection(tool.id),
+    });
+  });
+  /** The backend's actionable explanation for an `error` tool, verbatim. The
+   *  fallback only covers a backend that forgot to send one — never invent a
+   *  cause, since "needs path" was wrong exactly when it mattered. */
+  reasonOf(e: ToolDetection | null | undefined): string {
+    return e?.reason?.trim() || "found, but it wouldn’t run — set its path below";
+  }
   readonly detectedTools = computed(() => AGENT_TOOLS.filter((t) => this.runtime.toolAvailable(t.id)));
   readonly branchPreview = computed(() => {
     const s = this.store.settings();

@@ -83,6 +83,11 @@ pub fn run() {
             // settings live in the same DB; the agent service consults them at
             // spawn time (branch template + worktree root)
             let settings_service = settings::SettingsService::new(pool.clone());
+            // Tool detection reuses the last run's successful `--version` probes,
+            // so the first Settings open after a cold start costs a directory
+            // sweep and no process spawns. Resolution is never cached — only the
+            // probe result — so a PATH edit still lands on the next pass.
+            agents::adapters::probe_cache::attach(settings_service.clone());
             // Extension host: grammar/server packs under app-data/extensions.
             // Managed before every consumer (symbols, lsp): startup() promotes
             // pending versions and prunes tmp/ + stale dirs BEFORE any dylib

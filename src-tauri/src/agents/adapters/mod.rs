@@ -18,12 +18,15 @@ mod codex;
 mod cursor;
 mod gemini;
 mod pi;
+pub mod probe_cache;
+mod resolve;
 
 pub use claude::ClaudeAdapter;
 pub use codex::CodexAdapter;
 pub use cursor::CursorAdapter;
 pub use gemini::GeminiAdapter;
 pub use pi::PiAdapter;
+pub use resolve::in_home;
 
 /// Identity + connection a orrery-launched agent's hook needs to broker with the
 /// bridge. Stamped onto the agent process env at launch (the `ORRERY_*` vars);
@@ -309,6 +312,34 @@ pub trait AgentAdapter: Send + Sync {
     fn probe_version(&self, path: &str) -> Result<Option<String>, String> {
         run_probe(path, &self.version_args()).map(|out| self.parse_version(&out))
     }
+
+    /// [`probe_version`](AgentAdapter::probe_version) for a FALLBACK candidate:
+    /// the short ceiling and no retry — see [`FALLBACK_PROBE_TIMEOUT`].
+    fn probe_version_fallback(&self, path: &str) -> Result<Option<String>, String> {
+        run_probe_for(path, &self.version_args(), FALLBACK_PROBE_TIMEOUT)
+            .map(|out| self.parse_version(&out))
+    }
+
+    // ── where this tool installs, beyond PATH ──────────────────────────────
+
+    /// Directories this specific CLI is known to install into, swept when PATH
+    /// has nothing. Each tool's own installer writes to a fixed place and adds
+    /// it to the USER's PATH; a GUI app's inherited environment block can easily
+    /// predate that edit (see the [`resolve`] module docs), which is exactly the
+    /// case these hints cover. Default: none.
+    fn extra_dirs(&self) -> Vec<PathBuf> {
+        Vec::new()
+    }
+
+    /// Every on-disk hit for this tool's binary, best first: PATH (process, then
+    /// live registry) ahead of this adapter's
+    /// [`extra_dirs`](AgentAdapter::extra_dirs) and the shared package-manager
+    /// bins. These are FILES THAT EXIST, not tools proven to work — see
+    /// [`resolve::candidates`] — so a caller that can spawn should probe down the
+    /// list rather than trust the head of it.
+    fn candidates(&self) -> Vec<PathBuf> {
+        resolve::candidates(self.binary(), &self.extra_dirs())
+    }
 }
 
 /// Every known adapter, installed or not.
@@ -366,25 +397,68 @@ pub fn installed(overrides: &BTreeMap<String, String>) -> Vec<ToolStatus> {
         .collect()
 }
 
-/// Detect one tool via its `adapter`: resolve a path (manual override wins over
-/// PATH), then run the adapter's [`probe_version`](AgentAdapter::probe_version).
-/// See [`ToolStatus`] for the three outcomes.
+/// Detect one tool via its `adapter`: gather every on-disk candidate (a manual
+/// override replaces the search entirely), then run the adapter's
+/// [`probe_version`](AgentAdapter::probe_version) against them IN RANK ORDER and
+/// report the first that actually launches. See [`ToolStatus`] for the outcomes.
+///
+/// Probing the whole list, rather than the single best-ranked file, is what keeps
+/// a LEFTOVER launcher from masking a real install. Uninstalling one of these
+/// CLIs routinely leaves its shim on disk — an npm `.cmd` whose `node_modules`
+/// was deleted, a config tree that outlives the binary — and such a shim is
+/// indistinguishable from a working one until you run it. Answering from the
+/// first file found would then report a perfectly healthy machine as "needs
+/// path" purely because a dead file sorted higher.
+///
+/// When NOTHING runs, the report describes the best-ranked candidate, so the
+/// reason the user sees ("couldn't launch", "exited with code…") is the one for
+/// the copy their own shell would have picked.
 pub fn detect_one(adapter: &dyn AgentAdapter, manual: Option<&str>) -> ToolStatus {
     let id = adapter.id().to_string();
-    let (path, source) = match manual {
-        Some(p) => (Some(p.to_string()), "manual"),
-        None => (
-            which_path(adapter.binary()).map(|p| p.display().to_string()),
-            "path",
-        ),
+    // A manual override is the user's explicit instruction: it is the only
+    // candidate, and it is reported verbatim even when it does not exist, so the
+    // Settings row can explain that the path they typed is wrong.
+    let (candidates, source) = match manual {
+        Some(p) => (vec![PathBuf::from(p)], "manual"),
+        None => (adapter.candidates(), "path"),
     };
-    let Some(path) = path else {
+    let Some((first, rest)) = candidates.split_first() else {
         return ToolStatus::missing(id);
     };
-    match adapter.probe_version(&path) {
-        Ok(version) => ToolStatus::ok(id, path, source, version),
-        Err(reason) => ToolStatus::error(id, path, source, reason),
+    let first = first.display().to_string();
+    // The best-ranked candidate is the common case and the one whose failure the
+    // user is told about; everything after it is a fallback, and is probed on the
+    // short no-retry ceiling (see [`FALLBACK_PROBE_TIMEOUT`]).
+    let first_failure = match probe_cached(&first, || adapter.probe_version(&first)) {
+        Ok(version) => return ToolStatus::ok(id, first, source, version),
+        Err(reason) => reason,
+    };
+    for cand in rest {
+        let path = cand.display().to_string();
+        if let Ok(version) = probe_cached(&path, || adapter.probe_version_fallback(&path)) {
+            log::debug!("{id}: {first} did not run ({first_failure}); using {path}");
+            return ToolStatus::ok(id, path, source, version);
+        }
     }
+    ToolStatus::error(id, first, source, first_failure)
+}
+
+/// Run `probe` unless [`probe_cache`] already has proof that this exact file
+/// answers, and record a success. The cache is consulted for the PROBE only —
+/// never for which file to probe, which is re-resolved from scratch every pass
+/// so a PATH edit or an install can never be served stale.
+fn probe_cached(
+    path: &str,
+    probe: impl FnOnce() -> Result<Option<String>, String>,
+) -> Result<Option<String>, String> {
+    if let Some(version) = probe_cache::get(path) {
+        return Ok(version);
+    }
+    let result = probe();
+    if let Ok(version) = &result {
+        probe_cache::remember(path, version.clone());
+    }
+    result
 }
 
 /// Verify a manual `path` for tool `id` (Settings "Use this path"). Routes
@@ -400,18 +474,43 @@ pub fn detect_at(id: &str, path: &str) -> ToolStatus {
     }
 }
 
-/// Enumerate the models `id`'s CLI accepts by running its own listing command at
-/// `path` (see [`AgentAdapter::list_models_args`]). `Ok(ids)` in the spelling the
-/// tool's `--model` flag takes; `Err(reason)` when the tool has no listing command,
-/// is unknown, or the probe failed. Never invents entries — an empty `Ok` means the
-/// tool ran and reported none (no API keys configured, typically).
-pub fn models_at(id: &str, path: &str) -> Result<Vec<String>, String> {
+/// Enumerate the models tool `id` accepts, in the spelling its `--model` flag
+/// takes. Never invents entries — an empty `Ok` means the CLI ran and reported
+/// none, which is the truth for a tool that is signed out or has no API keys.
+///
+/// Resolves the binary exactly as detection does: the user's manual override when set, else every on-disk
+/// candidate in rank order until one answers. `Err` when the tool isn't
+/// installed, has no listing command, or nothing we found could run.
+///
+/// Walking the candidates matters as much here as it does in [`detect_one`] — a
+/// leftover shim at the head of the list would otherwise report "not installed"
+/// for a tool whose working copy sits one entry further down, and empty the
+/// model picker for no visible reason. As in [`detect_one`], only the first
+/// candidate gets the full [`MODELS_TIMEOUT`]; the rest are screened on
+/// [`FALLBACK_MODELS_TIMEOUT`] so the walk stays bounded.
+pub fn models_for(id: &str, manual: Option<&str>) -> Result<Vec<String>, String> {
     let adapter = adapter_for(id).ok_or_else(|| format!("unknown tool `{id}`"))?;
     let args = adapter
         .list_models_args()
         .ok_or_else(|| format!("`{id}` has no model-listing command"))?;
-    let out = run_probe(path, &args)?;
-    Ok(adapter.parse_models(&out))
+    let candidates: Vec<PathBuf> = match manual {
+        Some(p) => vec![PathBuf::from(p)],
+        None => adapter.candidates(),
+    };
+    let Some((first, rest)) = candidates.split_first() else {
+        return Err(format!("`{id}` is not installed"));
+    };
+    let first_failure = match run_probe_for(&first.display().to_string(), &args, MODELS_TIMEOUT) {
+        Ok(out) => return Ok(adapter.parse_models(&out)),
+        Err(reason) => reason,
+    };
+    for cand in rest {
+        if let Ok(out) = run_probe_for(&cand.display().to_string(), &args, FALLBACK_MODELS_TIMEOUT)
+        {
+            return Ok(adapter.parse_models(&out));
+        }
+    }
+    Err(first_failure)
 }
 
 /// Strip ANSI SGR/CSI escapes from CLI output. Tools colour their tables (pi uses
@@ -446,11 +545,70 @@ pub fn strip_ansi(s: &str) -> String {
     out
 }
 
+/// How long a `--version`-shaped probe may take before detection gives up.
+///
+/// Was 6s, which produced FALSE "needs path" tiles on Windows: an on-access
+/// virus scan of a cold ~100MB agent binary (claude ships a native `claude.exe`;
+/// codex/cursor are similar) routinely runs past six seconds on its FIRST
+/// launch after boot or an upgrade, and a timed-out probe is reported exactly
+/// like a broken binary. The tool is on disk, on PATH and perfectly runnable —
+/// we just didn't wait. Warm, every one of these answers in well under a second,
+/// so a generous ceiling costs nothing in the normal case and is only ever paid
+/// by a genuinely wedged binary.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Ceiling for candidates 2..N of the probe walk, which get no retry either.
+///
+/// [`PROBE_TIMEOUT`] and its retry are sized for ONE question: "will the binary
+/// the user's own shell resolves actually start, even cold, even while a virus
+/// scanner reads all 100MB of it first?" That cost is paid by the image we are
+/// about to launch, once, and the retry exists precisely because the first
+/// attempt is what warms it.
+///
+/// A fallback candidate is a different question — "does this file run AT ALL?"
+/// — asked of a leftover shim or a second install, and it answers in
+/// milliseconds or it never answers. Giving each of them the generous ceiling
+/// plus a retry turned a hard 6s worst case into 6 x (20 + 20) = 240s of a
+/// spinning Settings pane, for a machine whose only real problem is litter.
+const FALLBACK_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Ceiling for a model-listing probe. Higher than [`PROBE_TIMEOUT`] because
+/// these are NETWORK calls, not a version string: `pi --list-models` refreshes
+/// each configured provider's catalog before printing, and `cursor-agent models`
+/// asks the signed-in account. A cold, uncached run on a slow link legitimately
+/// needs tens of seconds — and timing out here is what silently emptied pi's
+/// model picker.
+const MODELS_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// [`FALLBACK_PROBE_TIMEOUT`]'s counterpart for the model walk. Not 3s: the
+/// listing IS a network round trip even for the candidate we are only screening,
+/// so the floor is what a warm, already-authenticated catalog fetch needs rather
+/// than what a local process start needs. Bounds the walk at 60 + 5 x 10 = 110s
+/// instead of 6 x 60 = 360s.
+const FALLBACK_MODELS_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Shared probe infra: run `<path> <args…>` (best-effort, bounded on a worker
 /// thread so a wedged binary can't hang detection). `Ok(combined stdout+stderr)`
 /// when it exits cleanly; `Err(reason)` when it can't launch / times out / exits
 /// non-zero. Adapters layer their version parsing on top (see `probe_version`).
+///
+/// A TIMEOUT is retried once. The dominant cause of a slow first probe is a
+/// one-off cost that the first attempt itself pays down — an on-access virus
+/// scan of the image, a cold page-in of a large binary — so the retry runs
+/// against a warm file and overwhelmingly succeeds. Every other failure (cannot
+/// launch, non-zero exit) is deterministic and is returned immediately.
 pub fn run_probe(path: &str, args: &[&str]) -> Result<String, String> {
+    match run_probe_for(path, args, PROBE_TIMEOUT) {
+        Err(reason) if reason.starts_with("timed out") => {
+            log::debug!("probe of {path} timed out; retrying once against a warm image");
+            run_probe_for(path, args, PROBE_TIMEOUT)
+        }
+        other => other,
+    }
+}
+
+/// [`run_probe`] with an explicit ceiling and no retry — the single attempt.
+pub fn run_probe_for(path: &str, args: &[&str], timeout: Duration) -> Result<String, String> {
     // Resolve script-shim / extensionless paths to something CreateProcessW can
     // launch (Windows) — e.g. npm's bare `claude` shim → `cmd.exe /c call
     // claude.cmd`. Without this, probing such a path fails os error 193.
@@ -470,8 +628,11 @@ pub fn run_probe(path: &str, args: &[&str]) -> Result<String, String> {
     std::thread::spawn(move || {
         let _ = tx.send(cmd.output());
     });
-    match rx.recv_timeout(Duration::from_secs(6)) {
-        Err(_) => Err("timed out — the binary didn’t respond".into()),
+    match rx.recv_timeout(timeout) {
+        Err(_) => Err(format!(
+            "timed out — the binary didn’t respond within {}s",
+            timeout.as_secs()
+        )),
         Ok(Err(e)) => Err(format!("couldn’t launch — {e}")),
         Ok(Ok(out)) => {
             if out.status.success() {
@@ -918,22 +1079,17 @@ fn windows_launch_prefix(path: &str) -> (String, Vec<String>) {
     }
 }
 
-/// Resolve `cmd` to its full path on PATH (first match, honoring PATHEXT-style
-/// extensions on Windows). Pure filesystem check — never spawns. `None` when
-/// nothing matches.
+/// Resolve `cmd` to a real executable. Sweeps the process PATH, the LIVE
+/// registry PATH and the well-known package-manager bins, trying the runnable
+/// extensions before the extensionless shim — see [`resolve`] for why each of
+/// those matters. Pure filesystem check; never spawns. `None` when nothing
+/// matches.
+///
+/// Prefer [`AgentAdapter::candidates`] when you have an adapter in hand: it adds
+/// that tool's own install locations to the sweep, and reports every hit rather
+/// than only the best-ranked one.
 pub fn which_path(cmd: &str) -> Option<PathBuf> {
-    let paths = std::env::var_os("PATH")?;
-    let exts: &[&str] = if cfg!(windows) {
-        &["", ".exe", ".cmd", ".bat"]
-    } else {
-        &[""]
-    };
-    std::env::split_paths(&paths).find_map(|dir| {
-        exts.iter().find_map(|ext| {
-            let cand = dir.join(format!("{cmd}{ext}"));
-            cand.is_file().then_some(cand)
-        })
-    })
+    resolve::lookup(cmd, &[])
 }
 
 #[cfg(test)]
@@ -1276,6 +1432,282 @@ mod tests {
         assert!(st.reason.is_some(), "an error carries a reason");
     }
 
+    /// An adapter whose binary name is unique to the test and whose search is
+    /// confined to directories the test owns, so detection can be driven over a
+    /// filesystem we control.
+    struct FakeAdapter {
+        binary: String,
+        dirs: Vec<PathBuf>,
+        /// The probe argv this fake answers. A test that stands a REAL
+        /// interpreter up as its "install" overrides it with an argv that
+        /// interpreter is guaranteed to exit zero on, so the verdict comes from
+        /// which FILE detection picked and never from how the host's shell
+        /// happens to treat `--version`.
+        version_args: Vec<&'static str>,
+    }
+    impl FakeAdapter {
+        fn new(binary: &str, dirs: Vec<PathBuf>) -> Self {
+            Self { binary: binary.into(), dirs, version_args: vec!["--version"] }
+        }
+    }
+    impl AgentAdapter for FakeAdapter {
+        fn id(&self) -> &str {
+            "fake"
+        }
+        fn binary(&self) -> &str {
+            &self.binary
+        }
+        fn base_argv(&self) -> Vec<String> {
+            vec![self.binary.clone()]
+        }
+        fn extra_dirs(&self) -> Vec<PathBuf> {
+            self.dirs.clone()
+        }
+        fn version_args(&self) -> Vec<&'static str> {
+            self.version_args.clone()
+        }
+        fn install_hooks(&self, _home: &Path, _bin: &Path) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// A file that EXISTS but cannot run is not an installed tool. This is the
+    /// uninstall-leftover shape: the launcher survives its `node_modules`, or a
+    /// config tree outlives the binary, and reporting it as "found but broken"
+    /// (the amber "needs path" tile) is wrong — nothing is installed.
+    #[test]
+    fn a_leftover_shim_that_cannot_run_is_reported_with_its_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        // Not a program in any format on any platform.
+        std::fs::write(dir.path().join("orrerydead"), "this is not an executable").unwrap();
+        let a = FakeAdapter::new("orrerydead", vec![dir.path().to_path_buf()]);
+        let st = detect_one(&a, None);
+        assert_eq!(st.status, "error", "a dead file never reports as ok");
+        assert!(!st.available);
+        assert!(st.reason.is_some(), "the user is told why it didn't run");
+    }
+
+    /// …and when a WORKING copy sits further down the candidate list, it wins.
+    /// Answering from the first file found would report this machine as broken
+    /// purely because a dead file sorted higher.
+    #[test]
+    fn a_working_copy_further_down_the_list_beats_a_dead_one() {
+        let dead = tempfile::tempdir().unwrap();
+        let live = tempfile::tempdir().unwrap();
+        // The host's own shell, copied under our test name so it is found by a
+        // directory sweep and genuinely answers a probe. `exit 0` rather than
+        // `--version`, because a shell's handling of an unknown flag differs per
+        // platform and the point under test is the CHOICE of file.
+        let (name, real, args) = if cfg!(windows) {
+            ("orrerypair.exe", which_path("cmd"), vec!["/c", "exit", "0"])
+        } else {
+            ("orrerypair", which_path("sh"), vec!["-c", "exit 0"])
+        };
+        let Some(real) = real else {
+            return; // no interpreter to copy — nothing to assert
+        };
+        std::fs::write(dead.path().join(name), "not an executable").unwrap();
+        std::fs::copy(&real, live.path().join(name)).unwrap();
+
+        let mut a = FakeAdapter::new(
+            name.trim_end_matches(".exe"),
+            vec![dead.path().to_path_buf(), live.path().to_path_buf()],
+        );
+        a.version_args = args;
+        let st = detect_one(&a, None);
+        assert_eq!(st.status, "ok", "a dead file ahead of a live one is not a failure");
+        assert_eq!(
+            st.path.as_deref(),
+            Some(live.path().join(name).to_string_lossy().as_ref()),
+            "the runnable copy is the one reported",
+        );
+    }
+
+    /// Nothing on disk at all is "missing", never "error" — the tiles say "not
+    /// installed" rather than sending the user to a path picker.
+    #[test]
+    fn nothing_on_disk_reports_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = FakeAdapter::new("orrery-never-installed-xyzzy", vec![dir.path().to_path_buf()]);
+        let st = detect_one(&a, None);
+        assert_eq!(st.status, "missing");
+        assert!(st.path.is_none());
+    }
+
+    /// The extension ranking reaches DETECTION, not just
+    /// [`resolve::candidates`]: npm writes `tool` beside `tool.exe`, and the
+    /// extensionless one is what `CreateProcessW` rejects outright (os error
+    /// 193). Probing it first would report an unrunnable path for a perfectly
+    /// healthy install.
+    #[cfg(windows)]
+    #[test]
+    fn a_runnable_extension_is_probed_before_the_extensionless_shim() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = which_path("cmd").expect("cmd.exe is always present");
+        std::fs::write(dir.path().join("orrerytrio"), "#!/bin/sh\n").unwrap();
+        std::fs::copy(&real, dir.path().join("orrerytrio.exe")).unwrap();
+
+        let mut a = FakeAdapter::new("orrerytrio", vec![dir.path().to_path_buf()]);
+        a.version_args = vec!["/c", "exit", "0"];
+        let st = detect_one(&a, None);
+        assert_eq!(st.status, "ok");
+        assert_eq!(
+            st.path.as_deref(),
+            Some(dir.path().join("orrerytrio.exe").to_string_lossy().as_ref()),
+        );
+    }
+
+    /// The probe walk's WORST CASE, stated as arithmetic rather than measured,
+    /// because measuring it means sitting through it. The generous ceiling plus
+    /// its retry is spent once, on the candidate the user's shell would run;
+    /// every other candidate is screened on the short one. Before the ceiling was
+    /// raised the whole walk was a hard 6s; giving all six candidates 20s + a
+    /// retry would have made it 240s of a spinning Settings pane.
+    #[test]
+    fn the_probe_walk_is_bounded_well_under_a_minute() {
+        let fallbacks = (resolve::MAX_CANDIDATES - 1) as u32;
+        let detect = PROBE_TIMEOUT * 2 + FALLBACK_PROBE_TIMEOUT * fallbacks;
+        assert!(
+            detect <= Duration::from_secs(60),
+            "detection ceiling {detect:?} — a user is watching this"
+        );
+        let models = MODELS_TIMEOUT + FALLBACK_MODELS_TIMEOUT * fallbacks;
+        assert!(models <= Duration::from_secs(120), "model walk ceiling {models:?}");
+        assert!(
+            FALLBACK_PROBE_TIMEOUT < PROBE_TIMEOUT && FALLBACK_MODELS_TIMEOUT < MODELS_TIMEOUT,
+            "a fallback is screened, not waited on",
+        );
+    }
+
+    /// …and the short ceiling is real, not just declared: a fallback candidate
+    /// that HANGS must be abandoned at [`FALLBACK_PROBE_TIMEOUT`] with no retry.
+    /// If it inherited the first candidate's treatment this would take 40s.
+    #[test]
+    fn a_hanging_fallback_candidate_is_cut_off_without_a_retry() {
+        let dead = tempfile::tempdir().unwrap();
+        let slow = tempfile::tempdir().unwrap();
+        // First candidate: fails instantly (not a program in any format), so the
+        // elapsed time measured is the FALLBACK's alone.
+        let (name, real, args) = if cfg!(windows) {
+            // `ping -n 30` is the portable "sleep" cmd.exe has; stdin is null, so
+            // nothing can cut it short but our own timeout.
+            ("orreryhang.exe", which_path("cmd"), vec!["/c", "ping", "-n", "30", "127.0.0.1"])
+        } else {
+            ("orreryhang", which_path("sh"), vec!["-c", "sleep 30"])
+        };
+        let Some(real) = real else {
+            return; // no interpreter to copy — nothing to assert
+        };
+        std::fs::write(dead.path().join(name), "not an executable").unwrap();
+        std::fs::copy(&real, slow.path().join(name)).unwrap();
+
+        let mut a = FakeAdapter::new(
+            name.trim_end_matches(".exe"),
+            vec![dead.path().to_path_buf(), slow.path().to_path_buf()],
+        );
+        a.version_args = args;
+        let started = std::time::Instant::now();
+        let st = detect_one(&a, None);
+        let elapsed = started.elapsed();
+        assert_eq!(st.status, "error", "nothing ran: {st:?}");
+        assert!(
+            elapsed < FALLBACK_PROBE_TIMEOUT * 2,
+            "a fallback waits {FALLBACK_PROBE_TIMEOUT:?} once, not twice: took {elapsed:?}",
+        );
+    }
+
+    /// The cache never answers "which file", only "does this file run". A tool
+    /// that moves — a PATH edit, a version-manager switch, an install into a
+    /// directory that now outranks the old one — must be picked up on the very
+    /// next pass, which is the whole reason resolution is re-swept every time.
+    #[test]
+    fn a_moved_install_is_resolved_afresh_even_after_a_cached_probe() {
+        let (name, real, args) = if cfg!(windows) {
+            ("orrerymoved.exe", which_path("cmd"), vec!["/c", "exit", "0"])
+        } else {
+            ("orrerymoved", which_path("sh"), vec!["-c", "exit 0"])
+        };
+        let Some(real) = real else { return };
+        let bin = name.trim_end_matches(".exe");
+
+        let old = tempfile::tempdir().unwrap();
+        std::fs::copy(&real, old.path().join(name)).unwrap();
+        let mut a = FakeAdapter::new(bin, vec![old.path().to_path_buf()]);
+        a.version_args = args.clone();
+        let first = detect_one(&a, None);
+        assert_eq!(first.status, "ok");
+        assert!(first.path.as_deref().unwrap().starts_with(&*old.path().to_string_lossy()));
+
+        // Same tool, different directory — as if the user's PATH now points
+        // elsewhere. A cached RESOLUTION would keep reporting the old copy.
+        let new = tempfile::tempdir().unwrap();
+        std::fs::copy(&real, new.path().join(name)).unwrap();
+        let mut b = FakeAdapter::new(bin, vec![new.path().to_path_buf()]);
+        b.version_args = args;
+        let moved = detect_one(&b, None);
+        assert_eq!(moved.status, "ok");
+        assert!(
+            moved.path.as_deref().unwrap().starts_with(&*new.path().to_string_lossy()),
+            "the new location wins: {moved:?}",
+        );
+    }
+
+    /// A cache HIT skips the spawn outright — proven by seeding a version for a
+    /// file that could never run, and watching detection report it anyway.
+    #[test]
+    fn a_cached_probe_result_skips_the_spawn_entirely() {
+        let dir = tempfile::tempdir().unwrap();
+        let name = if cfg!(windows) { "orrerycached.exe" } else { "orrerycached" };
+        let path = dir.path().join(name);
+        std::fs::write(&path, "not an executable in any format").unwrap();
+        probe_cache::remember(&path.to_string_lossy(), Some("4.5.6".into()));
+
+        let a = FakeAdapter::new(name.trim_end_matches(".exe"), vec![dir.path().to_path_buf()]);
+        let st = detect_one(&a, None);
+        assert_eq!(st.status, "ok", "the cached proof stands in for the probe");
+        assert_eq!(st.version.as_deref(), Some("4.5.6"));
+    }
+
+    /// A FAILURE is never cached. Caching one would pin the amber "needs path"
+    /// tile in place for a timeout that was only ever a cold virus scan, and the
+    /// user would have no way to clear it short of touching the binary.
+    #[test]
+    fn a_failed_probe_is_not_remembered() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("orreryfailcache");
+        std::fs::write(&path, "not an executable").unwrap();
+        let a = FakeAdapter::new("orreryfailcache", vec![dir.path().to_path_buf()]);
+        assert_eq!(detect_one(&a, None).status, "error");
+        assert_eq!(
+            probe_cache::get(&path.to_string_lossy()),
+            None,
+            "next pass must probe again, not serve the failure",
+        );
+    }
+
+    /// Model listing routes through the same adapter table as detection, and says
+    /// WHY it has nothing rather than returning an empty catalog — an empty list
+    /// is reserved for "the CLI ran and reported no models", which is the honest
+    /// answer for a signed-out tool and must stay distinguishable from a failure.
+    #[test]
+    fn models_for_explains_every_way_it_can_fail() {
+        assert!(models_for("nope", None)
+            .unwrap_err()
+            .contains("unknown tool"));
+        assert!(models_for("claude", None)
+            .unwrap_err()
+            .contains("no model-listing command"));
+        let bogus = if cfg!(windows) {
+            "C:/nope/not-here.exe"
+        } else {
+            "/nope/not-here"
+        };
+        assert!(
+            models_for("pi", Some(bogus)).is_err(),
+            "a manual path that cannot run is an error, never an empty picker",
+        );
+    }
+
 
     #[test]
     fn argv_includes_task_only_on_first_launch() {
@@ -1547,5 +1979,67 @@ mod tests {
             "gemini global settings written"
         );
     }
-}
 
+    /// Real-machine smoke: run detection and the model probe against whatever
+    /// CLIs are actually installed here, and print the result. Opt-in, because
+    /// the outcome depends entirely on the box:
+    ///
+    /// ```text
+    /// cargo test --lib agents::adapters::tests::live_detection_smoke -- --ignored --nocapture
+    /// ```
+    ///
+    /// It asserts only the two invariants that must hold on ANY machine: a
+    /// second pass agrees with the first (the probe cache may skip spawns but
+    /// must never change a verdict), and every report carries a usable path or
+    /// an explanation. Everything else is printed for a human to read.
+    #[test]
+    #[ignore]
+    fn live_detection_smoke() {
+        let t = std::time::Instant::now();
+        let first = installed(&BTreeMap::new());
+        let cold = t.elapsed();
+        let t = std::time::Instant::now();
+        let second = installed(&BTreeMap::new());
+        let warm = t.elapsed();
+
+        println!("
+=== detect_tools: cold {cold:?}, warm {warm:?} ===");
+        for s in &first {
+            println!(
+                "{:<8} {:<8} {:<9} {}",
+                s.id,
+                s.status,
+                s.version.clone().unwrap_or_default(),
+                s.path.clone().unwrap_or_else(|| s.reason.clone().unwrap_or_default()),
+            );
+        }
+        for (a, b) in first.iter().zip(second.iter()) {
+            assert_eq!((&a.id, &a.status), (&b.id, &b.status), "cache changed a verdict");
+        }
+        for s in &first {
+            match s.status.as_str() {
+                "ok" => assert!(s.path.is_some(), "{} ok without a path", s.id),
+                "error" => assert!(s.reason.is_some(), "{} error without a reason", s.id),
+                _ => {}
+            }
+        }
+
+        for a in registry().iter().filter(|a| a.list_models_args().is_some()) {
+            let t = std::time::Instant::now();
+            match models_for(a.id(), None) {
+                Ok(m) => println!(
+                    "
+=== {} models ({:?}): {} ===
+{}",
+                    a.id(),
+                    t.elapsed(),
+                    m.len(),
+                    m.join("
+"),
+                ),
+                Err(e) => println!("
+=== {} models ({:?}): {e} ===", a.id(), t.elapsed()),
+            }
+        }
+    }
+}

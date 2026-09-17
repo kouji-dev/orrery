@@ -31,9 +31,15 @@ import { KjBadgeComponent, KjButtonComponent, KjInputComponent, KjSpinnerCompone
         <app-tool-badge [tool]="toolId()" [size]="22" />
         <div class="set-rt-id">
           <div class="set-rt-name">{{ toolName() }}</div>
+          <!-- while probing there is no verdict yet: the dot would be a guess,
+               so the spinner takes its place until the backend answers -->
           <div class="set-rt-st" [class.ok]="isOk()" [class.err]="d?.status === 'error'"
-            [class.miss]="!d || d?.status === 'missing'">
-            <span class="rd"></span>{{ statusLabel() }}
+            [class.miss]="!probing() && (!d || d?.status === 'missing')">
+            @if (probing()) {
+              <kj-spinner kjSize="xs" [kjAriaLabel]="'Checking whether ' + toolName() + ' is installed'" />
+            } @else {
+              <span class="rd"></span>
+            }{{ statusLabel() }}
           </div>
         </div>
         @if (isOk() && !editing()) {
@@ -170,6 +176,9 @@ export class RuntimeRowComponent {
   /** This tool's live detection (null until startup detection completes). */
   readonly det = computed(() => this.runtime.detection(this.toolId()));
   readonly isOk = computed(() => this.det()?.status === "ok");
+  /** The startup sweep hasn't answered for this tool yet — no verdict exists,
+   *  so neither the status line nor the locate editor may claim one. */
+  readonly probing = computed(() => this.runtime.detectionPending(this.toolId()));
 
   readonly editing = signal(false);
   readonly draft = signal("");
@@ -178,7 +187,7 @@ export class RuntimeRowComponent {
 
   /** The locate/verify editor shows whenever the tool isn't OK, or the user
    *  pressed "Change" on a working one. */
-  readonly showEditor = computed(() => !this.isOk() || this.editing());
+  readonly showEditor = computed(() => (!this.isOk() && !this.probing()) || this.editing());
 
   readonly statusLabel = computed(() => {
     const d = this.det();
@@ -187,7 +196,8 @@ export class RuntimeRowComponent {
       return d.version ? `detected · ${src} · v${d.version}` : `detected · ${src}`;
     }
     if (d?.status === "error") return "found, can’t run";
-    return "not installed";
+    // "not installed" is a claim; before the probe returns we have none.
+    return this.probing() ? "checking…" : "not installed";
   });
 
   begin(): void {

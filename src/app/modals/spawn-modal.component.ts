@@ -13,7 +13,7 @@ import { AGENT_TOOLS, defaultEffortFor, effortLevelsFor, modelOption } from "../
 import { Agent, AgentTool, Project, Ticket } from "../models";
 import { AgentActionsService } from "../agents/agent-actions.service";
 import { AgentRuntimeService } from "../agents/agent-runtime.service";
-import { ModelCatalogService } from "../agents/model-catalog.service";
+import { modelDiscoveryHint, ModelCatalogService } from "../agents/model-catalog.service";
 import { ProjectActionsService } from "../projects/project-actions.service";
 import { effectiveModel, SettingsStore, worktreeRootLabel } from "../settings/settings.store";
 import { TicketsStore } from "../stores/tickets.store";
@@ -34,6 +34,7 @@ import {
   KjInputComponent,
   KjInputGroupAddonComponent,
   KjInputGroupComponent,
+  KjSpinnerComponent,
   KjTabComponent,
   KjTabListComponent,
   KjTabsComponent,
@@ -100,6 +101,7 @@ function slugName(title: string): string {
     KjInputComponent,
     KjInputGroupAddonComponent,
     KjInputGroupComponent,
+    KjSpinnerComponent,
     KjTabComponent,
     KjTabListComponent,
     KjTabsComponent,
@@ -150,40 +152,50 @@ function slugName(title: string): string {
             </div>
           </div>
 
-          <!-- ticket (optional) — prefills + links Name and Initial prompt.
-               Same <app-select> as Project / Source branch / Model: the To do /
-               In progress split rides in as option GROUPS, which is what the
-               native <optgroup> was here for. -->
-          <div>
-            <label class="field-label">Ticket</label>
-            <app-select
-              [value]="ticketSelection()"
-              [options]="ticketOptions()"
-              (valueChange)="selectTicket($event)"
-              [style.--kj-border-default]="linked ? 'var(--ui-line)' : null"
-            />
-            @if (linked) {
-              <div style="display:flex;align-items:center;gap:var(--sp-2);margin-top:var(--sp-3);color:var(--ink-2)">
-                <app-icon name="link" size="sm" />Name linked · the ticket is prepended to the prompt on spawn
-              </div>
-            } @else {
-              <div style="font-size:var(--fs-meta);color:var(--ink-4);margin-top:var(--sp-3)">optional · attach a ticket to base the agent on it</div>
-            }
-          </div>
-
-          <!-- name (drives the worktree, unique per project) -->
-          <kj-field class="spawn-field">
-            <kj-field-label>Name</kj-field-label>
-            <kj-input-group class="spawn-name" [style.--kj-input-group-border-color]="linked ? 'var(--ui-focus)' : null">
-              <kj-input-group-addon><app-icon name="agent" size="sm" color="var(--ink-4)" /></kj-input-group-addon>
-              <kj-input
-                [value]="name()"
-                (input)="onNameInput($any($event.target).value)"
-                placeholder="e.g. fix-login-bug"
+          <!-- ticket + name — paired because picking the ticket IS what fills
+               the name: the prefill, the "Name linked" line and the focus-ring
+               tint all cross between these two, and stacked they sat far enough
+               apart that the link read as a coincidence. Both columns are the
+               same kj-field wrapper (the Ticket half used to be a bare div +
+               .field-label): one wrapper means one label type step, one
+               label→control gap, and therefore one baseline per row, which is
+               what the old pairing could not give. -->
+          <div class="spawn-split">
+            <!-- Same <app-select> as Project / Source branch / Model: the To do /
+                 In progress split rides in as option GROUPS, which is what the
+                 native <optgroup> was here for. -->
+            <kj-field class="spawn-field">
+              <kj-field-label>Ticket</kj-field-label>
+              <app-select
+                [value]="ticketSelection()"
+                [options]="ticketOptions()"
+                (valueChange)="selectTicket($event)"
+                [style.--kj-border-default]="linked ? 'var(--ui-line)' : null"
               />
-            </kj-input-group>
-            <kj-field-help class="trunc">unique per project · becomes the worktree → <span style="color:var(--ink-3)">{{ worktreePreview() }}</span></kj-field-help>
-          </kj-field>
+              <!-- only the LINKED state gets a line. The idle copy said the
+                   field was optional, which the None row already says from
+                   inside the picker, and it held a line of height under every
+                   dialog open to do it. -->
+              @if (linked) {
+                <kj-field-help class="spawn-linked"><app-icon name="link" size="sm" />Name linked · the ticket is prepended to the prompt on spawn</kj-field-help>
+              }
+            </kj-field>
+
+            <!-- name (drives the worktree, unique per project) -->
+            <kj-field class="spawn-field">
+              <kj-field-label>Name</kj-field-label>
+              <kj-input-group class="spawn-name" [style.--kj-input-group-border-color]="linked ? 'var(--ui-focus)' : null">
+                <kj-input-group-addon><app-icon name="agent" size="sm" color="var(--ink-4)" /></kj-input-group-addon>
+                <kj-input
+                  [value]="name()"
+                  (input)="onNameInput($any($event.target).value)"
+                  placeholder="e.g. fix-login-bug"
+                />
+              </kj-input-group>
+              <!-- no help line: the footer already prints the full destination
+                   (worktreeDest), so the preview here only restated its tail -->
+            </kj-field>
+          </div>
 
           <!-- agent tool -->
           <kj-field class="spawn-field">
@@ -192,8 +204,10 @@ function slugName(title: string): string {
                  Settings → Default agent; only the selected tile's accent tint
                  is per-instance, since it is the TOOL's colour, not the app's -->
             <div class="tool-tiles spawn-tools">
-              @for (tl of tools; track tl.id) {
+              @for (tl of tools(); track tl.id) {
                 @let on = toolId() === tl.id;
+                @let det = runtime.detection(tl.id);
+                @let checking = runtime.detectionPending(tl.id);
                 <kj-button
                   kjVariant="ghost"
                   class="tool-tile"
@@ -204,7 +218,16 @@ function slugName(title: string): string {
                 >
                   <app-tool-badge [tool]="tl.id" [size]="20" />
                   <span class="tn">{{ tl.name }}</span>
-                  @if (!runtime.toolAvailable(tl.id)) {
+                  <!-- Order matters: the pending probe wins. A tool whose probe is
+                       still out has NO verdict, and stamping it "not found"
+                       before the answer lands is a guess the user can't tell
+                       from a fact. "can’t run" carries the backend's reason in
+                       the tooltip — Settings is where you act on it. -->
+                  @if (checking) {
+                    <span class="ts tchk"><kj-spinner kjSize="xs" [kjAriaLabel]="'Checking whether ' + tl.name + ' is installed'" />checking…</span>
+                  } @else if (det?.status === 'error') {
+                    <span class="ts tnum" style="color:var(--sem-attn)" [title]="det?.reason ?? ''">can’t run</span>
+                  } @else if (!runtime.toolAvailable(tl.id)) {
                     <span class="ts tnum" style="color:var(--st-blocked)">not found</span>
                   }
                 </kj-button>
@@ -213,8 +236,8 @@ function slugName(title: string): string {
           </kj-field>
 
           <!-- model + effort -->
-          <div style="display:flex;gap:var(--sp-6)">
-            <kj-field class="spawn-field" style="flex:1">
+          <div class="spawn-split">
+            <kj-field class="spawn-field">
               <kj-field-label>Model</kj-field-label>
               @if (currentTool().dynamicModels) {
                 <!-- A tool that enumerates its own models (pi --list-models):
@@ -233,7 +256,7 @@ function slugName(title: string): string {
               }
             </kj-field>
             @if (effortLevels(); as levels) {
-              <kj-field class="spawn-field" style="flex:1">
+              <kj-field class="spawn-field spawn-effort">
                 <kj-field-label>Reasoning effort</kj-field-label>
                 <!-- pills tabs, the same segmented control Settings uses for
                      this very choice. As four outline kj-buttons the selection
@@ -288,9 +311,19 @@ function slugName(title: string): string {
   styles: [
     `
       /* The panel box is the shared .kj-overlay-wrapper .kj-dialog recipe in
-         styles.css; only this modal's width and height cap are per-instance. */
+         styles.css; only this modal's width and height cap are per-instance —
+         kouji exposes no dialog-width knob, the class IS the surface, and the
+         density-scaled round(calc(Npx * --density)) is the app's own width
+         convention (Add project 480, Delete worktree 440).
+
+         600, up from 540: this dialog carries three side-by-side pairs (project
+         / branch, ticket / name, model / effort) where the others carry stacked
+         fields, and
+         at 540 the model+effort pair broke onto two rows for every tool with
+         more than five effort levels. The extra 60 buys claude's and codex's
+         trays their row back; pi's seven still wrap, by design. */
       .kj-dialog {
-        width: round(calc(540px * var(--density)), 1px);
+        width: round(calc(600px * var(--density)), 1px);
         max-height: 90vh;
       }
       /* kj-field label/help mapped onto the app's micro-label vocabulary */
@@ -304,6 +337,20 @@ function slugName(title: string): string {
         letter-spacing: 0.12em;
       }
       .spawn-field ::ng-deep .kj-field-help { font-size: var(--fs-meta); color: var(--ink-4); }
+      /* The linked confirmation is the row's only helper line, and the one that
+         is NOT muted meta — it reports a state the user just caused, so it
+         keeps --ink-2. It has to be painted on the SPAN: kj-field-help's host
+         is display:contents, so a display or box rule set on the host lands on
+         nothing. flex-start + flex:none: at half width the sentence wraps, and
+         centring would float the glyph against the middle of a two-line block
+         while letting it squeeze. */
+      .spawn-linked ::ng-deep .kj-field-help {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--sp-2);
+        color: var(--ink-2);
+      }
+      .spawn-linked ::ng-deep app-icon { flex: none; }
       /* name input group: one panel-2 box, addon + input share the (linkable) border */
       .spawn-name { width: 100%; border-radius: var(--r-md); }
       .spawn-name ::ng-deep .kj-input-group__addon {
@@ -347,17 +394,89 @@ function slugName(title: string): string {
          picker reads as a single choice set, so it must not reflow into a grid
          at a larger --fs-scale. Column auto-flow instead of a repeat(N) track
          list: N was pinned at 4 and adding pi silently wrapped the 5th tile onto
-         a second row. This cannot go stale. minmax(0,…) lets each track shrink
-         under its label; .tn's ellipsis (shared recipe) absorbs the rest. */
+         a second row. This cannot go stale.
+
+         The tracks are floored, NOT minmax(0, 1fr): dividing a fixed 540px by an
+         ever-growing N shaved every label a little further with each new adapter
+         — at five the names already ellipsized, and the tiles would have gone on
+         shrinking past legibility. The floor is the shared --tile-floor (in ch,
+         so it grows with the type), 1fr only spends the slack while the row
+         still fits; past that the overflow goes sideways under the app's own
+         scrollbar. Deliberately NOT .scroll-hide — the bar is the only cue that
+         there are more agents off-screen.
+
+         padding-block: overflow-x makes overflow-y a scrollport too, so a
+         focused tile's ring would be clipped (and would bounce the row
+         vertically) without a gutter to draw into. scroll-padding stops the
+         browser from parking a Tab-focused tile flush against the clipped edge. */
       .spawn-tools {
         --tile-cols: none;
         grid-auto-flow: column;
-        grid-auto-columns: minmax(0, 1fr);
+        grid-auto-columns: minmax(var(--tile-floor, 14ch), 1fr);
+        overflow-x: auto;
+        padding-block: var(--sp-2);
+        scroll-padding-inline: var(--sp-5);
       }
-      /* the effort tray fills its column, same size step as Settings' .set-seg */
-      .spawn-seg { --kj-tab-padding-x: var(--sp-6); --kj-tab-font-size: var(--fs-meta); }
-      .spawn-seg ::ng-deep .kj-tab-list { width: 100%; }
-      .spawn-seg ::ng-deep .kj-tab { flex: 1; justify-content: center; text-transform: capitalize; }
+      /* the in-progress probe line: the spinner sits inline with its label, so
+         the tile keeps the same single-row status slot the verdicts use and
+         nothing reflows when the answer lands */
+      .tool-tile .ts.tchk {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--sp-2);
+        color: var(--ink-4);
+      }
+      /* The dialog's two-up row: ONE line while both halves fit, each dropping
+         to a full-width line of its own when they don't. Shared by Ticket |
+         Name and Model | Reasoning effort — a second, non-wrapping convention
+         for the other pair would break at a large --fs-scale exactly where this
+         one was written not to. Pure CSS, so it holds for any tool declaring
+         any number of levels rather than for the five ids we happen to ship
+         today.
+
+         min-width:0 is the load-bearing part. A flex item's min-width defaults
+         to auto = its min-content width, and the kj pill tray is a nowrap flex
+         row, so its min-content is the SUM of every pill. pi declares seven
+         levels against claude's five and codex's four, so its tray measured
+         wider than half the dialog and took the difference out of the Model
+         field — the worst possible pairing, since pi is also the tool whose
+         model ids are longest (a full provider/model slug). Without the floor
+         the effort tray simply wins that negotiation. On Ticket | Name it is a
+         ticket title or a worktree preview that measures wider than the column
+         and would push the pair past the card.
+
+         The two flex-bases are what decide where the row breaks: the Model
+         column asks for the share it gets on claude/codex (in ch, so it tracks
+         the type ramp like --tile-floor does), the tray asks for its one-line
+         width, and the line wraps the moment the pair exceeds the dialog.
+         Wrapped, each is alone on its line and grows to the full width. */
+      .spawn-split { display: flex; flex-wrap: wrap; gap: var(--sp-6); }
+      .spawn-split > * { flex: 1 1 22ch; min-width: 0; }
+      .spawn-split > .spawn-effort { flex-basis: auto; }
+      /* the effort tray fills its column, same size step as Settings' .set-seg.
+         display:block: kouji makes the pills variant inline-block, i.e.
+         shrink-to-fit, so the tray sized itself off its content and the
+         width:100% below resolved against that same content width — the tray
+         never actually measured the column it is supposed to wrap inside. */
+      .spawn-seg { --kj-tab-padding-x: var(--sp-6); --kj-tab-font-size: var(--fs-meta); display: block; }
+      /* WRAP is the overflow strategy at both levels: the field wraps out of
+         the Model row above, and here the pills themselves wrap as the last
+         resort (a full row still too narrow — a large --fs-scale, a future
+         tool with more levels than pi). Not shrink: past ~35px "minimal" and
+         "medium" clip to stubs that can't be told apart, and the levels ARE
+         the control. Not scroll: a segmented control is read as a set, and a
+         scroller hides levels behind a gesture the tray gives no hint of and
+         can park the SELECTED pill off-screen, leaving the field showing no
+         answer at all. A second line only costs height, which this dialog's
+         scroll column already has.
+
+         flex:1 1 auto, not flex:1 — a 0 basis never overflows, so the line
+         would never break and the pills would go back to squeezing. auto
+         keeps each pill at its label's width, grow spends the last line's
+         slack, and the flex default min-width:auto is the floor that stops a
+         label clipping. */
+      .spawn-seg ::ng-deep .kj-tab-list { width: 100%; flex-wrap: wrap; }
+      .spawn-seg ::ng-deep .kj-tab { flex: 1 1 auto; justify-content: center; text-transform: capitalize; }
       /* footer: the path label ellipsizes, the first button pushes the trio right */
       .spawn-cancel ::ng-deep .kj-button { margin-left: auto; }
     `,
@@ -371,7 +490,6 @@ export class SpawnModalComponent {
   private readonly settingsStore = inject(SettingsStore);
   private readonly catalog = inject(ModelCatalogService);
   private readonly ticketsStore = inject(TicketsStore);
-  readonly tools = AGENT_TOOLS;
   readonly mix = mix;
 
   private defaultProject = this.ui.spawning()?.project ?? null;
@@ -387,6 +505,37 @@ export class SpawnModalComponent {
   /** Track whether the user has manually typed in the Name field, so a ticket
    *  selection won't overwrite a name they've already customized. */
   private nameUserEdited = false;
+
+  /** Runnable as the TILE reports it: detected AND without an `error` verdict.
+   *  An errored tool still answers `toolAvailable` optimistically in some
+   *  paths, but it renders "can’t run" — offering it up front would promote the
+   *  one agent the user cannot actually spawn. */
+  private runnable(id: string): boolean {
+    return this.runtime.toolAvailable(id) && this.runtime.detection(id)?.status !== "error";
+  }
+
+  /**
+   * Tile order: runnable agents first, the rest after. Two filters rather than
+   * a sort — a partition is stable BY CONSTRUCTION, so each group keeps its
+   * AGENT_TOOLS declaration order and the row stays predictable instead of
+   * riding on a comparator's tie-breaking (V8's sort is stable, but nothing in
+   * a `a-b` comparator says so at the call site).
+   *
+   * While ANY probe is still out the declaration order stands unchanged. The
+   * backend sweep answers tool by tool, so ordering during that window would
+   * walk tiles sideways one probe at a time — under a cursor already hovering
+   * a tile, the click would land on a different agent than the one aimed at.
+   * Holding until the sweep settles trades that shuffle for a single, visible
+   * move. Selection is held by id (`toolId`), never by position, so neither
+   * this nor `initialTool()` / `setTool()` can be disturbed by the reorder.
+   */
+  readonly tools = computed<AgentTool[]>(() => {
+    if (AGENT_TOOLS.some((t) => this.runtime.detectionPending(t.id))) return AGENT_TOOLS;
+    return [
+      ...AGENT_TOOLS.filter((t) => this.runnable(t.id)),
+      ...AGENT_TOOLS.filter((t) => !this.runnable(t.id)),
+    ];
+  });
 
   readonly currentTool = computed(() => AGENT_TOOLS.find((t) => t.id === this.toolId())!);
   readonly project = computed(
@@ -437,12 +586,19 @@ export class SpawnModalComponent {
     }
     return tool.models;
   }
-  /** Empty-state copy for the dynamic picker: probing vs. genuinely nothing. */
-  readonly discoveryHint = computed(() =>
-    this.catalog.isProbed(this.toolId())
-      ? "No models reported — check the CLI's sign-in or API keys. Enter applies the typed id."
-      : "Asking the CLI for its models… Enter applies the typed id.",
-  );
+  /** Empty-state copy for the dynamic picker. One empty combobox used to stand
+   *  for four unrelated situations — still probing, CLI not installed, probe
+   *  failed, CLI fine but signed out — so it said nothing useful about any of
+   *  them. `modelDiscoveryHint` names which one it is (shared with Settings). */
+  readonly discoveryHint = computed(() => {
+    const tool = this.currentTool();
+    return modelDiscoveryHint(tool, {
+      probed: this.catalog.isProbed(tool.id),
+      error: this.catalog.error(tool.id),
+      empty: !this.catalog.models(tool.id).length,
+      detection: this.runtime.detection(tool.id),
+    });
+  });
   /** Effort levels the PICKED model accepts (per model: Haiku none, Opus 4.6
    *  no `xhigh`); false hides the tray. */
   readonly effortLevels = computed(() => effortLevelsFor(this.currentTool(), this.model()));

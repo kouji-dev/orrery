@@ -49,7 +49,13 @@ const DETECTIONS: Record<string, ToolDetection> = {
   pi: { id: "pi", status: "ok", available: true, path: "/usr/local/bin/pi", version: "0.9.3", source: "path", reason: null, shim: false },
 };
 
-async function setup(stored: Partial<Settings> = {}): Promise<Setup> {
+async function setup(
+  stored: Partial<Settings> = {},
+  // `pending` mirrors the real service before the first backend sweep answers;
+  // `detections` lets a case swap in a tool that ran and failed.
+  opts: { pending?: (id: string) => boolean; detections?: Record<string, ToolDetection> } = {},
+): Promise<Setup> {
+  const detections = opts.detections ?? DETECTIONS;
   const pickDirectory = vi.fn(async () => "C:/picked/worktrees");
   const bridge: Bridge = {
     invoke: vi.fn(async (cmd: string) => (cmd === "settings_get" ? stored : null)) as Bridge["invoke"],
@@ -66,8 +72,9 @@ async function setup(stored: Partial<Settings> = {}): Promise<Setup> {
       {
         provide: AgentRuntimeService,
         useValue: {
-          toolAvailable: (id: string) => id !== "gemini",
-          detection: (id: string) => DETECTIONS[id] ?? null,
+          toolAvailable: (id: string) => detections[id]?.available ?? false,
+          detection: (id: string) => detections[id] ?? null,
+          detectionPending: (id: string) => opts.pending?.(id) ?? false,
           refreshDetections: async () => {},
           verifyToolPath: vi.fn(),
           setDetection: vi.fn(),
@@ -138,6 +145,46 @@ describe("SettingsModal sections render", () => {
     expect(chip?.textContent).toContain("/usr/local/bin/claude");
     // branch template live preview
     expect(s.el.querySelector(".set-preview b")?.textContent).toContain("agent/fix-login");
+  });
+
+  it("Agent defaults: an unprobed tool renders as CHECKING, never as a verdict", async () => {
+    // Before the backend sweep answers, detection(id) is null for every tool —
+    // which used to paint the whole grid "not found" and read as fact.
+    const s = await setup({}, { pending: () => true, detections: {} });
+    navTo(s, "Agent defaults");
+    const tools = Array.from(s.el.querySelectorAll<HTMLButtonElement>(".set-tool"));
+    expect(tools).toHaveLength(5);
+    expect(tools.every((t) => t.querySelector("kj-spinner") !== null)).toBe(true);
+    expect(s.el.textContent).toContain("checking");
+    expect(s.el.textContent).not.toContain("not found");
+    expect(s.el.textContent).not.toContain("not installed");
+    // no dimming / no amber warn while the answer is still out
+    expect(tools.some((t) => t.classList.contains("off") || t.classList.contains("warn"))).toBe(false);
+  });
+
+  it("Agent defaults: a broken tool shows the backend's reason ON the tile", async () => {
+    const detections: Record<string, ToolDetection> = {
+      ...DETECTIONS,
+      gemini: {
+        id: "gemini",
+        status: "error",
+        available: false,
+        path: "/usr/local/bin/gemini",
+        version: null,
+        source: "path",
+        reason: "timed out — the binary didn’t respond within 20s",
+        shim: false,
+      },
+    };
+    const s = await setup({}, { detections });
+    navTo(s, "Agent defaults");
+    const gemini = Array.from(s.el.querySelectorAll<HTMLButtonElement>(".set-tool"))[3];
+    const reason = gemini.querySelector(".rz");
+    expect(reason?.textContent).toContain("timed out");
+    expect(reason?.textContent).toContain("didn’t respond within 20s"); // visible, not only hovered
+    expect(reason?.getAttribute("title")).toContain("timed out"); // full text still on hover
+    expect(gemini.textContent).not.toContain("needs path"); // the old generic lie
+    expect(gemini.querySelector(".nf")?.textContent).toContain("can’t run");
   });
 
   it("Permissions: one policy row per DETECTED tool + remote approval", async () => {

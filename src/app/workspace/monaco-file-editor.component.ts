@@ -29,6 +29,7 @@ import {
   MonacoApi,
   monacoDensityOptions,
   monacoLanguage,
+  monacoScrollbarOptions,
 } from "./monaco-loader";
 import { ScrollStateService } from "./scroll-state.service";
 import { attachReviewComments, MonacoReviewApi } from "./review/review-comments.monaco";
@@ -488,6 +489,7 @@ export class MonacoFileEditorComponent {
           scrollBeyondLastLine: false,
           automaticLayout: true,
           ...monacoDensityOptions(),
+          ...monacoScrollbarOptions(),
           fixedOverflowWidgets: true,
           renderLineHighlight: "line",
           stickyScroll: { enabled: false },
@@ -521,6 +523,7 @@ export class MonacoFileEditorComponent {
         scrollBeyondLastLine: false,
         automaticLayout: true,
         ...monacoDensityOptions(),
+        ...monacoScrollbarOptions(),
         fixedOverflowWidgets: true,
         renderLineHighlight: "line",
         stickyScroll: { enabled: false },

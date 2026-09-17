@@ -1042,14 +1042,12 @@ pub async fn list_tool_models(
         .filter(|s| !s.is_empty());
     tauri::async_runtime::spawn_blocking(move || {
         crate::perf::timed("list_tool_models", || {
-            let path = match manual {
-                Some(p) => p,
-                None => super::adapters::adapter_for(&id)
-                    .and_then(|a| super::adapters::which_path(a.binary()))
-                    .map(|p| p.display().to_string())
-                    .ok_or_else(|| AppError::Other(format!("`{id}` is not installed")))?,
-            };
-            super::adapters::models_at(&id, &path).map_err(AppError::Other)
+            // Same resolution detection uses — PATH, the LIVE registry PATH, the
+            // tool's own install dirs, and a walk down the candidates until one
+            // answers. A bare PATH lookup here reported an installed tool as
+            // missing in exactly the cases that walk exists to cover, and emptied
+            // its model picker with no visible reason.
+            super::adapters::models_for(&id, manual.as_deref()).map_err(AppError::Other)
         })
     })
     .await

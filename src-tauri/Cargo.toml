@@ -84,6 +84,10 @@ windows-sys = { version = "0.61", features = [
     # psapi (K32GetProcessMemoryInfo): per-process PRIVATE bytes for the A7.7
     # process tree — RSS double-counts shared pages and must not be summed.
     "Win32_System_ProcessStatus",
+    # RegGetValueW: agent detection re-reads the LIVE user/machine Path from the
+    # registry, because a GUI app's inherited environment block can predate the
+    # PATH edit a CLI's installer made (see agents/adapters/resolve.rs).
+    "Win32_System_Registry",
 ] }
 # BrowserProcessId for the A7.7 tree: WebView2 shares one browser-process
 # family per user-data-dir, so a second Orrery instance's UI processes parent
