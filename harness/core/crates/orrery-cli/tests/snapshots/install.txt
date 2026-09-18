@@ -1,17 +1,34 @@
-Remove an installed extension
+Install an extension. A bare name is the signed registry.
 
-Usage: orrery ext remove [OPTIONS] <NAME>
+Seven source forms, disambiguated by prefix: `name`, `name@1.2.0`, `github:owner/repo#ref`, a git URL, `crate:<name>`, `npm:<name>`, `./path`.
+
+Usage: orrery install [OPTIONS] <SOURCE>
 
 Arguments:
-  <NAME>
-          The extension name
+  <SOURCE>
+          What to install
 
 Options:
       --profile <NAME>
           Which profile to resolve
 
+      --to <LAYER>
+          Which layer to install into. Defaults to the user layer.
+          
+          Spelled `--to` rather than `--workspace` because `--workspace <PATH>` is already a global flag naming the workspace root.
+
+          Possible values:
+          - user:      `~/.orrery/extensions/<id>/`. Personal, and available in every project
+          - workspace: `<workspace>/.orrery/extensions/<id>/`. Committed with the repository
+
+      --user
+          Shorthand for `--to user`
+
       --workspace <PATH>
           The workspace root. Defaults to the current directory
+
+      --link
+          Symlink a local path instead of copying it: the development loop
 
       --ui <UI>
           Renderer. Defaults to ratatui on a tty, json otherwise
@@ -24,6 +41,9 @@ Options:
       --json
           Shorthand for `--ui json`
 
+      --yes
+          Grant everything the extension asks for without asking
+
       --consent <MODE>
           Override the profile's consent mode, within the managed clamp
 
@@ -31,6 +51,12 @@ Options:
           - always: Ask every time
           - once:   Ask once per matching call, then remember for the session
           - never:  Never ask: deny instead, so CI cannot hang
+
+      --force
+          Replace an existing install rather than refusing
+
+      --index <PATH>
+          A signed index file to resolve registry names against
 
   -v...
           Log level on stderr. Never mixed into `--json` stdout. Repeatable

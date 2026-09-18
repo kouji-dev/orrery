@@ -34,6 +34,7 @@ orrery-host = { path = "../orrery-host" }
 orrery-transport = { path = "../orrery-transport" }
 orrery-agui = { version = "0.1.0", path = "../orrery-agui" }
 orrery-ext-api = { workspace = true }
+orrery-registry = { path = "../orrery-registry" }
 orrery-client = { version = "0.1.0", path = "../../../clients/sdk-rs" }
 orrery-client-json = { version = "0.1.0", path = "../../../clients/json" }
 orrery-client-ratatui = { path = "../../../clients/ratatui" }

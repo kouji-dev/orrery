@@ -53,6 +53,26 @@ fn main() {
         }) => cmd::attach::dispatch(&cli, endpoint, *since, submit.as_deref()),
         Some(Command::Replay { session }) => cmd::replay::dispatch(session),
         Some(Command::Session { command }) => cmd::session::dispatch(&cli, command),
+        Some(Command::Install {
+            source,
+            to,
+            user,
+            link,
+            yes,
+            force,
+            index,
+        }) => cmd::install::install(
+            &cli,
+            source,
+            to.or(user.then_some(args::Layer::User)),
+            *link,
+            *yes,
+            *force,
+            index.as_deref(),
+        ),
+        Some(Command::Remove { name, from, user }) => {
+            cmd::install::remove(&cli, name, from.or(user.then_some(args::Layer::User)))
+        }
         Some(Command::Ext { command }) => cmd::ext::dispatch(&cli, command),
         Some(Command::Permissions { command }) => cmd::permissions::dispatch(&cli, command),
         Some(Command::Config { command }) => cmd::config::dispatch(&cli, command),

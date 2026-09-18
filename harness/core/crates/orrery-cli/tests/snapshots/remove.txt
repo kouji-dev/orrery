@@ -1,14 +1,24 @@
-Install an extension from the signed registry
+Remove an installed extension
 
-Usage: orrery ext install [OPTIONS] <NAME>
+Usage: orrery remove [OPTIONS] <NAME>
 
 Arguments:
   <NAME>
           The extension name
 
 Options:
+      --from <LAYER>
+          Which layer to remove it from. Without it, being installed at two layers is a question rather than a guess
+
+          Possible values:
+          - user:      `~/.orrery/extensions/<id>/`. Personal, and available in every project
+          - workspace: `<workspace>/.orrery/extensions/<id>/`. Committed with the repository
+
       --profile <NAME>
           Which profile to resolve
+
+      --user
+          Shorthand for `--from user`
 
       --workspace <PATH>
           The workspace root. Defaults to the current directory

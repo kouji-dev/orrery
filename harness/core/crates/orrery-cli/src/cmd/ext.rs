@@ -1,4 +1,4 @@
-//! `orrery ext` - list, install, remove and test extensions.
+//! `orrery ext` - list and test extensions.
 //!
 //! # No model, no network
 //!
@@ -8,9 +8,13 @@
 //! anything, which is what makes `orrery ext test` runnable in a sandbox with
 //! no key.
 //!
+//! Install and remove are **not** here: they are bare top-level verbs,
+//! `orrery install <source>` and `orrery remove <name>`, in `cmd::install`.
+//! What stays under `ext` is what is not an everyday action.
+//!
 //! Implementation plans: `harness/docs/plans/06-extension-host.md` for the
 //! ledger and the test harness, `harness/docs/plans/15-registry-supply-chain.md`
-//! for install and remove, which go through the signed registry.
+//! for the registry itself.
 
 use std::path::{Path, PathBuf};
 
@@ -19,14 +23,11 @@ use orrery_ext_api::testing::load_for_test;
 use orrery_proto::{Capability, LoadOutcome};
 
 use crate::args::{Cli, ExtCommand};
-use crate::exit::{Exit, fail, not_implemented};
+use crate::exit::{Exit, fail};
 
 /// Dispatch an `ext` subcommand.
 pub fn dispatch(_cli: &Cli, command: &ExtCommand) -> ! {
     match command {
-        ExtCommand::Install { .. } | ExtCommand::Remove { .. } => {
-            not_implemented("15-registry-supply-chain.md")
-        }
         ExtCommand::List => list(),
         ExtCommand::Test { path } => test(path.as_deref()),
     }

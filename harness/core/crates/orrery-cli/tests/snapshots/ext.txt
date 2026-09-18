@@ -3,11 +3,9 @@ Inspect and manage extensions
 Usage: orrery ext [OPTIONS] <COMMAND>
 
 Commands:
-  list     List loaded extensions, including degraded and skipped ones with reasons
-  install  Install an extension from the signed registry
-  remove   Remove an installed extension
-  test     Run an extension's tests against the mock broker, with no model and no network
-  help     Print this message or the help of the given subcommand(s)
+  list  List loaded extensions, including degraded and skipped ones with reasons
+  test  Run an extension's tests against the mock broker, with no model and no network
+  help  Print this message or the help of the given subcommand(s)
 
 Options:
       --profile <NAME>

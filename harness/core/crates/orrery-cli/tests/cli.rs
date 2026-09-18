@@ -57,10 +57,10 @@ fn help_snapshot() {
         ("session-list", &["session", "list", "--help"]),
         ("session-show", &["session", "show", "--help"]),
         ("session-rm", &["session", "rm", "--help"]),
+        ("install", &["install", "--help"]),
+        ("remove", &["remove", "--help"]),
         ("ext", &["ext", "--help"]),
         ("ext-list", &["ext", "list", "--help"]),
-        ("ext-install", &["ext", "install", "--help"]),
-        ("ext-remove", &["ext", "remove", "--help"]),
         ("ext-test", &["ext", "test", "--help"]),
         ("permissions", &["permissions", "--help"]),
         ("permissions-explain", &["permissions", "explain", "--help"]),
@@ -120,7 +120,6 @@ fn a_typo_is_not_an_interactive_session() {
 fn unimplemented_subcommands_name_their_plan() {
     let cases: &[(&[&str], &str)] = &[
         (&["replay", "s1"], "17-cli.md"),
-        (&["ext", "install", "x"], "15-registry-supply-chain.md"),
         (&["eval", "run", "suite"], "16-eval-runner.md"),
         (&["ledger"], "07-policy-broker-audit.md"),
         (&["telemetry"], "07-policy-broker-audit.md"),

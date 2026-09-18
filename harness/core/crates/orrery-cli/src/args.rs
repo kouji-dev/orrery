@@ -106,6 +106,50 @@ pub enum Command {
         #[command(subcommand)]
         command: SessionCommand,
     },
+    /// Install an extension. A bare name is the signed registry.
+    ///
+    /// Seven source forms, disambiguated by prefix:
+    /// `name`, `name@1.2.0`, `github:owner/repo#ref`, a git URL,
+    /// `crate:<name>`, `npm:<name>`, `./path`.
+    Install {
+        /// What to install.
+        #[arg(value_name = "SOURCE")]
+        source: String,
+        /// Which layer to install into. Defaults to the user layer.
+        ///
+        /// Spelled `--to` rather than `--workspace` because `--workspace <PATH>`
+        /// is already a global flag naming the workspace root.
+        #[arg(long = "to", value_name = "LAYER")]
+        to: Option<Layer>,
+        /// Shorthand for `--to user`.
+        #[arg(long, conflicts_with = "to")]
+        user: bool,
+        /// Symlink a local path instead of copying it: the development loop.
+        #[arg(long)]
+        link: bool,
+        /// Grant everything the extension asks for without asking.
+        #[arg(long)]
+        yes: bool,
+        /// Replace an existing install rather than refusing.
+        #[arg(long)]
+        force: bool,
+        /// A signed index file to resolve registry names against.
+        #[arg(long, value_name = "PATH")]
+        index: Option<std::path::PathBuf>,
+    },
+    /// Remove an installed extension.
+    Remove {
+        /// The extension name.
+        #[arg(value_name = "NAME")]
+        name: String,
+        /// Which layer to remove it from. Without it, being installed at two
+        /// layers is a question rather than a guess.
+        #[arg(long = "from", value_name = "LAYER")]
+        from: Option<Layer>,
+        /// Shorthand for `--from user`.
+        #[arg(long, conflicts_with = "from")]
+        user: bool,
+    },
     /// Inspect and manage extensions.
     Ext {
         /// What to do with them.
@@ -170,23 +214,24 @@ pub enum SessionCommand {
     },
 }
 
+/// Which configuration layer an install lands in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Layer {
+    /// `~/.orrery/extensions/<id>/`. Personal, and available in every project.
+    User,
+    /// `<workspace>/.orrery/extensions/<id>/`. Committed with the repository.
+    Workspace,
+}
+
 /// `orrery ext ...`
+///
+/// The everyday actions — install and remove — are bare top-level verbs
+/// (`orrery install`, `orrery remove`). What stays here is what is not
+/// everyday.
 #[derive(Debug, Subcommand)]
 pub enum ExtCommand {
     /// List loaded extensions, including degraded and skipped ones with reasons.
     List,
-    /// Install an extension from the signed registry.
-    Install {
-        /// The extension name.
-        #[arg(value_name = "NAME")]
-        name: String,
-    },
-    /// Remove an installed extension.
-    Remove {
-        /// The extension name.
-        #[arg(value_name = "NAME")]
-        name: String,
-    },
     /// Run an extension's tests against the mock broker, with no model and no network.
     Test {
         /// The extension directory. Defaults to the current one.

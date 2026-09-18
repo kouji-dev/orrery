@@ -8,6 +8,8 @@ Commands:
   attach       Attach a renderer to a running kernel
   replay       Re-emit a stored session as events, so any renderer can draw any past session
   session      Inspect stored sessions
+  install      Install an extension. A bare name is the signed registry
+  remove       Remove an installed extension
   ext          Inspect and manage extensions
   permissions  Explain a permission decision
   config       Explain resolved configuration
