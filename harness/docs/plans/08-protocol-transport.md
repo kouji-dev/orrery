@@ -220,13 +220,19 @@ Files: `orrery-transport/src/lib.rs`
 - The **same** conformance fixtures pass in Rust and TypeScript.
 - ~~`orrery serve --provider fixture:…` accepts a ratatui client and an Ink
   client on one session simultaneously; both render the turn.~~
-  **Not true, and amended here rather than caveated below: none of the three
-  pieces exists.** The ratatui client is plan 09b, the Ink client is plan 09c,
-  and the `orrery serve` command is plan 17; all three are unlanded. What this
-  plan does have is the property those two clients would be exercising — one
-  session fans out to many attached clients over the same transport, with the
-  same conformance fixtures passing in Rust and TypeScript. Two *fixture*
-  clients on one session is what is asserted; two *real* TUIs is not.
+  **Half true as of plan 17, and the missing half is this crate's.**
+  `orrery serve --provider fixture:…` now exists and fans one session out to two
+  *real* renderer processes at once — `serve::two_renderers_one_session` in
+  `orrery-cli` puts the ratatui client and the json client on one pipe and
+  asserts both draw the same turn, tool call included. **Ink cannot be one of
+  them, and the reason is here:** the HTTP listener has `POST /run` and
+  `POST /control` and no passive subscribe route, so an SSE client only ever
+  receives the frames of a run it started itself. Ink reaches the kernel over
+  the endpoint `serve` prints (`serve::the_ink_client_reaches_the_kernel`) and
+  can render its own turns; it cannot render somebody else's. **What is needed
+  is a `GET /events` SSE route on this listener**, serving the same
+  `hub.subscribe` + `hub.attach(since)` the pipe handshake already serves.
+  Until then, two *byte-stream* renderers on one session is what is asserted.
 - A client that stops reading does not stall the kernel.
 
 ## Open questions

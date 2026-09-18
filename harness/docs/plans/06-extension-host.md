@@ -293,7 +293,7 @@ Files: `orrery-ext-api/src/testing.rs`
 
 - [x] **Failing test first.** `testing::denial_is_observable` — a test declaring no `spawn` grant; the extension's call returns `Denied` and the mock records it.
 - [x] Implement `MockBroker`, `load_for_test`, recorded calls, canned responses, surface assertions as data.
-- [ ] Wire `orrery ext test` to it (the command lands in plan 17).
+- [x] Wire `orrery ext test` to it (the command lands in plan 17). *(Landed in plan 17: `orrery ext test [path]` reads a manifest, loads it through `load_for_test` against the grants the manifest itself asks for, prints what it contributes and how many broker calls it made, and exits 0 / 1 / 2. `orrery ext list` reports the compiled-in set through `testing::missing`, the same function the host calls. Neither builds a kernel, opens a database or asks a provider for anything.)*
 
 ### Task 9 · The node SDK — **DEFERRED to the next wave**
 
@@ -319,14 +319,13 @@ Files: `extensions/node/ext-sdk/*`
   `builtin::read_respects_the_output_ceiling` reads 10 MB under a 4 KB ceiling
   and asserts, through `LimitedReader`'s own pull counter, that no more than the
   ceiling plus one 8 KB buffer was ever pulled from the file.
-- ~~`orrery ext test` runs an extension with no model and no network.~~
-  **Not true, and amended here rather than caveated below: the command is not
-  wired.** Plan 17 owns `orrery ext test` and has not landed. What exists is the
-  harness it will call — `orrery_ext_api::testing::load_for_test`, with the mock
-  broker, the recorded calls and the real ledger — and it is under test in
-  `orrery-ext-api/tests/testing.rs` and used by `orrery-ext-views-default`'s own
-  suite, which loads a real bundle through it with no model and no network. The
-  no-model, no-network property holds; the *command* does not exist.
+- `orrery ext test` runs an extension with no model and no network. **True as
+  of plan 17.** The command is wired to `orrery_ext_api::testing::load_for_test`
+  — the mock broker, the recorded calls, the real ledger — and
+  `ext::test_runs_without_a_model` in `orrery-cli` runs it on a fixture
+  extension with no `--provider`, no key and nothing to reach.
+  `ext::a_broken_manifest_is_usage` pins the other half: a manifest that will
+  not parse is exit 2 naming the file, never a panic.
 
 ## Open questions
 
@@ -374,7 +373,7 @@ Files: `extensions/node/ext-sdk/*`
 
 Two rules ended up in the table rather than in a runtime, because they must be the same for all four: `disabled_by_grant` (one answer to "is this granted", so a `native` tool is never offered where a `node` one is hidden) and the transport rule — **a runtime that dies mid-call degrades its extension and settles the call `Failed`; the session lives.**
 
-**Not done here:** the node SDK and its worked example (Task 9), and wiring `orrery ext test` to a command (plan 17 owns the command; the harness it calls is in `orrery-ext-api::testing` and is under test).
+**Not done here:** the node SDK and its worked example (Task 9). `orrery ext test` is now wired, in plan 17.
 
 **Landed (2026-09-18, wave 3).** Task 4. `orrery-ext-tools-builtin` implements
 all six tools against `BrokerFacade` and nothing else — no `File`, no `Command`,

@@ -93,6 +93,23 @@ fn unknown_flag_is_exit_2() {
     assert_eq!(out.status.code(), Some(2));
 }
 
+/// Open question 1, checked rather than assumed: a typo'd subcommand is a
+/// usage error, not a TUI.
+///
+/// `Cli` has no top-level positional argument, so clap has nothing to bind an
+/// unrecognised word to and refuses it by name. Bare `orrery` being
+/// interactive therefore costs nothing.
+#[test]
+fn a_typo_is_not_an_interactive_session() {
+    let out = orrery(&["rnu", "-p", "hi"]);
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("unrecognized subcommand") && stderr.contains("rnu"),
+        "and it says which word it did not know: {stderr}"
+    );
+}
+
 /// A subcommand that has not landed yet exits 2 and names the plan file that
 /// will implement it, so the tree is complete from phase 0 and fills in.
 ///
