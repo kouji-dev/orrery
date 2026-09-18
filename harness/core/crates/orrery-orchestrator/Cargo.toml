@@ -8,4 +8,26 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+# **No kernel.** The orchestrator runs steps; a step's passes are run through
+# [`TurnRunner`], which the facade implements over `orrery-kernel`. That keeps
+# the direction one-way — orchestrator → router → proto — and it is why the
+# tests in this crate need no provider and make no network call.
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-session = { workspace = true }
+orrery-audit = { workspace = true }
+# By path, not `workspace = true`: `orrery-router` is `publish = false`, so it
+# is not one of the version+path pairs the root declares for the published half.
+orrery-router = { path = "../orrery-router" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
