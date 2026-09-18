@@ -201,6 +201,28 @@ pub struct SessionHandle {
     pub branches: Vec<BranchId>,
 }
 
+/// One session, as an enumeration lists it.
+///
+/// What `orrery session list` prints, and the reason
+/// [`list_sessions`](crate::SessionStore::list_sessions) exists: `open` answers
+/// about a session you can already name, which is no use to somebody asking
+/// which sessions there are.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SessionSummary {
+    /// The session.
+    pub session: SessionId,
+    /// The workspace root it was created against.
+    pub workspace: String,
+    /// The profile it was created from.
+    pub profile: String,
+    /// Unix milliseconds, as the store recorded them at `create`.
+    pub created_at: i64,
+    /// How many turns it holds, across every branch. The cheapest honest
+    /// measure of "how much is in here", and the one thing a person scanning a
+    /// list actually reads.
+    pub turns: u64,
+}
+
 /// An event as the store kept it, for `session.attach(since)` and
 /// `orrery replay`.
 #[derive(Clone, Debug, PartialEq)]

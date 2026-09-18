@@ -37,6 +37,6 @@ pub use error::SessionError;
 pub use lease::{BranchLease, BranchState, BranchStatus, LeaseRegistry};
 pub use store::SessionStore;
 pub use turn::{
-    BranchOutcome, CompactResult, NewTurn, RecalledEntry, SessionHandle, StoredEvent, TurnKind,
-    TurnRow,
+    BranchOutcome, CompactResult, NewTurn, RecalledEntry, SessionHandle, SessionSummary,
+    StoredEvent, TurnKind, TurnRow,
 };

@@ -38,6 +38,7 @@ pub async fn run_conformance(store: Arc<dyn SessionStore>) {
     compact_leaves_the_originals_readable(&*store).await;
     compact_materialise_uses_the_highest_watermark(&*store).await;
     tool_results_round_trip(&*store).await;
+    sessions_can_be_enumerated(&*store).await;
     child_close_does_not_deadlock_the_parent(&*store).await;
 }
 
@@ -476,4 +477,52 @@ pub async fn tool_results_round_trip(store: &dyn SessionStore) {
         out.messages[0].content.first(),
         Some(ContentBlock::ToolResult { call: c, .. }) if *c == call
     ));
+}
+
+/// A store can say **which** sessions it holds, not only answer about one that
+/// is already named.
+///
+/// Every field `orrery session list` prints is asserted here — the id, the
+/// workspace, the profile, a creation time and the turn count — because a
+/// listing that cannot tell two sessions apart is not a listing. Ordering is
+/// newest first; the suite asserts it as "non-increasing", since two sessions
+/// created in the same millisecond may legitimately tie.
+pub async fn sessions_can_be_enumerated(store: &dyn SessionStore) {
+    let older = store.create("/ws/older", "default").await.expect("create");
+    let newer = store.create("/ws/newer", "review").await.expect("create");
+
+    let lease = store.lease(store.open(newer).await.expect("open").root).await.expect("lease");
+    store.append(&lease, user("one")).await.expect("append");
+    store.append(&lease, assistant("two")).await.expect("append");
+    drop(lease);
+
+    let listed = store.list_sessions().await.expect("a backend enumerates its sessions");
+
+    let a = listed
+        .iter()
+        .find(|s| s.session == older)
+        .expect("the older session is listed");
+    assert_eq!(a.workspace, "/ws/older");
+    assert_eq!(a.profile, "default");
+    assert_eq!(a.turns, 0, "a session with no turns still lists");
+
+    let b = listed
+        .iter()
+        .find(|s| s.session == newer)
+        .expect("the newer session is listed");
+    assert_eq!(b.workspace, "/ws/newer");
+    assert_eq!(b.profile, "review");
+    assert_eq!(b.turns, 2, "every turn on every branch is counted");
+    assert!(b.created_at >= a.created_at, "the later session is not older");
+
+    let times: Vec<i64> = listed.iter().map(|s| s.created_at).collect();
+    assert!(
+        times.windows(2).all(|w| w[0] >= w[1]),
+        "newest first: {times:?}"
+    );
+    let positions = |id| listed.iter().position(|s| s.session == id);
+    assert!(
+        positions(newer) <= positions(older),
+        "the newer session sorts first"
+    );
 }

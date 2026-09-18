@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use orrery_proto::{BranchId, Seq, SessionId, TurnId};
 use orrery_session::SessionError;
 use orrery_session::lease::BranchStatus;
-use orrery_session::turn::{SessionHandle, StoredEvent, TurnRow};
+use orrery_session::turn::{SessionHandle, SessionSummary, StoredEvent, TurnRow};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::convert::{self, map_err};
@@ -79,6 +79,11 @@ impl Reader {
     /// One session, with every branch in it.
     pub async fn session(&self, session: SessionId) -> Result<SessionHandle, SessionError> {
         self.with(move |c| session_blocking(c, session)).await
+    }
+
+    /// Every session, newest first.
+    pub async fn sessions(&self) -> Result<Vec<SessionSummary>, SessionError> {
+        self.with(sessions_blocking).await
     }
 
     /// One branch.
@@ -160,6 +165,44 @@ pub fn session_blocking(c: &Connection, session: SessionId) -> Result<SessionHan
         profile,
         branches,
     })
+}
+
+/// See [`Reader::sessions`].
+///
+/// The turn count is a correlated subquery rather than a second round trip: a
+/// listing that counted turns in Rust would read every row of every session to
+/// print one number per line.
+pub fn sessions_blocking(c: &Connection) -> Result<Vec<SessionSummary>, SessionError> {
+    let mut stmt = c
+        .prepare(
+            "SELECT s.id, s.workspace, s.profile, COALESCE(s.created_at, 0),                     (SELECT COUNT(*) FROM turns t                       JOIN branches b ON t.branch = b.id                      WHERE b.session = s.id)              FROM sessions s ORDER BY s.created_at DESC, s.rowid DESC",
+        )
+        .map_err(map_err)?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, i64>(3)?,
+                r.get::<_, i64>(4)?,
+            ))
+        })
+        .map_err(map_err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(map_err)?;
+
+    rows.into_iter()
+        .map(|(id, workspace, profile, created_at, turns)| {
+            Ok(SessionSummary {
+                session: convert::session_id(&id)?,
+                workspace,
+                profile,
+                created_at,
+                turns: turns.max(0) as u64,
+            })
+        })
+        .collect()
 }
 
 /// See [`Reader::branch`].

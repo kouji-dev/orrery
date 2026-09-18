@@ -34,7 +34,9 @@ use dashmap::DashMap;
 use orrery_proto::{BranchId, Seq, SessionId, TokenBudget, TurnId};
 use orrery_session::algebra::{self, Materialised, TokenCounter};
 use orrery_session::lease::{BranchLease, BranchStatus, LeaseRegistry};
-use orrery_session::turn::{BranchOutcome, CompactResult, NewTurn, SessionHandle, StoredEvent};
+use orrery_session::turn::{
+    BranchOutcome, CompactResult, NewTurn, SessionHandle, SessionSummary, StoredEvent,
+};
 use orrery_session::{SessionError, SessionStore};
 use tokio::sync::oneshot;
 
@@ -167,6 +169,10 @@ impl SessionStore for SqliteSessionStore {
             self.ensure_registered(*branch).await?;
         }
         Ok(handle)
+    }
+
+    async fn list_sessions(&self) -> Result<Vec<SessionSummary>, SessionError> {
+        self.reader.sessions().await
     }
 
     async fn lease(&self, branch: BranchId) -> Result<BranchLease, SessionError> {

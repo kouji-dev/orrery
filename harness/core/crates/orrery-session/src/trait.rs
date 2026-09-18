@@ -8,7 +8,9 @@ use orrery_proto::{BranchId, Seq, SessionId, TokenBudget, TurnId};
 use crate::algebra::{Materialised, TokenCounter};
 use crate::error::SessionError;
 use crate::lease::BranchLease;
-use crate::turn::{BranchOutcome, CompactResult, NewTurn, SessionHandle, StoredEvent};
+use crate::turn::{
+    BranchOutcome, CompactResult, NewTurn, SessionHandle, SessionSummary, StoredEvent,
+};
 
 /// Where the turn tree lives.
 ///
@@ -36,6 +38,23 @@ pub trait SessionStore: Send + Sync + 'static {
 
     /// Look one up.
     async fn open(&self, session: SessionId) -> Result<SessionHandle, SessionError>;
+
+    /// Every session in the store, **newest first**.
+    ///
+    /// `open` answers about a session you can already name; this is the one
+    /// that answers "which sessions are there", which is what
+    /// `orrery session list` asks and what nothing could ask before.
+    ///
+    /// The default refuses, and refusing is not conformant: the suite's
+    /// [`sessions_can_be_enumerated`](crate::conformance::sessions_can_be_enumerated)
+    /// fails against it, so a shipped backend has to override it. The default
+    /// exists only so that an in-test fake in a crate this wave does not own
+    /// keeps compiling; delete it once there are none.
+    async fn list_sessions(&self) -> Result<Vec<SessionSummary>, SessionError> {
+        Err(SessionError::Backend {
+            detail: "this backend does not enumerate sessions".to_owned(),
+        })
+    }
 
     /// Acquire the right to append.
     ///

@@ -34,6 +34,7 @@ struct Branch {
 struct Session {
     workspace: String,
     profile: String,
+    created_at: i64,
     root: BranchId,
     branches: Vec<BranchId>,
     events: Vec<StoredEvent>,
@@ -107,12 +108,14 @@ impl SessionStore for MemoryStore {
     async fn create(&self, workspace: &str, profile: &str) -> Result<SessionId, SessionError> {
         let session = SessionId::new();
         let root = BranchId::new();
+        let now = self.now();
         let mut inner = self.inner.lock().unwrap();
         inner.sessions.insert(
             session,
             Session {
                 workspace: workspace.to_owned(),
                 profile: profile.to_owned(),
+                created_at: now,
                 root,
                 branches: vec![root],
                 events: Vec::new(),
@@ -146,6 +149,27 @@ impl SessionStore for MemoryStore {
             profile: s.profile.clone(),
             branches: s.branches.clone(),
         })
+    }
+
+    async fn list_sessions(&self) -> Result<Vec<orrery_session::SessionSummary>, SessionError> {
+        let inner = self.inner.lock().unwrap();
+        let mut out: Vec<orrery_session::SessionSummary> = inner
+            .sessions
+            .iter()
+            .map(|(id, s)| orrery_session::SessionSummary {
+                session: *id,
+                workspace: s.workspace.clone(),
+                profile: s.profile.clone(),
+                created_at: s.created_at,
+                turns: inner
+                    .turns
+                    .iter()
+                    .filter(|r| s.branches.contains(&r.branch))
+                    .count() as u64,
+            })
+            .collect();
+        out.sort_by_key(|s| std::cmp::Reverse(s.created_at));
+        Ok(out)
     }
 
     async fn lease(&self, branch: BranchId) -> Result<BranchLease, SessionError> {
