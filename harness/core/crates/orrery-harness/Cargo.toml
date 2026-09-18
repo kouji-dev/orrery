@@ -8,4 +8,56 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# The first-party set. This is the **only** core crate allowed to name an
+# `extensions/` crate; `cargo xtask deps-check` allow-lists it by name.
+#
+# `anthropic` is off by default, which is a deliberate deviation from the plan's
+# `default = [.., "anthropic", ..]`: it pulls a TLS stack in, and nothing in
+# this repo's tests may reach the network. Turning it on is one flag.
+default = ["builtin-tools", "sqlite", "fixture-provider"]
+builtin-tools = ["dep:orrery-ext-tools-builtin"]
+sqlite = ["dep:orrery-ext-session-sqlite"]
+fixture-provider = ["dep:orrery-ext-provider-fixture"]
+anthropic = ["dep:orrery-ext-provider-anthropic"]
+
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-provider = { workspace = true }
+orrery-session = { workspace = true }
+orrery-audit = { workspace = true }
+orrery-policy = { workspace = true }
+orrery-broker = { workspace = true }
+orrery-ext-api = { workspace = true }
+# By path, not `workspace = true`: these are `publish = false`, so they are not
+# among the version+path pairs the root declares for the published half.
+orrery-tools = { path = "../orrery-tools" }
+orrery-host = { path = "../orrery-host" }
+orrery-kernel = { path = "../orrery-kernel" }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "fs", "time"] }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+# --- the first-party set, each behind its feature ---------------------------
+orrery-ext-tools-builtin = { path = "../../../extensions/crates/orrery-ext-tools-builtin", optional = true }
+orrery-ext-session-sqlite = { path = "../../../extensions/crates/orrery-ext-session-sqlite", optional = true }
+orrery-ext-provider-fixture = { path = "../../../extensions/crates/orrery-ext-provider-fixture", optional = true }
+orrery-ext-provider-anthropic = { path = "../../../extensions/crates/orrery-ext-provider-anthropic", optional = true }
+
+[dev-dependencies]
+# The kernel's own suites live here: `deps-check` rule 1 forbids a core crate
+# from naming an extension, and this is the one crate allowed to. The optional
+# first-party deps above are in scope for tests whenever their feature is on,
+# which the default set turns on.
+serde_json = { workspace = true }
+parking_lot = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+# `builtin::bash_is_contained` needs a real process tree to kill.
+[[example]]
+name = "contain_probe"
+

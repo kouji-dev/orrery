@@ -27,12 +27,12 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-# The kernel's tests run against a real store and a real provider, because a
-# kernel test against two mocks is a test of the mocks. Neither reaches the
-# network: the fixture provider replays a committed `.jsonl`, and sqlite is
-# bundled.
-orrery-ext-provider-fixture = { path = "../../../extensions/crates/orrery-ext-provider-fixture" }
-orrery-ext-session-sqlite = { path = "../../../extensions/crates/orrery-ext-session-sqlite" }
-tempfile = { workspace = true }
+# **No extension crates, and therefore no integration tests in this crate.**
+# `cargo xtask deps-check` rule 1 is about the whole graph, dev-dependencies
+# included: no `core/` crate names an `extensions/` one, and the single
+# exception is the facade. A kernel test needs a provider and a store, both of
+# which live in `extensions/`, so the loop's tests live in
+# `orrery-harness/tests/{intercept,lifecycle,turn,budget,retry,cancel}.rs` —
+# against the real sqlite store and the committed model streams, rather than
+# against doubles written to keep the graph tidy.
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
-futures-util = { workspace = true }

@@ -102,6 +102,9 @@ pub(crate) async fn edit(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome
         .map_err(orrery_ext_api::BrokerError::into_outcome)?;
     Ok(text_outcome(
         ctx,
-        format!("replaced {} occurrence(s) in {path}", if all { hits } else { 1 }),
+        format!(
+            "replaced {} occurrence(s) in {path}",
+            if all { hits } else { 1 }
+        ),
     ))
 }

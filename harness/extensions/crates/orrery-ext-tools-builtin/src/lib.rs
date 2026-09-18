@@ -79,6 +79,13 @@ pub(crate) fn text_outcome(ctx: &CallCtx, text: String) -> Outcome {
 }
 
 /// The string field `name`, or a `Failed` outcome saying which one is missing.
+///
+/// The `Err` half is an [`Outcome`], which clippy notes is a large variant to
+/// carry in a `Result`. It stays: the alternative is a second error type that
+/// every tool would then have to convert into an outcome, which is the
+/// duplication `Outcome` exists to prevent, and this is one allocation per
+/// malformed call rather than per call.
+#[allow(clippy::result_large_err)]
 pub(crate) fn string_arg(input: &Value, name: &str) -> Result<String, Outcome> {
     input
         .get(name)
@@ -143,9 +150,7 @@ impl NativeExtension for BuiltinTools {
                 .atomic(true)
                 .requiring([Aspect::Read, Aspect::Write]),
             ToolDef::new("bash")
-                .described(
-                    "Run a shell command, contained and under the call's wall clock.",
-                )
+                .described("Run a shell command, contained and under the call's wall clock.")
                 .with_schema(serde_json::json!({
                     "type": "object",
                     "properties": {

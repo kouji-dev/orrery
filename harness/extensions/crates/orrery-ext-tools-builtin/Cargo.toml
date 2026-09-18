@@ -20,20 +20,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 
-# The four named tests are tests *of the broker* — a ceiling that bounds peak
-# memory, a write that reverts on cancel, a child whose grandchild dies with it.
-# Against a stub they would be assertions about the stub, so the real one is a
-# dev-dependency and the rig in `tests/common` wires it to the real policy
-# engine.
-[dev-dependencies]
-orrery-broker = { path = "../../../core/crates/orrery-broker" }
-orrery-policy = { workspace = true }
-orrery-tools = { path = "../../../core/crates/orrery-tools" }
-tempfile = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
-tokio-util = { workspace = true }
-
-# `bash_is_contained` needs a real process tree to kill. `cargo test` builds
-# examples, so the test finds this beside its own binary.
-[[example]]
-name = "contain_probe"
+# **No dev-dependencies, on purpose.** `cargo xtask deps-check` rule 3: an
+# extension's tests may not reach into an unpublished core crate, so that a
+# community author runs the identical suite. The four named tests of this
+# bundle are tests *of the broker* — a ceiling that bounds peak memory, a write
+# that reverts on cancel, a child whose grandchild dies with it — and a broker
+# is precisely what this crate may not name. They live in
+# `orrery-harness/tests/builtin.rs`, where the real broker is wired, and they
+# exercise the production facade rather than a rig built for them.

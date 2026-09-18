@@ -91,7 +91,12 @@ pub(crate) async fn grep(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome
         let text = String::from_utf8_lossy(&chunk.bytes);
         for (n, line) in text.lines().enumerate() {
             if line.contains(&pattern) {
-                lines.push(format!("{}:{}: {}", display(&file, &root), n + 1, line.trim_end()));
+                lines.push(format!(
+                    "{}:{}: {}",
+                    display(&file, &root),
+                    n + 1,
+                    line.trim_end()
+                ));
                 if lines.len() >= max {
                     break;
                 }
