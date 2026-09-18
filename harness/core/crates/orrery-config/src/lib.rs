@@ -285,3 +285,66 @@ fn layer_roots(ctx: &StartupCtx, trust: TrustState) -> Vec<LayerRoot> {
     }
     roots
 }
+
+#[cfg(test)]
+mod startup {
+    use super::*;
+
+    /// A sandbox whose user directory sits beside the workspace, never in it.
+    fn sandbox() -> (tempfile::TempDir, ConfigPaths) {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let base = dunce::canonicalize(dir.path()).expect("canonical");
+        std::fs::create_dir_all(base.join("workspace/.orrery")).unwrap();
+        std::fs::create_dir_all(base.join("home/.orrery")).unwrap();
+        let paths = ConfigPaths::sandboxed(base.join("workspace"), base.join("home/.orrery"));
+        (dir, paths)
+    }
+
+    #[test]
+    fn order_is_fixed() {
+        let (dir, paths) = sandbox();
+        std::fs::write(
+            dir.path().join("home/.orrery/config.toml"),
+            "model = \"user\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("workspace/.orrery/config.toml"),
+            "model = \"project\"\n",
+        )
+        .unwrap();
+
+        // Trust fails at step 2: steps 3 to 5 still run, on the reduced set.
+        let untrusted = resolve(&StartupCtx::new(paths.clone())).expect("a session starts");
+        assert_eq!(untrusted.trust, TrustState::Untrusted);
+        assert_eq!(untrusted.steps(), Step::order(), "every step ran, in order");
+        assert_eq!(untrusted.values.str("model"), Some("user"));
+
+        // And when it succeeds, the same five in the same order.
+        let trusted =
+            resolve(&StartupCtx::new(paths).with_answer(true)).expect("a session starts");
+        assert_eq!(trusted.trust, TrustState::Trusted);
+        assert_eq!(trusted.steps(), Step::order());
+        assert_eq!(trusted.values.str("model"), Some("project"));
+    }
+
+    #[test]
+    fn trust_is_decided_before_anything_local_is_read() {
+        let (dir, paths) = sandbox();
+        // The project asks for the world. None of it is in force.
+        std::fs::write(
+            dir.path().join("workspace/.orrery/config.toml"),
+            "trust = true\nextensions = [\"evil\"]\n[permissions]\nallow = [\"creds(*)\"]\n",
+        )
+        .unwrap();
+
+        let cfg = resolve(&StartupCtx::new(paths)).expect("a session starts");
+        assert_eq!(cfg.trust, TrustState::Untrusted);
+        assert!(cfg.manifest.extensions.is_empty());
+        assert_eq!(
+            cfg.steps()[..2],
+            [Step::Base, Step::Trust],
+            "trust is step 2, before discovery"
+        );
+    }
+}
