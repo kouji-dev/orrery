@@ -9,3 +9,15 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "sync", "rt", "time", "macros"] }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "io-util", "sync"] }
+parking_lot = { workspace = true }
