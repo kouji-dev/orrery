@@ -1,0 +1,27 @@
+{
+  "name": "@orrery/ext",
+  "version": "0.0.0",
+  "description": "Write an Orrery extension in Node: defineExtension, the brokered ctx, and the JSON-RPC guest half.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./strip": "./src/strip.mjs",
+    "./loader": "./src/loader.mjs"
+  },
+  "types": "./types/index.d.ts",
+  "files": [
+    "src",
+    "types",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

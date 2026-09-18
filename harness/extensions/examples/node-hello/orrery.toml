@@ -1,0 +1,13 @@
+# The worked example from plan 06, task 9. A node extension, start to finish.
+api     = "orrery-ext/1"
+runtime = "node"
+
+[extension]
+id      = "hello"
+version = "0.1.0"
+
+[provides]
+tools = ["greet", "count_files"]
+
+[requires]
+read = ["$WORKSPACE/**"]

@@ -295,25 +295,35 @@ Files: `orrery-ext-api/src/testing.rs`
 - [x] Implement `MockBroker`, `load_for_test`, recorded calls, canned responses, surface assertions as data.
 - [x] Wire `orrery ext test` to it (the command lands in plan 17). *(Landed in plan 17: `orrery ext test [path]` reads a manifest, loads it through `load_for_test` against the grants the manifest itself asks for, prints what it contributes and how many broker calls it made, and exits 0 / 1 / 2. `orrery ext list` reports the compiled-in set through `testing::missing`, the same function the host calls. Neither builds a kernel, opens a database or asks a provider for anything.)*
 
-### Task 9 · The node SDK — **DEFERRED to the next wave**
+### Task 9 · The node SDK
 
 Files: `extensions/node/ext-sdk/*`
 
-> The host half is done and the wire format is pinned by a hand-written guest
+> The wire format is pinned by a hand-written guest
 > (`orrery-host-rpc/tests/fixtures/echo-ext/`) that deliberately shares no code
 > with the SDK — so the protocol is provably implementable from the spec alone,
-> which is the property an SDK cannot establish about itself. The TypeScript
-> package is the next wave's.
+> which is the property an SDK cannot establish about itself. The SDK is checked
+> against the same host from the other side: `orrery-host-rpc/tests/sdk.rs`
+> loads `extensions/examples/node-hello`, which is built on the SDK, through the
+> real `RpcHost`.
+>
+> **It ships as JavaScript with hand-written `.d.ts`, not as compiled
+> TypeScript.** There is no build step and no dependency, so what a reader sees
+> is what runs, and `pnpm install` is not on the path between a clone and a
+> passing test. The plan's `z.object(...)` is a plain JSON Schema for the same
+> reason: zod would be the package's first dependency.
 
-- [ ] `defineExtension`, the `ctx` shape (`ctx.proc`, `ctx.fs`, `ctx.net`, `ctx.creds`, `ctx.ui`), the JSON-RPC client half, the loader hook that strips `fs`/`child_process`.
-- [ ] **The README states the threat-model caveat** (translation #13) in its own section. Do not bury it.
-- [ ] One worked example extension under `extensions/examples/node-hello/`.
+- [x] `defineExtension`, the `ctx` shape (`ctx.proc`, `ctx.fs`, `ctx.net`, `ctx.creds`, `ctx.ui`), the JSON-RPC client half, the loader hook that strips `fs`/`child_process`.
+- [x] **The README states the threat-model caveat** (translation #13) in its own section. Do not bury it.
+- [x] One worked example extension under `extensions/examples/node-hello/`.
+- [x] `python` and `process` (section 8's phase 10): the same RPC path, a different argv. `orrery-host-rpc/tests/runtimes.rs` starts a hand-written python guest by the `python main.py` convention, and an "existing internal service" through its manifest's `[process]` table with no rewrite and no Orrery-shaped code.
 
 ---
 
 ## Done when
 
-- `cargo test -p orrery-ext-api -p orrery-host -p orrery-jsonrpc -p orrery-host-rpc` green, and the builtin bundle's own suite with `-p orrery-harness --test builtin` (see Task 4).
+- `cargo test -p orrery-ext-api -p orrery-host -p orrery-jsonrpc -p orrery-host-rpc` green, and the builtin bundle's own suite with `-p orrery-harness --test builtin` (see Task 4). `builtin::bash_is_contained` needs its example built first: `cargo build -p orrery-harness --example contain_probe`.
+- The node SDK's own suite is `node --test "test/*.test.mjs"` in `extensions/node/ext-sdk`, and it is checked against the host by `-p orrery-host-rpc --test sdk`.
 - Two extensions claiming `search` coexist as `a.search` and `b.search`; unloading one leaves the session alive.
 - `builtin.read` on a huge file demonstrably does not buffer it —
   `builtin::read_respects_the_output_ceiling` reads 10 MB under a 4 KB ceiling
@@ -373,7 +383,7 @@ Files: `extensions/node/ext-sdk/*`
 
 Two rules ended up in the table rather than in a runtime, because they must be the same for all four: `disabled_by_grant` (one answer to "is this granted", so a `native` tool is never offered where a `node` one is hidden) and the transport rule — **a runtime that dies mid-call degrades its extension and settles the call `Failed`; the session lives.**
 
-**Not done here:** the node SDK and its worked example (Task 9). `orrery ext test` is now wired, in plan 17.
+`orrery ext test` is wired, in plan 17.
 
 **Landed (2026-09-18, wave 3).** Task 4. `orrery-ext-tools-builtin` implements
 all six tools against `BrokerFacade` and nothing else — no `File`, no `Command`,
@@ -383,8 +393,7 @@ grandchild and asserts the beacon the grandchild was appending to stops growing
 once the call's wall clock runs out, which is the job object doing what a
 `Child::kill` could not.
 
-Two things the task revealed and did not fix, both written into the crate's
-module docs rather than left to be rediscovered:
+Two things the task revealed and did not fix — **both closed in wave 4, below.**
 
 - **`BrokerFacade` has no directory listing.** `grep` and `glob` therefore
   discover *names* with `std::fs::read_dir` and read every *byte* through the
@@ -396,3 +405,33 @@ module docs rather than left to be rediscovered:
   `write_is_atomic` builds a facade per call. Production wiring wants the same
   thing: a `for_call(call, cancel)` factory, or a `CallCtx` that carries its own
   broker.
+
+**Landed (2026-09-18, wave 4).** Task 9, and both disclosures above.
+
+- **`@orrery/ext`** (`extensions/node/ext-sdk`): `defineExtension` — which both
+  declares and serves, because the host starts the entry point and expects it to
+  answer — the framing, the bidirectional peer with its pending map, the whole
+  brokered `ctx` (`fs.list/read/write`, `proc.run`, `net.fetch`, `creds.get`,
+  `ui.table/text/markdown`, and a `signal` that fires on `$/cancel` for *one*
+  call), the outcome builders, and the loader hook. Twelve `node --test` cases,
+  no dependencies, no build step, no network. The threat-model caveat
+  (translation #13) is its README's second section, before the API: the hook is
+  **opt-in through the manifest's `[process]` table**, because a hook the host
+  imposed would look like a boundary the host enforces.
+- **`extensions/examples/node-hello`** — two tools, one of which discovers
+  through `ctx.fs.list` and declares `requires = ["read"]`, so ungranted it is
+  *disabled with a reason* rather than broken. `tests/sdk.rs` runs all three
+  properties through the real host.
+- **`BrokerFacade::list`** — added under `orrery-ext/1` (open question 3's
+  "adding a method" rule). `PolicyBroker` answers it from the engine's own
+  rules and **omits** what the call may not read rather than naming it and
+  refusing later; the mock broker answers it for `ext test`; `broker/list`
+  carries it to a guest. `grep` and `glob` no longer touch `std::fs`.
+- **`BrokerSource`** — the table asks for a facade *per dispatch*, and
+  `PolicyBroker::for_call` answers, so a token minted by a running tool is tied
+  to that call. Revocation also had to be made durable: a token is minted per
+  broker call and redeemed at once, so `TokenLedger::revoke_call` emptying
+  `live` was undone by the tool's very next `read`. A revoked call is now
+  remembered and mints nothing redeemable —
+  `ext_broker::revoke_call_reaches_an_in_flight_tool_call` fails without either
+  half.

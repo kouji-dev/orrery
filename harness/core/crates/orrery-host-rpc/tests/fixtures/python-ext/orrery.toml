@@ -1,0 +1,11 @@
+# A python guest. `runtime = "python"` implies `python main.py`, exactly as
+# `node` implies `node index.mjs`: same RPC path, different argv.
+api     = "orrery-ext/1"
+runtime = "python"
+
+[extension]
+id      = "pyext"
+version = "0.1.0"
+
+[provides]
+tools = ["version"]

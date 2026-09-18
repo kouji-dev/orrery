@@ -119,7 +119,7 @@ Files: `harness/xtask/src/deps_check.rs`
 
 Files: `harness/extensions/examples/`
 
-- [ ] `native-hello/` (Rust, compiled in), `node-hello/` (TS, `@orrery/ext`), `wasm-hello-rs/`, `wasm-hello-go/` (plan 14 builds the last two).
+- [ ] `native-hello/` (Rust, compiled in), `node-hello/` (`@orrery/ext`), `wasm-hello-rs/`, `wasm-hello-go/` (plan 14 builds the last two). **`node-hello/` landed with plan 06's task 9** — two tools, its own README, and `orrery-host-rpc/tests/sdk.rs` runs it through the real host. It is JavaScript with hand-written types, not compiled TypeScript: no build step, no dependency, nothing between the source and what runs.
 - [ ] **Failing test first.** `examples::all_runtimes_produce_the_same_output` — the same logical tool, four runtimes, identical `Outcome`. This is objective 9's proof, and it is the test that catches the kernel accidentally caring which runtime it dispatched to.
 
 ### Task 5 · Publishing dry run

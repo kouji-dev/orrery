@@ -1,0 +1,23 @@
+# An existing internal service, wrapped as an extension with no rewrite.
+#
+# `runtime = "process"` is the phase-10 case: the harness does not know or care
+# what the program is, only that it speaks the protocol on its stdio. Here the
+# program happens to be started by node; it could be a binary, a shell script or
+# a service somebody wrote years before Orrery existed.
+api     = "orrery-ext/1"
+runtime = "process"
+
+[extension]
+id      = "service"
+version = "0.1.0"
+
+[provides]
+tools = ["ping"]
+
+[process]
+command  = "node"
+args     = ["service.mjs"]
+protocol = "orrery-ext/1"
+
+[process.env]
+ORRERY_SERVICE_GREETING = "pong"
