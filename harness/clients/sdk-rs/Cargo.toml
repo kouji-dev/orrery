@@ -6,6 +6,24 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = true
+# Not publishable while it depends on orrery-transport, which is not published.
+# Splitting the store (publishable, pure data) from the session (transport) is
+# the phase-2 move; there is no third-party consumer yet to need it.
+publish = false
 
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-agui = { version = "0.1.0", path = "../../core/crates/orrery-agui" }
+orrery-transport = { version = "0.1.0", path = "../../core/crates/orrery-transport" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+futures-util = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true, features = ["json", "stream"] }
+interprocess = { workspace = true }
+bytes = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }
+rustls = { workspace = true }
