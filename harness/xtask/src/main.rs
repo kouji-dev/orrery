@@ -1,8 +1,8 @@
 //! `cargo xtask <task>`.
 //!
-//! `deps-check` enforces the dependency-direction rule for real. `typegen`,
-//! `wit-check` and `agui-drift` are stubs that exit 0 naming their plan, so the
-//! task list is complete from the scaffold and fills in plan by plan.
+//! `deps-check` enforces the dependency-direction rule for real; `typegen`
+//! regenerates `harness/protocol`; `agui-drift` checks the vendored AG-UI enum
+//! against upstream. `wit-check` is still a stub that exits 0 naming its plan.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -34,7 +34,19 @@ enum Task {
     /// Check `harness/wit/orrery-extension.wit` against the host bindings.
     WitCheck,
     /// Diff the vendored AG-UI event enum against the published upstream schema.
-    AguiDrift,
+    ///
+    /// Reads the installed `@ag-ui/core` when there is one, which is a file on
+    /// disk. `--fetch` additionally allows a network read, and is meant for CI;
+    /// without it and without the package, the job compares against the pinned
+    /// list and says so rather than failing for being offline.
+    AguiDrift {
+        /// Allow a network read of upstream's published schema. CI only.
+        #[arg(long)]
+        fetch: bool,
+        /// Fail when no upstream list can be read at all.
+        #[arg(long)]
+        strict: bool,
+    },
 }
 
 fn repo_root() -> PathBuf {
@@ -81,11 +93,31 @@ fn main() -> ExitCode {
             println!("wit-check: not implemented — see harness/docs/plans/14-wasm-wit.md");
             ExitCode::SUCCESS
         }
-        Task::AguiDrift => {
-            println!(
-                "agui-drift: not implemented — see harness/docs/plans/08-protocol-transport.md"
-            );
-            ExitCode::SUCCESS
-        }
+        Task::AguiDrift { fetch, strict } => match xtask::agui_drift::run(&root, fetch, strict) {
+            Err(e) => {
+                eprintln!("agui-drift: {e}");
+                ExitCode::from(2)
+            }
+            Ok(drift) => {
+                println!("agui-drift: compared against {}", drift.source);
+                for name in &drift.invented {
+                    eprintln!("agui-drift: `{name}` is not an AG-UI event");
+                }
+                for name in &drift.unaccounted {
+                    println!("agui-drift: upstream added `{name}`; neither emitted nor skipped");
+                }
+                for name in &drift.stale {
+                    println!("agui-drift: `{name}` is skipped but upstream dropped it");
+                }
+                if drift.is_failure() {
+                    eprintln!("agui-drift: the vendored enum has a name AG-UI does not");
+                    return ExitCode::FAILURE;
+                }
+                if drift.is_clean() {
+                    println!("agui-drift: ok");
+                }
+                ExitCode::SUCCESS
+            }
+        },
     }
 }

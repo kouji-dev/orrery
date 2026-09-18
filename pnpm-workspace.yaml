@@ -24,6 +24,10 @@ minimumReleaseAgeExclude:
   - '@kouji-ui/components'
   - '@kouji-ui/core'
   - '@kouji-ui/themes'
+  - '@ag-ui/client@1.0.0'
+  - '@ag-ui/core@1.0.0'
+  - '@ag-ui/encoder@1.0.0'
+  - '@ag-ui/proto@1.0.0'
 
 # lucide-angular@1.0.0 (latest) declares a peer range of "13.x - 21.x", which
 # Angular 22 falls outside of. The library itself is version-agnostic at runtime.
