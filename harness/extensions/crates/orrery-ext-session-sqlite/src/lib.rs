@@ -35,7 +35,7 @@ use orrery_proto::{BranchId, Seq, SessionId, TokenBudget, TurnId};
 use orrery_session::algebra::{self, Materialised, TokenCounter};
 use orrery_session::lease::{BranchLease, BranchStatus, LeaseRegistry};
 use orrery_session::turn::{
-    BranchOutcome, CompactResult, NewTurn, SessionHandle, SessionSummary, StoredEvent,
+    BranchOutcome, CompactResult, NewTurn, SessionHandle, SessionSummary, StoredEvent, TurnRow,
 };
 use orrery_session::{SessionError, SessionStore};
 use tokio::sync::oneshot;
@@ -313,6 +313,10 @@ impl SessionStore for SqliteSessionStore {
             watermark: upto,
             covered,
         })
+    }
+
+    async fn turns(&self, branch: BranchId) -> Result<Vec<TurnRow>, SessionError> {
+        self.reader.turns_on(branch).await
     }
 
     async fn events_since(

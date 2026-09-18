@@ -51,7 +51,7 @@ fn main() {
             since,
             submit,
         }) => cmd::attach::dispatch(&cli, endpoint, *since, submit.as_deref()),
-        Some(Command::Replay { session }) => cmd::replay::dispatch(session),
+        Some(Command::Replay { session }) => cmd::replay::dispatch(&cli, session),
         Some(Command::Session { command }) => cmd::session::dispatch(&cli, command),
         Some(Command::Install {
             source,

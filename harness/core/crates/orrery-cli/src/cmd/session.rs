@@ -41,7 +41,7 @@ pub fn dispatch(cli: &Cli, command: &SessionCommand) -> ! {
 /// Where the database is, given the flags. Defaults to `<workspace>/.orrery`,
 /// the same default `cmd::setup` uses, so `run` and `session list` agree
 /// without either reading the other's code.
-fn state_dir(cli: &Cli) -> PathBuf {
+pub(crate) fn state_dir(cli: &Cli) -> PathBuf {
     cli.state_dir.clone().unwrap_or_else(|| {
         let workspace = cli.workspace.clone().unwrap_or_else(|| {
             std::env::current_dir()
@@ -54,7 +54,7 @@ fn state_dir(cli: &Cli) -> PathBuf {
 /// Open the store, or exit. Answering "which sessions are there" must not
 /// *create* a database, so a store that is not there yet is `None` rather than
 /// an empty file written into somebody's workspace.
-fn store(cli: &Cli) -> Option<Arc<dyn SessionStore>> {
+pub(crate) fn store(cli: &Cli) -> Option<Arc<dyn SessionStore>> {
     let dir = state_dir(cli);
     if !dir.join("sessions.db").exists() {
         return None;
@@ -65,7 +65,7 @@ fn store(cli: &Cli) -> Option<Arc<dyn SessionStore>> {
     }
 }
 
-fn runtime() -> tokio::runtime::Runtime {
+pub(crate) fn runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

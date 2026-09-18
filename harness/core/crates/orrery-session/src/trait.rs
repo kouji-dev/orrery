@@ -9,7 +9,7 @@ use crate::algebra::{Materialised, TokenCounter};
 use crate::error::SessionError;
 use crate::lease::BranchLease;
 use crate::turn::{
-    BranchOutcome, CompactResult, NewTurn, SessionHandle, SessionSummary, StoredEvent,
+    BranchOutcome, CompactResult, NewTurn, SessionHandle, SessionSummary, StoredEvent, TurnRow,
 };
 
 /// Where the turn tree lives.
@@ -118,6 +118,27 @@ pub trait SessionStore: Send + Sync + 'static {
         upto: Seq,
         summary: NewTurn,
     ) -> Result<CompactResult, SessionError>;
+
+    /// The rows on one branch, in order, ignoring ancestry and ignoring
+    /// watermarks.
+    ///
+    /// This is the **cold replay** read, and it is deliberately not
+    /// `materialise`. `materialise` renders rows into the messages a *model*
+    /// sees, and that rendering is lossy on purpose: a tool result becomes a
+    /// user-role block with no tool name on it, a summary and a real prompt
+    /// become the same shape. Re-emitting a past session as events needs the
+    /// rows themselves — which call, which tool, what it cost — so `orrery
+    /// replay` reads here and encodes from [`TurnKind`](crate::TurnKind).
+    ///
+    /// The default refuses, and refusing is not conformant:
+    /// [`turns_come_back_in_order`](crate::conformance::turns_come_back_in_order)
+    /// fails against it.
+    async fn turns(&self, branch: BranchId) -> Result<Vec<TurnRow>, SessionError> {
+        let _ = branch;
+        Err(SessionError::Backend {
+            detail: "this backend does not read back raw turns".to_owned(),
+        })
+    }
 
     /// Replay, for `session.attach(since)` and `orrery replay`.
     ///

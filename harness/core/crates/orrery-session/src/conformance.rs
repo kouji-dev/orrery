@@ -41,6 +41,7 @@ pub async fn run_conformance(store: Arc<dyn SessionStore>) {
     sessions_can_be_enumerated(&*store).await;
     child_close_does_not_deadlock_the_parent(&*store).await;
     a_session_can_be_deleted(&*store).await;
+    turns_come_back_in_order(&*store).await;
 }
 
 fn user(text: &str) -> NewTurn {
@@ -594,4 +595,46 @@ pub async fn a_session_can_be_deleted(store: &dyn SessionStore) {
         1,
         "deleting one session leaves the other one's turns alone"
     );
+}
+
+/// `turns` hands back the rows themselves, in order, with their kinds intact.
+///
+/// The property `orrery replay` needs and `materialise` cannot give: a tool
+/// result is still a `ToolResult` with its call, its tool and its outcome on
+/// it, rather than a user-role block with the tool name rendered away.
+pub async fn turns_come_back_in_order(store: &dyn SessionStore) {
+    use orrery_proto::ToolRef;
+
+    let session = store.create("/ws", "default").await.expect("create");
+    let root = store.open(session).await.expect("open").root;
+    let lease = store.lease(root).await.expect("lease");
+    store.append(&lease, user("do the thing")).await.expect("append");
+    store.append(&lease, assistant("on it")).await.expect("append");
+    let call = CallId::new();
+    store
+        .append(
+            &lease,
+            NewTurn::new(TurnKind::ToolResult {
+                call,
+                r#ref: "builtin.read".parse::<ToolRef>().expect("a tool ref"),
+                outcome: Outcome::ok(),
+            }),
+        )
+        .await
+        .expect("append");
+    drop(lease);
+
+    let rows = store.turns(root).await.expect("a backend reads back its rows");
+    assert_eq!(rows.len(), 3, "every row, and nothing else");
+    let seqs: Vec<u64> = rows.iter().map(|r| r.seq.0).collect();
+    assert_eq!(seqs, vec![1, 2, 3], "in order, one-based, contiguous");
+    assert!(matches!(rows[0].kind, TurnKind::User { .. }));
+    assert!(matches!(rows[1].kind, TurnKind::Assistant { .. }));
+    match &rows[2].kind {
+        TurnKind::ToolResult { call: c, r#ref, .. } => {
+            assert_eq!(*c, call, "the call id survives the round trip");
+            assert_eq!(r#ref.to_string(), "builtin.read", "and so does the tool");
+        }
+        other => panic!("the third row is a tool result, not {other:?}"),
+    }
 }

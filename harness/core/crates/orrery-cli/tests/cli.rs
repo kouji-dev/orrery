@@ -113,13 +113,12 @@ fn a_typo_is_not_an_interactive_session() {
 /// A subcommand that has not landed yet exits 2 and names the plan file that
 /// will implement it, so the tree is complete from phase 0 and fills in.
 ///
-/// `run`, `serve`, `attach`, `ext test`, `session list|show`, both `explain`s,
-/// `init` and `import` are no longer on this list: they are implemented, and
-/// their own suites cover them.
+/// `run`, `serve`, `attach`, `ext test`, `session list|show|rm`, `replay`, both
+/// `explain`s, `init` and `import` are no longer on this list: they are
+/// implemented, and their own suites cover them.
 #[test]
 fn unimplemented_subcommands_name_their_plan() {
     let cases: &[(&[&str], &str)] = &[
-        (&["replay", "s1"], "17-cli.md"),
         (&["eval", "run", "suite"], "16-eval-runner.md"),
         (&["ledger"], "07-policy-broker-audit.md"),
         (&["telemetry"], "07-policy-broker-audit.md"),
