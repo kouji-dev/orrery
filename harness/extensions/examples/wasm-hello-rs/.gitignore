@@ -1,0 +1,3 @@
+# The example builds on demand, for another target. Its lockfile is a build
+# artifact here, not a contract.
+Cargo.lock

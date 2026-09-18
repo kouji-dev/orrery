@@ -8,4 +8,28 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# The TinyGo example needs tinygo and wit-bindgen-go, neither of which cargo
+# installs. Off by default so a machine without them still runs everything
+# else; `tests/examples.rs` says out loud when the Go half was not compared.
+tinygo-examples = []
+
 [dependencies]
+orrery-wit = { path = "../orrery-wit" }
+orrery-proto = { workspace = true }
+orrery-broker = { workspace = true }
+orrery-policy = { workspace = true }
+orrery-tools = { workspace = true }
+orrery-audit = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+async-trait = { workspace = true }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

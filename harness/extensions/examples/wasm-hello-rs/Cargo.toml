@@ -1,0 +1,24 @@
+# The Rust example. Outside the workspace on purpose: it builds for
+# wasm32-wasip2, with its own profile.
+[package]
+name = "wasm-hello-rs"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+orrery-guest = { path = "../../crates/orrery-guest" }
+
+# The size recipe from orrery-guest's README. Without it the component is
+# roughly twice this size.
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1

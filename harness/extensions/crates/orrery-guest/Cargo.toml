@@ -1,0 +1,15 @@
+[package]
+name = "orrery-guest"
+version = "0.1.0"
+description = "The guest SDK for Orrery wasm extensions: the broker, the ui builders, and the arena hidden behind them."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# NOT `workspace = true`: the root pins 0.36, whose generated `export!` emits
+# edition-2021 attribute syntax and will not compile in an edition-2024 guest.
+# See the note in plan 14. Move this back to the workspace pin once the root
+# moves to 0.51.
+wit-bindgen = "0.51"

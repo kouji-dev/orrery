@@ -130,11 +130,18 @@ It hides the arena: `ctx.ui.*` builds a normal tree and flattens it on the way o
 **Create**
 
 - `harness/wit/orrery-extension.wit`
-- `harness/core/crates/orrery-wit/src/{lib,bindings,arena}.rs`
-- `harness/core/crates/orrery-host-wasm/src/{lib,engine,store,imports,limits,cancel}.rs`
-- `harness/core/crates/orrery-host-wasm/tests/{sandbox,limits,cancel,roundtrip}.rs`
+- `harness/core/crates/orrery-wit/src/{lib,arena}.rs` (no `bindings.rs`: the host
+  bindings are generated in `orrery-host-wasm`, so `orrery-wit` stays free of
+  `wasmtime` and the arena is linkable from paths with no wasm in them)
+- `harness/core/crates/orrery-host-wasm/src/{lib,engine,store,imports,limits,cancel,broker}.rs`
+  (`broker.rs` added: the token-free `HostBroker` face the imports are served from)
+- `harness/core/crates/orrery-host-wasm/tests/{sandbox,limits,cancel,roundtrip,imports,examples}.rs`
 - `harness/extensions/crates/orrery-guest/{Cargo.toml,README.md,src/*}`
 - `harness/extensions/examples/wasm-hello-rs/`, `harness/extensions/examples/wasm-hello-go/`
+- `harness/core/crates/orrery-host-wasm/tests/guests/sandbox-probe/` — added: a guest
+  written against the raw `.wit` that probes the boundary from the inside. Every
+  sandbox, ceiling, import and cancellation test is driven through it, because
+  the host can only assert that it *configured* a sandbox.
 
 ---
 
@@ -171,42 +178,74 @@ bytes.
 
 Files: `orrery-host-wasm/src/{engine,store,limits}.rs`
 
-- [ ] **Failing test first.** `limits::memory_ceiling_traps` — a guest that allocates past its ceiling traps; the host reports `Outcome::Failed` with a clear reason, and the session lives.
-- [ ] `limits::epoch_ceiling_traps` — an infinite-loop guest is trapped within the wall-clock budget.
-- [ ] `sandbox::no_preopens` — a guest calling a WASI filesystem function fails; assert the linker exposes no preopened directory. **This is the test that proves the boundary.**
-- [ ] Implement.
+- [x] **Failing test first.** `limits::memory_ceiling_traps` — a guest that allocates past its ceiling traps; the host reports `Outcome::Trapped` with a clear reason, and the session lives (the next call on the same host is asserted to work).
+- [x] `limits::epoch_ceiling_traps` — an infinite-loop guest is trapped within the wall-clock budget. Plus `a_missing_memory_budget_is_not_an_absent_ceiling` and `a_zero_wall_clock_budget_is_not_forever`.
+- [x] `sandbox::no_preopens` — **done, and from inside a real guest.** `tests/guests/sandbox-probe` tries four paths, a `read_dir` and a write; the host asserts none succeeded and that the broker was never reached, so it is the guest failing to get out rather than the broker refusing it. A second, cheaper test fails at the same time if anybody adds a `preopened_dir` / `inherit_*` / `allow_*` call to `store::no_preopens`.
+- [x] Implement.
+
+Note on the outcome type: the plan said `Outcome::Failed`. `Failed` is now the
+guest's **own** error string — the message the model sees — and a ceiling is
+`Outcome::Trapped`. Two different things deserved two names.
+
+A trap needs a guest that really loops. `sandbox-probe`'s spin uses
+`std::hint::black_box`: without it LLVM proves a counting loop terminates,
+deletes it, and the "infinite loop" test silently stops testing anything.
 
 ### Task 3 · Broker imports
 
 Files: `orrery-host-wasm/src/imports.rs`
 
-- [ ] **Failing test first.** `imports::denied_call_returns_error_not_trap` — a guest calling `run-proc` without a `spawn` grant gets `error::denied`, and the guest can handle it. A denial must be a value here too.
-- [ ] `imports::guest_never_sees_a_token` — a type-level check plus an ABI review note: no import signature carries one.
-- [ ] `imports::output_ceiling_applies` — `read-file` with `max_bytes` returns truncated data and the flag.
-- [ ] Implement all five imports over the broker.
+- [x] **Failing test first.** `imports::denied_call_returns_error_not_trap` — the guest receives `error::denied`, reports it in a surface, and carries on; returning at all is what proves it was not trapped. `every_import_denies_as_a_value` does the same for the other four.
+- [x] `imports::guest_never_sees_a_token` — a type-level check (nothing in `HostBroker`'s signatures, nothing in the `.wit`'s imports) plus `orrery-wit`'s `no_import_carries_a_capability_token`, which asserts it against the world itself.
+- [x] `imports::output_ceiling_applies` — and `a_short_file_is_not_flagged_truncated` for the other side of it.
+- [x] Implement all five imports over the broker.
+
+**`read-file` now returns a `file-out` record.** The sketch returned a bare
+`list<u8>`, which has nowhere to put the truncation flag this task requires.
 
 ### Task 4 · Cancellation
 
 Files: `orrery-host-wasm/src/cancel.rs`, `tests/cancel.rs`
 
-- [ ] **Failing test first.** `cancel::traps_a_spinning_guest` — cancel; the guest traps; the call settles `Cancelled`.
-- [ ] `cancel::blocked_in_import_is_freed_by_the_broker` — a guest blocked in `run-proc`; cancelling kills the child, the import returns `cancelled`, the guest traps at its next backedge. Assert both halves happened.
-- [ ] Implement; **document the coarseness in the crate docs**, not only here.
+- [x] **Failing test first.** `cancel::traps_a_spinning_guest`.
+- [x] `cancel::blocked_in_import_is_freed_by_the_broker` — **both halves asserted.** The guest writes a witness file between the import returning and its spin, so the test can tell "the broker freed it with a value" from "the epoch alone stopped it". Plus `a_cancelled_call_starts_no_more_work`: after a cancel, imports refuse without reaching the broker.
+- [x] Implement; the coarseness is in `orrery-host-wasm`'s crate docs and in `cancel`'s module docs, and is readable as data via `WasmHost::coarseness()` so a client can say the true thing in a tooltip.
+
+**Mechanism correction.** Epoch interruption alone cannot carry cancellation: a
+cancel would have to race the epoch counter past a live deadline, which for a
+ten-minute budget is 60 000 increments. The store instead keeps a **one-tick
+deadline with a callback** that decides each time whether to extend — it reads
+the cancel flag and the elapsed wall clock, and refuses. One mechanism, both
+ceilings, and a cancel that lands within one tick whatever the budget. The
+callback only runs while the guest is executing wasm, which is exactly why it
+cannot free a guest blocked in an import — the documented coarseness, now with a
+mechanism behind it rather than an assertion.
 
 ### Task 5 · The guest SDK
 
 Files: `orrery-guest/*`
 
-- [ ] **Failing test first.** `guest::hides_the_arena` — an extension written with `ctx.ui.table(..)` produces a valid arena without the author touching indices.
-- [ ] Implement `export_extension!`, `Ctx`, the `ui` builders, error mapping.
+- [x] **Failing test first.** `guest::hides_the_arena` — `orrery-guest/tests/ui.rs` asserts the arena a `ui::section(..)` tree flattens to, and `orrery-host-wasm`'s `the_sdk_hides_the_arena` asserts the example's source contains no index *and* that it round-trips through a real host.
+- [x] Implement `export_extension!`, `Ctx` (`proc` / `fs` / `net`), the `ui` builders, error mapping.
+
+`Ctx` is `ctx.proc` / `ctx.fs` / `ctx.net` rather than the sketch's
+`ctx.proc` / `ctx.ui`: `ui` is free functions, because a builder hanging off the
+context implied it needed one.
 
 ### Task 6 · Examples in two languages
 
 Files: `extensions/examples/wasm-hello-{rs,go}/`
 
-- [ ] Rust example using `orrery-guest`.
-- [ ] **TinyGo example using `wit-bindgen` directly** — the point is to prove the WIT generates usable bindings for a language with no SDK of ours. If this is painful, the WIT is wrong.
-- [ ] **Failing test first.** `examples::both_load_and_dispatch` — build both (behind a feature flag so CI without TinyGo skips), load each, dispatch, assert identical output.
+- [x] Rust example using `orrery-guest` (`wasm-hello-rs`). 53 KiB with the size recipe.
+- [~] **TinyGo example** (`wasm-hello-go`) — written against the raw `.wit` for `wit-bindgen-go`, with a README giving the exact two commands. **NOT BUILT OR RUN HERE: TinyGo is not installed on this machine**, so it is behind the `tinygo-examples` cargo feature and `examples::both_load_and_dispatch` prints "NOT COMPARED" rather than skipping quietly. The Go source is written but unverified; compiling it is the remaining work.
+- [x] **Failing test first.** `examples::both_load_and_dispatch` — builds the Rust half, loads it, dispatches, and compares structurally (heading, columns, first cell) so the one legitimate difference between the languages is the only one allowed.
+
+**The world binds without an SDK — proven, in Rust.**
+`tests/guests/sandbox-probe` is written against the raw `.wit` with
+`wit-bindgen` alone, uses every import and builds arenas by hand, and drives
+every test in `orrery-host-wasm`. It compiled first time bar one borrow. That is
+most of the evidence this task wanted; the TinyGo half would extend it to a
+non-Rust toolchain.
 
 ### Task 7 · JSON-over-the-boundary cost
 
@@ -234,15 +273,47 @@ does not model.
 
 ## Done when
 
-- `cargo test -p orrery-wit -p orrery-host-wasm` green, including the arena proptest.
-- A guest cannot touch the filesystem except through the broker — proven by the no-preopens test.
-- Memory and wall-clock ceilings demonstrably trap.
-- Two example extensions in two languages load from the same `.wit` and behave identically.
-- The JSON-cost measurement is recorded.
+- [x] `cargo test -p orrery-wit -p orrery-host-wasm -p orrery-guest` green, including the arena proptest. 19 + 26 + 4 tests.
+- [x] A guest cannot touch the filesystem except through the broker — proven by `sandbox::no_preopens`, from inside a guest.
+- [x] Memory and wall-clock ceilings demonstrably trap, and the session survives both.
+- [~] Two example extensions in two languages load from the same `.wit`. The Rust one is built and asserted; the **TinyGo one is written but unbuilt — TinyGo is not installed here** — and is gated behind `--features tinygo-examples`.
+- [x] The JSON-cost measurement is recorded: 32.1%, acceptable.
 
 ## Open questions
 
-1. **Freeze the arena shape before phase 2 ends.** Every guest language binds against it; changing it later is the one genuinely expensive mistake available here.
-2. **Fuel under eval only** — confirm the eval runner can turn it on per-run without a second engine. `Config` is per-`Engine`, so this may mean two engines. Check early.
-3. **WASI p2 → p3.** Track it, do not chase it. Write down what a migration would touch (async imports, mainly) so the cost is known.
-4. **Component size.** A Rust wasm component with the SDK is not small. Measure and, if it matters, document the `opt-level = "z"` + `wasm-opt` recipe in `orrery-guest`'s README.
+1. **CLOSED — the arena is frozen.** See task 1. The shape, its six invariants
+   and the `rebuild` that enforces them are settled, and `cargo xtask wit-check`
+   fails if the `.wit` and the Rust drift.
+2. **CLOSED — fuel needs a second engine.** `consume_fuel` is a `Config`
+   setting and `Config` is per-`Engine`, so the eval runner cannot turn it on
+   per run against a shared engine. `WasmHost::for_eval()` builds the second
+   one. It is cheap: an `Engine` is a compiler and a code cache, and eval wants
+   a separate cache anyway.
+3. **OPEN, deliberately — WASI p2 → p3.** What a migration touches, now that
+   there is code to look at: the imports are already async
+   (`imports: { default: async }`), so the host-function bodies do not move.
+   What moves is `wasmtime_wasi::p2::add_to_linker_async` → the p3 equivalent,
+   the `WasiView` / `WasiCtxView` impl in `store.rs`, and any guest built for
+   `wasm32-wasip2`. **The `.wit` does not move at all**, which was the point of
+   freezing the contract before the runtime. Track it; do not chase it.
+4. **CLOSED — component size measured.** Raw guest, no SDK, `opt-level = "z"` +
+   `strip` + `panic = "abort"`: **109 KiB**. With `orrery-guest` and the full
+   recipe (`lto`, `codegen-units = 1` as well): **53 KiB**. The recipe and the
+   numbers are in `orrery-guest`'s README. `wasm-opt -Oz` takes roughly another
+   fifth off and is not a cargo dependency.
+
+## Not done here
+
+- **The real broker is not wired in.** `orrery-host-wasm` defines `HostBroker` —
+  the token-free face the guest's imports are served from — and maps
+  `orrery_broker::BrokerError` onto its four cases. What is missing is the
+  embedder that holds both a `TokenMinter` and a `LocalBroker`:
+  `TokenMinter::mint` is `pub(crate)` in `orrery-policy` (plan 07, and
+  correctly — only the engine mints), so there is **no public path from a
+  `PendingCall` to a `CapabilityToken`**. Plan 07 or the kernel needs to expose
+  one before this host can call the real broker. Everything above that seam is
+  done and tested against a fake.
+- **`orrery-guest` pins `wit-bindgen = "0.51"` directly**, not
+  `{ workspace = true }`: the root pins 0.36, whose generated `export!` emits
+  edition-2021 attribute syntax and will not compile inside an edition-2024
+  guest. Move it back to the workspace pin once the root moves.

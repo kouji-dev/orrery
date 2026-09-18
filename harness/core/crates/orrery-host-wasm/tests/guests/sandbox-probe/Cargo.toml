@@ -1,0 +1,23 @@
+# A guest component, built for wasm32-wasip2 by `orrery-host-wasm`'s tests.
+#
+# Deliberately NOT a workspace member: it is built for another target, with
+# another profile, by a test rather than by `cargo build`. The empty
+# `[workspace]` table below is what stops it being adopted by the repo root.
+[package]
+name = "sandbox-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.51"
+
+[profile.release]
+opt-level = "z"
+strip = true
+panic = "abort"

@@ -1,0 +1,2 @@
+# Built on demand by orrery-host-wasm tests. Its lockfile is a build artifact.
+Cargo.lock
