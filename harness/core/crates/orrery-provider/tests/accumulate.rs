@@ -106,7 +106,9 @@ fn a_call_with_no_fragments_is_an_empty_object() {
 fn an_end_without_a_start_is_an_error_not_a_panic() {
     let mut acc = ToolCallAccumulator::new();
     let r = acc
-        .feed(&ModelEvent::ToolUseEnd { call: CallId::new() })
+        .feed(&ModelEvent::ToolUseEnd {
+            call: CallId::new(),
+        })
         .expect("reported");
     assert!(r.is_err());
 }

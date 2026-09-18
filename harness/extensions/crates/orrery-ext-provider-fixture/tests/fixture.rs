@@ -129,7 +129,11 @@ async fn an_error_line_ends_the_stream_with_that_error() {
 #[test]
 fn spec_parsing() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let path = write(dir.path(), "s.jsonl", "{\"t\":\"done\",\"stop\":\"end-turn\"}\n");
+    let path = write(
+        dir.path(),
+        "s.jsonl",
+        "{\"t\":\"done\",\"stop\":\"end-turn\"}\n",
+    );
     let spec = format!("fixture:{}", path.display());
     let p = FixtureProvider::from_spec(&spec).expect("spec");
     assert_eq!(p.id(), "fixture");
@@ -149,7 +153,11 @@ fn a_malformed_line_fails_at_load_not_mid_stream() {
 #[test]
 fn capabilities_are_declared() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let path = write(dir.path(), "s.jsonl", "{\"t\":\"done\",\"stop\":\"end-turn\"}\n");
+    let path = write(
+        dir.path(),
+        "s.jsonl",
+        "{\"t\":\"done\",\"stop\":\"end-turn\"}\n",
+    );
     let p = FixtureProvider::load(&path).expect("load");
     assert!(p.capabilities().tools);
     assert!(!p.counter().is_exact());

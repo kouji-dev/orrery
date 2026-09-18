@@ -214,79 +214,124 @@ Phase 5. `POST /v1/chat/completions`, `stream: true`, `tool_calls` deltas. Exist
 
 Files: `orrery-provider/src/*`
 
-- [ ] **Failing test first.** `provider::is_object_safe` — a `fn takes(_: Arc<dyn Provider>) {}` compiles. Trivial, and it catches the day someone adds a generic method.
-- [ ] Implement `Provider`, `Capabilities`, `ModelRequest`, `ModelEvent`, `StopReason`, `ProviderError`, `AuthState`, `ProviderAuth`, `AuthMethod`, `AuthCtx`.
-- [ ] `ProviderError::is_retryable` + `code`, with a test enumerating every variant so a new one cannot be added without classifying it.
+- [x] **Failing test first.** `provider::is_object_safe` — a `fn takes(_: Arc<dyn Provider>) {}` compiles. Trivial, and it catches the day someone adds a generic method.
+- [x] Implement `Provider`, `Capabilities`, `ModelRequest`, `ModelEvent`, `StopReason`, `ProviderError`, `AuthState`, `ProviderAuth`, `AuthMethod`, `AuthCtx`.
+- [x] `ProviderError::is_retryable` + `code`, with a test enumerating every variant so a new one cannot be added without classifying it.
 
 ### Task 2 · The tool-call accumulator
 
 Files: `src/accumulate.rs`, `tests/accumulate.rs`
 
-- [ ] **Failing test first.** `accumulate::reassembles_split_json` — feed `{"pa`, `th":"/tmp`, `"}` across three deltas, get one `CompletedToolCall` with parsed input.
-- [ ] `accumulate::two_interleaved_calls` — two `CallId`s streaming at once come out separately.
-- [ ] `accumulate::malformed_json_is_an_error_not_a_panic`.
-- [ ] Implement.
+- [x] **Failing test first.** `accumulate::reassembles_split_json` — feed `{"pa`, `th":"/tmp`, `"}` across three deltas, get one `CompletedToolCall` with parsed input.
+- [x] `accumulate::two_interleaved_calls` — two `CallId`s streaming at once come out separately.
+- [x] `accumulate::malformed_json_is_an_error_not_a_panic`.
+- [x] Implement.
 
 ### Task 3 · The heuristic counter
 
 Files: `src/counter.rs`
 
-- [ ] **Failing test first.** `counter::is_monotonic` (proptest) — adding a message never lowers the count.
-- [ ] Implement `HeuristicCounter`, `is_exact() == false`.
+- [x] **Failing test first.** `counter::is_monotonic` (proptest) — adding a message never lowers the count.
+- [x] Implement `HeuristicCounter`, `is_exact() == false`.
 
 ### Task 4 · The fixture provider
 
 Files: `orrery-ext-provider-fixture/*`, `harness/clients/conformance/streams/*.jsonl`
 
-- [ ] **Failing test first.** `fixture::replays_in_order` — a three-event file yields three events in order.
-- [ ] `fixture::cancellation_ends_the_stream` — with a fixture that has a long delay, cancel and assert the stream ends promptly.
-- [ ] Implement the provider, the `fixture:<path>` spec parsing, and optional `delay_ms` per line.
-- [ ] Write the six fixtures. These are consumed by plans 05, 08, 09b and 09c — name them clearly and document the format in `harness/clients/conformance/README.md`.
+- [x] **Failing test first.** `fixture::replays_in_order` — a three-event file yields three events in order.
+- [x] `fixture::cancellation_ends_the_stream` — with a fixture that has a long delay, cancel and assert the stream ends promptly.
+- [x] Implement the provider, the `fixture:<path>` spec parsing, and optional `delay_ms` per line.
+- [x] Write the six fixtures. These are consumed by plans 05, 08, 09b and 09c — name them clearly and document the format in `harness/clients/conformance/README.md`.
 
 ### Task 5 · Anthropic — SSE
 
 Files: `orrery-ext-provider-anthropic/src/sse.rs`, `tests/`
 
-- [ ] **Decision to record:** hand-rolled SSE or `eventsource-stream`. Write it into this file.
-- [ ] **Failing test first.** `sse::parses_recorded_stream` — feed a recorded `.sse` fixture through the parser, assert the event sequence. Record fixtures once from a real call and commit them; **no test makes a network request.**
-- [ ] `sse::handles_split_frames` — the same fixture fed in 7-byte chunks produces identical output.
-- [ ] `sse::ignores_ping_and_comment_lines`.
-- [ ] Implement.
+- [x] **Decision to record:** hand-rolled SSE or `eventsource-stream`.
+
+> **Decided: hand-rolled, in `src/sse.rs`.** (2026-09-18)
+>
+> The parser is a `push(&[u8]) -> Vec<SseEvent>` state machine over a `BytesMut`
+> — about eighty lines, of which half is the field-name match. Four reasons it
+> beat the dependency:
+>
+> 1. **It is a byte splitter, not a protocol.** Anthropic uses none of what
+>    `eventsource-stream` exists to provide: no `id:`, no `Last-Event-ID`
+>    resumption, no `retry:`, no reconnection. That is the whole value of the
+>    crate and we would use none of it.
+> 2. **The test we actually need is synchronous.** `sse::handles_split_frames`
+>    feeds the same fixture in 7-byte chunks and asserts identical output. A
+>    `push`/`drain` parser tests that with a `for` loop; a `Stream` adapter needs
+>    a mock stream, a runtime and a collect, to prove less.
+> 3. **Dependency shape.** `eventsource-stream` pins its own `futures`, `bytes`
+>    and `nom` majors. The workspace deliberately holds one copy of each of
+>    those, and a transitive bump on somebody else's release schedule is a worse
+>    trade than eighty lines we own.
+> 4. **Failure attribution.** A malformed frame has to become a typed
+>    `ProviderError`, not a `Box<dyn Error>` from a crate that has never heard of
+>    one.
+>
+> Revisit if a second provider needs `Last-Event-ID` resumption — that is real
+> protocol and worth a real dependency. Byte splitting is not.
+- [x] **Failing test first.** `sse::parses_recorded_stream` — feed a recorded `.sse` fixture through the parser, assert the event sequence. Record fixtures once from a real call and commit them; **no test makes a network request.**
+- [x] `sse::handles_split_frames` — the same fixture fed in 7-byte chunks produces identical output.
+- [x] `sse::ignores_ping_and_comment_lines`.
+- [x] Implement.
 
 ### Task 6 · Anthropic — request building and mapping
 
 Files: `src/request.rs`, `src/map.rs`
 
-- [ ] **Failing test first.** `request::tool_descriptors_omitted_when_unsupported` — with `capabilities.tools == false` the body has no `tools` key.
-- [ ] `request::cache_control_lands_on_the_breakpoint` — given `cache_breakpoint: Some(2)`, the third block carries `cache_control`.
-- [ ] `map::usage_includes_cache_hits`.
-- [ ] `map::stop_reason_maps` — every Anthropic `stop_reason` string maps to a `StopReason`; an unknown one is an error, not a silent default.
-- [ ] Implement.
+- [x] **Failing test first.** `request::tool_descriptors_omitted_when_unsupported` — with `capabilities.tools == false` the body has no `tools` key.
+- [x] `request::cache_control_lands_on_the_breakpoint` — given `cache_breakpoint: Some(2)`, the third block carries `cache_control`.
+- [x] `map::usage_includes_cache_hits`.
+- [x] `map::stop_reason_maps` — every Anthropic `stop_reason` string maps to a `StopReason`; an unknown one is an error, not a silent default.
+- [x] Implement.
 
 ### Task 7 · Anthropic — errors and auth
 
 Files: `src/lib.rs`, `src/auth.rs`
 
-- [ ] **Failing test first.** `error::classification` — a table of (status, body) → expected `ProviderError` variant and `is_retryable`, including 429 with and without `Retry-After`, 401, 400, 500, 529.
-- [ ] `auth::missing_key_is_needs_login` — no credential ⇒ `AuthState::NeedsLogin`, not a panic and not a 401 at request time.
-- [ ] Implement API-key auth over a named `creds` grant. OAuth: leave a `TODO(phase-5)` with the `AuthMethod::OAuth` variant present but `login` returning `NeedsLogin { reason: "oauth not implemented" }`.
+- [x] **Failing test first.** `error::classification` — a table of (status, body) → expected `ProviderError` variant and `is_retryable`, including 429 with and without `Retry-After`, 401, 400, 500, 529.
+- [x] `auth::missing_key_is_needs_login` — no credential ⇒ `AuthState::NeedsLogin`, not a panic and not a 401 at request time.
+- [x] Implement API-key auth over a named `creds` grant. OAuth: leave a `TODO(phase-5)` with the `AuthMethod::OAuth` variant present but `login` returning `NeedsLogin { reason: "oauth not implemented" }`.
 
 ### Task 8 · Cancellation actually aborts
 
 Files: `tests/cancel.rs`
 
-- [ ] **Failing test first.** `cancel::drops_the_body` — start a stream against a local test server that never finishes, cancel the token, assert the server observes the connection close within a timeout. This is the test that proves "stops costing money at once".
-- [ ] Wire `CancellationToken` into the stream via `select!` and ensure the `reqwest::Response` is dropped.
+- [x] **Failing test first.** `cancel::drops_the_body` — start a stream against a local test server that never finishes, cancel the token, assert the server observes the connection close within a timeout. This is the test that proves "stops costing money at once".
+- [x] Wire `CancellationToken` into the stream via `select!` and ensure the `reqwest::Response` is dropped.
 
 ### Task 9 · Manifests
 
 Files: `*/orrery.toml`
 
-- [ ] Fixture: `runtime = "native"`, `[provides] providers = ["fixture"]`, `[requires] read = ["$WORKSPACE/**"]`.
-- [ ] Anthropic: `[provides] providers = ["anthropic"]`, `[requires] net = ["api.anthropic.com"]`, `creds = ["anthropic"]`.
-- [ ] Note in both READMEs that a community provider is exactly this shape.
+- [x] Fixture: `runtime = "native"`, `[provides] providers = ["fixture"]`, `[requires] read = ["$WORKSPACE/**"]`.
+- [x] Anthropic: `[provides] providers = ["anthropic"]`, `[requires] net = ["api.anthropic.com"]`, `creds = ["anthropic"]`.
+- [x] Note in both READMEs that a community provider is exactly this shape.
 
 ---
+
+## State
+
+Phase 1 is implemented and green as of 2026-09-18: tasks 1-9 except the
+`openai-compat` crate, which the plan itself places in phase 5. `cargo test -p
+orrery-provider -p orrery-ext-provider-fixture -p orrery-ext-provider-anthropic`
+passes 53 tests, clippy is clean, and no test opens a socket to anything but
+loopback.
+
+Three shapes departed from the sketch above, each for a reason worth keeping:
+
+- **`ModelEvent::Usage { usage }`**, a struct variant, not `Usage(Usage)`. Plan 01's
+  "struct variants only in every tagged enum" rule is what keeps the type
+  round-tripping over CBOR, and the fixture corpus serialises these events.
+- **`ToolCallAccumulator::feed` returns `Option<Result<CompletedToolCall, _>>`.** The
+  plan asks for `Option<CompletedToolCall>` and, two lines later, for malformed JSON to
+  be an error rather than a panic. There is nowhere else for that error to go.
+- **`ToolDescriptor` lives in `orrery-provider`**, not in plan 04's `orrery-tools`. A
+  provider crate has no business depending on dispatch, policy and budgets to name the
+  three fields a model is shown. The registry converts into it.
 
 ## Done when
 
@@ -301,3 +346,13 @@ Files: `*/orrery.toml`
 2. **OAuth.** Anthropic and OpenAI both have device-code flows worth supporting, and `login` already declares UI surfaces for it. Phase 5, unless a user needs it sooner.
 3. **Retry policy lives in the kernel** — but *where* do the defaults come from? Profile config (plan 10) is the natural home. Until then a hardcoded bounded backoff in plan 05, marked `TODO(plan-10)`.
 4. **Prompt caching across providers.** `cache_breakpoint` is an Anthropic-shaped idea. OpenAI-compatible endpoints cache implicitly by prefix. Confirm the field degrades to a no-op rather than forcing a bad request.
+
+> **Confirmed, and pinned by a test.** (2026-09-18) `cache_breakpoint` is advice, not an
+> instruction. The Anthropic builder consults `capabilities.cache` before it writes a
+> marker, so a provider that declares `cache: false` emits no `cache_control` anywhere —
+> `request::cache_breakpoint_degrades_to_a_no_op_without_the_capability`. An index past the
+> end of `messages` is likewise ignored rather than rejected
+> (`an_out_of_range_breakpoint_is_ignored_not_an_error`), because the assembler computing
+> it and the provider consuming it can disagree by a message after a compaction and the
+> right answer to that is a slightly worse cache hit rate, not a failed turn. An
+> OpenAI-compatible provider will read the field and do nothing with it.

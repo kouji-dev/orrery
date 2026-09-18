@@ -13,3 +13,25 @@ publish = false
 # nothing else changes. See harness/extensions/README.md.
 [dependencies]
 orrery-provider = { version = "0.1", path = "../../../core/crates/orrery-provider" }
+orrery-proto = { version = "0.1", path = "../../../core/crates/orrery-proto" }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+futures-core = { workspace = true }
+futures-util = { workspace = true }
+parking_lot = { workspace = true }
+# `stream` for `Response::bytes_stream`. The TLS setup is the workspace's:
+# rustls + ring, installed once by this crate rather than by reqwest, so the
+# ADE and the harness link one crypto stack.
+reqwest = { workspace = true, features = ["stream"] }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+futures-util = { workspace = true }
+# `net` for the loopback server the cancellation test needs.
+tokio = { workspace = true, features = ["net"] }
