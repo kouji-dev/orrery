@@ -20,11 +20,31 @@ publish = false
 # legitimately draw a blank screen (section 6.7), and the five named roles
 # (section 4.6) are names nothing answers to. They are still ordinary
 # extensions - manifest, ledger entry, deny rule - which is the whole point.
+# `git-tools` and `lsp-tools` are in the default set because the default set has
+# to be a WORKING harness: they are how an agent reads a repository the way a
+# person does, and `references` finding uses of a *symbol* rather than places a
+# string appears is the difference between navigating a codebase and grepping
+# it. Both are pure in-process reads - no socket, no TLS, no child process
+# unless a language server is actually configured and asked for.
 default = [
   "builtin-tools", "sqlite", "fixture-provider", "views-default", "agents-default",
   "memory-file", "rpc-extensions", "wasm-extensions", "graders",
+  "git-tools", "lsp-tools",
 ]
 builtin-tools = ["dep:orrery-ext-tools-builtin"]
+# Read-only git verbs over gitoxide, and a managed language-server client.
+# Ordinary extensions - manifest, ledger entry, deny rule - which is the point.
+git-tools = ["dep:orrery-ext-git"]
+lsp-tools = ["dep:orrery-ext-lsp"]
+# An OpenAI-compatible endpoint: ollama, vllm, llama.cpp, a gateway. **Off by
+# default, for the same reason `anthropic` is**: its `http` feature links
+# reqwest and rustls, and the default build must pull no TLS stack and reach no
+# network. It is tempting to make an exception because a local server wants no
+# credential and nothing dials until `--provider` names one - but "needs no key"
+# and "links no TLS" are different properties, and only the second is the rule
+# here. Turning it on is one flag, and `ProviderChoice::OpenAiCompat` exists in
+# every build so the error can say which flag.
+openai-compat = ["dep:orrery-ext-provider-openai-compat"]
 views-default = ["dep:orrery-ext-views-default"]
 agents-default = ["dep:orrery-ext-agents-default"]
 # Compiled in, and **not switched on**: the reference memory provider is
@@ -90,7 +110,10 @@ orrery-ext-tools-builtin = { path = "../../../extensions/crates/orrery-ext-tools
 orrery-ext-session-sqlite = { path = "../../../extensions/crates/orrery-ext-session-sqlite", optional = true }
 orrery-ext-provider-fixture = { path = "../../../extensions/crates/orrery-ext-provider-fixture", optional = true }
 orrery-ext-provider-anthropic = { path = "../../../extensions/crates/orrery-ext-provider-anthropic", optional = true }
-orrery-ext-graders = { path = "../../../extensions/crates/orrery-ext-graders", optional = true }
+orrery-ext-provider-openai-compat = { path = "../../../extensions/crates/orrery-ext-provider-openai-compat", optional = true }
+orrery-ext-git = { path = "../../../extensions/crates/orrery-ext-git", optional = true }
+orrery-ext-lsp = { path = "../../../extensions/crates/orrery-ext-lsp", optional = true }
+orrery-ext-graders ={ path = "../../../extensions/crates/orrery-ext-graders", optional = true }
 orrery-ext-views-default = { path = "../../../extensions/crates/orrery-ext-views-default", optional = true }
 orrery-ext-agents-default = { path = "../../../extensions/crates/orrery-ext-agents-default", optional = true }
 orrery-ext-memory-file = { path = "../../../extensions/crates/orrery-ext-memory-file", optional = true }

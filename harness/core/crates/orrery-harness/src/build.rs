@@ -40,8 +40,9 @@ use crate::broker::{LedgerRevoker, PolicyBroker};
 
 /// Where the model comes from.
 ///
-/// TODO(plan-10): profile config picks this. The enum is here so the facade has
-/// one thing to match on and the features have one place to be read.
+/// Profile config picks this: [`crate::config::provider_choice`] reads
+/// `[provider]` off the layers in force, and this is the one thing the facade
+/// matches on so that every feature is read in one place.
 #[non_exhaustive]
 #[derive(Clone)]
 pub enum ProviderChoice {
@@ -49,6 +50,52 @@ pub enum ProviderChoice {
     Fixture {
         /// The `.jsonl` files, one per pass, the last repeating.
         passes: Vec<PathBuf>,
+    },
+    /// Anthropic's Messages API, behind the `anthropic` feature.
+    ///
+    /// The feature is **off by default** and off in CI: it links a TLS stack,
+    /// and nothing in this repository may reach the network. The code path
+    /// exists and compiles regardless, which is the difference between a
+    /// product that can be pointed at a model and one that structurally cannot
+    /// — `ProviderChoice` had no variant for a real model at all, so no
+    /// configuration, key or flag could have reached one.
+    ///
+    /// `base_url` is the injectable transport: a test points it at an
+    /// in-process loopback server and never leaves the machine.
+    Anthropic {
+        /// The model id, in the provider's own vocabulary.
+        model: String,
+        /// The credential name the broker holds the key under.
+        credential: String,
+        /// Where the API lives. `None` is the real origin.
+        base_url: Option<String>,
+    },
+    /// An OpenAI-compatible chat-completions endpoint, behind the
+    /// `openai-compat` feature.
+    ///
+    /// This is the one provider that needs no credential to exist: point
+    /// `base_url` at ollama or vllm on localhost and the binary is talking to a
+    /// real model with no key anywhere in the system.
+    ///
+    /// It is still **off by default**, like `anthropic`, because its `http`
+    /// feature links reqwest and rustls and the default build must pull no TLS
+    /// stack. "Needs no key" and "links no TLS" are different properties and
+    /// only the second decides the default set. The variant exists in every
+    /// build regardless, so configuration can name it and the error can say
+    /// which flag to turn on.
+    ///
+    /// `base_url` is also the seam a test uses - an in-process server, and
+    /// nothing leaves the machine.
+    OpenAiCompat {
+        /// The model id, in whatever vocabulary that server uses.
+        model: String,
+        /// The credential name, for a hosted endpoint that wants one. A local
+        /// server wants none and an unset grant is `Anonymous`, not a prompt.
+        credential: String,
+        /// The server root: `http://localhost:11434/v1` for ollama,
+        /// `http://localhost:8000/v1` for vllm. No default, because guessing
+        /// which local server somebody runs is worse than asking.
+        base_url: String,
     },
     /// Something the caller built.
     Custom(Arc<dyn Provider>),
@@ -70,6 +117,26 @@ impl std::fmt::Debug for ProviderChoice {
             ProviderChoice::Fixture { passes } => {
                 f.debug_struct("Fixture").field("passes", passes).finish()
             }
+            ProviderChoice::Anthropic {
+                model,
+                credential,
+                base_url,
+            } => f
+                .debug_struct("Anthropic")
+                .field("model", model)
+                .field("credential", credential)
+                .field("base_url", base_url)
+                .finish(),
+            ProviderChoice::OpenAiCompat {
+                model,
+                credential,
+                base_url,
+            } => f
+                .debug_struct("OpenAiCompat")
+                .field("model", model)
+                .field("credential", credential)
+                .field("base_url", base_url)
+                .finish(),
             ProviderChoice::Custom(p) => f.debug_tuple("Custom").field(&p.id()).finish(),
         }
     }
@@ -150,6 +217,11 @@ impl ResolvedConfig {
     ) -> Self {
         let workspace = resolved.root.clone();
         let profile = resolved.profile.name.clone();
+        // A `[provider]` table in force wins over the caller's default. Without
+        // this the enum has a real-model variant nothing can select, which is
+        // the same dead end one level up.
+        let provider = crate::config::provider_choice(&resolved.values, &profile)
+            .unwrap_or(provider);
         let kernel = crate::config::kernel_config(
             &resolved.values,
             &profile,
@@ -436,6 +508,16 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
     let provider: Arc<dyn Provider> = match &config.provider {
         ProviderChoice::Custom(provider) => provider.clone(),
         ProviderChoice::Fixture { passes } => crate::features::fixture_provider(passes)?,
+        ProviderChoice::Anthropic {
+            model,
+            credential,
+            base_url,
+        } => crate::features::anthropic_provider(model, credential, base_url.as_deref())?,
+        ProviderChoice::OpenAiCompat {
+            model,
+            credential,
+            base_url,
+        } => crate::features::openai_compat_provider(model, credential, base_url)?,
     };
     let kernel = Kernel::new(
         store.clone(),

@@ -17,15 +17,15 @@ use crate::build::BuildError;
 
 /// Which first-party extensions this build has.
 ///
-/// # `anthropic` links, and is not yet selectable
+/// Every entry is **selectable**, not merely linked: the tool bundles register
+/// through [`register_native`], and both real providers have a
+/// [`ProviderChoice`](crate::ProviderChoice) variant that names them. This
+/// paragraph used to have to explain that `anthropic` compiled in with nothing
+/// able to pick it; that gap is closed.
 ///
-/// The feature compiles the provider in and this list reports it, but
-/// [`ProviderChoice`](crate::ProviderChoice) has no variant that picks it: a
-/// real provider needs a model id, a credential name and an auth flow, all of
-/// which are plan 10's profile config. The feature exists now so that the
-/// layering is settled - this is the crate that may name an extension - rather
-/// than so that a key can be used today. Nothing in this repo's tests may reach
-/// the network, which is also why it is off by default.
+/// `anthropic` is still off by default because it links a TLS stack and wants a
+/// credential. `openai-compat` is on, because a local server wants neither and
+/// nothing dials until something names it.
 // Each `push` is behind its own `#[cfg]`, so the `vec![]` clippy suggests
 // cannot express it.
 #[allow(clippy::vec_init_then_push)]
@@ -41,6 +41,12 @@ pub fn compiled_in() -> Vec<&'static str> {
     out.push("provider-fixture");
     #[cfg(feature = "anthropic")]
     out.push("provider-anthropic");
+    #[cfg(feature = "openai-compat")]
+    out.push("provider-openai-compat");
+    #[cfg(feature = "git-tools")]
+    out.push("git");
+    #[cfg(feature = "lsp-tools")]
+    out.push("lsp");
     #[cfg(feature = "views-default")]
     out.push("views-default");
     #[cfg(feature = "agents-default")]
@@ -72,6 +78,71 @@ pub fn register_native(registry: &mut NativeRegistry) {
     registry.register(Arc::new(orrery_ext_views_default::DefaultViews));
     #[cfg(feature = "agents-default")]
     registry.register(Arc::new(orrery_ext_agents_default::DefaultAgents));
+    // Reading a repository the way a person does. Both go through the same door
+    // as the builtin tools, so each gets a manifest parse, a policy check, a
+    // ledger entry and a deny rule that switches it off.
+    #[cfg(feature = "git-tools")]
+    registry.register(Arc::new(orrery_ext_git::GitTools::new()));
+    #[cfg(feature = "lsp-tools")]
+    registry.register(Arc::new(orrery_ext_lsp::LspTools::new()));
+}
+
+/// Build the OpenAI-compatible provider a config asked for.
+///
+/// `base_url` is the whole configuration: ollama is
+/// `http://localhost:11434/v1`, vllm is `http://localhost:8000/v1`, and a
+/// gateway is whatever you were given. There is no default, because guessing
+/// which local server somebody runs is worse than asking.
+///
+/// # No credential is the normal case
+///
+/// A local server wants none, so the store is consulted and an empty answer is
+/// [`AuthState::Anonymous`](orrery_provider::AuthState::Anonymous) rather than a
+/// login prompt nobody can satisfy. A hosted compatible endpoint that does want
+/// a key reads it from the `openai-compat` grant.
+///
+/// # Errors
+///
+/// [`BuildError::NoProvider`] when the `openai-compat` feature is off. The
+/// variant exists in every build so configuration can name it and the error can
+/// say what to do about it.
+#[allow(unused_variables)]
+pub fn openai_compat_provider(
+    model: &str,
+    credential: &str,
+    base_url: &str,
+) -> Result<Arc<dyn Provider>, BuildError> {
+    #[cfg(feature = "openai-compat")]
+    {
+        use orrery_ext_api::creds::{CredStore, EnvCredStore, LayeredCredStore, MemoryCredStore};
+
+        // The same arrangement `anthropic_provider` uses, and for the same
+        // reason: the broker's store applies a secret and never returns one, so
+        // reading falls through to the documented development fallback until
+        // plan 14's transport lets the broker sign the request itself.
+        let store: Arc<dyn CredStore> =
+            if credential == orrery_ext_provider_openai_compat::GRANT {
+                Arc::new(EnvCredStore)
+            } else {
+                Arc::new(LayeredCredStore::new(
+                    Arc::new(MemoryCredStore::default()),
+                    Arc::new(EnvCredStore),
+                ))
+            };
+        let provider =
+            orrery_ext_provider_openai_compat::OpenAiCompatProvider::over_http(base_url, store);
+        // The model id is the request's, not the provider's: one endpoint
+        // serves whatever is loaded into it, and pinning it here would mean a
+        // rebuild to switch models.
+        let _ = model;
+        Ok(Arc::new(provider))
+    }
+    #[cfg(not(feature = "openai-compat"))]
+    {
+        Err(BuildError::NoProvider {
+            which: "openai-compat".to_owned(),
+        })
+    }
 }
 
 /// Build the Anthropic provider a config asked for.
