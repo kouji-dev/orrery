@@ -16,6 +16,11 @@ import {
   treeAgentIds,
 } from "../workspace/pane-model";
 
+/** Bounds of the changed-file column, shared by every diff surface. */
+export const DIFF_LIST_MIN = 160; // px — narrowest the file list may get
+export const DIFF_LIST_MAX = 520; // px — widest before the diff body is cramped
+export const DIFF_LIST_DEFAULT = 300;
+
 const TWEAK_DEFAULTS: Tweaks = {
   theme: "dark",
   density: "regular",
@@ -121,7 +126,14 @@ export class UiStore {
   // Width of the diff panel's file list (px), user-resized via the separator.
   // null = the view's default. Global (not per agent) — a width preference,
   // not workspace content. Public: the WorkspaceStore persists/hydrates it.
+  // ONE width for every diff surface: resize the compare view's column and the
+  // working-changes list follows, because they are the same list.
   readonly diffListWidth = signal<number | null>(null);
+  /** That width, resolved and clamped — what the grids actually bind. */
+  readonly diffListW = computed(() => {
+    const w = this.diffListWidth();
+    return w == null ? DIFF_LIST_DEFAULT : Math.min(DIFF_LIST_MAX, Math.max(DIFF_LIST_MIN, w));
+  });
   diffSelectionFor(agentId: string): string | null {
     return this.diffSelections()[agentId] ?? null;
   }

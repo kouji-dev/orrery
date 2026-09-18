@@ -3,7 +3,6 @@ import {
   Component,
   computed,
   effect,
-  ElementRef,
   inject,
   input,
   signal,
@@ -13,187 +12,53 @@ import { IconComponent } from "../shared/icon.component";
 import { GitActionBarComponent } from "./git-action-bar.component";
 import { AgentsStore } from "../stores/agents.store";
 import { AgentWorkStore } from "../agents/agent-work.store";
+import { fileStateLabel, isMarkdownPath, langId, langTag } from "../utils";
 import { BRIDGE, Commands } from "../data-source/bridge";
-import { fileDir, fileName, fileStateLabel, isMarkdownPath, langId, langTag, mix, revealLabelFor } from "../utils";
-import { UiStore } from "../ui/ui.store";
-import { EditsStore } from "../stores/edits.store";
-import { ScrollStateService } from "./scroll-state.service";
-import { MenuPanelComponent } from "../context-menu/menu-panel.component";
+import { DIFF_LIST_MAX, DIFF_LIST_MIN, UiStore } from "../ui/ui.store";
+import { DiffFileListComponent } from "./git/diff-file-list.component";
+import { PaneResizerComponent } from "../shared/pane-resizer.component";
 import { UnifiedCodeComponent } from "./review/unified-code.component";
 import { AnnotateBlameComponent } from "./review/annotate-blame.component";
 import { SendReviewButtonComponent } from "./review/send-review.component";
 import { DiffStats } from "./review/chunk-stats";
-import { KjBadgeComponent, KjButtonComponent, KjTabComponent, KjTabListComponent, KjTabsComponent } from "@kouji-ui/components";
-import { StateBadgeComponent } from "../shared/git/state-badge.component";
-import { AddDelComponent } from "../shared/git/add-del.component";
-
-const LIST_MIN = 160; // px — narrowest the file-list panel may get
-const LIST_MAX = 520; // px — widest before the diff body is too cramped
-const LIST_DEFAULT = 300;
+import { KjBadgeComponent, KjButtonComponent } from "@kouji-ui/components";
 
 /** Worktree paths travel with forward slashes; the backend joins them itself. */
 const norm = (p: string): string => p.replace(/\\/g, "/");
-const msgOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-
-/** What the row context menu acts on: a changed file, a folder row (a real
- *  worktree folder, even though the tree synthesises the path segment), or
- *  null for the empty space below the rows (the worktree root). */
-interface MenuTarget {
-  path: string;
-  name: string;
-  isDir: boolean;
-  /** The git state of a file row; null for folders (nothing to hand the OS). */
-  state: AgentFile["state"] | null;
-}
 
 @Component({
   selector: "app-diff-view",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionBarComponent, KjBadgeComponent, KjButtonComponent, KjTabsComponent, KjTabListComponent, KjTabComponent, StateBadgeComponent, AddDelComponent, MenuPanelComponent],
+  imports: [IconComponent, UnifiedCodeComponent, AnnotateBlameComponent, SendReviewButtonComponent, GitActionBarComponent, KjBadgeComponent, KjButtonComponent, DiffFileListComponent, PaneResizerComponent],
   template: `
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;min-width:0">
     <div
       class="diff-grid"
-      [class.resizing]="dragging()"
       [style.grid-template-columns]="listW() + 'px 6px 1fr'"
     >
-      <!-- file list: header pinned, only the listing below scrolls -->
-      <div style="display:flex;flex-direction:column;min-height:0;background:var(--panel);padding-top:var(--sp-3)">
-        <div style="flex:none;display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--sp-5) var(--sp-3) var(--sp-6)">
-          <span class="up" style="color:var(--ink-3)">Changed · {{ changes().length }}</span>
-          <!-- tree / flat toggle -->
-          <kj-tabs variant="pills" class="tabs-xs" style="margin-left:auto"
-                   [value]="treeMode() ? 'tree' : 'flat'" (valueChange)="setTreeMode($event === 'tree')">
-            <kj-tab-list aria-label="File list layout">
-              <kj-tab value="tree" title="Tree view"><app-icon size="md" name="graph" [color]="treeMode() ? 'var(--ui-ink)' : null" />Tree</kj-tab>
-              <kj-tab value="flat" title="Flattened view"><app-icon size="md" name="dots" [color]="!treeMode() ? 'var(--ui-ink)' : null" />Flat</kj-tab>
-            </kj-tab-list>
-          </kj-tabs>
-          <kj-button kjSize="icon" kjVariant="ghost" (click)="refresh()" title="Rescan changes"><app-icon size="md" name="refresh" /></kj-button>
-        </div>
-
-        <!-- the listing is also the root-scoped menu surface: row handlers stop
-             propagation, so a right-click on empty space below them (or on the
-             "no changes" placeholder) creates at the worktree root -->
-        <div class="scroll-y" style="padding-bottom:var(--sp-3)" (contextmenu)="onContext($event, null)">
-        @if (!changes().length) {
-          <div style="padding:var(--sp-5) var(--sp-6);color:var(--ink-4)">no changes</div>
-        } @else if (treeMode()) {
-          <!-- tree view: folders + indented file leaves -->
-          @for (row of treeRows(); track row.path) {
-            @if (row.dir) {
-              <div class="diff-dir" (click)="toggleDir(row.path)" (contextmenu)="onDirContext($event, row.path, row.name)" [style.padding-left.px]="8 + row.depth * 13">
-                <app-icon [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" size="sm" color="var(--ink-4)" />
-                <app-icon [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" size="sm" color="var(--ink-4)" />
-                <!-- uniform-state folders read like their files: a fully-deleted
-                     folder is dim + strikethrough (never red — locked rule), a
-                     fully-new / moved one carries the A / R chip -->
-                <span
-                  [style.color]="row.state === 'D' ? 'var(--ink-4)' : 'var(--ink-3)'"
-                  [style.text-decoration]="row.state === 'D' ? 'line-through' : 'none'"
-                  [style.opacity]="row.state === 'D' ? 0.7 : 1"
-                  style="font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                >{{ row.name }}</span>
-                @if (row.state) {
-                  <span [style.color]="stateInk(row.state)" [style.background]="stateBg(row.state)" class="state-chip">{{ row.state }}</span>
-                }
-                <span class="tnum counts-chip" style="opacity:0.75">
-                  <span style="color:var(--code-add-ink)">+{{ row.add }}</span>
-                  @if ((row.del ?? 0) > 0) { <span style="color:var(--code-del-ink)">−{{ row.del }}</span> }
-                </span>
-              </div>
-            } @else {
-              <div
-                class="diff-file list-row"
-                [class.sel]="current()?.path === row.path"
-                (click)="select(row.path)"
-                (contextmenu)="onFileContext($event, row.file!)"
-                [style.padding-left.px]="12 + row.depth * 13"
-              >
-                <app-state-badge [state]="row.file!.state" />
-                <span [title]="row.file!.state === 'R' && row.file!.oldPath ? ('renamed from ' + row.file!.oldPath) : row.name" class="fname trunc">{{ row.name }}</span>
-                <app-add-del [add]="row.file!.add" [del]="row.file!.del" style="margin-left:auto" />
-              </div>
-            }
-          }
-        } @else {
-          <!-- flat view: SAME single-line row as the tree — the directory (or
-               rename origin) rides inline, muted, so both modes share --row-h -->
-          @for (f of changes(); track f.path) {
-            <div
-              class="diff-file list-row"
-              [class.sel]="current()?.path === f.path"
-              (click)="select(f.path)"
-              (contextmenu)="onFileContext($event, f)"
-            >
-              <app-state-badge [state]="f.state" />
-              <span [title]="f.state === 'R' && f.oldPath ? ('renamed from ' + f.oldPath) : f.path" class="fname trunc">{{ fname(f.path) }}</span>
-              @if (f.state === 'R' && f.oldPath) {
-                <span class="fdir trunc" style="color:var(--vcs-renamed)">← {{ f.oldPath }}</span>
-              } @else if (fdir(f.path)) {
-                <span class="fdir trunc">{{ fdir(f.path) }}</span>
-              }
-              <app-add-del [add]="f.add" [del]="f.del" style="margin-left:auto" />
-            </div>
-          }
-        }
-        </div>
-      </div>
-
-      <!-- context menu: file/folder CRUD + the OS hand-offs, opened from a file
-           row, a folder row, or the empty space below the rows (creates only,
-           scoped to the worktree root). A deleted file has nothing left on
-           disk to open or show, so both hand-offs disable. -->
-      @if (menu(); as m) {
-        <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
-          @switch (menuMode()) {
-            @case ("actions") {
-              <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startInput('create-file')"><app-icon size="md" name="file" />New File…</kj-button>
-              <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startInput('create-dir')"><app-icon size="md" name="folder" />New Folder…</kj-button>
-              @if (m.target; as t) {
-                <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startRename()"><app-icon size="md" name="rename" />Rename…</kj-button>
-                <div class="menu-sep"></div>
-                <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="t.state === 'D'" (click)="openExternal(t)"><app-icon size="md" name="ext" />Open in Default App</kj-button>
-                <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="t.state === 'D'" (click)="reveal(t)"><app-icon size="md" name="folderOpen" />{{ revealLabel }}</kj-button>
-                <div class="menu-sep"></div>
-                <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item danger" (click)="menuMode.set('delete')"><app-icon size="md" name="trash" />Delete</kj-button>
-              }
-            }
-            @case ("delete") {
-              <div class="menu-label">Delete <b>{{ m.target?.name }}</b>{{ m.target?.isDir ? ' and its contents' : '' }}?</div>
-              <div class="menu-row">
-                <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
-                <kj-button kjVariant="danger" (click)="confirmDelete()">Delete</kj-button>
-              </div>
-            }
-            @default {
-              <div class="menu-label">{{ inputLabel() }}</div>
-              <input
-                class="menu-input"
-                [value]="nameInput()"
-                (input)="nameInput.set($any($event.target).value)"
-                (keydown.enter)="commit()"
-                (keydown.escape)="closeMenu()"
-                spellcheck="false"
-              />
-              <div class="menu-row">
-                <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
-                <kj-button kjVariant="default" [kjDisabled]="!nameInput().trim()" (click)="commit()">OK</kj-button>
-              </div>
-            }
-          }
-        </app-menu-panel>
-      }
+      <!-- file list: THE shared changed-file list — same rows, same collapse,
+           same menu as every other diff surface. -->
+      <app-diff-file-list
+        style="min-height:0;min-width:0"
+        [agent]="agent()"
+        [files]="changes()"
+        [selPath]="current()?.path ?? null"
+        title="Changed"
+        [allowCreate]="true"
+        [canRefresh]="true"
+        (select)="select($event)"
+        (refresh)="refresh()"
+        (mutated)="afterMutation()"
+      />
 
       <!-- resizable separator: drag to rebalance the file list vs the diff body -->
-      <div
-        class="diff-resizer"
-        role="separator"
-        aria-orientation="vertical"
-        (pointerdown)="startDrag($event)"
-        (dblclick)="resetWidth()"
-        title="Drag to resize · double-click to reset"
-      ><span class="grip"></span></div>
+      <app-pane-resizer
+        [width]="listW()"
+        [min]="LIST_MIN"
+        [max]="LIST_MAX"
+        (widthChange)="ui.diffListWidth.set($event)"
+        (reset)="resetWidth()"
+      />
 
       <!-- diff body -->
       <div style="display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--bg)">
@@ -260,93 +125,6 @@ interface MenuTarget {
   `,
   styles: [
     `
-      .diff-grid {
-        flex: 1;
-        display: grid;
-        min-height: 0;
-      }
-      /* while dragging, kill the iframe/text selection + pointer noise */
-      .diff-grid.resizing {
-        user-select: none;
-        cursor: col-resize;
-      }
-      /* ONE row recipe for both view modes — same height (density-scaled via
-         --row-h), so Tree and Flat read as the same list, compact to comfy. */
-      .diff-file,
-      .diff-dir {
-        display: flex;
-        align-items: center;
-        gap: var(--sp-3);
-        height: var(--row-h);
-        cursor: pointer;
-      }
-      /* margin / radius / cursor / hover / selected all come from .list-row */
-      .diff-file {
-        padding: 0 var(--sp-5);
-      }
-      .diff-dir {
-        padding: 0 var(--sp-4);
-      }
-      .diff-file .state-chip,
-      .diff-dir .state-chip {
-        flex: none;
-        width: var(--sp-6);
-        height: var(--sp-6);
-        border-radius: 3px;
-        display: grid;
-        place-items: center;
-        font-size: var(--fs-2xs);
-        font-weight: 700;
-      }
-      .diff-file .fname {
-        flex: 0 1 auto;
-        }
-      .diff-file .fdir {
-        flex: 1 1 auto;
-        font-size: var(--fs-meta);
-        color: var(--ink-4);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .diff-file .counts-chip,
-      .diff-dir .counts-chip {
-        font-size: var(--fs-2xs);
-        display: flex;
-        gap: var(--sp-2);
-        flex: none;
-        margin-left: auto;
-      }
-      .diff-file:hover:not(.sel) {
-        background: var(--panel-2);
-      }
-      .diff-file.sel {
-        background: var(--panel-3);
-      }
-
-      /* ----- resizer handle ----- */
-      .diff-resizer {
-        position: relative;
-        cursor: col-resize;
-        display: grid;
-        place-items: center;
-        background: var(--panel);
-        border-right: 1px solid var(--hair);
-        touch-action: none;
-      }
-      .diff-resizer .grip {
-        width: 1px;
-        height: var(--ctl-h);
-        border-radius: 1px;
-        background: var(--hair-2);
-        transition: background 0.13s ease, box-shadow 0.13s ease;
-      }
-      .diff-resizer:hover .grip,
-      .diff-grid.resizing .diff-resizer .grip {
-        background: var(--ui-fill);
-        box-shadow: 0 0 0 1px var(--ui-sel);
-      }
-
       /* ----- diff header: .pane-head + the deltas this one needs (a two-line
          left block, so the row aligns to the TOP rather than centre) ----- */
       .diff-head {
@@ -399,11 +177,10 @@ interface MenuTarget {
 export class DiffViewComponent {
   private agents = inject(AgentsStore);
   private work = inject(AgentWorkStore);
-  private ui = inject(UiStore);
-  private edits = inject(EditsStore);
-  private scroll = inject(ScrollStateService);
-  private host = inject(ElementRef<HTMLElement>);
+  readonly ui = inject(UiStore);
   readonly agent = input.required<Agent>();
+  readonly LIST_MIN = DIFF_LIST_MIN;
+  readonly LIST_MAX = DIFF_LIST_MAX;
 
   // selection by PATH (works across both flat + tree views); treeMode toggles
   // them. Selection lives in UiStore keyed by agent — the pane destroys this
@@ -412,160 +189,14 @@ export class DiffViewComponent {
   select(path: string): void {
     this.ui.setDiffSelection(this.agentId(), path);
   }
-  // Tree/Flat preference — global like diffListWidth, persisted with the
-  // workspace (a component-local signal would reset on every tab switch).
-  readonly treeMode = computed(() => this.ui.diffTreeMode());
-  setTreeMode(on: boolean): void {
-    this.ui.diffTreeMode.set(on);
-  }
-
-  // ----- row context menu: file CRUD + the OS hand-offs -----
-  // The same menu the sidebar file tree ships, on the changed-file list. A
-  // folder row here IS a real worktree folder (the tree only synthesises the
-  // path segments), so rename / delete act on disk exactly as they do there.
-  // Creates scope to where the user pointed: a folder row → inside it, a file
-  // row → its parent, empty space below the rows → the worktree root.
-  readonly menu = signal<{ x: number; y: number; target: MenuTarget | null } | null>(null);
-  readonly menuMode = signal<"actions" | "create-file" | "create-dir" | "rename" | "delete">("actions");
-  readonly nameInput = signal("");
-  readonly revealLabel = revealLabelFor(navigator.userAgent);
-
-  readonly inputLabel = computed(() => {
-    const t = this.menu()?.target ?? null;
-    switch (this.menuMode()) {
-      case "create-file":
-        return `New file in ${this.scopeDir(t) || "worktree root"}`;
-      case "create-dir":
-        return `New folder in ${this.scopeDir(t) || "worktree root"}`;
-      case "rename":
-        return `Rename ${t?.name ?? ""}`;
-      default:
-        return "";
-    }
-  });
-
-  onContext(e: MouseEvent, target: MenuTarget | null): void {
-    e.preventDefault();
-    e.stopPropagation();
-    this.menu.set({ x: e.clientX, y: e.clientY, target });
-    this.menuMode.set("actions");
-    this.nameInput.set("");
-  }
-  /** Folder rows carry no AgentFile — build the target from the tree row. */
-  onDirContext(e: MouseEvent, path: string, name: string): void {
-    this.onContext(e, { path, name, isDir: true, state: null });
-  }
-  /** File rows: the changed file's state drives the OS hand-offs (a deleted
-   *  file has nothing on disk left to open or reveal). */
-  onFileContext(e: MouseEvent, file: AgentFile): void {
-    this.onContext(e, { path: file.path, name: fileName(file.path), isDir: false, state: file.state });
-  }
-  closeMenu(): void {
-    this.menu.set(null);
-  }
-
-  startInput(mode: "create-file" | "create-dir"): void {
-    this.menuMode.set(mode);
-    this.nameInput.set("");
-    this.focusInput();
-  }
-  startRename(): void {
-    this.menuMode.set("rename");
-    this.nameInput.set(this.menu()?.target?.name ?? "");
-    this.focusInput();
-  }
-  private focusInput(): void {
-    queueMicrotask(() => {
-      const el = this.host.nativeElement.querySelector(".menu-input") as HTMLInputElement | null;
-      el?.focus();
-      el?.select();
-    });
-  }
-
-  /** Directory a create scopes to: the row itself (folder), its parent (file),
-   *  or "" for the worktree root. */
-  private scopeDir(t: MenuTarget | null): string {
-    if (!t) return "";
-    const p = norm(t.path);
-    if (t.isDir) return p;
-    const i = p.lastIndexOf("/");
-    return i === -1 ? "" : p.slice(0, i);
-  }
-
-  async commit(): Promise<void> {
-    const m = this.menu();
-    const name = this.nameInput().trim();
-    if (!m || !name) return;
-    const mode = this.menuMode();
-    const id = this.agentId();
-    try {
-      if (mode === "rename") {
-        const from = norm(m.target!.path);
-        // the parent of the row, folder and file alike
-        const dir = this.scopeDir({ ...m.target!, isDir: false });
-        const to = dir ? `${dir}/${name}` : name;
-        await this.bridge.invoke(Commands.FileRename, { id, from, to });
-        this.edits.close(id, from); // stale buffer under the old path
-        this.scroll.clear(id, from);
-      } else {
-        const base = this.scopeDir(m.target);
-        const path = base ? `${base}/${name}` : name;
-        const cmd = mode === "create-dir" ? Commands.DirCreate : Commands.FileCreate;
-        await this.bridge.invoke(cmd, { id, path });
-        if (mode === "create-file") this.ui.openFileInWorkspace(id, path);
-      }
-      this.closeMenu();
-      this.afterMutation();
-    } catch (e) {
-      this.ui.flash(msgOf(e));
-    }
-  }
-
-  async confirmDelete(): Promise<void> {
-    const t = this.menu()?.target;
-    if (!t) return;
-    const id = this.agentId();
-    const path = norm(t.path);
-    // dismiss first, like every other row action: the confirmation has already
-    // been given, and a failure reports through the flash rather than by
-    // leaving the menu hanging open.
-    this.closeMenu();
-    try {
-      await this.bridge.invoke(Commands.FileDelete, { id, path });
-      this.edits.close(id, path);
-      this.scroll.clear(id, path);
-      this.afterMutation();
-    } catch (e) {
-      this.ui.flash(msgOf(e));
-    }
-  }
-
   /** A worktree write moves BOTH feeds: this list (git status) and the sidebar
    *  file tree, which is rooted at the same agent id. */
-  private afterMutation(): void {
+  afterMutation(): void {
     const id = this.agentId();
     this.work.loadChanges(id);
     this.work.loadTree(id, true);
   }
 
-  openExternal(t: MenuTarget): void {
-    this.toOs(Commands.FileOpenExternal, t.path, "couldn't open");
-  }
-  reveal(t: MenuTarget): void {
-    this.toOs(Commands.FileReveal, t.path, "couldn't reveal");
-  }
-  /** Dismiss first, then hand the worktree-relative path to the OS; a failure
-   *  reports through the flash rather than by leaving the menu hanging open. */
-  private toOs(command: string, raw: string, failed: string): void {
-    const path = norm(raw);
-    this.closeMenu();
-    void this.bridge
-      .invoke(command, { id: this.agentId(), path })
-      .catch((e: unknown) => this.ui.flash(`${failed} ${fileName(path)}: ${msgOf(e)}`));
-  }
-
-  readonly fname = fileName;
-  readonly fdir = fileDir;
   readonly stateLabel = fileStateLabel;
 
   // Why id, not the Agent object: runtime.agents() re-creates agent objects on
@@ -580,33 +211,6 @@ export class DiffViewComponent {
     const cs = this.changes();
     return cs.find((f) => f.path === this.selPath()) ?? cs[0];
   });
-  // nested folder tree of the changed files, for the "Tree" view
-  readonly diffTree = computed<DiffNode[]>(() => buildDiffTree(this.changes()));
-  // collapsed folders (path → false); default: folders are OPEN. Lives in
-  // UiStore keyed by agent (persisted with the workspace) — the pane destroys
-  // this component on every tab switch, so local state would reset each time.
-  readonly dirOpen = computed<Record<string, boolean>>(() =>
-    this.ui.diffDirOpenFor(this.agentId()),
-  );
-  // the visible rows: walk the tree, skipping children of collapsed folders
-  readonly treeRows = computed<DiffRow[]>(() => {
-    const open = this.dirOpen();
-    const out: DiffRow[] = [];
-    const walk = (nodes: DiffNode[], depth: number) => {
-      for (const n of nodes) {
-        out.push({ dir: n.dir, name: n.name, path: n.path, depth, file: n.file, state: n.state, add: n.add, del: n.del });
-        if (n.dir && open[n.path] !== false) walk(n.children, depth + 1);
-      }
-    };
-    walk(this.diffTree(), 0);
-    return out;
-  });
-  isDirOpen(path: string): boolean {
-    return this.dirOpen()[path] !== false;
-  }
-  toggleDir(path: string) {
-    this.ui.toggleDiffDir(this.agentId(), path);
-  }
   /** Manual fallback: re-fetch this agent's changed files — the diff effect then
    *  reloads the selected file's content. */
   refresh() {
@@ -653,16 +257,11 @@ export class DiffViewComponent {
   readonly addCount = computed(() => this.stats()?.add ?? this.current()?.add ?? 0);
   readonly delCount = computed(() => this.stats()?.del ?? this.current()?.del ?? 0);
 
-  // ----- resizable separator (store-backed width, pointer drag) -----
-  // The width preference lives in UiStore (persisted with the workspace), so
-  // it survives tab switches AND restarts. null = the default; always clamped.
-  readonly listW = computed(() => {
-    const w = this.ui.diffListWidth();
-    return w == null ? LIST_DEFAULT : Math.min(LIST_MAX, Math.max(LIST_MIN, w));
-  });
-  readonly dragging = signal(false);
-  private dragStartX = 0;
-  private dragStartW = 0;
+  // ----- resizable separator -----
+  // The width preference lives in UiStore (persisted with the workspace, and
+  // shared with every other diff surface), so it survives tab switches AND
+  // restarts.
+  readonly listW = this.ui.diffListW;
 
   constructor() {
     // Pin the displayed agent's work data while this view is on screen — a
@@ -754,26 +353,6 @@ export class DiffViewComponent {
     });
   }
 
-  startDrag(ev: PointerEvent) {
-    ev.preventDefault();
-    this.dragging.set(true);
-    this.dragStartX = ev.clientX;
-    this.dragStartW = this.listW();
-    const target = ev.target as HTMLElement;
-    target.setPointerCapture?.(ev.pointerId);
-    const move = (e: PointerEvent) => {
-      const next = this.dragStartW + (e.clientX - this.dragStartX);
-      this.ui.diffListWidth.set(Math.min(LIST_MAX, Math.max(LIST_MIN, next)));
-    };
-    const up = (e: PointerEvent) => {
-      this.dragging.set(false);
-      target.releasePointerCapture?.(e.pointerId);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  }
   resetWidth() {
     this.ui.diffListWidth.set(null); // back to the default
   }
@@ -793,16 +372,6 @@ export class DiffViewComponent {
     if (f) this.ui.openFileInWorkspace(this.agent().id, f.path);
   }
 
-  stateBg(state: string): string {
-    return state === "A"
-      ? mix("var(--vcs-added)", 88)
-      : state === "D"
-        ? "transparent"
-        : state === "R"
-          ? mix("var(--vcs-renamed)", 88)
-          : mix("var(--vcs-modified)", 88);
-  }
-
   stateInk(state: string): string {
     return state === "A"
       ? "var(--vcs-added)"
@@ -811,84 +380,5 @@ export class DiffViewComponent {
         : state === "R"
           ? "var(--vcs-renamed)"
           : "var(--vcs-modified)";
-  }
-}
-
-// ----- "Tree" view: build a nested folder tree from the changed-file paths -----
-interface DiffRow {
-  dir: boolean;
-  name: string;
-  path: string;
-  depth: number;
-  file?: AgentFile;
-  /** Dirs: the uniform descendant state (A/D/R/M) — undefined when mixed. */
-  state?: string;
-  /** Dirs: aggregate line counts over every descendant file. */
-  add?: number;
-  del?: number;
-}
-interface DiffNode {
-  dir: boolean;
-  name: string;
-  path: string;
-  file?: AgentFile;
-  children: DiffNode[];
-  state?: string;
-  add?: number;
-  del?: number;
-}
-
-// Dirs first then files, alphabetical at each level. File leaves carry their
-// AgentFile for state/counts; dir nodes carry the AGGREGATE — total ±lines and,
-// when every descendant shares one state, that state (a fully-deleted folder
-// reads as deleted, a fully-new one as added, a moved one as renamed). The
-// component flattens this respecting per-folder open state (collapsible).
-function buildDiffTree(files: AgentFile[]): DiffNode[] {
-  const root: DiffNode = { dir: true, name: "", path: "", children: [] };
-  const dirAt = new Map<string, DiffNode>([["", root]]);
-  for (const f of files) {
-    const parts = f.path.split("/");
-    let parentPath = "";
-    parts.forEach((part, i) => {
-      const isFile = i === parts.length - 1;
-      const path = parentPath ? `${parentPath}/${part}` : part;
-      if (isFile) {
-        dirAt.get(parentPath)!.children.push({ dir: false, name: part, path, file: f, children: [] });
-      } else if (!dirAt.has(path)) {
-        const node: DiffNode = { dir: true, name: part, path, children: [] };
-        dirAt.get(parentPath)!.children.push(node);
-        dirAt.set(path, node);
-      }
-      parentPath = path;
-    });
-  }
-  const sortRec = (nodes: DiffNode[]) => {
-    nodes.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
-    for (const n of nodes) if (n.dir) sortRec(n.children);
-  };
-  sortRec(root.children);
-  aggregateRec(root.children);
-  return root.children;
-}
-
-/** Bottom-up dir aggregation: ±line sums plus the uniform state (or none). */
-function aggregateRec(nodes: DiffNode[]): void {
-  for (const n of nodes) {
-    if (!n.dir) continue;
-    aggregateRec(n.children);
-    let add = 0;
-    let del = 0;
-    let state: string | undefined;
-    let uniform = true;
-    for (const c of n.children) {
-      add += c.dir ? (c.add ?? 0) : (c.file?.add ?? 0);
-      del += c.dir ? (c.del ?? 0) : (c.file?.del ?? 0);
-      const cs = c.dir ? c.state : c.file?.state;
-      if (state === undefined) state = cs;
-      if (cs === undefined || cs !== state) uniform = false;
-    }
-    n.add = add;
-    n.del = del;
-    n.state = uniform ? state : undefined;
   }
 }

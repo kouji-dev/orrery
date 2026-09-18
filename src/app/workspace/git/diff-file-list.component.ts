@@ -8,8 +8,7 @@ import {
   output,
   signal,
 } from "@angular/core";
-import { NgTemplateOutlet } from "@angular/common";
-import { Agent, CommitFile } from "../../models";
+import { Agent } from "../../models";
 import { fileDir, fileName, revealLabelFor } from "../../utils";
 import { IconComponent } from "../../shared/icon.component";
 import { MenuPanelComponent } from "../../context-menu/menu-panel.component";
@@ -18,6 +17,8 @@ import { AddDelComponent } from "../../shared/git/add-del.component";
 import { BRIDGE, Commands } from "../../data-source/bridge";
 import { EditsStore } from "../../stores/edits.store";
 import { UiStore } from "../../ui/ui.store";
+import { ScrollStateService } from "../scroll-state.service";
+import { buildDiffTree, DiffEntry, DiffRow, flattenTree } from "./diff-tree";
 import {
   KjButtonComponent,
   KjConfirmPopupActionComponent,
@@ -26,80 +27,51 @@ import {
   KjConfirmPopupComponent,
   KjConfirmPopupContentComponent,
   KjConfirmPopupMessageComponent,
-  KjDividerComponent, KjTabComponent, KjTabListComponent, KjTabsComponent} from "@kouji-ui/components";
+  KjDividerComponent,
+  KjTabComponent,
+  KjTabListComponent,
+  KjTabsComponent,
+} from "@kouji-ui/components";
 import { KjConfirmPopupTrigger } from "@kouji-ui/core";
 
 function msgOf(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-// ---- tree node types ----
-interface DirNode {
-  kind: "dir";
-  name: string;
+/** Worktree paths travel with forward slashes; the backend joins them itself. */
+const norm = (p: string): string => p.replace(/\\/g, "/");
+
+/** What the row context menu acts on: a changed file, a folder row (a real
+ *  worktree folder, even though the tree synthesises the path segment), or
+ *  null for the empty space below the rows (the worktree root). */
+interface MenuTarget {
   path: string;
-  children: TreeNode[];
-}
-interface FileNode {
-  kind: "file";
   name: string;
-  path: string;
-  file: CommitFile;
-}
-type TreeNode = DirNode | FileNode;
-
-function buildTree(files: CommitFile[]): TreeNode[] {
-  const root: Record<string, unknown> = {};
-  for (const f of files) {
-    const parts = f.path.split("/");
-    let cur = root as Record<string, unknown>;
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i];
-      const leaf = i === parts.length - 1;
-      if (!cur[p]) {
-        cur[p] = {
-          name: p,
-          leaf,
-          path: parts.slice(0, i + 1).join("/"),
-          file: leaf ? f : null,
-          children: {},
-        };
-      }
-      cur = ((cur[p] as Record<string, unknown>)["children"] as Record<string, unknown>);
-    }
-  }
-
-  function walk(obj: Record<string, unknown>): TreeNode[] {
-    return (Object.values(obj) as Array<{
-      name: string;
-      leaf: boolean;
-      path: string;
-      file: CommitFile | null;
-      children: Record<string, unknown>;
-    }>)
-      .sort((a, b) =>
-        a.leaf === b.leaf ? a.name.localeCompare(b.name) : a.leaf ? 1 : -1
-      )
-      .map((n): TreeNode =>
-        n.leaf
-          ? { kind: "file", name: n.name, path: n.path, file: n.file! }
-          : { kind: "dir", name: n.name, path: n.path, children: walk(n.children) }
-      );
-  }
-
-  return walk(root as Record<string, unknown>);
+  isDir: boolean;
+  /** The git state of a file row; null for folders (nothing to hand the OS). */
+  state: string | null;
 }
 
 /**
- * Changed-files panel for commit/range diff views.
- * Shows a flat list (default) or tree view with state badge + ±N stats.
- * Emits `select` with the path when a file row is clicked.
+ * THE changed-file list. One component behind every diff surface — the agent's
+ * working-tree changes, a single commit's files, and a multi-commit compare —
+ * so all three collapse, resize, sort and read identically. They used to ship
+ * two lists: the compare's had no collapsible folders, no folder aggregates
+ * and a fixed 232px column, which is exactly how it drifted from the panel it
+ * is supposed to mirror.
+ *
+ * Tree/Flat and the collapsed folders come from UiStore (persisted with the
+ * workspace, keyed by agent), so a tab switch or a relaunch never resets them.
+ *
+ * `allowCreate` is the one real difference between the surfaces: a worktree
+ * list can create files and folders (and scopes a create to where the user
+ * right-clicked), while a commit's file list is history — nothing to create,
+ * so right-clicking anywhere but a file row opens nothing there.
  */
 @Component({
   selector: "app-diff-file-list",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    NgTemplateOutlet,
     IconComponent,
     MenuPanelComponent,
     StateBadgeComponent,
@@ -118,17 +90,16 @@ function buildTree(files: CommitFile[]): TreeNode[] {
     KjTabComponent,
   ],
   template: `
-    <div style="display:flex;flex-direction:column;min-height:0;height:100%">
+    <div style="display:flex;flex-direction:column;min-height:0;height:100%;background:var(--panel)">
 
-      <!-- header: label · count, ±total, tree/flat toggle -->
-      <div class="pane-head" style="gap:var(--sp-3);padding:var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-5)">
-        <span class="up" style="color:var(--ink-3)">
-          {{ title() || 'Changed' }} · {{ files().length }}
-        </span>
+      <!-- header: label · count, ±total, tree/flat toggle, optional rescan -->
+      <div class="pane-head" style="gap:var(--sp-4);padding:var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-5)">
+        <!-- the label never wraps: at the column's minimum width a two-word
+             title used to break onto a second line and grow the header -->
+        <span class="up trunc" style="color:var(--ink-3);flex:none">{{ title() || 'Changed' }} · {{ files().length }}</span>
         <app-add-del [add]="totalAdd()" [del]="totalDel()" />
-        <!-- tree / flat toggle -->
         <kj-tabs variant="pills" class="tabs-xs" style="margin-left:auto"
-                 [value]="treeMode() ? 'tree' : 'flat'" (valueChange)="treeMode.set($event === 'tree')">
+                 [value]="treeMode() ? 'tree' : 'flat'" (valueChange)="setTreeMode($event === 'tree')">
           <kj-tab-list aria-label="File list layout">
             <kj-tab value="tree" title="Tree view">
               <app-icon size="md" name="graph" [color]="treeMode() ? 'var(--ui-ink)' : null" />Tree
@@ -138,154 +109,231 @@ function buildTree(files: CommitFile[]): TreeNode[] {
             </kj-tab>
           </kj-tab-list>
         </kj-tabs>
+        @if (canRefresh()) {
+          <kj-button kjSize="icon" kjVariant="ghost" (click)="refresh.emit()" title="Rescan changes"><app-icon size="md" name="refresh" /></kj-button>
+        }
       </div>
 
-      <!-- scrollable file list -->
-      <div class="scroll-y" style="flex:1;padding:var(--sp-2) 0">
-
-        <!-- flat mode -->
-        @if (!treeMode()) {
+      <!-- The listing is also the root-scoped menu surface (worktree lists
+           only): row handlers stop propagation, so a right-click on the empty
+           space below them creates at the worktree root. -->
+      <div class="scroll-y" style="flex:1;padding:var(--sp-2) 0" (contextmenu)="onRootContext($event)">
+        @if (!files().length) {
+          <div style="padding:var(--sp-5) var(--sp-6);color:var(--ink-4)">{{ emptyLabel() }}</div>
+        } @else if (treeMode()) {
+          @for (row of rows(); track row.path) {
+            @if (row.dir) {
+              <div
+                class="diff-dir list-row"
+                [class.gone]="row.state === 'D'"
+                (click)="toggleDir(row.path)"
+                (contextmenu)="onDirContext($event, row)"
+                [style.padding-left.px]="8 + row.depth * 13"
+              >
+                <app-icon [name]="isDirOpen(row.path) ? 'chevronD' : 'chevron'" size="sm" color="var(--ink-4)" />
+                <app-icon [name]="isDirOpen(row.path) ? 'folderOpen' : 'folder'" size="sm" color="var(--ink-4)" />
+                <span class="dname">{{ row.name }}</span>
+                @if (row.state) {
+                  <app-state-badge [state]="row.state" />
+                }
+                <app-add-del class="counts-chip" [add]="row.add ?? 0" [del]="row.del ?? 0" />
+              </div>
+            } @else {
+              <div
+                class="diff-file list-row"
+                [class.sel]="selPath() === row.path"
+                (click)="select.emit(row.path)"
+                (contextmenu)="onFileContext($event, row.file!)"
+                [style.padding-left.px]="12 + row.depth * 13"
+              >
+                <app-state-badge [state]="row.file!.state" />
+                <span [title]="rowTitle(row.file!)" class="fname trunc">{{ row.name }}</span>
+                <app-add-del class="counts-chip" [add]="row.file!.add" [del]="row.file!.del" />
+              </div>
+            }
+          }
+        } @else {
+          <!-- flat view: the SAME single-line row as the tree — the directory
+               (or rename origin) rides inline, muted, so both modes share
+               --row-h -->
           @for (f of files(); track f.path) {
             <div
+              class="diff-file list-row"
+              [class.sel]="selPath() === f.path"
               (click)="select.emit(f.path)"
-              (contextmenu)="onContext($event, f)"
-              [style.background]="selPath() === f.path ? 'var(--panel-3)' : 'transparent'"
-              style="display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);cursor:pointer;margin:1px var(--sp-2);border-radius:var(--r-sm)"
-              (mouseenter)="onEnter($event, f.path)"
-              (mouseleave)="onLeave($event, f.path)"
+              (contextmenu)="onFileContext($event, f)"
             >
               <app-state-badge [state]="f.state" />
-              <div style="flex:1;min-width:0">
-                <div class="trunc" style="color:var(--ink)">
-                  {{ name(f.path) }}
-                </div>
-                @if (dir(f.path)) {
-                  <div class="trunc" style="font-size:var(--fs-meta);color:var(--ink-4)">
-                    {{ dir(f.path) }}
-                  </div>
-                }
-              </div>
-              <app-add-del [add]="f.add" [del]="f.del" />
+              <span [title]="rowTitle(f)" class="fname trunc">{{ fname(f.path) }}</span>
+              @if (f.state === 'R' && f.oldPath) {
+                <span class="fdir trunc" style="color:var(--vcs-renamed)">← {{ f.oldPath }}</span>
+              } @else if (fdir(f.path)) {
+                <span class="fdir trunc">{{ fdir(f.path) }}</span>
+              }
+              <app-add-del class="counts-chip" [add]="f.add" [del]="f.del" />
             </div>
           }
         }
-
-        <!-- tree mode -->
-        @if (treeMode()) {
-          <ng-template [ngTemplateOutlet]="treeRows" [ngTemplateOutletContext]="{ nodes: tree(), depth: 0 }" />
-        }
-
       </div>
     </div>
 
-    <!-- context menu: file actions, only ever opened from a file row — shared menu chrome -->
+    <!-- context menu: file/folder CRUD + the OS hand-offs. A deleted file has
+         nothing left on disk to open or show, so both hand-offs disable. -->
     @if (menu(); as m) {
       <app-menu-panel [x]="m.x" [y]="m.y" (closed)="closeMenu()">
         @switch (menuMode()) {
           @case ("actions") {
-            <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startRename()"><app-icon size="md" name="rename" />Rename…</kj-button>
-            <kj-divider />
-            <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="openExternal(m.file)"><app-icon size="md" name="ext" />Open in Default App</kj-button>
-            <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="reveal(m.file)"><app-icon size="md" name="folderOpen" />{{ revealLabel }}</kj-button>
-            <kj-divider />
-            <kj-confirm-popup [kjDestructive]="true" (kjConfirmed)="confirmDelete()">
-              <kj-button kjConfirmPopupTrigger #delTrig="kjConfirmPopupTrigger" kjVariant="danger" [kjFullWidth]="true" class="menu-item"><app-icon size="md" name="trash" />Delete</kj-button>
-              <kj-confirm-popup-content [kjFor]="delTrig">
-                <kj-confirm-popup-message>Delete <b>{{ name(m.file.path) }}</b>?</kj-confirm-popup-message>
-                <kj-confirm-popup-actions>
-                  <kj-confirm-popup-cancel><kj-button kjVariant="outline">Cancel</kj-button></kj-confirm-popup-cancel>
-                  <kj-confirm-popup-action><kj-button kjVariant="danger">Delete</kj-button></kj-confirm-popup-action>
-                </kj-confirm-popup-actions>
-              </kj-confirm-popup-content>
-            </kj-confirm-popup>
+            @if (allowCreate()) {
+              <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startInput('create-file')"><app-icon size="md" name="file" />New File…</kj-button>
+              <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startInput('create-dir')"><app-icon size="md" name="folder" />New Folder…</kj-button>
+            }
+            @if (m.target; as t) {
+              <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" (click)="startRename()"><app-icon size="md" name="rename" />Rename…</kj-button>
+              <kj-divider />
+              <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="t.state === 'D'" (click)="openExternal(t)"><app-icon size="md" name="ext" />Open in Default App</kj-button>
+              <kj-button kjVariant="ghost" [kjFullWidth]="true" class="menu-item" [kjDisabled]="t.state === 'D'" (click)="reveal(t)"><app-icon size="md" name="folderOpen" />{{ revealLabel }}</kj-button>
+              <kj-divider />
+              <kj-confirm-popup [kjDestructive]="true" (kjConfirmed)="confirmDelete()">
+                <kj-button kjConfirmPopupTrigger #delTrig="kjConfirmPopupTrigger" kjVariant="danger" [kjFullWidth]="true" class="menu-item"><app-icon size="md" name="trash" />Delete</kj-button>
+                <kj-confirm-popup-content [kjFor]="delTrig">
+                  <kj-confirm-popup-message>Delete <b>{{ t.name }}</b>{{ t.isDir ? ' and its contents' : '' }}?</kj-confirm-popup-message>
+                  <kj-confirm-popup-actions>
+                    <kj-confirm-popup-cancel><kj-button kjVariant="outline">Cancel</kj-button></kj-confirm-popup-cancel>
+                    <kj-confirm-popup-action><kj-button kjVariant="danger">Delete</kj-button></kj-confirm-popup-action>
+                  </kj-confirm-popup-actions>
+                </kj-confirm-popup-content>
+              </kj-confirm-popup>
+            }
           }
           @default {
-            <div class="menu-label">Rename {{ name(m.file.path) }}</div>
+            <div class="menu-label">{{ inputLabel() }}</div>
             <input
               class="menu-input"
               [value]="nameInput()"
               (input)="nameInput.set($any($event.target).value)"
-              (keydown.enter)="commitRename()"
+              (keydown.enter)="commit()"
               (keydown.escape)="closeMenu()"
               spellcheck="false"
             />
             <div class="menu-row">
               <kj-button kjVariant="outline" (click)="closeMenu()">Cancel</kj-button>
-              <kj-button kjVariant="default" [kjDisabled]="!nameInput().trim()" (click)="commitRename()">OK</kj-button>
+              <kj-button kjVariant="default" [kjDisabled]="!nameInput().trim()" (click)="commit()">OK</kj-button>
             </div>
           }
         }
       </app-menu-panel>
     }
-
-    <!-- recursive tree row template -->
-    <ng-template #treeRows let-nodes="nodes" let-depth="depth">
-      @for (node of nodes; track node.path) {
-        @if (node.kind === 'dir') {
-          <div [style.padding-left.px]="8 + depth * 13" style="display:flex;align-items:center;gap:var(--sp-2);padding-top:var(--sp-1);padding-bottom:var(--sp-1);padding-right:var(--sp-2)">
-            <app-icon size="lg" name="folderOpen" style="color:var(--ink-4);flex:none" />
-            <span style="font-size:var(--fs-meta);color:var(--ink-3)">{{ node.name }}</span>
-          </div>
-          <ng-template [ngTemplateOutlet]="treeRows" [ngTemplateOutletContext]="{ nodes: node.children, depth: depth + 1 }" />
-        } @else {
-          <div
-            (click)="select.emit(node.path)"
-            (contextmenu)="onContext($event, node.file)"
-            [style.padding-left.px]="8 + depth * 13 + 4"
-            [style.background]="selPath() === node.path ? 'var(--panel-3)' : 'transparent'"
-            style="display:flex;align-items:center;gap:var(--sp-3);padding-top:var(--sp-1);padding-bottom:var(--sp-1);padding-right:var(--sp-3);cursor:pointer;margin:1px var(--sp-2);border-radius:var(--r-sm)"
-            (mouseenter)="onEnter($event, node.path)"
-            (mouseleave)="onLeave($event, node.path)"
-          >
-            <app-state-badge [state]="node.file.state" />
-            <span
-              class="trunc"
-              style="flex:1"
-              [style.color]="selPath() === node.path ? 'var(--ink)' : 'var(--ink-2)'"
-            >{{ node.name }}</span>
-            <app-add-del [add]="node.file.add" [del]="node.file.del" />
-          </div>
-        }
-      }
-    </ng-template>
   `,
 })
 export class DiffFileListComponent {
   private readonly bridge = inject(BRIDGE);
   private readonly ui = inject(UiStore);
   private readonly edits = inject(EditsStore);
+  private readonly scroll = inject(ScrollStateService);
   private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly agent = input.required<Agent>();
-  readonly files = input<CommitFile[]>([]);
+  readonly files = input<readonly DiffEntry[]>([]);
   readonly selPath = input<string | null | undefined>(null);
   readonly title = input<string>("");
+  /** Worktree lists can create; a commit's file list is history. Also gates
+   *  the folder-row and empty-space menus — there is nothing else to do to a
+   *  folder in a read-only listing. */
+  readonly allowCreate = input(false);
+  /** Shows the rescan button; the host owns the reload. */
+  readonly canRefresh = input(false);
+  readonly emptyLabel = input("no changes");
 
   readonly select = output<string>();
+  readonly refresh = output<void>();
+  /** A worktree write landed (create / rename / delete) — the host re-scans
+   *  whatever feeds it. */
+  readonly mutated = output<void>();
 
-  readonly treeMode = signal(true);
+  // Tree/Flat and the collapsed folders are workspace preferences, not view
+  // state: this component is destroyed on every tab switch.
+  readonly treeMode = computed(() => this.ui.diffTreeMode());
+  setTreeMode(on: boolean): void {
+    this.ui.diffTreeMode.set(on);
+  }
 
-  // ----- context-menu file actions (rename / open / reveal / delete) -----
-  readonly menu = signal<{ x: number; y: number; file: CommitFile } | null>(null);
-  readonly menuMode = signal<"actions" | "rename">("actions");
+  private readonly agentId = computed(() => this.agent().id);
+
+  readonly tree = computed(() => buildDiffTree(this.files()));
+  private readonly dirOpen = computed<Record<string, boolean>>(() =>
+    this.ui.diffDirOpenFor(this.agentId()),
+  );
+  /** The visible rows — collapsed folders keep their children off screen. */
+  readonly rows = computed<DiffRow[]>(() =>
+    flattenTree(this.tree(), (path) => this.dirOpen()[path] !== false),
+  );
+  isDirOpen(path: string): boolean {
+    return this.dirOpen()[path] !== false;
+  }
+  toggleDir(path: string): void {
+    this.ui.toggleDiffDir(this.agentId(), path);
+  }
+
+  readonly totalAdd = computed(() => this.files().reduce((s, f) => s + f.add, 0));
+  readonly totalDel = computed(() => this.files().reduce((s, f) => s + f.del, 0));
+
+  // ----- row context menu: file/folder CRUD + the OS hand-offs -----
+  readonly menu = signal<{ x: number; y: number; target: MenuTarget | null } | null>(null);
+  readonly menuMode = signal<"actions" | "create-file" | "create-dir" | "rename">("actions");
   readonly nameInput = signal("");
   readonly revealLabel = revealLabelFor(navigator.userAgent);
 
-  onContext(e: MouseEvent, file: CommitFile): void {
+  readonly inputLabel = computed(() => {
+    const t = this.menu()?.target ?? null;
+    switch (this.menuMode()) {
+      case "create-file":
+        return `New file in ${this.scopeDir(t) || "worktree root"}`;
+      case "create-dir":
+        return `New folder in ${this.scopeDir(t) || "worktree root"}`;
+      case "rename":
+        return `Rename ${t?.name ?? ""}`;
+      default:
+        return "";
+    }
+  });
+
+  private open(e: MouseEvent, target: MenuTarget | null): void {
     e.preventDefault();
     e.stopPropagation();
-    this.menu.set({ x: e.clientX, y: e.clientY, file });
+    this.menu.set({ x: e.clientX, y: e.clientY, target });
     this.menuMode.set("actions");
     this.nameInput.set("");
   }
-
+  /** File rows: the file's state drives the OS hand-offs. */
+  onFileContext(e: MouseEvent, file: DiffEntry): void {
+    this.open(e, { path: file.path, name: fileName(file.path), isDir: false, state: file.state });
+  }
+  /** Folder rows carry no file — build the target from the tree row. Only a
+   *  worktree list acts on folders. */
+  onDirContext(e: MouseEvent, row: DiffRow): void {
+    if (!this.allowCreate()) return;
+    this.open(e, { path: row.path, name: row.name, isDir: true, state: null });
+  }
+  /** Empty space below the rows = the worktree root: creates only. */
+  onRootContext(e: MouseEvent): void {
+    if (!this.allowCreate()) return;
+    this.open(e, null);
+  }
   closeMenu(): void {
     this.menu.set(null);
   }
 
+  startInput(mode: "create-file" | "create-dir"): void {
+    this.menuMode.set(mode);
+    this.nameInput.set("");
+    this.focusInput();
+  }
   startRename(): void {
     this.menuMode.set("rename");
-    this.nameInput.set(this.name(this.menu()!.file.path));
+    this.nameInput.set(this.menu()?.target?.name ?? "");
+    this.focusInput();
+  }
+  private focusInput(): void {
     queueMicrotask(() => {
       const el = this.host.nativeElement.querySelector(".menu-input") as HTMLInputElement | null;
       el?.focus();
@@ -293,77 +341,85 @@ export class DiffFileListComponent {
     });
   }
 
-  async commitRename(): Promise<void> {
+  /** Directory a create scopes to: the row itself (folder), its parent (file),
+   *  or "" for the worktree root. */
+  private scopeDir(t: MenuTarget | null): string {
+    if (!t) return "";
+    const p = norm(t.path);
+    if (t.isDir) return p;
+    const i = p.lastIndexOf("/");
+    return i === -1 ? "" : p.slice(0, i);
+  }
+
+  async commit(): Promise<void> {
     const m = this.menu();
-    const newName = this.nameInput().trim();
-    if (!m || !newName) return;
-    const from = m.file.path.replace(/\\/g, "/");
-    const i = from.lastIndexOf("/");
-    const dir = i === -1 ? "" : from.slice(0, i);
-    const to = dir ? `${dir}/${newName}` : newName;
+    const name = this.nameInput().trim();
+    if (!m || !name) return;
+    const mode = this.menuMode();
+    const id = this.agentId();
     try {
-      await this.bridge.invoke(Commands.FileRename, { id: this.agent().id, from, to });
-      this.edits.close(this.agent().id, from);
+      if (mode === "rename") {
+        const from = norm(m.target!.path);
+        // the parent of the row, folder and file alike
+        const dir = this.scopeDir({ ...m.target!, isDir: false });
+        const to = dir ? `${dir}/${name}` : name;
+        await this.bridge.invoke(Commands.FileRename, { id, from, to });
+        this.edits.close(id, from); // stale buffer under the old path
+        this.scroll.clear(id, from);
+      } else {
+        const base = this.scopeDir(m.target);
+        const path = base ? `${base}/${name}` : name;
+        const cmd = mode === "create-dir" ? Commands.DirCreate : Commands.FileCreate;
+        await this.bridge.invoke(cmd, { id, path });
+        if (mode === "create-file") this.ui.openFileInWorkspace(id, path);
+      }
       this.closeMenu();
+      this.mutated.emit();
     } catch (e) {
       this.ui.flash(msgOf(e));
     }
   }
 
-  openExternal(file: CommitFile): void {
-    this.toOs(Commands.FileOpenExternal, file, "couldn't open");
+  openExternal(t: MenuTarget): void {
+    this.toOs(Commands.FileOpenExternal, t.path, "couldn't open");
   }
-
-  reveal(file: CommitFile): void {
-    this.toOs(Commands.FileReveal, file, "couldn't reveal");
+  reveal(t: MenuTarget): void {
+    this.toOs(Commands.FileReveal, t.path, "couldn't reveal");
   }
-
-  private toOs(command: string, file: CommitFile, failed: string): void {
-    const path = file.path.replace(/\\/g, "/");
+  /** Dismiss first, then hand the worktree-relative path to the OS; a failure
+   *  reports through the flash rather than by leaving the menu hanging open. */
+  private toOs(command: string, raw: string, failed: string): void {
+    const path = norm(raw);
     this.closeMenu();
     void this.bridge
-      .invoke(command, { id: this.agent().id, path })
-      .catch((e: unknown) => this.ui.flash(`${failed} ${this.name(path)}: ${msgOf(e)}`));
+      .invoke(command, { id: this.agentId(), path })
+      .catch((e: unknown) => this.ui.flash(`${failed} ${fileName(path)}: ${msgOf(e)}`));
   }
 
   async confirmDelete(): Promise<void> {
-    const m = this.menu();
-    if (!m) return;
-    const path = m.file.path.replace(/\\/g, "/");
-    // dismiss first, like every other row action (toOs): the confirmation has
-    // already been given, so the menu has nothing left to say — and a failed
-    // delete reports through the flash, not by leaving the menu hanging open.
+    const t = this.menu()?.target;
+    if (!t) return;
+    const id = this.agentId();
+    const path = norm(t.path);
+    // dismiss first, like every other row action: the confirmation has already
+    // been given, and a failure reports through the flash rather than by
+    // leaving the menu hanging open.
     this.closeMenu();
     try {
-      await this.bridge.invoke(Commands.FileDelete, { id: this.agent().id, path });
-      this.edits.close(this.agent().id, path);
+      await this.bridge.invoke(Commands.FileDelete, { id, path });
+      this.edits.close(id, path);
+      this.scroll.clear(id, path);
+      this.mutated.emit();
     } catch (e) {
       this.ui.flash(msgOf(e));
     }
   }
 
-  readonly totalAdd = computed(() => this.files().reduce((s, f) => s + f.add, 0));
-  readonly totalDel = computed(() => this.files().reduce((s, f) => s + f.del, 0));
-
-  readonly tree = computed(() => buildTree(this.files()));
-
-  name(path: string): string {
-    return fileName(path);
+  /** A renamed row says where it came from; every other row says its path. */
+  rowTitle(f: DiffEntry): string {
+    return f.state === "R" && f.oldPath ? `renamed from ${f.oldPath}` : f.path;
   }
 
-  dir(path: string): string {
-    return fileDir(path);
-  }
-
-  onEnter(event: MouseEvent, path: string): void {
-    if (this.selPath() !== path) {
-      (event.currentTarget as HTMLElement).style.background = "var(--panel-2)";
-    }
-  }
-
-  onLeave(event: MouseEvent, path: string): void {
-    if (this.selPath() !== path) {
-      (event.currentTarget as HTMLElement).style.background = "transparent";
-    }
-  }
+  readonly fname = fileName;
+  readonly fdir = fileDir;
 }
