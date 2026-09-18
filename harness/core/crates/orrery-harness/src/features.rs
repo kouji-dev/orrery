@@ -15,6 +15,16 @@ use orrery_session::SessionStore;
 use crate::build::BuildError;
 
 /// Which first-party extensions this build has.
+///
+/// # `anthropic` links, and is not yet selectable
+///
+/// The feature compiles the provider in and this list reports it, but
+/// [`ProviderChoice`](crate::ProviderChoice) has no variant that picks it: a
+/// real provider needs a model id, a credential name and an auth flow, all of
+/// which are plan 10's profile config. The feature exists now so that the
+/// layering is settled - this is the crate that may name an extension - rather
+/// than so that a key can be used today. Nothing in this repo's tests may reach
+/// the network, which is also why it is off by default.
 // Each `push` is behind its own `#[cfg]`, so the `vec![]` clippy suggests
 // cannot express it.
 #[allow(clippy::vec_init_then_push)]
