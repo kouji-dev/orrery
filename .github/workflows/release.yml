@@ -86,8 +86,14 @@ jobs:
         include:
           - os: windows-latest # x64 NSIS + MSI
             slug: windows
-          - os: macos-14 # Apple Silicon (aarch64) dmg + updater .app.tar.gz — unsigned (no Apple identity yet)
-            slug: mac
+          # macOS is PARKED until the Mac build is actually ready to ship (no
+          # Apple identity, nothing tested on it) — it only doubled the wall
+          # clock of every release. Re-enabling is this entry plus the two
+          # blocks marked "macOS (parked)" below; nothing else is mac-aware:
+          # make-latest-json.mjs already treats darwin-aarch64 as optional and
+          # ships a windows-only manifest.
+          # - os: macos-14 # Apple Silicon (aarch64) dmg + updater .app.tar.gz — unsigned (no Apple identity yet)
+          #   slug: mac
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -124,14 +130,15 @@ jobs:
           # MSI updater signature (per-machine installs update via the MSI). Tolerant:
           # if it's absent, make-latest-json just omits the MSI updater entry.
           Copy-Item src-tauri/target/release/bundle/msi/*.msi.sig dist-release/ -ErrorAction SilentlyContinue
-      - name: Stage release files (flat, mac)
-        if: matrix.slug == 'mac'
-        run: |
-          mkdir -p dist-release
-          cp src-tauri/target/release/bundle/dmg/*.dmg dist-release/
-          # Updater payload + minisign signature — what latest.json's darwin entry points at.
-          cp src-tauri/target/release/bundle/macos/*.app.tar.gz dist-release/
-          cp src-tauri/target/release/bundle/macos/*.app.tar.gz.sig dist-release/
+      # macOS (parked — see the build matrix above)
+      # - name: Stage release files (flat, mac)
+      #   if: matrix.slug == 'mac'
+      #   run: |
+      #     mkdir -p dist-release
+      #     cp src-tauri/target/release/bundle/dmg/*.dmg dist-release/
+      #     # Updater payload + minisign signature — what latest.json's darwin entry points at.
+      #     cp src-tauri/target/release/bundle/macos/*.app.tar.gz dist-release/
+      #     cp src-tauri/target/release/bundle/macos/*.app.tar.gz.sig dist-release/
       - uses: actions/upload-artifact@v7
         with:
           name: release-files-${{ matrix.slug }}
@@ -169,6 +176,10 @@ jobs:
           --out artifacts/latest.json
           --repo kouji-dev/orrery-releases
           --notes "$(cat notes.md)"
+      # macOS (parked — see the build matrix): the mac assets are OFF the asset
+      # list too. An unmatched glob is passed through literally by the shell and
+      # gh fails on the missing file, so this line must grow back
+      # `artifacts/*.dmg artifacts/*.app.tar.gz` the day macos-14 returns.
       - name: Create release in orrery-releases
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
@@ -179,7 +190,7 @@ jobs:
           --latest
           --title "v${{ needs.prepare.outputs.version }}"
           --notes-file notes.md
-          artifacts/*-setup.exe artifacts/*.msi artifacts/*.dmg artifacts/*.app.tar.gz artifacts/latest.json
+          artifacts/*-setup.exe artifacts/*.msi artifacts/latest.json
 
   # release => changelog. After the app is published, append this release's entry
   # to changelog.json in the PUBLIC orrery-releases repo (orrery is private). Both
