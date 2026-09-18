@@ -159,74 +159,75 @@ Reads use a second, read-only connection under `spawn_blocking`. WAL makes them 
 
 Files: `src/turn.rs`, `src/algebra.rs`, `tests/algebra.rs`
 
-- [ ] **Failing test first.** `algebra::materialise_is_oldest_first` — three turns in, three messages out, in order.
-- [ ] `algebra::elision_never_drops_the_head` — a budget that fits only two of five turns keeps turn 1 and turn 5.
-- [ ] `algebra::watermark_replaces_the_prefix` — with a watermark at seq 3 and a summary turn, the output is summary + turns 4,5, and turns 1–3 are absent but still in the input rows.
-- [ ] Implement `TurnKind`, `TurnRow`, `NewTurn`, `Materialised`, `algebra::materialise`.
-- [ ] `TokenCounter` trait here (`fn count(&self, messages: &[Message]) -> u64`) with a `CharsOverFour` test impl. The real ones are plan 03.
+- [x] **Failing test first.** `algebra::materialise_is_oldest_first` — three turns in, three messages out, in order.
+- [x] `algebra::elision_never_drops_the_head` — a budget that fits only two of five turns keeps turn 1 and turn 5.
+- [x] `algebra::watermark_replaces_the_prefix` — with a watermark at seq 3 and a summary turn, the output is summary + turns 4,5, and turns 1–3 are absent but still in the input rows.
+- [x] Implement `TurnKind`, `TurnRow`, `NewTurn`, `Materialised`, `algebra::materialise`.
+- [x] `TokenCounter` trait here (`fn count(&self, messages: &[Message]) -> u64`) with a `CharsOverFour` test impl. The real ones are plan 03.
 
 ### Task 2 · The lease
 
 Files: `src/lease.rs`, `tests/conformance.rs`
 
-- [ ] **Failing test first.** `conformance::second_lease_is_refused` — take a lease, `lease()` the same branch again, assert `SessionError::BranchBusy`; drop the first, assert the second now succeeds.
-- [ ] `conformance::two_branches_lease_concurrently` — two leases on different branches held at once.
-- [ ] Implement `BranchLease`, `BranchState`, the `DashMap` registry, `lease()` on `try_lock_owned`.
-- [ ] **A compile-fail test** (`trybuild`): constructing a `BranchLease` outside the crate does not compile. This is the whole point of the type; prove it.
+- [x] **Failing test first.** `conformance::second_lease_is_refused` — take a lease, `lease()` the same branch again, assert `SessionError::BranchBusy`; drop the first, assert the second now succeeds.
+- [x] `conformance::two_branches_lease_concurrently` — two leases on different branches held at once.
+- [x] Implement `BranchLease`, `BranchState`, the `DashMap` registry, `lease()` on `try_lock_owned`.
+- [x] **A compile-fail test**: constructing a `BranchLease` outside the crate does not compile, and neither does cloning one. This is the whole point of the type; prove it.
+  - **Done with `compile_fail` doctests, not `trybuild`.** A doctest links the crate as an external dependency, which is exactly the vantage point the test needs, and it costs no new dependency — `trybuild` is not in the workspace pins or the lockfile, and adding one to a `Cargo.lock` shared with two other agents mid-flight is not worth it for a guarantee we already have. The two cases are at the top of `src/lease.rs`.
 
 ### Task 3 · The trait and the conformance suite
 
 Files: `src/trait.rs`, `tests/conformance.rs`
 
-- [ ] Write `run_conformance(store)` covering: create → append → materialise; branch → append on child → close → parent sees `BranchResult`; append out of order rejected; `events_since` returns a contiguous `seq` range; `compact` leaves the original rows readable.
-- [ ] Add an in-memory `Vec`-backed store **in the test module only**, so the suite is exercised before the SQLite backend exists. It is not a shipped backend — it exists to prove the suite runs.
+- [x] Write `run_conformance(store)` — it lives in **`src/conformance.rs`**, not `tests/`, because a `tests/` binary cannot be linked by a backend crate and the whole point is that both backends run the same code. `tests/conformance.rs` is the memory store plus the runner. Covering: create → append → materialise; branch → append on child → close → parent sees `BranchResult`; append out of order rejected (as `conformance::appends_are_contiguous` — the lease is the only source of a `Seq`, so "out of order" is only reachable by going under the trait, which `sqlite::unique_branch_seq_is_enforced` and `concurrency::writer_survives_a_failed_op` do); `events_since` returns a contiguous `seq` range; `compact` leaves the original rows readable.
+- [x] Add an in-memory `Vec`-backed store **in the test module only**, so the suite is exercised before the SQLite backend exists. It is not a shipped backend — it exists to prove the suite runs.
 
 ### Task 4 · SQLite schema and reads
 
 Files: `orrery-ext-session-sqlite/src/{schema,read}.rs`
 
-- [ ] **Failing test first.** `sqlite::schema_applies_and_is_idempotent` — apply twice, no error.
-- [ ] `sqlite::unique_branch_seq_is_enforced` — two rows with the same `(branch, seq)` is a constraint violation, surfaced as `SessionError::Corrupt`, not a panic.
-- [ ] Apply the DDL, set `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`.
-- [ ] Read path on a read-only connection under `spawn_blocking`.
+- [x] **Failing test first.** `sqlite::schema_applies_and_is_idempotent` — apply twice, no error.
+- [x] `sqlite::unique_branch_seq_is_enforced` — two rows with the same `(branch, seq)` is a constraint violation, surfaced as `SessionError::Corrupt`, not a panic.
+- [x] Apply the DDL, set `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`.
+- [x] Read path on a read-only connection under `spawn_blocking`.
 
 ### Task 5 · The writer actor
 
 Files: `orrery-ext-session-sqlite/src/writer.rs`, `tests/concurrency.rs`
 
-- [ ] **Failing test first.** `concurrency::appends_on_one_branch_are_ordered` — 100 appends from 10 tasks holding the lease in turn produce seq 1..100 with no gaps.
-- [ ] `concurrency::writer_survives_a_failed_op` — one op returns an error; the next succeeds (the actor does not die on a single failure).
-- [ ] Implement the `mpsc` + `oneshot` actor, one transaction per append.
+- [x] **Failing test first.** `concurrency::appends_on_one_branch_are_ordered` — 100 appends from 10 tasks holding the lease in turn produce seq 1..100 with no gaps.
+- [x] `concurrency::writer_survives_a_failed_op` — one op returns an error; the next succeeds (the actor does not die on a single failure).
+- [x] Implement the `mpsc` + `oneshot` actor, one transaction per append.
 
 ### Task 6 · Crash durability
 
 Files: `tests/crash.rs`
 
-- [ ] **Failing test first.** `crash::loses_at_most_one_turn` — spawn a child process that appends N turns and is SIGKILLed mid-run; reopen the database; assert the turn count is N or N-1 and that `materialise` succeeds. On Windows use `TerminateProcess` via the existing job-object helper.
-- [ ] Assert the WAL recovers without manual intervention.
+- [x] **Failing test first.** `crash::loses_at_most_one_turn` — spawn a child process that appends N turns and is SIGKILLed mid-run; reopen the database; assert the turn count is N or N-1 and that `materialise` succeeds. On Windows use `TerminateProcess` via the existing job-object helper.
+- [x] Assert the WAL recovers without manual intervention.
 
 ### Task 7 · Compaction
 
 Files: `src/algebra.rs`, `orrery-ext-session-sqlite/src/lib.rs`
 
-- [ ] **Failing test first.** `compact::original_rows_survive` — compact up to seq 3, then read `turns` directly and assert seqs 1–3 are still there.
-- [ ] `compact::materialise_uses_the_highest_watermark` — two compactions, the later one wins.
-- [ ] Implement `compact` as: write the summary turn, write the watermark row, one transaction.
+- [x] **Failing test first.** `compact::original_rows_survive` — compact up to seq 3, then read `turns` directly and assert seqs 1–3 are still there.
+- [x] `compact::materialise_uses_the_highest_watermark` — two compactions, the later one wins.
+- [x] Implement `compact` as: write the summary turn, write the watermark row, one transaction.
 
 ### Task 8 · The parent-join deadlock
 
 Files: `tests/conformance.rs`
 
-- [ ] **Failing test first, and this is the highest-value test in the suite.** `conformance::child_close_does_not_deadlock_the_parent` — parent holds its lease, spawns a child branch, the child appends and closes; assert the whole thing completes within a timeout and the parent's `BranchResult` row exists. Written before the implementation, it will hang; that is the point.
-- [ ] Implement `close_branch` so it writes only to the **child's** rows and returns the outcome; the parent writes `BranchResult` itself, under its own lease.
-- [ ] Document the invariant at the top of `lease.rs`.
+- [x] **Failing test first, and this is the highest-value test in the suite.** `conformance::child_close_does_not_deadlock_the_parent` — parent holds its lease, spawns a child branch, the child appends and closes; assert the whole thing completes within a timeout and the parent's `BranchResult` row exists. Written before the implementation, it will hang; that is the point.
+- [x] Implement `close_branch` so it writes only to the **child's** rows and returns the outcome; the parent writes `BranchResult` itself, under its own lease.
+- [x] Document the invariant at the top of `lease.rs`.
 
 ### Task 9 · Manifest and registration
 
 Files: `orrery-ext-session-sqlite/orrery.toml`
 
-- [ ] Write the manifest: `runtime = "native"`, `[provides] session = true`, `[requires] write = ["$STATE/**"]`.
-- [ ] Register through `orrery-host` like any extension (plan 06 provides the loader; until then a direct constructor is fine, marked `TODO(plan-06)`).
+- [x] Write the manifest: `runtime = "native"`, `[provides] session = "sqlite"` (the singleton field names its implementation, which is what the scaffold already wrote and what lets a config layer say which one wins), `[requires] read/write = ["$STATE/**"]`.
+- [x] Register through `orrery-host` like any extension (plan 06 provides the loader; until then a direct constructor is fine, marked `TODO(plan-06)`).
 
 ---
 
@@ -240,5 +241,27 @@ Files: `orrery-ext-session-sqlite/orrery.toml`
 ## Open questions
 
 1. **Does `events_since` belong on `SessionStore`?** It is the replay half of §5.3, and it is the only method a *transport* calls. Alternative: a separate `EventLog` trait backed by the same database, so a store backend does not have to implement replay. Decide before plan 08 consumes it.
+
+   **Decided: it stays on `SessionStore`.** The event row and the turn row are written in the *same transaction* — that is what makes it impossible to replay an event for a turn that is not there, and impossible for the session-wide `seq` to skip a number. A separate `EventLog` trait would either need to share the store's write transaction (so it is not separable) or write in a second one (so a crash between the two is a lost or orphaned frame, and the gap-detection-by-arithmetic contract dies). The cost is one extra method a backend must implement; the alternative costs the contract. Revisit at plan 08 only if a transport turns up that wants replay from something that is not the store.
+
 2. **Retention.** §4.2 says nothing about deleting sessions. The ADE's `history/mod.rs` has a retention policy worth copying. Out of scope for phase 1; note it for phase 5 (config).
+
+   **Confirmed out of scope.** Nothing in this plan deletes a row. Note for phase 5: retention has to be expressed as *dropping whole sessions*, never as trimming turns inside one, because `materialise` walks ancestry and a branch whose parent's prefix was trimmed cannot be replayed.
+
 3. **`Materialised.elided`** — is exposing what was cut useful to the caller, or does it invite the kernel to second-guess the store? Keep it for now because plan 05's compaction trigger wants it.
+
+   **Decided: kept.** `elided` is what tells plan 05 "you are paying to drop history every turn; compact instead". Without it the trigger has to guess from token counts. It is a report, not a lever: nothing in the API lets a caller put an elided turn back, so it cannot be used to second-guess the store, only to decide to compact.
+
+## What was built
+
+Both crates are green:
+
+```
+cargo test -p orrery-session            # 5 algebra + 6 conformance + 3 doctests
+cargo test -p orrery-ext-session-sqlite # 4 schema + 7 conformance + 3 concurrency + 1 crash
+```
+
+Two things worth knowing that are not obvious from the task list:
+
+- **`algebra::materialise` yields when the last turn alone will not fit.** "Never the head" and "never the most recent" are both in the plan, and a two-turn branch under a one-token budget cannot honour both. The most recent turn wins: dropping what the model just did is how a loop starts. `tests/algebra.rs::the_most_recent_turn_survives_any_budget` pins it.
+- **A superseded summary is dropped from the view, not hoisted.** With two compactions, the view shows the summary the *winning* watermark points at and nothing from the earlier one — both rows are still on disk, and `tests/conformance.rs::materialise_uses_the_highest_watermark` asserts all eight rows are there.

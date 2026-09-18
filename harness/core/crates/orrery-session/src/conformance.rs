@@ -128,7 +128,10 @@ pub async fn two_branches_lease_concurrently(store: &dyn SessionStore) {
     let right = store.branch(anchor, "right").await.expect("branch");
 
     let a = store.lease(left).await.expect("left leases");
-    let b = store.lease(right).await.expect("right leases at the same time");
+    let b = store
+        .lease(right)
+        .await
+        .expect("right leases at the same time");
     assert_eq!(a.branch(), left);
     assert_eq!(b.branch(), right);
 }
@@ -142,8 +145,15 @@ pub async fn appends_are_contiguous(store: &dyn SessionStore) {
 
     let lease = store.lease(root).await.expect("lease");
     for i in 1..=5u64 {
-        assert_eq!(lease.next_seq(), Seq(i), "the lease hands out 1..n in order");
-        store.append(&lease, user(&format!("{i}"))).await.expect("append");
+        assert_eq!(
+            lease.next_seq(),
+            Seq(i),
+            "the lease hands out 1..n in order"
+        );
+        store
+            .append(&lease, user(&format!("{i}")))
+            .await
+            .expect("append");
     }
     assert_eq!(lease.next_seq(), Seq(6));
     drop(lease);
@@ -176,7 +186,10 @@ pub async fn closed_branch_refuses_appends(store: &dyn SessionStore) {
         .await
         .expect("close");
 
-    let reopened = store.lease(child).await.expect("a closed branch still leases");
+    let reopened = store
+        .lease(child)
+        .await
+        .expect("a closed branch still leases");
     match store.append(&reopened, user("too late")).await {
         Err(SessionError::BranchClosed { branch }) => assert_eq!(branch, child),
         other => panic!("a closed branch must refuse an append, got {other:?}"),
@@ -189,7 +202,10 @@ pub async fn branch_close_and_parent_join(store: &dyn SessionStore) {
     let root = store.open(session).await.expect("open").root;
 
     let lease = store.lease(root).await.expect("lease");
-    let anchor = store.append(&lease, user("delegate this")).await.expect("append");
+    let anchor = store
+        .append(&lease, user("delegate this"))
+        .await
+        .expect("append");
     drop(lease);
 
     let child = store.branch(anchor, "sub-agent").await.expect("branch");
@@ -236,7 +252,10 @@ pub async fn branch_close_and_parent_join(store: &dyn SessionStore) {
         .await
         .expect("materialise the child");
     assert!(
-        child_view.messages.iter().any(|m| text_of(m) == "child work"),
+        child_view
+            .messages
+            .iter()
+            .any(|m| text_of(m) == "child work"),
         "the child keeps its own turns"
     );
 }
@@ -249,7 +268,10 @@ pub async fn events_since_is_contiguous(store: &dyn SessionStore) {
 
     let lease = store.lease(root).await.expect("lease");
     for i in 0..6 {
-        store.append(&lease, user(&format!("turn {i}"))).await.expect("append");
+        store
+            .append(&lease, user(&format!("turn {i}")))
+            .await
+            .expect("append");
     }
     drop(lease);
 
@@ -274,7 +296,10 @@ pub async fn compact_leaves_the_originals_readable(store: &dyn SessionStore) {
 
     let lease = store.lease(root).await.expect("lease");
     for i in 1..=5u64 {
-        store.append(&lease, user(&format!("turn {i}"))).await.expect("append");
+        store
+            .append(&lease, user(&format!("turn {i}")))
+            .await
+            .expect("append");
     }
 
     let result = store
@@ -320,7 +345,10 @@ pub async fn compact_materialise_uses_the_highest_watermark(store: &dyn SessionS
 
     let lease = store.lease(root).await.expect("lease");
     for i in 1..=6u64 {
-        store.append(&lease, user(&format!("turn {i}"))).await.expect("append");
+        store
+            .append(&lease, user(&format!("turn {i}")))
+            .await
+            .expect("append");
     }
     store
         .compact(

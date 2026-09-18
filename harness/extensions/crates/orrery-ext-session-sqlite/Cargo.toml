@@ -13,3 +13,19 @@ publish = false
 # nothing else changes. See harness/extensions/README.md.
 [dependencies]
 orrery-session = { version = "0.1", path = "../../../core/crates/orrery-session" }
+orrery-proto = { workspace = true }
+rusqlite = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+dashmap = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+
+# The crash test needs a real child process to kill. `cargo test` builds
+# examples, so the test finds this beside its own binary.
+[[example]]
+name = "crash_child"

@@ -160,7 +160,11 @@ impl SessionStore for MemoryStore {
         let created_at = self.now();
 
         let mut inner = self.inner.lock().unwrap();
-        if inner.turns.iter().any(|r| r.branch == branch && r.seq == seq) {
+        if inner
+            .turns
+            .iter()
+            .any(|r| r.branch == branch && r.seq == seq)
+        {
             return Err(SessionError::Corrupt {
                 detail: format!("duplicate ({branch}, {seq})"),
             });
