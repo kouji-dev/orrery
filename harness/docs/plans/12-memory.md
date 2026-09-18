@@ -195,6 +195,8 @@ Files: `src/lib.rs`
 
    **Decided: it stays in `extensions/crates/`, off by default.** Moving it to `examples/` would defeat both reasons it exists: the conformance suite needs a real `MemoryProvider` to be meaningful, and an example is not loaded through `orrery-host`, so it would not demonstrate the thing worth demonstrating — that a memory provider is an ordinary extension, with a ledger entry, a deny rule and `orrery ext test`. The embarrassment is answered by the default, not by the directory: nothing links it unless an embedder asks for it. Revisit after the first real user, as written.
 
+   **Amended, round 5 — the distinction sharpened, the decision unchanged.** It *is* linked by default now: `orrery-harness`'s `memory-file` feature is in the default set, so the crate is in `cargo tree -p orrery-cli` and a profile can name it without a rebuild. What has not changed is the thing this answer was actually about: it is **not switched on**. Nothing selects it unless configuration says `[memory] provider = "file"`, so `EvalRun.memory` still defaults to `"off"` and a mediocre default memory is still not what anybody gets by accident. "Off by default" meant *not in force*, and conflating that with *not compiled in* is what left the crate unreachable from the product for no benefit.
+
 ---
 
 ## State

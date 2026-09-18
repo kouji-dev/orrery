@@ -308,6 +308,30 @@ address inside one — an `orrery-proto` change, not this plan's, and nothing ne
   The "no drawing code" half is a source scan that fails on `std::io`, `print!`, a terminal
   crate or a width. See Task 8 for what it found.
 
+- [ ] **Open, named in round 5: the shipped binary does not link this crate.**
+  `orrery-surface` is absent from `cargo tree -p orrery-cli`, with or without
+  `--all-features`, and the reason is structural rather than an oversight.
+  `ExtensionTable` holds **one session-wide** `SurfaceSink` and hands every call
+  a clone of it, while `SurfaceEmit::emit(&self, surface: &Surface)` — the
+  published signature in `orrery-ext-api` — carries neither a `TurnId` nor a
+  `SurfaceId`. A kernel-side `SurfaceStore` therefore has nothing to key a diff
+  on: it cannot tell a re-emission of one surface from a second surface, which
+  is the one distinction the differ exists to make. The consequence today is
+  that an extension's `ctx.ui.*` output is described, returned in the tool's
+  `Outcome`, and **discarded** by the table's `SurfaceSink::discarding()`; the
+  only surfaces a client sees are the ones `orrery-cli`'s own `Publisher` mints
+  by hand for assistant text and tool arguments.
+
+  The fix is an addition, not a break, and it already has a model in this
+  codebase: mirror `BrokerSource`. A `SurfaceSource` on `orrery-ext-api` with
+  `fn for_call(&self, call: CallId) -> SurfaceSink`, a second field on
+  `ExtensionTable` beside `brokers`, and a `SurfaceSource` implementation in
+  `orrery-harness` holding `Mutex<SurfaceStore>` and keying each call's surface
+  off its `CallId` — which is what `orrery-cli` already does for tool arguments
+  (`SurfaceId::from_uuid(*call.as_uuid())`). Not attempted in round 5 because it
+  touches the published extension API across three crates and deserves its own
+  failing test rather than a drive-by.
+
 ## State
 
 Amended 2026-09-19 (phase 4, the porting exercise): three ported extensions live in

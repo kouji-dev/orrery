@@ -239,6 +239,24 @@ Files: `orrery-router/src/lib.rs`, `orrery-ext-agents-default/*`
 - A sub-agent's work is visible as ordinary turn **rows on its own branch** — `User` and `Assistant` turns, inspectable and replayable, never collapsed into one tool result. *Amended*: the plan said "in the transcript", and rendering a transcript is a client's job (plan 09); what this plan makes true is the shape in the tree, asserted in `subagent::runs_on_a_branch`.
 - Every routing decision is audited with its signal values. `Router` holds an `Audit`, not an `Option<Audit>`, so the record is unconditional and a router built without a sink writes to the null one.
 
+- [ ] **Open, named in round 5: neither crate is reachable from the binary.**
+  `orrery-router` and `orrery-orchestrator` are absent from
+  `cargo tree -p orrery-cli` with or without `--all-features`, so every
+  criterion above is true as a **library** test and unreachable as a product.
+  A green test the binary cannot reach does not count as done, and
+  `agents-default` shipping in the default build (round 5) makes the gap
+  sharper rather than smaller: the five roles now load, appear in the ledger and
+  bind — and nothing in the binary can route to one or run a step.
+
+  What is missing is named and bounded, not vague. Both crates are deliberately
+  acyclic with the kernel: `Router::decide` is sync and returns data, and the
+  orchestrator runs steps through the `TurnRunner` and `StepExecutor` traits
+  **which nothing implements**. `orrery-harness` is the crate that may name both
+  a kernel and an orchestrator, so the two implementations belong there; and
+  then `orrery-cli` needs a verb to reach them, since `orrery run -p` submits
+  exactly one turn and has nowhere to put a workflow file. That is section 8
+  phase 6, and it is a plan-sized piece rather than a wiring change.
+
 ## Open questions
 
 1. **Should the router ever be a model call?** §4.6 left this open and then settled it: the `router` role can be bound to an agent, so a model router is available without a new mechanism. Unbound stays the default because eval comparison needs reproducibility. Confirm no code path assumes the router is always declarative.

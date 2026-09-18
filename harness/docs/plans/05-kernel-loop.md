@@ -163,7 +163,15 @@ impl TurnBudget {
 }
 ```
 
-Money is `micro_usd`, computed from `Usage` and a per-model price table in config (plan 10). Until then a `PriceTable::empty()` that leaves `micro_usd` as `None` and makes `maxUsd` inert — with a `TODO(plan-10)`.
+Money is `micro_usd`, computed from `Usage` and a per-model price table in
+config. **Landed (round 5).** `orrery_harness::price_table` reads
+`[prices.<model>] inputPerMillion / outputPerMillion` off the layers in force
+and hands it over as `KernelConfig::prices`; `orrery-cli/tests/budget.rs`
+asserts a ceiling stopping a real turn **through the binary**, exit 3.
+
+A model nobody priced keeps `PriceTable::empty()`'s behaviour: `micro_usd`
+stays `None` and `maxUsd` is inert rather than free. That is the documented
+state, not a leftover — the same test file asserts it.
 
 ### The facade
 
@@ -343,12 +351,22 @@ Files: `src/turn.rs`
 - Every budget kind demonstrably stops the loop - turns, tokens, wall clock and
   money, in `budget.rs`. Money needs a `PriceTable`; without one it is inert
   rather than free, and `budget::money_stops_only_when_priced` asserts both
-  halves.
+  halves. **Amended, round 5:** that was a library assertion, and the binary
+  could not reach it — `orrery-harness` had no dependency on `orrery-config`, so
+  no price table ever arrived and `maxUsd` was inert in every *build*. It is now
+  asserted where it counts, in `orrery-cli/tests/budget.rs`, driving the binary.
 - Cancellation leaves partial work in the tree.
 
 ## Open questions
 
-1. **Where does the retry policy live?** Hardcoded now, profile config later (plan 10). Confirm the shape: per-provider, per-profile, or both?
+1. **Where does the retry policy live?** **Answered, round 5: per profile, and
+   not per provider.** `[retry] maxAttempts / baseMs / maxMs / jitter`, read
+   through the profile overlay by `orrery_harness::kernel_config` and handed
+   over as `KernelConfig::retry`. Per-provider stays unbuilt because nothing
+   asks for it: a `RetryPolicy` is one value on the kernel, and a per-provider
+   one would need the kernel to hold a map keyed by provider id — which would
+   also put the "how hard to try" decision back in the providers, the thing
+   keeping it here was meant to prevent.
 
    **Decided: both, and the profile narrows.** A provider knows things a profile
    cannot - an API that always answers `Retry-After`, a local model that never

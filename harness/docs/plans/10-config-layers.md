@@ -182,6 +182,14 @@ Files: `src/explain.rs`
 
 - [x] **Failing test first.** `explain::prints_value_layer_and_file` — for a key set in two layers, the explanation names the winner and the shadowed one.
 - [x] Implement. The CLI surface is plan 17, and it **landed**: `orrery config explain <key>` prints the winner and the shadowed values, with `--json`.
+- [x] **Amended, round 5.** `explain` ignored the profile overlay: with `model`
+  set under `[profile.review]`, `orrery config explain model --profile review`
+  printed `model: not set in any layer`, and only the raw dotted path resolved.
+  `explain_in` now reads `profile.<name>.<key>` first and falls through to the
+  bare key, which stays in the answer as shadowed. `Explanation::resolved_from`
+  names the key that was actually read, in the text and in the JSON —
+  `explain::a_profile_overlay_wins_and_names_the_key_it_read`, and through the
+  binary in `orrery-cli/tests/explain.rs`.
 
 ### Task 8 · `init` and `import`
 
@@ -218,10 +226,23 @@ Files: `src/import.rs`, `tests/import.rs`
   because wiring config to the kernel is the CLI's job. **Half of that is now
   stale: `orrery-cli` is not a stub** — it runs turns, serves and attaches, and
   it resolves these layers for `config explain`, `permissions explain` and
-  `init`. What it does *not* yet do is build the kernel from a profile: it still
-  assembles one from flags, so the provider is the fixture one. `Assembled` is
-  exactly the set of inputs a kernel takes, and that is still all this plan
-  claims.
+  `init`. ~~What it does *not* yet do is build the kernel from a profile: it
+  still assembles one from flags, so the provider is the fixture one.~~
+  **Stale as of round 5, and this was the root cause of five `TODO(plan-10)`
+  markers:** `orrery-harness` now depends on `orrery-config`, and
+  `cmd::setup` folds the resolved layers into the `KernelConfig` the loop runs
+  on — budget, retry policy, price table, model and output ceilings, each read
+  through the profile overlay first. The consequence that made it worth doing is
+  that `maxUsd` was **inert in every build** before it, and
+  `orrery-cli/tests/budget.rs` now stops a real turn from a config file, through
+  the binary, exit 3.
+
+  `ProviderChoice` had only `Fixture` and `Custom`, so no configuration could
+  name a real model. It has an `Anthropic` variant now, selected by
+  `[provider] kind = "anthropic"`, with the feature that links it still off in
+  CI and the transport injectable —
+  `orrery-harness/tests/anthropic.rs` drives a turn through an in-process
+  loopback server and a hand-written SSE fixture.
 - A Claude Code settings file imports into working rules. **True** —
   `import::claude_code_permissions` round-trips a real-shaped fixture through a
   real `PolicyEngine` and checks the verdicts.
