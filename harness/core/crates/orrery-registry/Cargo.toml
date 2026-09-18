@@ -9,3 +9,19 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-ext-api = { workspace = true }
+orrery-config = { path = "../orrery-config" }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+semver = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+# ed25519 comes from `ring`, which rustls already puts in this tree: one crypto
+# stack, not two. See `verify.rs` for the decision and plan 15 task 2.
+ring = { version = "0.17", default-features = false, features = ["alloc"] }
+hex = "0.4"
+
+[dev-dependencies]
+tempfile = { workspace = true }
