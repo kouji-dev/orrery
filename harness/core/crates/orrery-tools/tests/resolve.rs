@@ -70,10 +70,7 @@ fn unknown_suggests() {
     register(&mut reg, "ripgrep", "search", Layer::Project);
 
     match reg.resolve("serch", &wide_scope()) {
-        Resolution::Unknown {
-            name,
-            did_you_mean,
-        } => {
+        Resolution::Unknown { name, did_you_mean } => {
             assert_eq!(name, "serch");
             assert!(
                 did_you_mean.iter().any(|s| s == "search"),
@@ -177,8 +174,9 @@ fn a_registry_without_an_audit_still_records_to_its_ledger() {
     register(&mut reg, "ripgrep", "search", Layer::User);
     register(&mut reg, "semantic", "search", Layer::Project);
     let _ = reg.resolve("search", &wide_scope());
-    assert!(reg
-        .ledger()
-        .iter()
-        .any(|e| matches!(e, LedgerEntry::Ambiguous { .. })));
+    assert!(
+        reg.ledger()
+            .iter()
+            .any(|e| matches!(e, LedgerEntry::Ambiguous { .. }))
+    );
 }

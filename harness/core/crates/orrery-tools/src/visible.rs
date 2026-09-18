@@ -2,8 +2,8 @@
 
 use orrery_proto::{AgentScope, ToolRef};
 
-use orrery_proto::ToolDescriptor;
 use crate::registry::{Entry, ExtState, Registry};
+use orrery_proto::ToolDescriptor;
 
 /// Whether a scope's glob list names this tool.
 ///

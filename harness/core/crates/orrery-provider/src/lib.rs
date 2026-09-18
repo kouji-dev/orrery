@@ -33,6 +33,6 @@ pub use auth::{AuthCtx, AuthMethod, AuthState, ProviderAuth};
 pub use counter::{HeuristicCounter, TokenCounter};
 pub use error::ProviderError;
 pub use event::{ModelEvent, StopReason};
-pub use provider::{Capabilities, Provider};
 pub use orrery_proto::ToolDescriptor;
+pub use provider::{Capabilities, Provider};
 pub use request::ModelRequest;

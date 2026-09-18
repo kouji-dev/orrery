@@ -186,11 +186,22 @@ Hand-written Messages API client. `reqwest` with the existing rustls setup, `POS
 - Map `content_block_start` / `content_block_delta` / `message_delta` / `message_stop` onto `ModelEvent`.
 - `cache_control: {"type":"ephemeral"}` on the block at `cache_breakpoint`.
 - Read `usage.input_tokens`, `output_tokens`, `cache_read_input_tokens` into `Usage`.
-- Auth: `x-api-key` from a `creds` grant named `anthropic`. OAuth is a later task.
+- Auth: `x-api-key` from a `creds` grant named `anthropic`. OAuth landed in phase 5 as `oauth::DeviceCodeAuth`, a second `ProviderAuth` rather than a branch inside the first.
 
 ### openai-compat
 
-Phase 5. `POST /v1/chat/completions`, `stream: true`, `tool_calls` deltas. Exists so §4.6's `local/qwen-coder` examples are real. Same trait, different builder.
+**Done (2026-09-19).** `POST /v1/chat/completions`, `stream: true`, `tool_calls`
+deltas. §4.6's `local/qwen-coder` examples are real: `--provider
+openai-compat`, or `kind = "ollama"` / `"vllm"` in a profile, and the binary is
+talking to a local model with no credential anywhere in the system.
+
+Same trait, different builder — and one thing the sketch did not anticipate:
+**the HTTP side is a trait** (`transport::ChatTransport`). No machine running
+this suite has ollama on it, so a recorded byte stream replayed through a seam
+is the only way the parser, the mapper, the classification and the
+cancellation path get covered at all. `RecordedTransport` hands the body out in
+seven-byte slices, so a frame split across a chunk boundary is the default case
+rather than one somebody remembered to write.
 
 ---
 
@@ -205,6 +216,9 @@ Phase 5. `POST /v1/chat/completions`, `stream: true`, `tool_calls` deltas. Exist
 - `harness/extensions/crates/orrery-ext-provider-anthropic/{Cargo.toml,orrery.toml,README.md}`
 - `harness/extensions/crates/orrery-ext-provider-anthropic/src/{lib,request,sse,map,auth}.rs`
 - `harness/extensions/crates/orrery-ext-provider-anthropic/tests/fixtures/*.sse` — recorded responses
+- `harness/extensions/crates/orrery-ext-provider-anthropic/src/oauth.rs`, `tests/oauth.rs` — the device-code flow and its fake authorization server
+- `harness/extensions/crates/orrery-ext-provider-openai-compat/src/{lib,request,sse,map,transport,auth}.rs`
+- `harness/extensions/crates/orrery-ext-provider-openai-compat/tests/{stream.rs,fixtures/*.sse}`
 
 ---
 
@@ -294,7 +308,33 @@ Files: `src/lib.rs`, `src/auth.rs`
 
 - [x] **Failing test first.** `error::classification` — a table of (status, body) → expected `ProviderError` variant and `is_retryable`, including 429 with and without `Retry-After`, 401, 400, 500, 529.
 - [x] `auth::missing_key_is_needs_login` — no credential ⇒ `AuthState::NeedsLogin`, not a panic and not a 401 at request time.
-- [x] Implement API-key auth over a named `creds` grant. OAuth: leave a `TODO(phase-5)` with the `AuthMethod::OAuth` variant present but `login` returning `NeedsLogin { reason: "oauth not implemented" }`.
+- [x] Implement API-key auth over a named `creds` grant. ~~OAuth: leave a `TODO(phase-5)` with the `AuthMethod::OAuth` variant present but `login` returning `NeedsLogin { reason: "oauth not implemented" }`.~~ **Superseded (2026-09-19): the flow is implemented, so the placeholder and `oauth_not_implemented()` are gone.** See task 10.
+
+### Task 10 · The device-code flow (phase 5)
+
+Files: `orrery-ext-provider-anthropic/src/oauth.rs`, `tests/oauth.rs`,
+`orrery-provider/src/auth.rs`
+
+- [x] **Failing test first.** `oauth::the_happy_path_stores_a_token_and_reports_the_account`, against a fake authorization server in the test process.
+- [x] RFC 8628 for real: device-code request, the code and URI put in front of the person as a **surface**, polling at the interval the *server* stated, token exchange, refresh, expiry.
+- [x] `authorization_pending`, `slow_down` (widen by five and **stay** widened; a server-stated `interval` wins), `expired_token`, `access_denied`, and the flow giving up when the code outlives its own `expires_in`.
+- [x] The HTTP side is `OAuthTransport` and time is `Clock`, both traits. **No socket is opened anywhere in the suite**, and no case costs its interval in wall clock.
+- [x] `AuthState::Pending { user_code, verification_uri, verification_uri_complete, expires_at, interval_secs }` — a client draws the wait from data rather than scraping a rendered string. `DeviceCodeAuth::begin` returns it for a client that polls on its own schedule; `login` is `begin` + `wait`.
+- [x] Three names under one grant: the access token, `.refresh`, and `.expires` so `state()` can answer `Expired` without a round trip. `logout` clears all three — a refresh token left behind is a credential the person believes they revoked.
+- [x] `refresh` is idempotent under concurrent passes: one lock, and a re-read after it, so the pass that queued returns the token the pass that ran stored instead of spending a rotating refresh token twice.
+
+### Task 11 · openai-compat (phase 5)
+
+Files: `orrery-ext-provider-openai-compat/src/{lib,request,map,sse,transport,auth}.rs`, `tests/stream.rs`, `tests/fixtures/*.sse`
+
+- [x] **Failing test first.** `stream::a_text_turn_maps`, replaying a committed `.sse` file.
+- [x] `build_body`: system as a `role: "system"` message, tool results as their own `role: "tool"` messages keyed by `tool_call_id`, arguments as a **string** of JSON (sending the object is the commonest way a compatible server 400s), both `max_completion_tokens` and `max_tokens` because ollama and vllm still read the old one.
+- [x] `EventMapper`: tool-call fragments correlated by `index`, which is the only thing tying the third fragment to the `name` that arrived on the first. Exposed reasoning under both spellings servers use.
+- [x] An unknown `finish_reason` is an error, never `EndTurn`.
+- [x] A 400 whose message is a context overflow becomes `ContextTooLong`, not `BadRequest`: the kernel's answer to the first is compact-and-retry and to the second is fail-the-turn.
+- [x] A stream that ends without `[DONE]` still closes its open tool call, or the turn hangs.
+- [x] No credential is the **normal** case, so an unset grant is `Anonymous`, not `NeedsLogin` — the kernel refuses a turn that starts at `NeedsLogin`.
+- [x] `ChatTransport` is injectable and the suite opens no socket.
 
 ### Task 8 · Cancellation actually aborts
 
@@ -309,16 +349,28 @@ Files: `*/orrery.toml`
 
 - [x] Fixture: `runtime = "native"`, `[provides] providers = ["fixture"]`, `[requires] read = ["$WORKSPACE/**"]`.
 - [x] Anthropic: `[provides] providers = ["anthropic"]`, `[requires] net = ["api.anthropic.com"]`, `creds = ["anthropic"]`.
+- [x] openai-compat: `[provides] providers = ["openai-compat"]`, `[requires] net = ["http://localhost/**", "https://**"]`, `creds = ["openai-compat"]`. The wide `net` is the honest cost of "compatible with whatever you are running"; it is narrowed in policy, where the address is actually known.
 - [x] Note in both READMEs that a community provider is exactly this shape.
 
 ---
 
 ## State
 
-Phase 1 is implemented and green as of 2026-09-18: tasks 1-9 except the
-`openai-compat` crate, which the plan itself places in phase 5. `cargo test -p
+**Phase 5 is done as of 2026-09-19.** `openai-compat` is implemented (15 tests)
+and the Anthropic device-code flow is implemented (14 tests); neither suite
+opens a socket. `TODO(phase-5)` no longer appears in this tree, and
+`oauth_not_implemented()` is deleted rather than left as a placeholder a client
+could still be shown.
+
+Both are reachable from the **binary**, which is the part that was missing:
+`ProviderChoice` has a variant per real provider, `orrery ext list` names the
+bundles, and `orrery-cli/tests/reachable.rs` drives `CARGO_BIN_EXE_orrery` to
+keep it that way.
+
+Phase 1 was implemented and green as of 2026-09-18: tasks 1-9 except the
+`openai-compat` crate, which the plan itself placed in phase 5. `cargo test -p
 orrery-provider -p orrery-ext-provider-fixture -p orrery-ext-provider-anthropic`
-passes 53 tests, clippy is clean, and no test opens a socket to anything but
+passes, clippy is clean, and no test opens a socket to anything but
 loopback.
 
 Three shapes departed from the sketch above, each for a reason worth keeping:
@@ -347,7 +399,12 @@ Three shapes departed from the sketch above, each for a reason worth keeping:
 ## Open questions
 
 1. **Exact tokenizers.** Heuristic counting means compaction runs with a margin and `maxContext` enforcement is approximate. Adding `tiktoken`-style tokenizers is a large dependency per provider family. Revisit when a real workload gets bitten; until then the margin is the answer.
-2. **OAuth.** Anthropic and OpenAI both have device-code flows worth supporting, and `login` already declares UI surfaces for it. Phase 5, unless a user needs it sooner.
+2. ~~**OAuth.**~~ **Answered (2026-09-19).** Implemented for Anthropic as
+   `oauth::DeviceCodeAuth`. It is a second `ProviderAuth` rather than a branch
+   inside `ApiKeyAuth`: the two store different things under different names
+   and share nothing but the grant, and `methods()` on each reports only what
+   it actually runs. OpenAI-compatible endpoints get no flow, because "whatever
+   you are running" has no authorization server to name.
 3. **Retry policy lives in the kernel** — but *where* do the defaults come from? Profile config (plan 10) is the natural home. Until then a hardcoded bounded backoff in plan 05, marked `TODO(plan-10)`.
 4. **Prompt caching across providers.** `cache_breakpoint` is an Anthropic-shaped idea. OpenAI-compatible endpoints cache implicitly by prefix. Confirm the field degrades to a no-op rather than forcing a bad request.
 

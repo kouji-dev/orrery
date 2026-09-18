@@ -29,10 +29,10 @@ pub mod resolve;
 pub mod visible;
 
 pub use budget::ToolBudget;
-pub use orrery_proto::ToolDescriptor;
 pub use dispatch::{
     AllowAll, CallCtx, PolicyCheck, PolicyDecision, ToolHost, ToolInterceptor, UnavailableHost,
 };
 pub use error::ToolError;
+pub use orrery_proto::ToolDescriptor;
 pub use registry::{Entry, ExtState, LedgerEntry, Registry, ToolSpec};
 pub use resolve::Resolution;

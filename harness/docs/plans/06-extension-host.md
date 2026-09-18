@@ -374,6 +374,51 @@ Files: `extensions/node/ext-sdk/*`
 
 ## State
 
+**Landed (2026-09-19, wave 6): the two tool bundles this plan named and never
+built.**
+
+`orrery-ext-git` and `orrery-ext-lsp` were five lines of doc comment each,
+which meant this plan had two of its named first-party bundles ticked as
+"scaffolded" and reachable from nothing. Both are implemented, registered in
+`orrery-harness::features::register_native`, in the default feature set, and
+named by the shipped binary — `orrery-cli/tests/reachable.rs` drives
+`CARGO_BIN_EXE_orrery` and asserts `orrery ext list` shows them, undegraded,
+with the verbs they actually implement.
+
+- **`orrery-ext-git`** — `status`, `log`, `show`, `diff`, `blame` over gitoxide,
+  reusing `ade/src-tauri/src/git/gix_backend.rs` rather than rediscovering it.
+  Read-only. Fourteen tests: the refusal path against the mock broker, the verbs
+  against a real repository built in a temp directory with the system `git`
+  binary — deliberately *not* with gitoxide, because a test that built its
+  commits with the library under test cannot catch a library that writes and
+  reads its own mistake consistently.
+- **`orrery-ext-lsp`** — `hover`, `definition`, `references`, `diagnostics` over
+  a managed client. Twenty-one tests and **no process started**: `LspTransport`
+  is a trait, so a fake language server lives in the test process. Framing is
+  tested separately over `&[u8]`, because it is the one part a fake cannot stand
+  in for.
+
+Three things worth recording, because each is a deviation from the sketch:
+
+- **gitoxide uses `std::fs`, which the broker cannot mediate.** So every git
+  verb asks the broker to read the repository path *first* — a real,
+  policy-checked `Aspect::Read` call — and stops on a denial. Without it the
+  bundle would go around the one door an extension has.
+  `denied_before_gitoxide_is_opened` pins it.
+- **`orrery-ext-lsp` does not use `orrery-jsonrpc`,** though this plan says it
+  should. `orrery-jsonrpc` is `publish = false` and `deps-check` rule 2 forbids
+  an extension from depending on an unpublished core crate — a community author
+  has to build against crates.io. Sixty lines of framing live in the extension
+  instead, moved from the ADE, with a comment saying to delete them when
+  `orrery-jsonrpc` publishes. **Not a workaround to leave undecided: either
+  publish `orrery-jsonrpc` or the duplication is permanent.**
+- **Both manifests shrank.** The git scaffold declared `branch` and `commit` and
+  asked for `write` and `spawn`; the lsp scaffold declared `symbols`. None
+  existed. A manifest that lists a tool the extension does not have makes the
+  ledger a lie, and a grant nothing uses is a capability handed over for
+  nothing — so the declarations went, each with a note saying what brings it
+  back.
+
 **Landed (2026-09-18, wave 2).** Tasks 1, 2, 3, 5, 6, 7 and 8 are implemented and green; tasks 4 and 9 are deferred with the reasons written above.
 
 - `orrery-ext-api` — the manifest (one parser for both the plan's `[extension]` spelling and the one the eleven scaffolded first-party bundles use, with a test that parses every `orrery.toml` in the tree), `Provides` and its contribution mapping from one macro invocation, the broker facade, `CallCtx`/`SurfaceSink`/`ToolBudget`, `Generation`/`InstanceState`, the `Ledger`, and `testing::load_for_test` with a recording `MockBroker`.

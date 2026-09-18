@@ -106,8 +106,7 @@ impl Registry {
                 // sort on the reverse layer keeps registration order for ties.
                 candidates.sort_by_key(|e| (std::cmp::Reverse(e.layer), e.order));
                 let chose = candidates[0].r#ref.clone();
-                let candidates: Vec<ToolRef> =
-                    candidates.iter().map(|e| e.r#ref.clone()).collect();
+                let candidates: Vec<ToolRef> = candidates.iter().map(|e| e.r#ref.clone()).collect();
                 self.record(LedgerEntry::Ambiguous {
                     name: call_name.to_owned(),
                     candidates: candidates.clone(),

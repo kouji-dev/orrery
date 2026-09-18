@@ -182,6 +182,7 @@ Everything else writes to it, so it comes first.
 - [x] **Failing test first.** `audit::inputs_are_hashed` — record a tool call with a secret in its input; assert the raw value appears nowhere in the sink and the hash is stable.
 - [x] `audit::append_only` — no API mutates or deletes.
 - [x] Implement the event enum, the file sink (JSONL), the three tracing layers, `redact`.
+- [x] **(2026-09-19)** `orrery-tools`'s dispatch actually *emits* `AuditEvent::ToolCall`. It had carried a `TODO(plan-07)` reading "until that crate exists as a dependency, tracing carries it" long after `orrery-audit` became a dependency of `orrery-tools` — a stale blocker, which is a bug and not a note. `dispatch::a_settled_call_reaches_the_audit_stream` and `a_denied_call_is_audited_as_denied` pin both halves: every exit is audited, including the six early refusals, and the input is hashed before an interceptor can rewrite it.
 
 ### Task 2 · Rule parsing
 
@@ -265,6 +266,26 @@ Files: `orrery-broker/src/creds.rs`
 
 - [x] **Failing test first.** `creds::value_never_returned` — the API has no method returning a secret; a doc test shows the `use_it` shape.
 - [x] `creds::rotation_is_transparent` — rewrite the stored value; a held reference keeps working.
+- [x] **(2026-09-19) The extension-facing half.** `orrery_ext_api::creds` is one `CredStore` for every provider extension, where there had been a copy per vendor, and `BrokerCredStore` goes through the `creds` grant: policy-checked, in the ledger, refused with a rule id. The facade gained `store_credential`, `forget_credential` and `has_credential`, each with a default body — a non-breaking addition under `orrery-ext/1`. `MockBroker` implements them, so an extension author tests a login against the same ledger a session shows.
+
+> **Where this is still short, stated plainly (2026-09-19).** A provider can
+> *store* a credential through the grant and *ask whether one exists* through
+> the grant. It cannot have the broker **use** one, because using it means the
+> broker owns the outgoing request and the broker installs no HTTP transport yet
+> — `Broker::fetch` answers "no transport is installed", and that is plan 14's.
+> So a provider still holds its own key, and reads it through
+> `LayeredCredStore`: the grant first, then `EnvCredStore`. That fallback is
+> **documented, not a TODO** — `EnvCredStore`'s doc comment says what it is for
+> (a contributor's exported key before any session exists; a downstream
+> embedder's CI) and that it refuses to write, because a login that wrote to the
+> process environment would be lost at exit. A *denial* from the grant never
+> falls through to it: reaching around a refusal via an environment variable is
+> exactly the hole the grant exists to close.
+>
+> **What closes this:** plan 14's transport, after which `fetch` signs the
+> request through `CredUse::Header` and the fallback is deleted. Nothing else in
+> a provider changes, which is why the seam is a type rather than an `if` in
+> each of them.
 - [x] Implement: OS keychain where available, `0600` file otherwise.
 
 ### Task 10 · `permissions explain`

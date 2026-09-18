@@ -92,7 +92,9 @@ fn draining_extension_is_hidden() {
         .map(|d| d.name)
         .collect();
     assert!(
-        !names.iter().any(|n| n.contains("status") || n.contains("commit")),
+        !names
+            .iter()
+            .any(|n| n.contains("status") || n.contains("commit")),
         "a draining extension is not offered: {names:?}"
     );
 }
