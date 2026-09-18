@@ -36,7 +36,9 @@ orrery replay <session> [--json]         # re-emit a stored session as events
 
 orrery session list | show <id> | rm <id>
 
-orrery ext list | install <name> | remove <name> | test [path]
+orrery install <source> [--to user|workspace] [--user] [--link] [--yes]
+orrery remove <name> [--from user|workspace]
+orrery ext list | test [path]
 orrery permissions explain <call>
 orrery config explain <key>
 orrery init [--profile <name>]
@@ -48,6 +50,20 @@ orrery eval replay <run> --case <id>
 
 orrery ledger | telemetry                # the §4.12 streams, queryable
 ```
+
+**Amended, and decided with the user: install and remove are bare top-level
+verbs.** They were `orrery ext install` / `orrery ext remove`. Installing an
+extension is an everyday action, so it gets a verb of its own, Pi-style; what
+stays under `ext` is what is not everyday. Plan 15's Architecture section is
+where the source forms and the layer rule are written down. Two details that
+belong here rather than there:
+
+- **The layer flag is `--to <user|workspace>`, not `--workspace`.** `--workspace
+  <PATH>` is already in the global table below, and clap will not let one long
+  name mean two things. `--user` is the bare shorthand.
+- **`orrery ext install` no longer parses**, and
+  `install::install_and_remove_are_no_longer_under_ext` asserts it, so the move
+  is a fact rather than an intention.
 
 ### Global flags
 
@@ -190,9 +206,17 @@ the file in front of them is worse than no answer. stdout is untouched.
 Files: `src/cmd/{ext,session}.rs`
 
 - [x] **Failing test first.** `ext::test_runs_without_a_model` — `orrery ext test` on a fixture extension passes with no network and no provider (plan 06 task 8). *(Plus `ext::a_broken_manifest_is_usage`: exit 2 naming the file, never a panic.)*
+- [x] `orrery install` / `orrery remove` (plan 15). *(`tests/install.rs`: a local
+  path into the user layer and into the workspace, the grant diff rendered from
+  the `Surface` itself, an unanswered install granting nothing and saying what
+  it lost, an ambiguous `remove` refusing to guess, and a bare registry name
+  naming the index rather than falling through to crates.io. Sandboxed home, no
+  network. **What is not here: fetching a remote index**, which is a `net` call
+  and therefore needs a broker and a session; `--index <path>` and a managed
+  `[registry]` pointing at a file both work today.)*
 - [x] `ext::list_shows_the_ledger` — ~~including `degraded` and `skipped` entries with reasons.~~ **Amended: `ok` and `degraded` with reasons; `skipped` is not producible here.** `ext list` reports every first-party extension this build compiled in, run through `orrery_ext_api::testing::missing` — the same function the real host calls — so a degraded line says the words a session would. `Skipped` is a *loader* state (a deny rule, a disabled extension), and reaching it needs the policy engine, which means a session, which means a model. When `ext list` can take a live session's ledger (plan 07's `query extensions`), `skipped` comes with it.
 - [x] `session::list_and_show`. ~~**Blocked, and not on this plan:**~~ **True, and unblocked by building it.** `SessionStore` really did have no enumeration, so `list_sessions` landed on the trait with this command — id, workspace, profile, `created_at` and turn count, newest first — implemented in `orrery-ext-session-sqlite` as one correlated subquery, with `conformance::sessions_can_be_enumerated` making every backend provide it. `session show` is the `materialise` it was always going to be. `tests/session.rs` runs both against history the binary itself wrote from a fixture stream.
-- [ ] `session rm`. **Blocked, and not on this plan:** there is no delete on `SessionStore`, and plan 02 open question 2 parks retention for the config phase — with the rule that it must drop whole sessions rather than trim turns inside one. The flag and the `--yes` rule are in the tree and in the committed help; the command exits 2 naming that file and that reason, which `cli::session_rm_names_the_missing_piece` asserts.
+- [ ] `session rm`. **Blocked, re-checked 2026-09-19 and still true:** there is no delete on `SessionStore`, and plan 02 open question 2 parks retention for the config phase — with the rule that it must drop whole sessions rather than trim turns inside one. The flag and the `--yes` rule are in the tree and in the committed help; the command exits 2 naming that file and that reason, which `cli::session_rm_names_the_missing_piece` asserts.
 - [x] Implement.
 
 ### Task 8 · `replay`, `ledger`, `telemetry`
@@ -207,7 +231,14 @@ Files: `src/cmd/{replay,ledger}.rs`
 Files: `src/cmd/{init,import,eval}.rs`
 
 - [x] Thin wrappers over plan 10. ~~**Not landed: there is nothing to wrap.**~~ **Stale for `init` and `import`: plan 10 landed.** `orrery init` writes `<workspace>/.orrery/config.toml` from `orrery_config::import::init`, shorthands expanded so the file says what it does, and **refuses to overwrite** one that is already there. `orrery import --from claude-code|codex` finds the foreign file (workspace first, then the home directory), maps it, and prints the config on **stdout** with every unmapped note on **stderr** — so `orrery import --from codex > .orrery/config.toml` writes a file that parses and nothing is dropped in silence. `tests/init.rs` covers all four paths.
-- [ ] `orrery eval`. **Blocked, and re-checked rather than inherited: `orrery-eval` is still a stub.** In the tree, exits 2 naming `16-eval-runner.md`.
+- [ ] `orrery eval`. ~~**Blocked: `orrery-eval` is still a stub.**~~ **No longer
+  true, and re-checked rather than inherited: `orrery-eval` landed while this
+  wave was in flight** — `run`, `compare`, `replay`, `junit`, `matrix`,
+  `isolate` and the cross-harness adapters are all in the crate. What is left is
+  the wiring, three functions in `cmd/eval.rs`, and it belongs with plan 16's
+  own landing wave rather than being raced from here. In the tree it still exits
+  2 naming `16-eval-runner.md`; that is now a *stale* message, and plan 16 owns
+  removing it.
 
 ### Task 10 · Terminal hygiene
 
@@ -257,9 +288,9 @@ Files: `src/term.rs`
 
 ## State
 
-**Tasks 1–7, task 9's `init` and `import`, and task 10 are done; task 8,
-`orrery eval` and `session rm` are not, and each says against itself what it is
-waiting for and why.** The
+**Tasks 1–7 (including `orrery install` and `orrery remove`), task 9's `init`
+and `import`, and task 10 are done; task 8, `orrery eval` and `session rm` are
+not, and each says against itself what it is waiting for and why.** The
 harness is runnable: `orrery run -p "…"` completes a turn end to end against the
 fixture provider with a real tool call, `--json` emits AG-UI frames on a clean
 stdout, `orrery serve` prints endpoints that `attach` and `ORRERY_ENDPOINT` both
@@ -280,11 +311,21 @@ Two things worth knowing beyond the tasks:
   the run id in `RUN_STARTED` is the CLI's, because `Kernel::run_turn` mints a
   `TurnId` it never hands out.
 
-Known limits, each with its owner: no passive subscribe over HTTP (plan 08); no
-**delete** on `SessionStore`, so no `session rm` (plan 02, open question 2); no
-persisted rich event stream and no `query` handler, so no `replay` and no
-`ledger`/`telemetry` (plans 02/07/08); no eval runner (plan 16); and no
-selectable provider other than the fixture, so no `NeedsLogin` from a flag.
+Known limits, each with its owner and each **re-checked on 2026-09-19 rather
+than inherited**: no **delete** on `SessionStore`, so no `session rm` (plan 02,
+open question 2 — the trait still has `create`, `open`, `list_sessions`,
+`lease`, `append`, `branch`, `close_branch`, `materialise`, `compact` and
+`events_since`, and nothing that removes); no persisted rich event stream and no
+`query` handler, so no `replay` and no `ledger`/`telemetry` (plans 02/07/08 —
+`KernelControl` still refuses `query` by name); and no selectable provider other
+than the fixture, so no `NeedsLogin` from a flag. **Two limits on this list are
+gone:** the passive HTTP subscribe landed with plan 08, and the eval runner
+landed with plan 16 — only its three-function CLI wiring is outstanding, and
+plan 16 owns it.
+
+**Also landed this wave:** `orrery install <source>` and `orrery remove <name>`,
+with `orrery-registry` behind them. `tests/install.rs` runs six of them against
+a sandboxed home with nothing on the network.
 
 **Three limits listed here were no longer true, which is the point of writing
 them down.** The policy engine had grown `explain`, the layered config had

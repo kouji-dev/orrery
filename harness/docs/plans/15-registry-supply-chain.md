@@ -27,7 +27,9 @@ From [`00-overview.md`](00-overview.md):
 
 **Spelling: `orrery install <source>`, a bare top-level verb, Pi-style.** `orrery remove <name>` likewise. The fuller `orrery ext list` / `ext test` forms stay for the things that are not everyday actions. Plan 17's command tree is amended to match.
 
-**Default target: `~/.orrery/extensions/<id>/`** — the user layer, so an install is personal and available in every project, exactly as Pi behaves. `--workspace` installs into `<workspace>/.orrery/extensions/<id>/` for an extension the repo itself needs and should commit. `--user` is accepted for symmetry. Discovery already scans `<layer-root>/extensions/` at every layer (plan 10, landed), so nothing new is needed on the read side.
+**Default target: `~/.orrery/extensions/<id>/`** — the user layer, so an install is personal and available in every project, exactly as Pi behaves. The workspace layer, `<workspace>/.orrery/extensions/<id>/`, is for an extension the repo itself needs and should commit.
+
+**Amended while implementing: the flag is `--to <user|workspace>`, not `--workspace`.** `--workspace <PATH>` is already a **global** flag on the `orrery` binary naming the workspace root, and clap will not let one long name mean two things. `--user` is accepted as the bare shorthand, as the plan asks. Discovery already scans `<layer-root>/extensions/` at every layer (plan 10, landed), so nothing new is needed on the read side.
 
 **Sources, Pi-style.** One positional argument, disambiguated by prefix:
 
@@ -145,80 +147,83 @@ With `unpinned = "refuse"`, anything not in the index is `Skipped { reason: Unsi
 
 Files: `src/index.rs`
 
-- [ ] **Failing test first.** `index::parses_and_round_trips`; `index::unknown_schema_is_refused`; `index::expired_index_is_refused`.
-- [ ] Implement.
+- [x] **Failing test first.** `index::parses_and_round_trips`; `index::unknown_schema_is_refused`; `index::expired_index_is_refused`.
+- [x] Implement.
 
 ### Task 2 · Signatures
 
 Files: `src/verify.rs`, `tests/verify.rs`
 
-- [ ] **Decision to record in this file:** `ed25519-dalek` (simple, small, we manage the keys) vs. sigstore (no key management, but a large dependency and an online dependency at verify time). **Recommendation: ed25519-dalek**, because an air-gapped enterprise is exactly the customer here and sigstore's transparency log assumes reachability. Write the decision and the reasoning down.
-- [ ] **Failing test first.** `verify::good_signature_passes`; `verify::tampered_index_fails`; `verify::wrong_key_fails`; `verify::rotated_key_with_overlap_works`.
-- [ ] Implement.
+- [x] **Decision, recorded here and in `verify.rs`:** `ed25519-dalek` (simple, small, we manage the keys) vs. sigstore (no key management, but a large dependency and an online dependency at verify time). **ed25519 wins**, because an air-gapped enterprise is exactly the customer here and sigstore's transparency log assumes reachability — a verification step that needs the network is one that fails in the room where it matters most.
+  **Amended while implementing: the ed25519 comes from `ring`, not `ed25519-dalek`.** `rustls` already puts `ring` in this workspace, so taking `ed25519-dalek` would mean two curve25519 implementations in one binary — two things to audit, two to patch on an advisory — for an identical algorithm and an identical wire format. The API surface used is four calls wide, so the implementation is swappable without a format change.
+- [x] **Failing test first.** `verify::good_signature_passes`; `verify::tampered_index_fails`; `verify::wrong_key_fails`; `verify::rotated_key_with_overlap_works`.
+- [x] Implement.
 
 ### Task 3 · Fetch and hash
 
 Files: `src/fetch.rs`
 
-- [ ] **Failing test first.** `fetch::hash_mismatch_refuses` — a package whose bytes do not match the pinned `sha256` is refused, with the expected and actual hashes in the error.
-- [ ] `fetch::nothing_executes_before_verification` — the important one. Fetch a package containing a build script that would touch a sentinel file; assert the sentinel is untouched after a failed verification.
-- [ ] Implement over the broker's `net`.
+- [x] **Failing test first.** `fetch::hash_mismatch_refuses` — a package whose bytes do not match the pinned `sha256` is refused, with the expected and actual hashes in the error.
+- [x] `fetch::nothing_executes_before_verification` — the important one. Fetch a package containing a build script that would touch a sentinel file; assert the sentinel is untouched after a failed verification.
+- [x] Implement over the broker's `net`.
 
 ### Task 4 · `requires` mirroring
 
 Files: `src/verify.rs`, `tests/tamper.rs`
 
-- [ ] **Failing test first.** `tamper::manifest_requires_more_than_the_index` — a package whose manifest asks for `creds(*)` while the index says only `read`; assert a **hard failure**, audited as a tampering signal, not a prompt.
-- [ ] Implement.
+- [x] **Failing test first.** `tamper::manifest_requires_more_than_the_index` — a package whose manifest asks for `creds(*)` while the index says only `read`; assert a **hard failure**, audited as a tampering signal, not a prompt.
+- [x] Implement.
 
 ### Task 5 · The grant diff surface
 
 Files: `src/diff.rs`, `tests/diff.rs`
 
-- [ ] **Failing test first.** `diff::new_capability_on_upgrade_is_flagged` — 1.2.0 → 1.3.0 adding `net`; the diff marks it new and defaults to deny.
-- [ ] `diff::unchanged_capabilities_are_shown_as_already_allowed`.
-- [ ] `diff::renders_as_a_surface` — a `Surface` (a `form` or a `stack` of `question`s), so every client draws it.
-- [ ] `diff::deny_degrades_not_fails` — denying `spawn` disables the spawn-needing tool and leaves the rest working, ledger says `degraded`.
-- [ ] Implement.
+- [x] **Failing test first.** `diff::new_capability_on_upgrade_is_flagged` — 1.2.0 → 1.3.0 adding `net`; the diff marks it new and defaults to deny.
+- [x] `diff::unchanged_capabilities_are_shown_as_already_allowed`.
+- [x] `diff::renders_as_a_surface` — a `Surface` (a `form` or a `stack` of `question`s), so every client draws it.
+- [x] `diff::deny_degrades_not_fails` — denying `spawn` disables the spawn-needing tool and leaves the rest working, ledger says `degraded`.
+- [x] Implement.
 
 ### Task 6 · Pinning and managed enforcement
 
 Files: `src/pin.rs`, `tests/pin.rs`
 
-- [ ] **Failing test first, and it is the phase-8 criterion.** `pin::unpinned_refuses_under_managed` — with `unpinned = "refuse"`, an extension absent from the index is `Skipped { Unsigned }`, the reason and the index URL are in the ledger, and **a user-layer setting cannot override it**.
-- [ ] `pin::warn_mode_loads_with_a_ledger_warning`.
-- [ ] `pin::version_set_is_exact` — a pinned 1.2.0 refuses 1.2.1.
-- [ ] Implement.
+- [x] **Failing test first, and it is the phase-8 criterion.** `pin::unpinned_refuses_under_managed` — with `unpinned = "refuse"`, an extension absent from the index is `Skipped { Unsigned }`, the reason and the index URL are in the ledger, and **a user-layer setting cannot override it**.
+- [x] `pin::warn_mode_loads_with_a_ledger_warning`.
+- [x] `pin::version_set_is_exact` — a pinned 1.2.0 refuses 1.2.1.
+- [x] Implement.
 
 ### Task 7 · `orrery install`
 
 Files: `src/{lib,source,install}.rs` (the CLI surface is plan 17)
 
-- [ ] **Failing test first.** `install::end_to_end` — against a local fixture registry: resolve, fetch, verify, show the diff, approve, load, and see it in the ledger.
-- [ ] `install::offline_uses_the_cache` — a previously verified package installs without network.
-- [ ] Implement.
+- [x] **Failing test first.** `install::end_to_end` — against a local fixture registry: resolve, fetch, verify, show the diff, approve, load, and see it in the ledger.
+- [x] `install::offline_uses_the_cache` — a previously verified package installs without network.
+- [x] Implement.
 
 ### Task 8 · Source resolution
 
 Files: `src/source.rs`
 
+**Decided while implementing: a bare name with *several* versions in the index is an error, not "the latest".** The plan's "a missing version is an error" and the Architecture table's bare `orrery install buildgraph` are both right, and they meet here: when the index holds exactly one version of an id, that is the pin; when it holds more, `orrery install x` says which it has and asks for one. Picking newest would make one command resolve differently on two machines either side of a publish, which is the thing a pin list exists to stop.
+
 Every test here must run **offline**: a local bare git repo in a tempdir stands in for GitHub, and a local directory for crates.io/npm tarballs. No test fetches from a real host.
 
-- [ ] **Failing test first.** `source::parses_every_form` — a table over the seven forms in the Architecture table above, each producing the right `Source` variant. Ambiguity rules pinned: a bare word is the registry, a leading `./` or `../` is a path, everything else needs its prefix.
-- [ ] `source::bare_name_is_the_registry` — `orrery install buildgraph` never silently falls through to crates.io. If it is not in the index, that is an error naming the index URL, not a guess at another host.
-- [ ] `source::version_pin` — `name@1.2.0` resolves to exactly that version; a missing version is an error, not the latest.
-- [ ] `source::git_sha_is_reproducible_tag_is_not` — installing `github:o/r#v1.2` records the resolved commit sha in the ledger, so the install is auditable even though the ref is mutable.
-- [ ] Implement the resolvers. Git via the broker's `spawn` of the system git (the ADE already decided gitoxide has no network features — reuse that reasoning); crates.io and npm via the broker's `net`; local via the broker's `read`.
+- [x] **Failing test first.** `source::parses_every_form` — a table over the seven forms in the Architecture table above, each producing the right `Source` variant. Ambiguity rules pinned: a bare word is the registry, a leading `./` or `../` is a path, everything else needs its prefix.
+- [x] `source::bare_name_is_the_registry` — `orrery install buildgraph` never silently falls through to crates.io. If it is not in the index, that is an error naming the index URL, not a guess at another host.
+- [x] `source::version_pin` — `name@1.2.0` resolves to exactly that version; a missing version is an error, not the latest.
+- [x] `source::git_sha_is_reproducible_tag_is_not` — installing `github:o/r#v1.2` records the resolved commit sha in the ledger, so the install is auditable even though the ref is mutable.
+- [x] Implement the resolvers. Git via the broker's `spawn` of the system git (the ADE already decided gitoxide has no network features — reuse that reasoning); crates.io and npm via the broker's `net`; local via the broker's `read`.
 
 ### Task 9 · Install target and layers
 
 Files: `src/install.rs`
 
-- [ ] **Failing test first.** `install::defaults_to_the_user_layer` — `orrery install x` with no flag lands in `~/.orrery/extensions/x/` and is discovered from a different workspace.
-- [ ] `install::workspace_flag` — `--workspace` lands in `<workspace>/.orrery/extensions/x/`.
-- [ ] `install::link_is_a_symlink_and_marked_development` — `--link ./x` creates a link, and the ledger entry says `Development`, because the code can change under the harness between runs.
-- [ ] `remove::ambiguous_across_layers_asks` — installed at user *and* workspace, `orrery remove x` names both and refuses to guess.
-- [ ] Implement.
+- [x] **Failing test first.** `install::defaults_to_the_user_layer` — `orrery install x` with no flag lands in `~/.orrery/extensions/x/` and is discovered from a different workspace.
+- [x] `install::workspace_flag` — the workspace target lands in `<workspace>/.orrery/extensions/x/`. *(Spelled `--to workspace` on the command line; see the amendment in Architecture.)*
+- [x] `install::link_is_a_symlink_and_marked_development` — `--link ./x` creates a link, and the ledger entry says `Development`, because the code can change under the harness between runs. *(On Windows a directory symlink needs Developer Mode or `SeCreateSymbolicLinkPrivilege`. The test probes for it and asserts the other half where it is missing: `--link` either links, or returns `SymlinkUnavailable` naming both. **Silently copying instead is the one wrong answer**, and neither branch allows it.)*
+- [x] `remove::ambiguous_across_layers_asks` — installed at user *and* workspace, `orrery remove x` names both and refuses to guess.
+- [x] Implement.
 
 ### Task 10 · Unpinned sources are visibly unpinned
 
@@ -226,26 +231,86 @@ Files: `src/install.rs`, `src/pin.rs`
 
 This is the task that keeps the ergonomics honest.
 
-- [ ] **Failing test first.** `pin::non_registry_source_is_recorded_unpinned` — a git install loads with `pinned: false` in the ledger and an audit entry naming the source; a registry install records `pinned: true` with the rule that verified it.
-- [ ] `pin::managed_refuse_blocks_every_non_registry_source` — with `unpinned = "refuse"`, all five non-registry forms are refused, the message names the managed file, and **a user-layer setting cannot override it**.
-- [ ] `pin::warn_mode_installs_loudly`.
-- [ ] `pin::link_is_always_unpinned` — `--link` cannot be pinned even under `allow`.
-- [ ] Implement.
+- [x] **Failing test first.** `pin::non_registry_source_is_recorded_unpinned` — a non-registry install loads with `pinned: false` in the supply-chain ledger and the source named; a registry install records `pinned: true` with the rule that verified it. *(The unpinned half uses a local path, which needs no git on the machine; the git source is covered by `install::a_git_install_records_the_commit_it_resolved_to`, which asserts both `pinned: false` and the resolved commit sha.)*
+- [x] `pin::managed_refuse_blocks_every_non_registry_source` — with `unpinned = "refuse"`, all five non-registry forms are refused, the message names the managed file, and **a user-layer setting cannot override it**.
+- [x] `pin::warn_mode_installs_loudly`.
+- [x] `pin::link_is_always_unpinned` — `--link` cannot be pinned even under `allow`.
+- [x] Implement.
 
 ---
 
 ## Done when
 
-- `cargo test -p orrery-registry` green, including the tamper tests.
-- An admin pins a version set; unpinned extensions refuse to load and say why.
-- A capability added in an upgrade is surfaced distinctly and defaults to deny.
-- No package code executes before its signature is verified.
-- All seven source forms install, offline, in tests; the five non-registry ones are recorded `pinned: false` and are refused under managed `unpinned = "refuse"`.
-- `orrery install x` with no flag lands in `~/.orrery/extensions/x/`.
+- [x] `cargo test -p orrery-registry` green, including the tamper tests. *(42 tests
+  across `index`, `verify`, `fetch`, `tamper`, `diff`, `source`, `pin` and
+  `install`, every one of them offline.)*
+- [x] An admin pins a version set; unpinned extensions refuse to load and say why.
+  *(`pin::unpinned_refuses_under_managed`, plus `pin::version_set_is_exact` for
+  the pin being a version rather than a range.)*
+- [x] A capability added in an upgrade is surfaced distinctly and defaults to deny.
+  *(`diff::new_capability_on_upgrade_is_flagged`, and end to end in
+  `install::an_upgrade_that_adds_a_capability_denies_it_by_default`.)*
+- [x] No package code executes before its signature is verified.
+  *(`fetch::nothing_executes_before_verification`, with both halves asserted so
+  the first is not vacuous.)*
+- [x] All seven source forms install, offline, in tests; the five non-registry ones are recorded `pinned: false` and are refused under managed `unpinned = "refuse"`.
+- [x] `orrery install x` with no flag lands in `~/.orrery/extensions/x/`.
+  *(`install::defaults_to_the_user_layer`, which then finds it with
+  `orrery_config::discover` from a **different** workspace.)*
+
+## State
+
+**All ten tasks are done, and `orrery install` / `orrery remove` are in the
+command tree (plan 17 task 7).** `cargo test -p orrery-registry` is 42 tests
+green; `cargo clippy -p orrery-registry --all-targets -- -D warnings` is clean;
+`cargo xtask deps-check` says ok.
+
+Five things decided while implementing that are not in the tasks above:
+
+- **The pin is over a canonical *tree* hash, not a tarball.** A package arrives
+  as a directory — that is what a git clone, a local path and an unpacked crate
+  all are — so `fetch::tree_sha256` hashes every file's relative path and bytes,
+  sorted and length-prefixed, and skips `.git`. One hash for every runtime,
+  which is open question 2's "lean duplicate" answered in the only way that
+  keeps a single verification path.
+- **The ordering is a type, not a comment.** `fetch_and_verify` is the only way
+  to obtain a `Verified`, and everything downstream takes one, so "nothing
+  executes before verification" is enforced by there being nothing to execute
+  *from* until it has happened. The `PackageHooks` trait exists so the sentinel
+  test can assert the hook does **not** fire on a failure and **does** on a
+  success.
+- **`LoadOutcome` has no `Skipped { reason: Unsigned }` in this build, and this
+  crate did not add one.** `SkipReason` is a closed set in `orrery-proto`, with
+  a generated-types tail behind it. So the supply-chain facts live in
+  `pin::SupplyChainRecord` — source, `pinned`, the reason, the index URL, the
+  rule that verified it — and `SupplyChainRecord::load_outcome` projects a
+  refusal into `Skipped { PolicyDenied }`, which is the closest true statement
+  the current set can make. **When `orrery-proto` next gains a variant, this is
+  the one to add**, and `pin::unpinned_refuses_under_managed` is the test that
+  should then assert it.
+- **Test fixtures are built from committed seeds, not committed as bytes.** The
+  plan's file list asks for a signed index and key pairs under
+  `tests/fixtures/`. A committed signature cannot be regenerated when a
+  canonical form changes, so the first field reorder would turn the whole suite
+  red with nothing to say why. The seeds are committed; a seed is 32 bytes of
+  nothing in particular, and there is no secret in this repository.
+- **Fetching a *remote* index is not built.** Reading one is: `--index <path>`,
+  or a managed `[registry] index` naming a file. Fetching over HTTPS is a `net`
+  call, a `net` call goes through the broker, and the broker needs a session —
+  which an install command does not have. Everything downstream of "here is the
+  index text" is complete and tested, so this is one function and a decision
+  about where an install gets a broker, not a redesign.
 
 ## Open questions
 
 1. **Key rotation and distribution.** One key in managed config is simple but has no revocation story. Minimum viable: two keys with an overlap window and an `expires` on the index. Is that enough for a real security team? Ask one.
 2. **npm packages.** Node extensions ship on npm, which has its own integrity story (`integrity` in the lockfile). Do we duplicate the hash pin, or lean on npm's? Duplicating is more uniform and more work. Lean duplicate — one verification path for every runtime.
 3. **What about the ADE's existing extension registry?** `ade/src-tauri/src/extensions/registry.rs` already does sha256-verified zips from a release repo, with a `minOrreryVersion` gate. It is a different problem (tree-sitter grammars, not code with capabilities) but the fetch-and-verify code may be worth reading before writing this.
+   **Partly answered by building it:** the keyring holds several keys, each with
+   its own validity window, so rotation is an overlap rather than a cutover
+   (`verify::rotated_key_with_overlap_works`), and the index carries `expires`.
+   What is still open is revocation *inside* a window, and the managed schema
+   this build reads carries one key without a window of its own — which is the
+   next thing to widen, and the reason to ask a security team before doing so.
+
 4. **Transitive dependencies.** We pin an extension; its crates.io dependencies are pinned by its lockfile, which we do not review. A malicious transitive dependency is still a hole — the wasm sandbox closes it, the `native` and `node` runtimes do not. Say this plainly in the threat model rather than implying the registry solves it.
