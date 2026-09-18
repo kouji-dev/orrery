@@ -1,0 +1,13 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "example-release-train"
+version = "0.1.0"
+
+[provides]
+tools = ["status"]
+
+# It describes the state it is given. A release train that could push would be
+# asking for `spawn`; this one reports.
+[requires]

@@ -15,6 +15,8 @@
 //! - [`instance`] — generation ids and the state machine, the runtime half.
 //! - [`tool`] — what a tool declares, and the trait a compiled-in one implements.
 //! - [`ctx`] — what a call gets: a ceiling, a cancel token, the broker, `ctx.ui`.
+//! - [`sink`] — the other nine core-surface builders on `ctx.ui`, so every
+//!   surface in the vocabulary is reachable from the published crate.
 //! - [`broker`] — the only door out of an extension. Implemented in plan 07.
 //! - [`ledger`] — what loaded, degraded, failed or was skipped.
 //! - [`testing`] — the harness `orrery ext test` runs.
@@ -36,6 +38,7 @@ pub mod error;
 pub mod instance;
 pub mod ledger;
 pub mod manifest;
+pub mod sink;
 pub mod testing;
 pub mod tool;
 pub mod view;
@@ -53,6 +56,7 @@ pub use manifest::{
     ApiVersion, ExtensionManifest, ManifestError, ProcessSpec, Provides, Requirement, RuntimeKind,
     SUPPORTED_API_MAJOR, SingletonSlot,
 };
+pub use sink::SurfaceBuilders;
 pub use tool::{NativeExtension, ToolDef};
 pub use view::{
     EventKind, LoopEvent, Placed, Placement, Predicate, ProfileError, ViewBinding, ViewRegistry,

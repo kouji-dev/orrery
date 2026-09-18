@@ -1,0 +1,13 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "example-patch-review"
+version = "0.1.0"
+
+[provides]
+tools = ["review"]
+
+# The patch is handed to it. Reading the file from disk would be a `read` grant
+# and a different tool; describing a patch needs nothing.
+[requires]

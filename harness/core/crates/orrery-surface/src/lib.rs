@@ -20,6 +20,9 @@
 //! - [`diff`] — the differ, the append fast path and the cost guard.
 //! - [`store`] — per-turn storage, and the seal at `turn.settled`.
 //! - [`sink`] — the builders an extension describes surfaces with.
+//!   Re-exported from `orrery-ext-api`: describing a surface is an extension's
+//!   job, and this crate is not published, so the builders ship where a third
+//!   party can reach them.
 //! - [`view`] — binding loop events to surfaces, and the profile that moves
 //!   them. Re-exported from `orrery-ext-api`: contributing a view is an
 //!   extension's job, so the vocabulary ships in the published crate and the
@@ -30,15 +33,13 @@
 
 pub mod diff;
 pub mod hash;
-pub mod sink;
 pub mod store;
 pub mod validate;
 
-pub use orrery_ext_api::view;
+pub use orrery_ext_api::{SurfaceBuilders, sink, view};
 
 pub use diff::{COST_GUARD, DiffCost, apply, diff};
 pub use hash::{HashCounter, HashTree, NodeHash, hash_tree};
-pub use sink::SurfaceBuilders;
 pub use store::SurfaceStore;
 pub use validate::{MAX_DEPTH, Warning, validate};
 pub use view::{

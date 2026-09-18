@@ -4,6 +4,15 @@ members = [
   "ade/src-tauri", "ade/src-tauri/updater-stub",
   "harness/core/crates/*",
   "harness/extensions/crates/*",
+  # The `native` worked example (plan 18, task 4). A member so it is built and
+  # dependency-checked like any other extension; not a default member, because
+  # it is an example rather than part of the product.
+  "harness/extensions/examples/native-hello",
+  # Phase 4: three ported extensions, each emitting real surfaces and
+  # drawing none of them. The clients snapshot what they describe.
+  "harness/extensions/examples/workspace-census",
+  "harness/extensions/examples/patch-review",
+  "harness/extensions/examples/release-train",
   # clients/ also holds TypeScript packages, so it is listed crate by crate
   # rather than globbed.
   "harness/clients/sdk-rs", "harness/clients/ratatui", "harness/clients/json",

@@ -1,0 +1,13 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "example-workspace-census"
+version = "0.0.0"
+
+[provides]
+tools = ["census"]
+
+# It is handed its rows and describes them. No files, no processes, no network:
+# a ported extension that needed a grant to draw would be drawing.
+[requires]

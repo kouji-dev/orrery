@@ -1,0 +1,23 @@
+[package]
+name = "workspace-census"
+version = "0.1.0"
+description = "A ported example extension: the workspace census, described as surfaces instead of printed."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# An example, not a product.
+publish = false
+
+# What a third party can depend on, and nothing else: the published extension
+# API and the published types. No client, no terminal crate, no kernel. This
+# dependency list is the phase-4 acceptance criterion in manifest form.
+[dependencies]
+orrery-ext-api = { workspace = true }
+orrery-proto = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

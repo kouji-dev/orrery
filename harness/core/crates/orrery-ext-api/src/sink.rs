@@ -1,14 +1,12 @@
 //! The builders an extension describes surfaces with.
 //!
-//! `ctx.ui` is an [`orrery_ext_api::SurfaceSink`]. It carries the three
-//! builders the extension API crate can define on its own — `text`, `table`,
-//! `markdown` — and this trait adds the other nine, so an extension can produce
-//! **every** core surface without importing a drawing library, a terminal
-//! crate, or anything that knows what a column is.
+//! `ctx.ui` is a [`SurfaceSink`]. It carries the three builders the sink type
+//! defines inline — `text`, `table`, `markdown` — and this trait adds the other
+//! nine, so an extension can produce **every** core surface without importing a
+//! drawing library, a terminal crate, or anything that knows what a column is.
 //!
 //! ```
-//! use orrery_ext_api::SurfaceSink;
-//! use orrery_surface::SurfaceBuilders;
+//! use orrery_ext_api::{SurfaceBuilders, SurfaceSink};
 //!
 //! # fn example(ui: &SurfaceSink) {
 //! ui.table(["crate", "lines"], [["orrery-proto", "2358"]]);
@@ -16,6 +14,17 @@
 //! ui.question("Overwrite the file?", [("yes", "Yes"), ("no", "No")]);
 //! # }
 //! ```
+//!
+//! # Why it lives in the published crate
+//!
+//! It was written in `orrery-surface`, which is `publish = false`. That made
+//! nine of the twelve core surfaces reachable only from inside this repo: a
+//! community extension could describe `text`, `table` and `markdown` and
+//! nothing else, and the plan's own promise — "an extension can produce every
+//! core surface" — was true only for us. Phase 4's porting exercise is what
+//! made it visible, and the fix is the same one the view vocabulary took:
+//! the types were in the wrong crate. `orrery-surface` re-exports the trait,
+//! so kernel-side code reads exactly as before.
 //!
 //! # There is no `draw`
 //!
@@ -25,9 +34,9 @@
 //! to, and then there would be extensions that only work in one of them. That
 //! is the whole bargain, and it is enforced by there being no other method.
 
-use orrery_ext_api::SurfaceSink;
+use crate::ctx::SurfaceSink;
 use orrery_proto::{
-    Choice, Field, Hunk, StackDir, Status, Surface, SurfaceKind, TaskItem, TreeNode,
+    Choice, Field, Hunk, StackDir, Status, Surface, SurfaceId, SurfaceKind, TaskItem, TreeNode,
 };
 
 /// The core surfaces `ctx.ui` can describe, beyond the three on the sink itself.
@@ -92,8 +101,18 @@ pub trait SurfaceBuilders {
         fallback: Surface,
     ) -> Surface;
 
-    /// Give a surface a handle, so a later emission can patch it.
+    /// Say how far along a surface is.
     fn with_status(&self, surface: Surface, status: Status) -> Surface;
+
+    /// Name the surface, so a later emission patches it instead of replacing
+    /// it.
+    ///
+    /// Ids are **extension-minted** (plan 09, open question 4): an extension
+    /// mints one, re-emits its whole surface under it, and the kernel — which
+    /// keys its store by `(turn, id)` — works out what changed. Without this
+    /// there was no way to say so from inside `ctx.ui`, so every re-emission
+    /// looked like a new surface. Phase 4 is where that showed up.
+    fn with_id(&self, surface: Surface, id: SurfaceId) -> Surface;
 }
 
 impl SurfaceBuilders for SurfaceSink {
@@ -206,14 +225,19 @@ impl SurfaceBuilders for SurfaceSink {
         surface.status = Some(status);
         self.emit(surface)
     }
+
+    fn with_id(&self, mut surface: Surface, id: SurfaceId) -> Surface {
+        surface.id = Some(id);
+        self.emit(surface)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use orrery_ext_api::SurfaceSink;
     use orrery_proto::{Field, FieldKind, Hunk, StackDir, Status, SurfaceKind, TaskItem, TreeNode};
 
     use super::SurfaceBuilders;
+    use crate::ctx::SurfaceSink;
 
     /// The API describes; it has no way to write bytes anywhere.
     ///
@@ -304,5 +328,24 @@ mod tests {
                 "`{forbidden}` in the sink: it describes, it does not draw"
             );
         }
+    }
+
+    /// An extension can name the surface it will re-emit under.
+    ///
+    /// Plan 09 decided ids are extension-minted; until phase 4 tried it, the
+    /// sink had no way to say one. Re-emission under the same id is what makes
+    /// the kernel diff rather than replace.
+    #[test]
+    fn an_extension_can_mint_the_id_it_re_emits_under() {
+        use orrery_proto::SurfaceId;
+
+        let (ui, log) = SurfaceSink::recording();
+        let id = SurfaceId::new();
+        let first = ui.with_id(ui.progress("linking", Some(1), Some(9)), id);
+        let second = ui.with_id(ui.progress("linking", Some(9), Some(9)), id);
+        assert_eq!(first.id, Some(id));
+        assert_eq!(second.id, first.id, "the same surface, later");
+        assert_ne!(second.kind, first.kind);
+        assert_eq!(log.len(), 4, "two builds and two namings, all described");
     }
 }
