@@ -78,16 +78,20 @@ impl Mode {
     /// Whether this mode admits an aspect at all.
     ///
     /// This is the mode's own ceiling, applied **before** the policy engine
-    /// ever sees the call: `plan` and `review` drop the three aspects that
-    /// change something. It never widens anything — a mode that admits an
+    /// ever sees the call. It never widens anything — a mode that admits an
     /// aspect still has to clear the rules.
+    ///
+    /// `plan` is read-only: no `write`, no `mem.write`, and no `spawn` either,
+    /// since a process is how a plan-mode agent would change something anyway.
+    /// `review` **never writes**, but it does spawn — a verifier that cannot
+    /// run the tests is not a verifier — and what that process may touch is the
+    /// broker's question, under a capability token, not the mode's.
     #[must_use]
     pub const fn permits(self, aspect: Aspect) -> bool {
         match self {
             Mode::Execute => true,
-            Mode::Plan | Mode::Review => {
-                !matches!(aspect, Aspect::Write | Aspect::MemWrite | Aspect::Spawn)
-            }
+            Mode::Plan => !matches!(aspect, Aspect::Write | Aspect::MemWrite | Aspect::Spawn),
+            Mode::Review => !matches!(aspect, Aspect::Write | Aspect::MemWrite),
         }
     }
 

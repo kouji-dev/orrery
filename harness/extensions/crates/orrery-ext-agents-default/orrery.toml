@@ -9,4 +9,6 @@ version = "0.0.0"
 agents = ["planner", "executor", "verifier", "compactor", "summariser"]
 
 # Role agents run turns through the kernel; they hold no capability of their own.
+# What each one asks for is declared on the agent and intersected with the
+# step's grant, which is a narrowing and never a request for more.
 [requires]

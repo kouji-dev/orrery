@@ -11,5 +11,16 @@ publish = false
 # Dependencies on core name BOTH halves: `version` makes this crate
 # publishable, `path` makes it build in-tree. At split time the path goes and
 # nothing else changes. See harness/extensions/README.md.
+#
+# **Not `orrery-router` and not `orrery-orchestrator`**: both are
+# `publish = false`, so naming either would break `cargo xtask deps-check`
+# rule 2 — and an agent is declared data, which `orrery-proto` can already say.
 [dependencies]
 orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
+orrery-proto = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+
+# No dev-dependencies on core: the tests load this bundle through
+# `orrery-ext-api::testing`, the published mock-broker harness — the same door a
+# community author goes through (deps-check rule 3).
