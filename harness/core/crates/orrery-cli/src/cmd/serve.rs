@@ -111,7 +111,11 @@ pub fn dispatch(cli: &Cli, listen: Option<&str>) -> ! {
         }
         let _ = out.flush();
     }
-    eprintln!("orrery: session {id}; ^C to stop");
+    // The session id on stderr, in one stable shape, because a client that
+    // speaks AG-UI names the session it attaches to and the endpoint does not
+    // carry one.
+    eprintln!("orrery: session {id}");
+    eprintln!("orrery: ^C to stop");
 
     // Sessions outlive clients.
     session.harness().block_on(std::future::pending::<()>());

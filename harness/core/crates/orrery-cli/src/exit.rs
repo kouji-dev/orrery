@@ -121,7 +121,7 @@ mod tests {
             reason: "no rule allows read(/etc/hosts)".to_owned(),
         };
         assert_eq!(
-            Exit::from_turn(&completed(), &[denied.clone()]),
+            Exit::from_turn(&completed(), std::slice::from_ref(&denied)),
             Exit::Denied
         );
         assert_eq!(

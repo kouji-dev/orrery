@@ -41,5 +41,11 @@ Options:
   -v...
           Log level on stderr. Never mixed into `--json` stdout. Repeatable
 
+      --provider <SPEC>
+          Where the model comes from. Repeat it for one stream per pass, the last repeating. This build understands `fixture:<path-to.jsonl>`
+
+      --state-dir <PATH>
+          Where the session database lives. Defaults to `<workspace>/.orrery`
+
   -h, --help
           Print help (see a summary with '-h')

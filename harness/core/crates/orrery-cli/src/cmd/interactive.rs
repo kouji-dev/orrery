@@ -162,14 +162,12 @@ fn ratatui(cli: &Cli) -> ! {
                     }
                 }
             }
-            let mut sink =
-                orrery_client_ratatui::terminal::TerminalScrollback::new(&mut terminal, width);
-            app.flush_scrollback(&mut sink)?;
-            drop(sink);
-            terminal.draw(|f| {
-                let area = f.area();
-                app.draw(&mut ratatui::buffer::Buffer::empty(area));
-            })?;
+            {
+                let mut sink =
+                    orrery_client_ratatui::terminal::TerminalScrollback::new(&mut terminal, width);
+                app.flush_scrollback(&mut sink)?;
+            }
+            terminal.draw(|f| app.draw(f.buffer_mut()))?;
         }
         Ok::<(), std::io::Error>(())
     });

@@ -130,9 +130,9 @@ async fn drain_ratatui(
             let mut source = PipeSource { client };
             let mut sink =
                 orrery_client_ratatui::terminal::TerminalScrollback::new(&mut terminal, width);
-            if let Err(e) = app.run(&mut source, &mut sink).await {
-                drop(sink);
-                crate::term::restore();
+            let drawn = app.run(&mut source, &mut sink).await;
+            crate::term::restore();
+            if let Err(e) = drawn {
                 fail(Exit::Kernel, e);
             }
             return Exit::Ok;

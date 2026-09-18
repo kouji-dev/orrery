@@ -95,15 +95,14 @@ fn unknown_flag_is_exit_2() {
 
 /// A subcommand that has not landed yet exits 2 and names the plan file that
 /// will implement it, so the tree is complete from phase 0 and fills in.
+///
+/// `run`, `serve`, `attach` and `ext` are no longer on this list: they are
+/// implemented, and their own suites cover them.
 #[test]
 fn unimplemented_subcommands_name_their_plan() {
     let cases: &[(&[&str], &str)] = &[
-        (&["run", "-p", "hi"], "17-cli.md"),
-        (&["serve"], "17-cli.md"),
-        (&["attach", "pipe:orrery-1"], "17-cli.md"),
         (&["replay", "s1"], "17-cli.md"),
         (&["session", "list"], "02-session-store.md"),
-        (&["ext", "list"], "06-extension-host.md"),
         (&["ext", "install", "x"], "15-registry-supply-chain.md"),
         (
             &["permissions", "explain", "read"],
@@ -142,7 +141,7 @@ fn unimplemented_subcommands_name_their_plan() {
 /// (`17-cli.md`, streams discipline).
 #[test]
 fn not_implemented_does_not_pollute_stdout() {
-    let out = orrery(&["run", "-p", "hi", "--json"]);
+    let out = orrery(&["replay", "s1", "--json"]);
     assert!(
         out.stdout.is_empty(),
         "stdout must stay clean: {:?}",

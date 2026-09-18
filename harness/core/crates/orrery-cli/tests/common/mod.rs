@@ -26,6 +26,10 @@ pub const CONTENTS: &str = "[package]\nname = \"the-file-the-tool-really-read\"\
 /// The assistant's last word in `text-turn.jsonl`.
 pub const FINAL_TEXT: &str = "The workspace has three crates: proto, provider and kernel.";
 
+/// The tail of it, which the stream sends as one delta. What to look for in a
+/// frame-by-frame rendering, where the sentence arrives in two pieces.
+pub const FINAL_TAIL: &str = "three crates: proto, provider and kernel.";
+
 /// A temporary workspace with the file the fixture reads.
 #[must_use]
 pub fn workspace() -> tempfile::TempDir {
