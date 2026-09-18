@@ -9,3 +9,30 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-provider = { workspace = true }
+orrery-session = { workspace = true }
+orrery-audit = { workspace = true }
+# By path, not `workspace = true`: `orrery-tools` is `publish = false`, so it is
+# not one of the version+path pairs the root declares for the published half.
+orrery-tools = { path = "../orrery-tools" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+parking_lot = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# The kernel's tests run against a real store and a real provider, because a
+# kernel test against two mocks is a test of the mocks. Neither reaches the
+# network: the fixture provider replays a committed `.jsonl`, and sqlite is
+# bundled.
+orrery-ext-provider-fixture = { path = "../../../extensions/crates/orrery-ext-provider-fixture" }
+orrery-ext-session-sqlite = { path = "../../../extensions/crates/orrery-ext-session-sqlite" }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+futures-util = { workspace = true }
