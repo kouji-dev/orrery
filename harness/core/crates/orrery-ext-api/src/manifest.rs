@@ -12,6 +12,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use orrery_proto::{Aspect, Capability, Contribution, ContributionKind, ExtId, LoadStage};
+
+use crate::broker::aspect_name;
 use serde::{Deserialize, Serialize};
 
 /// The major of the extension API this build implements.
@@ -248,6 +250,14 @@ macro_rules! provides {
                 )*
                 out
             }
+
+            /// What this manifest called the thing it put in a slot.
+            #[must_use]
+            pub fn singleton_name(&self, slot: SingletonSlot) -> Option<&str> {
+                match slot {
+                    $( SingletonSlot::$sname => self.$sname.as_deref(), )*
+                }
+            }
         }
 
         /// The slots exactly one extension may hold.
@@ -259,6 +269,21 @@ macro_rules! provides {
                 #[doc = concat!("The `", stringify!($sname), "` slot.")]
                 $sname,
             )*
+        }
+
+        impl SingletonSlot {
+            /// What a contribution to this slot is reported as, when the wire
+            /// type has a kind for it.
+            #[must_use]
+            pub const fn kind(self) -> Option<ContributionKind> {
+                match self { $( SingletonSlot::$sname => $skind, )* }
+            }
+
+            /// Every slot there is.
+            #[must_use]
+            pub const fn all() -> &'static [SingletonSlot] {
+                &[ $( SingletonSlot::$sname, )* ]
+            }
         }
 
         impl std::fmt::Display for SingletonSlot {
@@ -462,6 +487,76 @@ impl ExtensionManifest {
     pub fn contributions(&self) -> Vec<Contribution> {
         self.provides.contributions()
     }
+
+    /// What this manifest asked for that a grant does not cover, in the words
+    /// the ledger shows.
+    ///
+    /// The gap between the ask and the grant is exactly what turns a load into
+    /// [`LoadOutcome::Degraded`](orrery_proto::LoadOutcome), so it is computed
+    /// in one place and both the host and `ext test` call it. Two
+    /// implementations of "is this granted" would agree right up until the day
+    /// they did not.
+    #[must_use]
+    pub fn unmet(&self, granted: &[Capability]) -> Vec<String> {
+        let mut problems = Vec::new();
+        for want in self.capabilities() {
+            if !granted.iter().any(|g| g.aspect == want.aspect) {
+                problems.push(format!(
+                    "no `{aspect}` grant: anything needing it is disabled",
+                    aspect = aspect_name(want.aspect)
+                ));
+                continue;
+            }
+            for entry in &want.scope {
+                if !covers(granted, want.aspect, Some(entry)) {
+                    problems.push(format!(
+                        "`{aspect}` is granted, but not over `{entry}`",
+                        aspect = aspect_name(want.aspect)
+                    ));
+                }
+            }
+        }
+        problems
+    }
+}
+
+/// Whether a set of granted capabilities covers one aspect, optionally over one
+/// name.
+///
+/// `scope: None` asks only whether the aspect is granted at all, which is the
+/// question a tool's `requires` list asks at load time — before there is a path
+/// or a program to check.
+#[must_use]
+pub fn covers(granted: &[Capability], aspect: Aspect, scope: Option<&str>) -> bool {
+    granted
+        .iter()
+        .filter(|c| c.aspect == aspect)
+        .any(|c| match scope {
+            None => true,
+            Some(what) => c.scope.is_empty() || c.scope.iter().any(|p| scope_matches(p, what)),
+        })
+}
+
+/// Whether one scope pattern covers one name.
+///
+/// Glob-aware, because `read = ["$WORKSPACE/**"]` is the normal case and a
+/// string comparison would refuse every real path. Windows separators are
+/// normalised so a pattern written with `/` matches a path built with `\`.
+///
+/// This is *not* the narrowing the broker enforces — see `orrery-policy`. It is
+/// the coarser question "would this ask fall inside this grant", which is what
+/// a load-time report needs.
+#[must_use]
+pub fn scope_matches(pattern: &str, candidate: &str) -> bool {
+    if pattern == candidate || pattern == "*" || pattern == "**" {
+        return true;
+    }
+    let candidate = candidate.replace('\\', "/");
+    globset::GlobBuilder::new(pattern)
+        .literal_separator(false)
+        .build()
+        .map(|g| g.compile_matcher().is_match(&candidate))
+        .unwrap_or(false)
 }
 
 /// The deserialise target. Translation #10: this is not the runtime type.

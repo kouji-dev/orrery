@@ -9,3 +9,18 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-ext-api = { workspace = true }
+# By path, not `workspace = true`: `orrery-tools` is `publish = false`, so it is
+# not one of the version+path pairs the root declares for the published half.
+orrery-tools = { path = "../orrery-tools" }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+parking_lot = { workspace = true }
+indexmap = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

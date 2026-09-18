@@ -30,10 +30,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::broker::{
     BrokerError, BrokerFacade, BrokerResult, NetRequest, NetResponse, ReadChunk, ReadRequest,
-    SpawnOutput, SpawnRequest, WriteRequest, aspect_name,
+    SpawnOutput, SpawnRequest, WriteRequest,
 };
 use crate::ctx::{CallCtx, SurfaceLog, SurfaceSink, ToolBudget};
-use crate::manifest::{ExtensionManifest, ManifestError};
+use crate::manifest::{ExtensionManifest, ManifestError, scope_matches};
 
 /// Something an extension asked the broker for.
 ///
@@ -154,7 +154,7 @@ impl MockBroker {
         self.grants
             .iter()
             .filter(|c| c.aspect == aspect)
-            .any(|c| c.scope.is_empty() || c.scope.iter().any(|p| matches_scope(p, what)))
+            .any(|c| c.scope.is_empty() || c.scope.iter().any(|p| scope_matches(p, what)))
     }
 
     fn check(&self, aspect: Aspect, what: &str) -> BrokerResult<()> {
@@ -168,24 +168,6 @@ impl MockBroker {
     fn record(&self, call: BrokerCall) {
         self.recorded.lock().push(call);
     }
-}
-
-/// Whether one scope pattern covers one name.
-///
-/// Glob-aware, because `read = ["$WORKSPACE/**"]` is the normal case and a
-/// string comparison would refuse every real path. Windows separators are
-/// normalised so a test written with `/` matches a path built with `\`.
-#[must_use]
-pub fn matches_scope(pattern: &str, candidate: &str) -> bool {
-    if pattern == candidate || pattern == "*" || pattern == "**" {
-        return true;
-    }
-    let candidate = candidate.replace('\\', "/");
-    globset::GlobBuilder::new(pattern)
-        .literal_separator(false)
-        .build()
-        .map(|g| g.compile_matcher().is_match(&candidate))
-        .unwrap_or(false)
 }
 
 #[async_trait]
@@ -436,32 +418,10 @@ pub fn load_path_for_test(
 }
 
 /// What the manifest asked for and the grants did not cover, in the words the
-/// ledger shows.
+/// ledger shows. The host calls the same function.
 #[must_use]
 pub fn missing(manifest: &ExtensionManifest, grants: &[Capability]) -> Vec<String> {
-    let mut problems = Vec::new();
-    for want in manifest.capabilities() {
-        let held: Vec<&Capability> = grants.iter().filter(|g| g.aspect == want.aspect).collect();
-        if held.is_empty() {
-            problems.push(format!(
-                "no `{aspect}` grant: anything needing it is disabled",
-                aspect = aspect_name(want.aspect)
-            ));
-            continue;
-        }
-        for entry in &want.scope {
-            let covered = held
-                .iter()
-                .any(|g| g.scope.is_empty() || g.scope.iter().any(|p| matches_scope(p, entry)));
-            if !covered {
-                problems.push(format!(
-                    "`{aspect}` is granted, but not over `{entry}`",
-                    aspect = aspect_name(want.aspect)
-                ));
-            }
-        }
-    }
-    problems
+    manifest.unmet(grants)
 }
 
 /// `aspect` or `aspect:scope`. An unknown aspect becomes a grant of nothing
