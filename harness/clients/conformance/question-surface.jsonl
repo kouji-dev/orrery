@@ -1,0 +1,13 @@
+# question-surface - a blocking question, created by a state delta and then
+# edited field by field. A replace at /surfaces/<id> creates as well as swaps:
+# the kernel sends one op whether or not the client has seen the surface before.
+# Derived from streams/text-turn.jsonl, the turn a question interrupts.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-5"}}
+{"ev":{"seq":2,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/q-1","value":{"id":"q-1","status":"running","kind":{"t":"question","prompt":"Which crate?","multi":false,"free":false,"choices":[{"value":"proto","label":"orrery-proto"},{"value":"kernel","label":"orrery-kernel"}],"default":"proto","deadline_ms":60000}}}]}}
+{"expect":{"last_seq":2,"live":"turn-5","gaps":[],"turns":[{"id":"turn-5","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"q-1","status":"running","kind":{"t":"question","prompt":"Which crate?","multi":false,"free":false,"choices":[{"value":"proto","label":"orrery-proto"},{"value":"kernel","label":"orrery-kernel"}],"default":"proto","deadline_ms":60000}}],"prompts":[]}]}}
+# A Set on one field, which is an RFC 6902 replace pointed inside the surface.
+{"ev":{"seq":3,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/q-1/kind/default","value":"kernel"}]}}
+{"expect":{"last_seq":3,"live":"turn-5","gaps":[],"turns":[{"id":"turn-5","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"q-1","status":"running","kind":{"t":"question","prompt":"Which crate?","multi":false,"free":false,"choices":[{"value":"proto","label":"orrery-proto"},{"value":"kernel","label":"orrery-kernel"}],"default":"kernel","deadline_ms":60000}}],"prompts":[]}]}}
+{"ev":{"seq":4,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/q-1/status","value":"done"}]}}
+{"ev":{"seq":5,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-5","result":null}}
+{"expect":{"last_seq":5,"live":null,"gaps":[],"turns":[{"id":"turn-5","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"q-1","status":"done","kind":{"t":"question","prompt":"Which crate?","multi":false,"free":false,"choices":[{"value":"proto","label":"orrery-proto"},{"value":"kernel","label":"orrery-kernel"}],"default":"kernel","deadline_ms":60000}}],"prompts":[]}]}}

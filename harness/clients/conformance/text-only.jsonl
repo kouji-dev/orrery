@@ -1,0 +1,10 @@
+# text-only - the baseline. A turn that is one assistant message.
+# Derived from streams/text-turn.jsonl: the same two text deltas, the same usage.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-1"}}
+{"ev":{"seq":2,"type":"TEXT_MESSAGE_START","messageId":"msg-1","role":"assistant"}}
+{"ev":{"seq":3,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"The workspace has "}}
+{"ev":{"seq":4,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"three crates: proto, provider and kernel."}}
+{"expect":{"last_seq":4,"live":"turn-1","gaps":[],"turns":[{"id":"turn-1","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"running","kind":{"t":"markdown","value":"The workspace has three crates: proto, provider and kernel.","complete":false}}],"prompts":[]}]}}
+{"ev":{"seq":5,"type":"TEXT_MESSAGE_END","messageId":"msg-1"}}
+{"ev":{"seq":6,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-1","result":{"input_tokens":812,"output_tokens":11,"cache_hits":0}}}
+{"expect":{"last_seq":6,"live":null,"gaps":[],"turns":[{"id":"turn-1","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"done","kind":{"t":"markdown","value":"The workspace has three crates: proto, provider and kernel.","complete":true}}],"prompts":[]}]}}

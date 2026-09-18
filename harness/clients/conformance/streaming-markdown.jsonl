@@ -1,0 +1,18 @@
+# streaming-markdown - the half-open code fence. `complete` stays false while
+# the fence is unbalanced, which is a renderer's cue not to trust it yet.
+# Derived from streams/text-turn.jsonl with the deltas cut inside a fence.
+# Also carries one unknown event type, which must be ignored rather than rejected.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-3"}}
+{"ev":{"seq":2,"type":"TEXT_MESSAGE_START","messageId":"msg-1","role":"assistant"}}
+{"ev":{"seq":3,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"Here is the fix:\n\n```rust\n"}}
+{"ev":{"seq":4,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"fn main() {\n"}}
+{"expect":{"last_seq":4,"live":"turn-3","gaps":[],"turns":[{"id":"turn-3","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"running","kind":{"t":"markdown","value":"Here is the fix:\n\n```rust\nfn main() {\n","complete":false}}],"prompts":[]}]}}
+# An event type this client has never heard of. Ignored, not rejected -
+# and it still consumes its sequence number.
+{"ev":{"seq":5,"type":"THINKING_START"}}
+{"expect":{"last_seq":5,"live":"turn-3","gaps":[],"turns":[{"id":"turn-3","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"running","kind":{"t":"markdown","value":"Here is the fix:\n\n```rust\nfn main() {\n","complete":false}}],"prompts":[]}]}}
+{"ev":{"seq":6,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"    println!(\"hi\");\n}\n"}}
+{"ev":{"seq":7,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"```\n"}}
+{"ev":{"seq":8,"type":"TEXT_MESSAGE_END","messageId":"msg-1"}}
+{"ev":{"seq":9,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-3","result":null}}
+{"expect":{"last_seq":9,"live":null,"gaps":[],"turns":[{"id":"turn-3","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"done","kind":{"t":"markdown","value":"Here is the fix:\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n","complete":true}}],"prompts":[]}]}}

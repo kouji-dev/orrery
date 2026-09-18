@@ -1,0 +1,11 @@
+# custom-with-fallback - an extension's own surface. The store keeps payload
+# and fallback side by side and picks neither: that is the renderer's call, and
+# the json renderer emits both so a lazy fallback shows up in CI.
+# Derived from streams/tool-call.jsonl: the tool returns the custom surface.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-10"}}
+{"ev":{"seq":2,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/dag-1","value":{"id":"dag-1","status":"done","kind":{"t":"custom","kind":"buildgraph.dag","payload":{"nodes":["proto","agui","kernel"],"edges":[[0,1],[1,2]]},"fallback":{"kind":{"t":"text","value":"proto -> agui -> kernel"}}}}}]}}
+{"expect":{"last_seq":2,"live":"turn-10","gaps":[],"turns":[{"id":"turn-10","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"dag-1","status":"done","kind":{"t":"custom","kind":"buildgraph.dag","payload":{"nodes":["proto","agui","kernel"],"edges":[[0,1],[1,2]]},"fallback":{"kind":{"t":"text","value":"proto -> agui -> kernel"}}}}],"prompts":[]}]}}
+# A Custom name this client has no handler for. Ignored, not rejected.
+{"ev":{"seq":3,"type":"CUSTOM","name":"buildgraph.focus","value":{"node":2}}}
+{"expect":{"last_seq":3,"live":"turn-10","gaps":[],"turns":[{"id":"turn-10","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"dag-1","status":"done","kind":{"t":"custom","kind":"buildgraph.dag","payload":{"nodes":["proto","agui","kernel"],"edges":[[0,1],[1,2]]},"fallback":{"kind":{"t":"text","value":"proto -> agui -> kernel"}}}}],"prompts":[]}]}}
+{"ev":{"seq":4,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-10","result":null}}

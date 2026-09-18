@@ -1,0 +1,17 @@
+# consent-prompt - a destructive shell call that policy stops to ask about.
+# The prompt rides AG-UI Custom, because AG-UI has no consent vocabulary;
+# the answer comes back the same way, and the call then settles.
+# Derived from streams/tool-call-consent.jsonl.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-4"}}
+{"ev":{"seq":2,"type":"TEXT_MESSAGE_START","messageId":"msg-1","role":"assistant"}}
+{"ev":{"seq":3,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"I will remove the build directory."}}
+{"ev":{"seq":4,"type":"TEXT_MESSAGE_END","messageId":"msg-1"}}
+{"ev":{"seq":5,"type":"TOOL_CALL_START","toolCallId":"call-2","toolCallName":"builtin.shell","parentMessageId":"msg-1"}}
+{"ev":{"seq":6,"type":"TOOL_CALL_ARGS","toolCallId":"call-2","delta":"{\"command\":\"rm -rf target\",\"cwd\":\".\"}"}}
+{"ev":{"seq":7,"type":"TOOL_CALL_END","toolCallId":"call-2"}}
+{"ev":{"seq":8,"type":"CUSTOM","name":"orrery.consent.request","value":{"prompt":{"id":"prompt-1","subject":"ext:builtin","capabilities":[],"reason":"rm -rf target"},"deadline_ms":30000}}}
+{"expect":{"last_seq":8,"live":"turn-4","gaps":[],"turns":[{"id":"turn-4","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"done","kind":{"t":"markdown","value":"I will remove the build directory.","complete":true}},{"id":"call-2","status":"running","kind":{"t":"stack","dir":"column","title":"builtin.shell","collapsed":false,"children":[{"kind":{"t":"text","value":"{\"command\":\"rm -rf target\",\"cwd\":\".\"}","style":"code"}}]}}],"prompts":[{"id":"prompt-1","reason":"rm -rf target","deadline_ms":30000,"resolved":null}]}]}}
+{"ev":{"seq":9,"type":"CUSTOM","name":"orrery.consent.resolved","value":{"prompt_id":"prompt-1","answer":"allow-once","by":"user"}}}
+{"ev":{"seq":10,"type":"TOOL_CALL_RESULT","messageId":"call-2:result","toolCallId":"call-2","content":"ok","outcome":{"t":"ok"}}}
+{"ev":{"seq":11,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-4","result":{"input_tokens":1004,"output_tokens":51,"cache_hits":256}}}
+{"expect":{"last_seq":11,"live":null,"gaps":[],"turns":[{"id":"turn-4","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"done","kind":{"t":"markdown","value":"I will remove the build directory.","complete":true}},{"id":"call-2","status":"done","kind":{"t":"stack","dir":"column","title":"builtin.shell","collapsed":false,"children":[{"kind":{"t":"text","value":"{\"command\":\"rm -rf target\",\"cwd\":\".\"}","style":"code"}},{"kind":{"t":"text","value":"ok"}}]}}],"prompts":[{"id":"prompt-1","reason":"rm -rf target","deadline_ms":30000,"resolved":{"answer":"allow-once","by":"user"}}]}]}}

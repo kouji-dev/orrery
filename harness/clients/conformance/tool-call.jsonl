@@ -1,0 +1,15 @@
+# tool-call - one read-only call. Arguments arrive split mid-token and become
+# one code child of the call's stack; the result becomes a second child.
+# Derived from streams/tool-call.jsonl, fragment boundaries included.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-2"}}
+{"ev":{"seq":2,"type":"TEXT_MESSAGE_START","messageId":"msg-1","role":"assistant"}}
+{"ev":{"seq":3,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"Let me look at the manifest."}}
+{"ev":{"seq":4,"type":"TEXT_MESSAGE_END","messageId":"msg-1"}}
+{"ev":{"seq":5,"type":"TOOL_CALL_START","toolCallId":"call-1","toolCallName":"builtin.read","parentMessageId":"msg-1"}}
+{"ev":{"seq":6,"type":"TOOL_CALL_ARGS","toolCallId":"call-1","delta":"{\"pa"}}
+{"ev":{"seq":7,"type":"TOOL_CALL_ARGS","toolCallId":"call-1","delta":"th\":\"Cargo.toml\"}"}}
+{"ev":{"seq":8,"type":"TOOL_CALL_END","toolCallId":"call-1"}}
+{"expect":{"last_seq":8,"live":"turn-2","gaps":[],"turns":[{"id":"turn-2","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"done","kind":{"t":"markdown","value":"Let me look at the manifest.","complete":true}},{"id":"call-1","status":"running","kind":{"t":"stack","dir":"column","title":"builtin.read","collapsed":false,"children":[{"kind":{"t":"text","value":"{\"path\":\"Cargo.toml\"}","style":"code"}}]}}],"prompts":[]}]}}
+{"ev":{"seq":9,"type":"TOOL_CALL_RESULT","messageId":"call-1:result","toolCallId":"call-1","content":"name = \"orrery\"\n","outcome":{"t":"ok","surface":{"status":"done","kind":{"t":"text","value":"name = \"orrery\"\n"}}}}}
+{"ev":{"seq":10,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-2","result":{"input_tokens":934,"output_tokens":42,"cache_hits":0}}}
+{"expect":{"last_seq":10,"live":null,"gaps":[],"turns":[{"id":"turn-2","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"done","kind":{"t":"markdown","value":"Let me look at the manifest.","complete":true}},{"id":"call-1","status":"done","kind":{"t":"stack","dir":"column","title":"builtin.read","collapsed":false,"children":[{"kind":{"t":"text","value":"{\"path\":\"Cargo.toml\"}","style":"code"}},{"kind":{"t":"text","value":"name = \"orrery\"\n"},"status":"done"}]}}],"prompts":[]}]}}

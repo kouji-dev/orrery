@@ -1,0 +1,11 @@
+# table-then-resort - the cost guard. Re-sorting a table must cost one op on
+# /kind/rows, not a second copy of every cell; a client that rebuilds the whole
+# surface here will be paying for it on every sort a person clicks.
+# Derived from streams/tool-call.jsonl: the tool returns the table.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-6"}}
+{"ev":{"seq":2,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/tbl-1","value":{"id":"tbl-1","status":"done","kind":{"t":"table","columns":["crate","lines"],"rows":[[{"text":"orrery-proto"},{"text":"2358","style":"muted"}],[{"text":"orrery-agui"},{"text":"612","style":"muted"}]]}}}]}}
+{"expect":{"last_seq":2,"live":"turn-6","gaps":[],"turns":[{"id":"turn-6","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"tbl-1","status":"done","kind":{"t":"table","columns":["crate","lines"],"rows":[[{"text":"orrery-proto"},{"text":"2358","style":"muted"}],[{"text":"orrery-agui"},{"text":"612","style":"muted"}]]}}],"prompts":[]}]}}
+# The cost-guard case: a re-sort sends rows, never the whole surface again.
+{"ev":{"seq":3,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/tbl-1/kind/rows","value":[[{"text":"orrery-agui"},{"text":"612","style":"muted"}],[{"text":"orrery-proto"},{"text":"2358","style":"muted"}]]}]}}
+{"expect":{"last_seq":3,"live":"turn-6","gaps":[],"turns":[{"id":"turn-6","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"tbl-1","status":"done","kind":{"t":"table","columns":["crate","lines"],"rows":[[{"text":"orrery-agui"},{"text":"612","style":"muted"}],[{"text":"orrery-proto"},{"text":"2358","style":"muted"}]]}}],"prompts":[]}]}}
+{"ev":{"seq":4,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-6","result":null}}

@@ -1,0 +1,12 @@
+# reattach-since - replay picks up mid-turn. Everything before the client's
+# first frame belongs to a turn it never saw start, which lands in the
+# placeholder turn `(detached)` rather than being dropped on the floor.
+# Derived from streams/text-turn.jsonl, replayed from seq 12.
+# The client had already seen seq 11 and re-attached with since = 11.
+# The first frame of a re-attached stream may carry any seq: contiguity is
+# only required from the second frame on.
+{"ev":{"seq":12,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"resumed"}}
+{"expect":{"last_seq":12,"live":null,"gaps":[],"turns":[{"id":"(detached)","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"running","kind":{"t":"markdown","value":"resumed","complete":false}}],"prompts":[]}]}}
+{"ev":{"seq":13,"type":"TEXT_MESSAGE_END","messageId":"msg-1"}}
+{"ev":{"seq":14,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-8","result":null}}
+{"expect":{"last_seq":14,"live":null,"gaps":[],"turns":[{"id":"(detached)","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"done","kind":{"t":"markdown","value":"resumed","complete":true}}],"prompts":[]}]}}

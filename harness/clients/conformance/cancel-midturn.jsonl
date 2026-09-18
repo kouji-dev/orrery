@@ -1,0 +1,10 @@
+# cancel-midturn - a turn stopped while a message was open. The message is
+# closed as cancelled, never as done: a half-answer must not read as an answer.
+# Derived from streams/never-ends.jsonl, cancelled after the first delta.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-9"}}
+{"ev":{"seq":2,"type":"TEXT_MESSAGE_START","messageId":"msg-1","role":"assistant"}}
+{"ev":{"seq":3,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"Working on it"}}
+# The stream stalls for an hour. Somebody presses the key.
+{"ev":{"seq":4,"type":"CUSTOM","name":"orrery.turn.cancelled","value":{"run_id":"turn-9","reason":"user"}}}
+{"ev":{"seq":5,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-9","result":null}}
+{"expect":{"last_seq":5,"live":null,"gaps":[],"turns":[{"id":"turn-9","settled":true,"cancelled":true,"error":null,"surfaces":[{"id":"msg-1","status":"cancelled","kind":{"t":"markdown","value":"Working on it","complete":true}}],"prompts":[]}]}}

@@ -1,0 +1,11 @@
+# seq-gap - a lost frame. seq is on the frame, so a client detects the loss by
+# arithmetic rather than by noticing that something looks wrong.
+# Derived from streams/text-turn.jsonl with two deltas withheld.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-7"}}
+{"ev":{"seq":2,"type":"TEXT_MESSAGE_START","messageId":"msg-1","role":"assistant"}}
+{"ev":{"seq":3,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"one "}}
+# Frames 4 and 5 were dropped by a coalescing client that fell too far behind.
+# The gap is reported and the event is still applied: a renderer's cue to
+# re-attach with since = 3, not a reason to throw the turn away.
+{"ev":{"seq":6,"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"four"}}
+{"expect":{"last_seq":6,"live":"turn-7","gaps":[{"expected":4,"got":6}],"turns":[{"id":"turn-7","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"msg-1","status":"running","kind":{"t":"markdown","value":"one four","complete":false}}],"prompts":[]}]}}
