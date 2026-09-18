@@ -326,3 +326,106 @@ fn item_name(path: &Path) -> Option<String> {
     }
     path.file_stem().map(|n| n.to_string_lossy().into_owned())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    use crate::layer::LayerFile;
+
+    /// A walker that records every directory it is asked for, so "walked once"
+    /// is an assertion rather than a hope.
+    #[derive(Default)]
+    struct Counting {
+        inner: FsWalk,
+        seen: RefCell<Vec<PathBuf>>,
+    }
+
+    impl Walk for Counting {
+        fn read_dir(&self, dir: &Path) -> Vec<PathBuf> {
+            self.seen.borrow_mut().push(dir.to_path_buf());
+            self.inner.read_dir(dir)
+        }
+    }
+
+    fn fixture() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let root = dunce::canonicalize(dir.path()).unwrap().join(".orrery");
+        for (sub, name) in [
+            ("extensions", "git"),
+            ("skills", "review-checklist"),
+            ("prompts", "triage"),
+            ("mcp", "ripgrep"),
+        ] {
+            std::fs::create_dir_all(root.join(sub).join(name)).unwrap();
+        }
+        // A directory discovery must not wander into.
+        std::fs::create_dir_all(root.join("extensions/git/src")).unwrap();
+        (dir, root)
+    }
+
+    fn values(text: &str) -> Provenanced {
+        let file = LayerFile::new(Layer::Workspace, "config.toml", text);
+        crate::merge::merge(&[file]).expect("the fixture parses").values
+    }
+
+    #[test]
+    fn one_pass() {
+        let (_guard, root) = fixture();
+        let roots = vec![LayerRoot {
+            layer: Layer::Workspace,
+            dir: root.clone(),
+        }];
+        let walk = Counting::default();
+        let manifest = discover(&roots, &Provenanced::new(), &walk);
+
+        // All four kinds, from one traversal.
+        assert_eq!(manifest.extensions.len(), 1, "{manifest:?}");
+        assert!(manifest.has(ItemKind::Extension, "git"));
+        assert!(manifest.has(ItemKind::Skill, "review-checklist"));
+        assert!(manifest.has(ItemKind::Prompt, "triage"));
+        assert!(manifest.has(ItemKind::McpServer, "ripgrep"));
+
+        let seen = walk.seen.borrow().clone();
+        let mut unique = seen.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(seen.len(), unique.len(), "no directory is read twice: {seen:?}");
+        assert_eq!(
+            seen.len(),
+            5,
+            "the layer directory and its four item directories, and nothing else: {seen:?}"
+        );
+        assert!(
+            !seen.iter().any(|p| p.ends_with("src")),
+            "discovery does not descend into an item: {seen:?}"
+        );
+    }
+
+    #[test]
+    fn manifest_matches_the_ledger() {
+        let (_guard, root) = fixture();
+        let roots = vec![LayerRoot {
+            layer: Layer::Workspace,
+            dir: root,
+        }];
+        let values = values("extensions = [\"lsp\"]\n[mcp_servers.github]\ncommand = \"gh\"\n");
+        let manifest = discover(&roots, &values, &FsWalk);
+
+        let mut ledger = LoadLedger::default();
+        ledger.record(&manifest);
+
+        // §4.11: if it is in the model's visible set, it is in the manifest —
+        // and what the ledger reports is exactly that set, no more and no less.
+        for kind in ItemKind::all() {
+            let in_manifest: Vec<&str> =
+                manifest.of(kind).iter().map(|d| d.name.as_str()).collect();
+            assert_eq!(ledger.loaded(kind), in_manifest, "{kind:?}");
+        }
+        assert!(manifest.has(ItemKind::Extension, "lsp"), "declared by name");
+        assert!(manifest.has(ItemKind::Extension, "git"), "found on disk");
+        assert!(manifest.has(ItemKind::McpServer, "github"));
+        assert_eq!(ledger.entries.len(), manifest.all().len());
+    }
+}
