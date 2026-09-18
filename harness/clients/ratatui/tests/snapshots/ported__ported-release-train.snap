@@ -1,0 +1,38 @@
+---
+source: harness/clients/ratatui/tests/ported.rs
+expression: screen
+---
+-- scrollback --
+✓ surface schema
+✓ kernel differ
+✓ ratatui client
+· ink client
+· ade client
+[###########################···················] v0.25.0 3/5
+<example-release-train.timeline>
+v0.25.0: 3 of 5 stages shipped, in order —
+stage           state
+surface schema  shipped
+kernel differ   shipped
+ratatui client  shipped
+ink client      waiting
+ade client      waiting
+-- live --
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

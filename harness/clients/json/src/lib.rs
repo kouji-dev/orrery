@@ -75,25 +75,27 @@ impl<W: Write> JsonRenderer<W> {
             let Some(view) = self.store.turn(&turn).and_then(|t| t.surface(&surface)) else {
                 continue;
             };
-            let SurfaceKind::Custom {
-                kind,
-                payload,
-                fallback,
-            } = &view.kind
-            else {
-                continue;
-            };
-            let line = serde_json::to_string(&serde_json::json!({
-                "t": FALLBACK_LINE,
-                "seq": frame.seq,
-                "turn": turn,
-                "surface": surface,
-                "kind": kind,
-                "payload": payload,
-                "fallback": fallback,
-                "fallback_text": render_text(fallback),
-            }))?;
-            writeln!(self.out, "{line}")?;
+            // Every custom surface in the tree, not only one that happens to
+            // be at the top. An extension composes — a timeline inside a
+            // section, a graph beside a table — so a check on `view.kind`
+            // alone means the common case never reaches CI, which is the one
+            // thing 6.2 asks of this renderer. Phase 4's release train is the
+            // case that found it.
+            let mut customs = Vec::new();
+            collect_customs(&view.kind, &mut customs);
+            for (kind, payload, fallback) in customs {
+                let line = serde_json::to_string(&serde_json::json!({
+                    "t": FALLBACK_LINE,
+                    "seq": frame.seq,
+                    "turn": turn,
+                    "surface": surface,
+                    "kind": kind,
+                    "payload": payload,
+                    "fallback": fallback,
+                    "fallback_text": render_text(fallback),
+                }))?;
+                writeln!(self.out, "{line}")?;
+            }
         }
         Ok(())
     }
@@ -111,6 +113,33 @@ impl<W: Write> JsonRenderer<W> {
             self.emit(frame)?;
         }
         self.out.flush()
+    }
+}
+
+/// Every `custom` surface in a tree, outermost first.
+///
+/// A custom surface's fallback may itself hold one — the fallback for a
+/// flamegraph could be a simpler graph — so the walk goes through fallbacks as
+/// well as through stacks.
+fn collect_customs<'a>(
+    kind: &'a SurfaceKind,
+    out: &mut Vec<(&'a String, &'a serde_json::Value, &'a Surface)>,
+) {
+    match kind {
+        SurfaceKind::Custom {
+            kind: name,
+            payload,
+            fallback,
+        } => {
+            out.push((name, payload, fallback));
+            collect_customs(&fallback.kind, out);
+        }
+        SurfaceKind::Stack { children, .. } => {
+            for child in children {
+                collect_customs(&child.kind, out);
+            }
+        }
+        _ => {}
     }
 }
 

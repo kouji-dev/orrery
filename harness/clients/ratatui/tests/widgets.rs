@@ -66,6 +66,38 @@ fn markdown_snapshot() {
     both("markdown", &surface_from("streaming-markdown", "msg-1"));
 }
 
+/// Inline emphasis is *rendered*, never shown.
+///
+/// Phase 4 found this by porting: `workspace-census` writes a sentence with two
+/// bold numbers in it, Ink drew `4`, and this renderer drew `**4**`. Weight is
+/// a client's own business (plan 09, open question 1: typeface and weight are
+/// free) — the *characters* are not, and two clients showing different
+/// characters for the same surface is the incomparability that rule forbids.
+#[test]
+fn markdown_renders_inline_emphasis_rather_than_showing_it() {
+    let surface = Surface::new(orrery_proto::SurfaceKind::Markdown {
+        value: "**4** crates, **2** of them published. See `orrery.toml` and *this*."
+            .into(),
+        complete: true,
+    });
+    let drawn = draw(&surface, 60, Theme::colour());
+    assert!(
+        !drawn.contains('*') && !drawn.contains('`'),
+        "the markers are shown rather than applied: {drawn}"
+    );
+    assert!(drawn.contains("4 crates, 2 of them published."), "{drawn}");
+    assert!(drawn.contains("orrery.toml"), "{drawn}");
+
+    // And while it is still streaming, nothing is touched: half a `**` is not
+    // emphasis, and a shape that changes under the reader is the thing 6.5 is
+    // about.
+    let streaming = Surface::new(orrery_proto::SurfaceKind::Markdown {
+        value: "**4** cra".into(),
+        complete: false,
+    });
+    assert!(draw(&streaming, 60, Theme::colour()).contains("**4** cra"));
+}
+
 #[test]
 fn table_snapshot() {
     both("table", &surface_from("table-then-resort", "tbl-1"));

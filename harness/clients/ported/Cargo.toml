@@ -1,0 +1,36 @@
+[package]
+name = "orrery-ported"
+version = "0.0.0"
+description = "Phase 4: the three ported example extensions, run through orrery-host and turned into frames every client renders."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# Why a crate in `clients/` depends on extensions: it is the thing that proves
+# a ported extension renders, and "renders" is a client word. The direction is
+# the legal one — `core` never names an extension or a client; a client may name
+# both, and this one exists only to be dev-depended on by the renderers'
+# test suites.
+[dependencies]
+orrery-proto = { workspace = true }
+orrery-ext-api = { workspace = true }
+orrery-host = { path = "../../core/crates/orrery-host" }
+orrery-tools = { workspace = true }
+orrery-surface = { path = "../../core/crates/orrery-surface" }
+orrery-agui = { path = "../../core/crates/orrery-agui" }
+orrery-client = { path = "../sdk-rs" }
+workspace-census = { path = "../../extensions/examples/workspace-census" }
+patch-review = { path = "../../extensions/examples/patch-review" }
+release-train = { path = "../../extensions/examples/release-train" }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+toml = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+# The json renderer's `render_text`, so "is this fallback informative?" is asked
+# with the same function CI reads it through.
+orrery-client-json = { version = "0.1.0", path = "../json" }

@@ -21,5 +21,9 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+# Phase 4: the three ported extensions, run for real. A dev-dependency, so no
+# renderer links an extension outside its tests.
+orrery-ported = { path = "../ported" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 schemars = { workspace = true }
 serde = { workspace = true }

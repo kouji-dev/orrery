@@ -16,3 +16,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+# Phase 4: the three ported extensions, run for real.
+orrery-ported = { path = "../ported" }
+orrery-agui = { path = "../../core/crates/orrery-agui" }
+orrery-client = { path = "../sdk-rs" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

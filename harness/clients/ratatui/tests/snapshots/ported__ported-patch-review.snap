@@ -1,0 +1,34 @@
+---
+source: harness/clients/ratatui/tests/ported.rs
+expression: screen
+---
+-- scrollback --
+── harness/core/crates/orrery-ext-api/src/sink.rs
+@@ -28,3 +28,3 @@
+ use orrery_proto::Surface;
+-use orrery_ext_api::SurfaceSink;
++use crate::ctx::SurfaceSink;
+Apply 2 changed lines to sink.rs?
+> Apply
+  Skip (default)
+  Explain the change
+
+-- live --
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

@@ -1,0 +1,33 @@
+---
+source: harness/clients/ratatui/tests/ported.rs
+expression: screen
+---
+-- scrollback --
+▾   workspace census
+4 crates, 2 of them published.
+crate           area       publish
+orrery-proto    core       published
+orrery-ext-api  core       published
+orrery-surface  core       private
+patch-review    extension  private
+publish = false is a crate a community extension cannot
+depend on.
+-- live --
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit
