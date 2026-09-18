@@ -6,8 +6,9 @@ An OpenAI-compatible chat-completions provider, for local models behind ollama o
 `ExtensionDefinition.providers`, and it loads through `orrery-host` like any third-party
 extension: the ledger shows it, a deny rule disables it, `orrery ext test` runs it.
 
-**Status.** Scaffold only. Implementation plan:
-[`harness/docs/plans/03-provider-layer.md`](../../../docs/plans/03-provider-layer.md).
+**Status.** Implemented. Implementation plan:
+[`harness/docs/plans/03-provider-layer.md`](../../../docs/plans/03-provider-layer.md),
+phase 5.
 
 See [`orrery.toml`](orrery.toml) for what it provides and what it requires.
 
@@ -28,5 +29,11 @@ has to narrow.
 cargo test -p orrery-ext-provider-openai-compat
 ```
 
-Nothing yet: this crate is a scaffold. When it lands it is tested the way the
-Anthropic provider is — committed byte streams through the parser, no request.
+Every case replays a committed `.sse` file under `tests/fixtures/` through
+`RecordedTransport`, in seven-byte slices so a frame split across a chunk
+boundary is the default rather than a case somebody remembered to write. **No
+socket is opened.** That is why the HTTP side is the `ChatTransport` trait: no
+machine running this suite has ollama on it.
+
+Turn the `http` feature off and the crate is the parser, the mapper and
+`RecordedTransport` — which is all a fixture replay needs, and no TLS stack.

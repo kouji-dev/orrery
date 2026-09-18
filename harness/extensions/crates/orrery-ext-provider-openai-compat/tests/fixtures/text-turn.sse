@@ -1,0 +1,12 @@
+data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"qwen2.5-coder","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"content":", world"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-1","choices":[],"usage":{"prompt_tokens":24,"completion_tokens":5,"total_tokens":29,"prompt_tokens_details":{"cached_tokens":8}}}
+
+data: [DONE]
+

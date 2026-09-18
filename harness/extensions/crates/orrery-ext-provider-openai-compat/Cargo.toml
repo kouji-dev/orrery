@@ -11,5 +11,31 @@ publish = false
 # Dependencies on core name BOTH halves: `version` makes this crate
 # publishable, `path` makes it build in-tree. At split time the path goes and
 # nothing else changes. See harness/extensions/README.md.
+[features]
+# The real HTTP transport. On by default, because a provider that cannot dial
+# is not a provider; off, the crate is the parser, the mapper and
+# `RecordedTransport`, which is what a fixture replay needs.
+default = ["http"]
+http = ["dep:reqwest", "dep:rustls"]
+
 [dependencies]
 orrery-provider = { version = "0.1", path = "../../../core/crates/orrery-provider" }
+orrery-proto = { version = "0.1", path = "../../../core/crates/orrery-proto" }
+orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
+async-trait = { workspace = true }
+futures-core = { workspace = true }
+futures-util = { workspace = true }
+parking_lot = { workspace = true }
+# `stream` for `Response::bytes_stream`. The TLS setup is the workspace's:
+# rustls + ring, installed once by this crate rather than by reqwest, so the
+# ADE and the harness link one crypto stack.
+reqwest = { workspace = true, features = ["stream"], optional = true }
+rustls = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+
+[dev-dependencies]
+futures-util = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

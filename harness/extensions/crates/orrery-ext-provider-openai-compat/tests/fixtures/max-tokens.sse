@@ -1,0 +1,6 @@
+data: {"id":"chatcmpl-3","choices":[{"index":0,"delta":{"content":"half a th"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-3","choices":[{"index":0,"delta":{},"finish_reason":"length"}]}
+
+data: [DONE]
+

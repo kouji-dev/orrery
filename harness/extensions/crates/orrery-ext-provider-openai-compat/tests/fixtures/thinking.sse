@@ -1,0 +1,6 @@
+data: {"id":"chatcmpl-4","choices":[{"index":0,"delta":{"reasoning_content":"let me think"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-4","choices":[{"index":0,"delta":{"content":"42"},"finish_reason":"stop"}]}
+
+data: [DONE]
+
