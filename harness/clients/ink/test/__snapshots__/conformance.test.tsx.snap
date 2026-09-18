@@ -1,0 +1,130 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the conformance fixtures > cancel-midturn: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-9 (cancelled)
+⊘ Working on it
+"
+`;
+
+exports[`the conformance fixtures > consent-prompt: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-4
+✓ I will remove the build directory.
+✓ builtin.shell
+  {"command":"rm -rf target","cwd":"."}
+  ok
+"
+`;
+
+exports[`the conformance fixtures > custom-with-fallback: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-10
+✓ buildgraph.dag (no renderer)
+  proto -> agui -> kernel
+"
+`;
+
+exports[`the conformance fixtures > diff-surface: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-21
+✓ src/lib.rs +2 -1
+  @@ -1,2 +1,3 @@
+   fn main() {
+  +    println!("hi");
+   }
+  @@ -40,1 +41,1 @@
+  -let x = 1;
+  +let x = 2;
+"
+`;
+
+exports[`the conformance fixtures > form-surface: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-25
+✓   Branch         * main
+    Token          * ••••
+    Depth            1
+    Push when done   no
+    Remote         * origin
+  [Create branch] · required fields empty
+"
+`;
+
+exports[`the conformance fixtures > progress-surface: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-22
+✓ ████████████████████ 9/9 indexing the workspace
+"
+`;
+
+exports[`the conformance fixtures > question-surface: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-5
+✓ Which crate?
+    orrery-proto
+  ❯ orrery-kernel
+  ↑↓ enter · default kernel · 60s
+"
+`;
+
+exports[`the conformance fixtures > reattach-since: the store agrees at every checkpoint, then draws 1`] = `
+"── (detached)
+✓ resumed
+"
+`;
+
+exports[`the conformance fixtures > seq-gap: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-7 …
+▸ one four
+"
+`;
+
+exports[`the conformance fixtures > stream-surface: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-23
+✓ ⟨stderr⟩ closed
+"
+`;
+
+exports[`the conformance fixtures > streaming-markdown: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-3
+✓ Here is the fix:
+    fn main() {
+        println!("hi");
+    }
+"
+`;
+
+exports[`the conformance fixtures > table-then-resort: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-6
+✓ crate        lines
+  orrery-agui  612
+  orrery-proto 2358
+"
+`;
+
+exports[`the conformance fixtures > task-surface: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-24
+✓ 2/4 done
+  ✓ read the plan
+  ✓ write the differ
+  · run the tests
+  · tick the plan
+"
+`;
+
+exports[`the conformance fixtures > text-only: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-1
+✓ The workspace has three crates: proto, provider and kernel.
+"
+`;
+
+exports[`the conformance fixtures > tool-call: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-2
+✓ Let me look at the manifest.
+✓ builtin.read
+  {"path":"Cargo.toml"}
+  name = "orrery"
+"
+`;
+
+exports[`the conformance fixtures > tree-surface: the store agrees at every checkpoint, then draws 1`] = `
+"── turn-20
+✓ └▾ harness
+    ├· core
+    └· clients
+"
+`;
