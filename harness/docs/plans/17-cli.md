@@ -213,7 +213,7 @@ Files: `src/term.rs`
 
 ## Done when
 
-- `cargo test -p orrery-cli` green; `--help` snapshots committed. *(32 tests: 10
+- `cargo test -p orrery-cli` green; `--help` snapshots committed. *(33 tests: 10
   unit, and `cli`, `json`, `exit_codes`, `serve`, `ext` as integration suites.
   26 snapshots under `tests/snapshots/`.)*
 - `orrery run -p "…"` completes a real turn with a real tool call.
