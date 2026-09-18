@@ -144,11 +144,28 @@ It hides the arena: `ctx.ui.*` builds a normal tree and flattens it on the way o
 
 Files: `harness/wit/orrery-extension.wit`, `orrery-wit/src/arena.rs`
 
-- [ ] **Failing test first.** `arena::round_trips` (proptest) — for an arbitrary `Surface`, `flatten` then `rebuild` yields the original. Including deep stacks and nested `custom` fallbacks.
-- [ ] `arena::rejects_cycles` — a hand-built arena with a child index loop is rejected, not infinitely recursed.
-- [ ] `arena::rejects_dangling_indices`.
-- [ ] Write the `.wit`; implement `flatten`/`rebuild`.
-- [ ] `cargo xtask wit-check` — the `.wit` parses and the generated bindings compile.
+- [x] **Failing test first.** `arena::round_trips` (proptest) — for an arbitrary `Surface`, `flatten` then `rebuild` yields the original. Including deep stacks and nested `custom` fallbacks.
+- [x] `arena::rejects_cycles` — a hand-built arena with a child index loop is rejected, not infinitely recursed. Two tests: the self-loop and the 0→1→0 loop.
+- [x] `arena::rejects_dangling_indices`, plus `rejects_a_dangling_root`, `rejects_a_kind_tag_that_disagrees_with_the_payload`, `custom_must_carry_exactly_one_fallback_child`, `a_leaf_carries_no_children`, `nodes_are_written_parent_first_depth_first`.
+- [x] Write the `.wit`; implement `flatten`/`rebuild`.
+- [x] `cargo xtask wit-check` — the `.wit` parses and the frozen shapes have not drifted from the Rust that rebuilds them (`orrery-wit/tests/wit.rs`, run by the xtask).
+
+**FROZEN, 2026-09-18.** A node is `{ kind, id, status, payload, children }`; `kind`
+is a flat enum over all twelve `SurfaceKind` variants and must agree with the
+`t` tag inside `payload`; `payload` is the variant's serde JSON minus its
+recursive fields; `children` indices are **strictly greater** than the node's
+own, so the arena is acyclic by construction and walkable without a visited set;
+nodes are written parent-first, depth-first; only `stack` (any number) and
+`custom` (exactly one — the mandatory fallback) carry children. `rebuild` is the
+trust boundary and enforces every one of those as a value, plus a `MAX_DEPTH`
+of 128 so a 100k-node chain cannot blow the host stack.
+
+Two corrections to the sketch in this file, both made in the frozen `.wit`:
+the `node-kind` enum in the sketch was missing `tree`, `task`, `question` and
+`form` and invented a `details` that `SurfaceKind` does not have; and
+`broker.read-file` now returns a `file-out` record rather than a bare
+`list<u8>`, because task 3 requires the truncation flag to come back with the
+bytes.
 
 ### Task 2 · Engine and store
 
@@ -195,8 +212,23 @@ Files: `extensions/examples/wasm-hello-{rs,go}/`
 
 Files: `tests/roundtrip.rs`
 
-- [ ] **Measure, then decide.** A benchmark: a delta-heavy extension emitting 1000 small surface updates, JSON-as-string vs. a hypothetical typed variant. Record the number in this file.
-- [ ] If the cost is material, open a follow-up to type the hot payloads in WIT before the contract freezes. If not, write "measured at X, acceptable" here and close the question.
+- [x] **Measure, then decide.** `orrery-wit/tests/json_cost.rs`, 1000 delta updates of the hot shape (a row stack holding a text line and a two-cell table).
+- [x] Decision recorded below; the test is the regression guard.
+
+**MEASURED, 2026-09-18** (`cargo test -p orrery-wit --test json_cost --release -- --nocapture`):
+
+| | bytes over 1000 updates | JSON documents |
+|---|---|---|
+| JSON-as-string (what the WIT does) | 218 300 | 3 000 |
+| typed in WIT (hypothetical) | 165 300 | 0 |
+
+**Overhead: 32.1%.** Flatten 5.9 µs/update, rebuild 8.3 µs/update, 16.6 µs for a
+whole round trip of a 3-node update. **Measured at 32%, acceptable — closed.**
+Typing twelve more records into the contract to save a third of the bytes on a
+path that costs microseconds is not worth freezing them, and the shapes would
+then have to move in lockstep with `SurfaceKind` forever. The test fails above
+120% so the decision is re-opened if payloads ever grow a shape the estimate
+does not model.
 
 ---
 

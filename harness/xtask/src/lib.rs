@@ -1,8 +1,8 @@
 //! Repo automation for the Orrery harness: `deps-check`, `typegen`,
 //! `wit-check` and `agui-drift`.
 //!
-//! `deps-check`, `typegen` and `agui-drift` are implemented; `wit-check` is a
-//! stub that names its plan.
+//! All four are implemented. `wit-check` delegates to `orrery-wit`'s `.wit`
+//! drift tests, which sit next to the Rust side they compare against.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]

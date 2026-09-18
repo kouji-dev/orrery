@@ -9,3 +9,12 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+orrery-proto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+uuid = { workspace = true }
+wit-parser = "0.244"

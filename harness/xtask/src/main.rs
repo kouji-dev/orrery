@@ -2,7 +2,7 @@
 //!
 //! `deps-check` enforces the dependency-direction rule for real; `typegen`
 //! regenerates `harness/protocol`; `agui-drift` checks the vendored AG-UI enum
-//! against upstream. `wit-check` is still a stub that exits 0 naming its plan.
+//! against upstream. `wit-check` runs `orrery-wit`'s `.wit` drift tests.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -90,8 +90,28 @@ fn main() -> ExitCode {
             }
         },
         Task::WitCheck => {
-            println!("wit-check: not implemented — see harness/docs/plans/14-wasm-wit.md");
-            ExitCode::SUCCESS
+            // The check itself lives in `orrery-wit`, next to the Rust side it
+            // compares against: the `.wit` parses, the embedded copy matches
+            // the file, and `node-kind` / `surface-node` have not drifted from
+            // the arena that rebuilds them.
+            let status = std::process::Command::new(env!("CARGO"))
+                .args(["test", "-p", "orrery-wit", "--test", "wit"])
+                .current_dir(&root)
+                .status();
+            match status {
+                Ok(s) if s.success() => {
+                    println!("wit-check: ok");
+                    ExitCode::SUCCESS
+                }
+                Ok(_) => {
+                    eprintln!("wit-check: harness/wit/orrery-extension.wit drifted");
+                    ExitCode::from(1)
+                }
+                Err(e) => {
+                    eprintln!("wit-check: {e}");
+                    ExitCode::from(2)
+                }
+            }
         }
         Task::AguiDrift { fetch, strict } => match xtask::agui_drift::run(&root, fetch, strict) {
             Err(e) => {

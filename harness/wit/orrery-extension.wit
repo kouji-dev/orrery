@@ -2,9 +2,10 @@
 //
 // Implementation plan: harness/docs/plans/14-wasm-wit.md
 //
-// This is the SKETCH the scaffold commits so `cargo xtask wit-check` has a
-// target and so the flat-arena question is visible rather than deferred
-// silently. It is not final and nothing binds against it yet.
+// This is the FROZEN contract (plan 14, task 1). Every WASM-target language
+// binds against it, and it is the same schema the JSON-RPC paths serialise.
+// Changing the shapes below — the arena above all — is a major version bump of
+// `orrery:extension`, not an edit.
 //
 // Two rules it exists to make structural:
 //
@@ -23,6 +24,10 @@ package orrery:extension@1.0.0;
 interface broker {
     /// Why an operation did not happen. Denial and budget stops are values, not
     /// failures: the guest is expected to report them and re-plan, not retry.
+    ///
+    /// A denial is deliberately NOT a trap. The guest gets a value it can
+    /// handle, report and plan around; trapping would make "you may not do
+    /// that" indistinguishable from "your code is broken".
     variant error {
         /// A policy rule said no. Terminal — retrying will not help.
         denied(string),
@@ -51,6 +56,14 @@ interface broker {
         /// Standard error, up to `max-output-bytes`.
         stderr: list<u8>,
         /// True when either stream hit the ceiling.
+        truncated: bool,
+    }
+
+    /// What a bounded read returned.
+    record file-out {
+        /// The bytes, up to `max-bytes`.
+        bytes: list<u8>,
+        /// True when the file was longer than `max-bytes`.
         truncated: bool,
     }
 
@@ -92,7 +105,7 @@ interface broker {
     run-proc: func(cmd: string, args: list<string>, opts: run-opts) -> result<proc-out, error>;
 
     /// Read a file, truncated at `max-bytes`. Never reads to end.
-    read-file: func(path: string, max-bytes: u64) -> result<list<u8>, error>;
+    read-file: func(path: string, max-bytes: u64) -> result<file-out, error>;
 
     /// Write a file. With `atomic`, the broker writes a temp file and renames,
     /// so a cancelled write leaves the original intact.
@@ -112,53 +125,87 @@ interface broker {
 /// WIT has no recursive types, but `Surface` has `stack.children: Vec<Surface>`
 /// and `custom.fallback: Box<Surface>`. Across this boundary a surface is a
 /// flat arena — a `list<surface-node>` plus child indices — rebuilt host-side
-/// into the real `Surface`. Every guest language binds against this shape, so
-/// **settle it before phase 2 freezes the WIT**.
+/// into the real `Surface`.
+///
+/// FROZEN. The invariants the host enforces on arrival, and that a guest may
+/// therefore rely on:
+///
+///   1. `kind` must agree with the `t` tag inside `payload`.
+///   2. Every index in `children` is STRICTLY GREATER than the node's own
+///      index, so the arena cannot loop and can be walked without a visited set.
+///   3. Nodes are written parent-first, depth-first.
+///   4. Only `stack` (any number) and `custom` (exactly one — its fallback)
+///      carry children. Every other kind carries none.
 interface surfaces {
-    /// Which kind of node this is. Payload-carrying fields travel in
-    /// `surface-node`, because a variant with recursive payloads is exactly
-    /// what WIT cannot express.
+    /// How far along whatever produced a node is.
+    enum node-status {
+        /// Not started.
+        pending,
+        /// In flight; more patches are coming.
+        running,
+        /// Finished, successfully.
+        done,
+        /// Finished, unsuccessfully.
+        failed,
+        /// Stopped before it finished.
+        cancelled,
+    }
+
+    /// Which kind of node this is — one per `SurfaceKind` variant.
+    ///
+    /// Payload-carrying fields travel in `surface-node.payload`, because a
+    /// variant with recursive payloads is exactly what WIT cannot express.
     enum node-kind {
-        /// Plain text.
+        /// A run of text.
         text,
-        /// Streaming text, appended to as it arrives.
+        /// Rows under headers.
+        table,
+        /// A hierarchy.
+        tree,
+        /// A change to one file.
+        diff,
+        /// Something taking a while.
+        progress,
+        /// An append-only channel.
         %stream,
+        /// A checklist.
+        task,
+        /// A question the run is blocked on.
+        question,
+        /// Several values collected at once.
+        form,
+        /// Other surfaces, arranged. Carries its children.
+        stack,
         /// Markdown.
         markdown,
-        /// A vertical or horizontal stack of children.
-        stack,
-        /// A table.
-        table,
-        /// A key/value detail list.
-        details,
-        /// A diff.
-        diff,
-        /// A progress indicator.
-        progress,
-        /// An extension-defined node, with a fallback child to draw instead.
+        /// An extension-defined node. Carries exactly one child: the fallback
+        /// to draw instead, which is mandatory — a custom node nobody can draw
+        /// is a blank hole in a transcript.
         custom,
     }
 
     /// One node of the arena.
     record surface-node {
-        /// What kind of node this is.
+        /// What kind of node this is. Must agree with `payload`'s `t` tag.
         kind: node-kind,
-        /// A stable id, used to match children across diffs. Empty when unset.
-        id: string,
-        /// The node's own payload, JSON-encoded.
+        /// The handle a patch addresses this surface by. A uuid, as a string.
+        id: option<string>,
+        /// How far along it is.
+        status: option<node-status>,
+        /// The node's own payload, JSON-encoded, WITHOUT its recursive fields —
+        /// `stack.children` and `custom.fallback` live in `children` instead.
         ///
         /// FLAGGED in `00-overview.md`: JSON crosses as a `string`, so payloads
-        /// double-encode. Measure the cost on delta-heavy extensions before
-        /// phase 2 ends.
+        /// double-encode. MEASURED — see plan 14, task 7.
         payload: string,
-        /// Indices into `surface.nodes`. Must be greater than this node's own
-        /// index, so the arena is acyclic by construction.
+        /// Indices into `surface.nodes`. Each must be greater than this node's
+        /// own index, so the arena is acyclic by construction.
         children: list<u32>,
     }
 
     /// A whole surface as an arena.
     record surface {
-        /// Every node. Index 0 is not special; `root` says where to start.
+        /// Every node, parent-first and depth-first.
         nodes: list<surface-node>,
         /// The index of the root node.
         root: u32,
