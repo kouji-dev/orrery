@@ -4,11 +4,28 @@
   "private": true,
   "description": "The React/Ink Orrery TUI, spawned as a Node process against a running kernel.",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
   "license": "MIT",
   "repository": { "type": "git", "url": "https://github.com/kouji-dev/orrery", "directory": "harness/clients/ink" },
+  "engines": { "node": ">=20.19" },
   "scripts": {
-    "build": "echo \"not implemented in this build - see harness/docs/plans/09c-client-ink.md\""
+    "build": "tsc --noEmit",
+    "start": "node --experimental-strip-types src/index.tsx",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@orrery/client": "workspace:*",
+    "@orrery/protocol": "workspace:*",
+    "ink": "^5.1.0",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "ink-testing-library": "^4.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8"
   }
 }
