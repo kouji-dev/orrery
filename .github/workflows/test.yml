@@ -13,6 +13,10 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      # The client SDK runs the same conformance fixtures the Rust SDK does.
+      # Two implementations, one contract; a green Rust run means nothing on its
+      # own.
+      - run: pnpm -C harness/clients/sdk-ts test
 
   # The harness is a separate product from the ADE, so it gets its own job and
   # neither waits on the other. Deliberately NOT `cargo test --workspace`: the
@@ -44,4 +48,16 @@ jobs:
       - run: cargo test -p orrery-proto
       - run: cargo test -p orrery-cli
       - run: cargo test -p xtask
+      - run: cargo test -p orrery-agui
+      - run: cargo test -p orrery-transport
+      - run: cargo test -p orrery-client
+      - run: cargo test -p orrery-client-json
       - run: cargo xtask deps-check
+      # The one step in this repo that is allowed a network read, and the only
+      # one that has to be: the vendored AG-UI enum is checked against what
+      # upstream actually publishes. `--fetch` is passed here and nowhere else,
+      # so the same task offline reads the installed `@ag-ui/core` or falls back
+      # to the pinned list and stays green. It fails only on a name we invented,
+      # never on being unable to reach the network.
+      - name: cargo xtask agui-drift (networked, CI only)
+        run: cargo xtask agui-drift --fetch
