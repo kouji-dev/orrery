@@ -164,6 +164,67 @@ pub fn kernel_config(values: &Provenanced, profile: &str, base: KernelConfig) ->
     out
 }
 
+/// The provider a config names, if it names one.
+///
+/// ```toml
+/// [provider]
+/// kind = "anthropic"
+/// model = "claude-sonnet-4-5"
+/// credential = "anthropic"
+/// baseUrl = "http://127.0.0.1:9"   # a gateway, or a test's loopback server
+/// ```
+///
+/// `kind = "openai-compat"` (or `"ollama"` / `"vllm"`, which are aliases that
+/// carry a default `baseUrl`) points at any server speaking chat completions.
+///
+/// `kind = "fixture"` takes `passes`, one `.jsonl` per pass. An unknown kind is
+/// `None` rather than an error here: `Harness::build` is where a provider that
+/// cannot be built reports itself, with a message that names the feature.
+#[must_use]
+pub fn provider_choice(values: &Provenanced, profile: &str) -> Option<crate::ProviderChoice> {
+    let keys = Keys::new(values, profile);
+    match keys.str("provider.kind")? {
+        "anthropic" => Some(crate::ProviderChoice::Anthropic {
+            model: keys.str("provider.model").unwrap_or("claude-sonnet-4-5").to_owned(),
+            credential: keys.str("provider.credential").unwrap_or("anthropic").to_owned(),
+            base_url: keys.str("provider.baseUrl").map(str::to_owned),
+        }),
+        // Two spellings, one provider: `ollama` and `vllm` are what people
+        // actually type, and making them aliases costs a line and saves an
+        // issue.
+        "openai-compat" | "ollama" | "vllm" => Some(crate::ProviderChoice::OpenAiCompat {
+            model: keys.str("provider.model").unwrap_or_default().to_owned(),
+            credential: keys
+                .str("provider.credential")
+                .unwrap_or("openai-compat")
+                .to_owned(),
+            // A default only for the two servers that have a well-known port.
+            // `openai-compat` with no `baseUrl` is a configuration mistake and
+            // `Harness::build` says so, rather than dialling a guess.
+            base_url: keys
+                .str("provider.baseUrl")
+                .map(str::to_owned)
+                .unwrap_or_else(|| match keys.str("provider.kind") {
+                    Some("ollama") => "http://localhost:11434/v1".to_owned(),
+                    Some("vllm") => "http://localhost:8000/v1".to_owned(),
+                    _ => String::new(),
+                }),
+        }),
+        "fixture" => {
+            let passes: Vec<std::path::PathBuf> = keys
+                .candidates("provider.passes")
+                .into_iter()
+                .map(|k| values.strings(&k))
+                .find(|v| !v.is_empty())?
+                .into_iter()
+                .map(std::path::PathBuf::from)
+                .collect();
+            Some(crate::ProviderChoice::Fixture { passes })
+        }
+        _ => None,
+    }
+}
+
 /// Every `[prices.<model>]` table in force, profile overlay included.
 ///
 /// Read off the key list rather than deserialised, so that a model id with a
@@ -275,6 +336,47 @@ mod tests {
         let plain = kernel_config(&vals, "other", KernelConfig::default());
         assert_eq!(plain.model, "base");
         assert_eq!(plain.budget.max_turns, 4);
+    }
+
+    /// Round 5, item 2: the enum has a real-model variant, and configuration
+    /// can select it. The feature that links the provider is off here; the
+    /// *choice* is feature-independent on purpose, so the error a build without
+    /// it gives can name the feature instead of the variant not existing.
+    #[test]
+    fn config_can_select_a_real_provider() {
+        let vals = values(
+            "[provider]\nkind = \"anthropic\"\nmodel = \"claude-sonnet-4-5\"\n\
+             credential = \"work-key\"\nbaseUrl = \"http://127.0.0.1:9\"\n",
+        );
+        match provider_choice(&vals, "").expect("a provider is named") {
+            crate::ProviderChoice::Anthropic {
+                model,
+                credential,
+                base_url,
+            } => {
+                assert_eq!(model, "claude-sonnet-4-5");
+                assert_eq!(credential, "work-key");
+                assert_eq!(base_url.as_deref(), Some("http://127.0.0.1:9"));
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+
+        // A file that names no provider leaves the choice to the caller.
+        assert!(provider_choice(&values(""), "").is_none());
+        // And a profile can point one profile at a real model and leave the
+        // rest on fixtures.
+        let split = values(
+            "[provider]\nkind = \"fixture\"\npasses = [\"a.jsonl\"]\n\
+             [profile.live.provider]\nkind = \"anthropic\"\n",
+        );
+        assert!(matches!(
+            provider_choice(&split, "live"),
+            Some(crate::ProviderChoice::Anthropic { .. })
+        ));
+        assert!(matches!(
+            provider_choice(&split, "other"),
+            Some(crate::ProviderChoice::Fixture { .. })
+        ));
     }
 
     #[test]
