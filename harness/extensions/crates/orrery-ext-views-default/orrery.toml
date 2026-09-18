@@ -6,7 +6,7 @@ id = "views-default"
 version = "0.0.0"
 
 [provides]
-views = ["assistant.text", "tool.started", "tool.settled", "consent", "error"]
+views = ["assistant.text", "tool.started", "tool.settled", "consent.request", "error"]
 
 # Pure rendering data. It touches nothing.
 [requires]
