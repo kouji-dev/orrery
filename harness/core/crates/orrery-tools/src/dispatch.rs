@@ -5,6 +5,7 @@
 //! no path around the policy check in step 4.
 
 use async_trait::async_trait;
+use orrery_audit::{AuditEvent, CallOutcome, Digest};
 use orrery_proto::{AgentScope, CallId, Outcome, RuleId, Subject, ToolRef, Verdict};
 
 use crate::budget::ToolBudget;
@@ -130,9 +131,15 @@ pub enum PolicyDecision {
 
 /// The check step 4 runs, which nothing can skip.
 ///
-/// TODO(plan-07): `orrery-policy` implements this. Until then the registry
-/// ships [`AllowAll`], so the dispatch path is already shaped around the check
-/// and plan 07 is a substitution rather than a rewrite.
+/// Plan 07 landed: `orrery_broker::EngineGate` implements this over
+/// `PolicyEngine`, and `orrery_harness::build::assemble` wires it into every
+/// registry the product builds. The substitution this trait was shaped for has
+/// happened.
+///
+/// [`AllowAll`] is still here, and is **not** the product's policy: it is what a
+/// `Registry::new` with no `with_policy` gets, which is a unit test of the
+/// dispatch path and nothing else. A registry the harness assembles always
+/// carries the gate.
 pub trait PolicyCheck: Send + Sync {
     /// May this subject make this call, with this input?
     fn check(&self, r#ref: &ToolRef, input: &serde_json::Value, ctx: &CallCtx) -> PolicyDecision;
@@ -220,6 +227,46 @@ impl Registry {
         input: serde_json::Value,
         ctx: CallCtx,
     ) -> Result<Outcome, ToolError> {
+        // Hashed **before** anything can rewrite it, so the digest is of what
+        // the caller actually sent. The input itself never reaches the stream:
+        // a tool call's arguments are the most likely place a secret ends up,
+        // and an audit stream is the last place one should be readable.
+        let input_digest = Digest::of_bytes(input.to_string().as_bytes());
+        let call = ctx.call;
+        // The ref as called, until an interceptor says otherwise. Auditing the
+        // requested name when a `tool.resolve` interceptor rewrote it would
+        // record a call that did not happen.
+        let mut resolved = r#ref.clone();
+
+        let out = self
+            .dispatch_inner(r#ref, input, ctx, &mut resolved)
+            .await;
+
+        // Every settled call, including a refusal. A stream that recorded only
+        // what succeeded answers "what did this agent do" and not "what did it
+        // try", and the second is the question somebody asks after an incident.
+        // A `ToolError` is deliberately not audited here: the call never
+        // settled, and the harness failing is not the agent doing something.
+        if let Ok(outcome) = &out {
+            self.audit.append(AuditEvent::ToolCall {
+                call,
+                tool: resolved.to_string(),
+                input: input_digest,
+                outcome: call_outcome(outcome),
+            });
+        }
+        out
+    }
+
+    /// The steps themselves. Split out so that every early return is audited by
+    /// [`Registry::dispatch`] rather than by seven copies of the same block.
+    async fn dispatch_inner(
+        &self,
+        r#ref: &ToolRef,
+        input: serde_json::Value,
+        ctx: CallCtx,
+        resolved: &mut ToolRef,
+    ) -> Result<Outcome, ToolError> {
         // 1 · `tool.resolve` interceptors.
         let mut r#ref = r#ref.clone();
         for i in &self.interceptors {
@@ -233,6 +280,8 @@ impl Registry {
                 _ => {}
             }
         }
+
+        resolved.clone_from(&r#ref);
 
         let entry = self
             .entries
@@ -299,18 +348,28 @@ impl Registry {
             }
         }
 
-        // 7 · Audit, and return.
-        // TODO(plan-07): this event belongs in `orrery-audit`'s stream. Until
-        // that crate exists as a dependency, tracing carries it.
-        tracing::info!(
-            target: "orrery.tools.dispatch",
-            tool = %r#ref,
-            call = %ctx.call,
-            subject = %ctx.subject,
-            ok = outcome.is_ok(),
-            "tool call settled"
-        );
+        // 7 · Return. The audit event is `dispatch`'s, so that the six earlier
+        //     exits above are recorded too.
         Ok(outcome)
+    }
+}
+
+/// An [`Outcome`] as the audit stream classifies it.
+///
+/// Four words rather than a boolean, because "it was refused", "it was
+/// cancelled" and "it broke" are three different things to be looking for in a
+/// stream, and `ok = false` collapses them into one.
+fn call_outcome(outcome: &Outcome) -> CallOutcome {
+    match outcome {
+        // A truncated result is a result: the tool ran and produced something,
+        // and the ceiling that cut it short is already its own event.
+        Outcome::Ok { .. } | Outcome::Truncated { .. } => CallOutcome::Ok,
+        Outcome::Denied { .. } => CallOutcome::Denied,
+        Outcome::Cancelled { .. } => CallOutcome::Cancelled,
+        // `Outcome` is `#[non_exhaustive]`. An outcome this crate has not been
+        // taught about is recorded as a failure rather than as a success:
+        // over-reporting a failure is recoverable, and the opposite is not.
+        _ => CallOutcome::Failed,
     }
 }
 

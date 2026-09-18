@@ -194,3 +194,88 @@ async fn manifest_ceiling_narrows_the_budget() {
     let seen: ToolBudget = serde_json::from_value(value).expect("a budget");
     assert_eq!(seen, ToolBudget::new(5_000, 1_024));
 }
+
+/// Plan 07, task 4, completed once `orrery-audit` was a dependency: a settled
+/// tool call is an **audit event**, not a `tracing::info!` line.
+///
+/// The difference is not cosmetic. The audit stream is the thing `orrery
+/// ledger` reads and the thing an operator keeps; a tracing line is a
+/// developer convenience that a release build's subscriber may drop entirely.
+/// "Which tool ran, under which call, and how did it end" has to be answerable
+/// from the stream alone.
+#[tokio::test]
+async fn a_settled_call_reaches_the_audit_stream() {
+    let audit = orrery_audit::memory();
+    let host = Arc::new(CountingHost::default());
+    let (reg, r#ref) = strict_registry(host.clone());
+    let reg = reg.with_audit(Arc::clone(&audit) as orrery_audit::Audit);
+
+    let ctx = ctx();
+    let call = ctx.call;
+    let outcome = reg
+        .dispatch(&r#ref, serde_json::json!({ "path": "Cargo.toml" }), ctx)
+        .await
+        .expect("the call was carried");
+    assert!(outcome.is_ok());
+
+    let recorded = audit
+        .records()
+        .into_iter()
+        .find_map(|rec| match rec.event {
+            orrery_audit::AuditEvent::ToolCall {
+                call,
+                tool,
+                input,
+                outcome,
+            } => Some((call, tool, input, outcome)),
+            _ => None,
+        })
+        .expect("the settled call is in the audit stream");
+
+    assert_eq!(recorded.0, call, "joined to the call, not to a fresh id");
+    assert_eq!(recorded.1, "builtin.read");
+    assert_eq!(recorded.3, orrery_audit::CallOutcome::Ok);
+    // The input is **hashed**, never kept: a tool call's arguments are the most
+    // likely place a secret ends up, and an audit stream is the last place one
+    // should be readable.
+    assert_eq!(
+        recorded.2,
+        orrery_audit::Digest::of_bytes(
+            serde_json::json!({ "path": "Cargo.toml" })
+                .to_string()
+                .as_bytes()
+        )
+    );
+}
+
+/// A refusal is audited too, and as a refusal.
+///
+/// An audit stream that only recorded what succeeded would answer "what did
+/// this agent do" and not "what did it try", and the second question is the one
+/// somebody asks after an incident.
+#[tokio::test]
+async fn a_denied_call_is_audited_as_denied() {
+    let audit = orrery_audit::memory();
+    let host = Arc::new(CountingHost::default());
+    let (reg, r#ref) = strict_registry(host.clone());
+    let reg = reg
+        .with_audit(Arc::clone(&audit) as orrery_audit::Audit)
+        .with_policy(Arc::new(DenyAll));
+
+    let outcome = reg
+        .dispatch(&r#ref, serde_json::json!({ "path": "Cargo.toml" }), ctx())
+        .await
+        .expect("a denial is not an error");
+    assert!(matches!(outcome, Outcome::Denied { .. }), "{outcome:?}");
+
+    let settled = audit
+        .records()
+        .into_iter()
+        .find_map(|rec| match rec.event {
+            orrery_audit::AuditEvent::ToolCall { outcome, .. } => Some(outcome),
+            _ => None,
+        })
+        .expect("the refusal is in the audit stream");
+    assert_eq!(settled, orrery_audit::CallOutcome::Denied);
+    assert_eq!(host.calls.load(Ordering::SeqCst), 0);
+}
