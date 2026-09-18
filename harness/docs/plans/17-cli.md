@@ -144,7 +144,7 @@ Nothing in `core/` changed shape. The consequence, written down in
 
 Files: `src/cmd/{serve,attach}.rs`
 
-- [x] **Failing test first, and it is the "no privileged client" proof.** ~~`serve::two_renderers_one_session` — start `serve`, attach ratatui and the Ink client, submit one turn, assert both render it.~~ **Amended: the two renderers are ratatui and json, not ratatui and Ink.** The proof itself holds and is asserted — one `serve`, two renderer *processes*, neither of them the process holding the kernel, both over the same pipe, same handshake, same control RPC, both rendering the same turn including the tool call. Ink cannot be the second one **today**, for a reason that is not about privilege: AG-UI's HTTP transport has one way in, `POST /run`, and its SSE body carries that run's frames. There is no passive subscribe route, so an Ink client can only render a turn it started itself, and its only way to start one is a keystroke in its composer. `serve::the_ink_client_reaches_the_kernel` asserts the half this command owns — Ink attaches to the same kernel over the endpoint `serve` printed, with nothing but `ORRERY_ENDPOINT` and `ORRERY_SESSION`, and gets as far as Ink's own raw-mode requirement. **What is needed:** a `GET /events` SSE route on the HTTP listener (plan 08's crate, not this one), after which this test takes its literal form.
+- [x] **Failing test first, and it is the "no privileged client" proof.** ~~`serve::two_renderers_one_session` — start `serve`, attach ratatui and the Ink client, submit one turn, assert both render it.~~ **Amended: the two renderers are ratatui and json, not ratatui and Ink.** The proof itself holds and is asserted — one `serve`, two renderer *processes*, neither of them the process holding the kernel, both over the same pipe, same handshake, same control RPC, both rendering the same turn including the tool call. Ink cannot be the second one **today**, for a reason that is not about privilege: AG-UI's HTTP transport has one way in, `POST /run`, and its SSE body carries that run's frames. There was no passive subscribe route, so an Ink client could only render a turn it started itself, and its only way to start one is a keystroke in its composer. `serve::the_ink_client_reaches_the_kernel` asserts the half this command owns — Ink attaches to the same kernel over the endpoint `serve` printed, with nothing but `ORRERY_ENDPOINT` and `ORRERY_SESSION`, and gets as far as Ink's own raw-mode requirement. **The `GET /events` route has since landed in plan 08's crate**, and `serve::attach_over_http_renders_the_turn` is this test in its literal form for a passive HTTP renderer; a headless *Ink* still stops at raw mode, which is Ink's own.
 - [x] `serve::outlives_a_client` — attach, kill the client mid-turn, re-attach with `--since`, assert the turn completed and replays.
 - [x] Implement; print the endpoint in a form `attach` and `ORRERY_ENDPOINT` both accept.
 
@@ -227,10 +227,12 @@ Files: `src/term.rs`
   neither of them the process holding the kernel — and both render the same
   turn, tool call included. Ink is *attached* to the same kernel over the
   endpoint `serve` prints and asserted to get there
-  (`serve::the_ink_client_reaches_the_kernel`), but it cannot render a turn it
-  did not start: AG-UI's HTTP transport carries frames on the body of a
-  `POST /run` and has no passive subscribe route. The missing piece is a
-  `GET /events` SSE route in `orrery-transport` (plan 08), not anything here.
+  (`serve::the_ink_client_reaches_the_kernel`). **The transport half is no
+  longer missing:** `orrery-transport` serves `GET /events`, so an SSE client
+  renders a session it did not start, and `attach` takes the `http://` endpoint
+  as readily as the pipe — `serve::attach_over_http_renders_the_turn` watches a
+  turn somebody else submitted. What keeps a *headless* Ink out of
+  `two_renderers_one_session` is Ink's own raw-mode requirement.
 - ~~Every exit code is reachable and tested.~~ **Amended: five of seven are
   reached by a command; 1 and 5 are decided and unit-tested.** 0, 2, 3, 4 and 6
   each have a run in `tests/exit_codes.rs`, and 1 is also reached by
@@ -269,7 +271,7 @@ Two things worth knowing beyond the tasks:
   the run id in `RUN_STARTED` is the CLI's, because `Kernel::run_turn` mints a
   `TurnId` it never hands out.
 
-Known limits, each with its owner: no passive subscribe over HTTP (plan 08); no
+Known limits, each with its owner: no
 session enumeration on `SessionStore` (plan 02); no `explain` on the policy
 engine (plan 07); no layered config, so no selectable provider other than the
 fixture and no `NeedsLogin` from a flag (plan 10); no persisted rich event

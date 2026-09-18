@@ -179,6 +179,10 @@ Files: `orrery-transport/src/listener/http.rs`
 - [x] `http::control_endpoints` — attach, cancel, consent answer, intent, query.
 - [x] `http::slow_consumer_does_not_stall_the_kernel` — a client that never reads; assert the turn still completes.
 - [x] Implement with `axum`. Bind to loopback by default; a bearer token from the endpoint string. **No auth story beyond loopback + token in phase 1** — record that as a limitation.
+- [x] **Added after the fact, and the Done-when named it:** `GET /events`, the
+  passive subscribe AG-UI has no vocabulary for. `http::events_is_a_passive_subscribe`
+  and `http::events_since_is_contiguous` — a session somebody else is driving,
+  replay then live, one numbering space, guarded by the same bearer token.
 
 ### Task 7 · Rust client SDK
 
@@ -218,21 +222,18 @@ Files: `orrery-transport/src/lib.rs`
 
 - `cargo test -p orrery-transport -p orrery-agui -p orrery-client -p orrery-client-json` green; `pnpm -C harness/clients/sdk-ts test` green.
 - The **same** conformance fixtures pass in Rust and TypeScript.
-- ~~`orrery serve --provider fixture:…` accepts a ratatui client and an Ink
-  client on one session simultaneously; both render the turn.~~
-  **Half true as of plan 17, and the missing half is this crate's.**
-  `orrery serve --provider fixture:…` now exists and fans one session out to two
-  *real* renderer processes at once — `serve::two_renderers_one_session` in
+- `orrery serve --provider fixture:…` accepts a ratatui client and an Ink
+  client on one session simultaneously; both render the turn.
+  **True as of the `GET /events` route.** `serve::two_renderers_one_session` in
   `orrery-cli` puts the ratatui client and the json client on one pipe and
-  asserts both draw the same turn, tool call included. **Ink cannot be one of
-  them, and the reason is here:** the HTTP listener has `POST /run` and
-  `POST /control` and no passive subscribe route, so an SSE client only ever
-  receives the frames of a run it started itself. Ink reaches the kernel over
-  the endpoint `serve` prints (`serve::the_ink_client_reaches_the_kernel`) and
-  can render its own turns; it cannot render somebody else's. **What is needed
-  is a `GET /events` SSE route on this listener**, serving the same
-  `hub.subscribe` + `hub.attach(since)` the pipe handshake already serves.
-  Until then, two *byte-stream* renderers on one session is what is asserted.
+  asserts both draw the same turn, tool call included; the HTTP listener now
+  also has a passive subscribe route, so an SSE client renders a session it did
+  not start. `serve::attach_over_http_renders_the_turn` is the literal form:
+  one `serve`, a watcher on `http://…` that submits nothing, a submitter on the
+  pipe, and the watcher draws the whole turn. Ink reaches the same route over
+  `ORRERY_ENDPOINT` (`serve::the_ink_client_reaches_the_kernel`); what still
+  stops a *headless* Ink from being the second renderer in CI is Ink's own
+  raw-mode requirement, not the transport.
 - A client that stops reading does not stall the kernel.
 
 ## Open questions
@@ -258,7 +259,11 @@ Files: `orrery-transport/src/lib.rs`
 
 ## State
 
-**Landed 2026-09-18.** All ten tasks. 34 Rust tests across four crates plus 18 under vitest, all green, none of them touching the network or a paid API.
+**Landed 2026-09-18.** All ten tasks. 36 Rust tests across four crates plus 18
+under vitest, all green, none of them touching the network or a paid API.
+`GET /events` and `AguiSession::subscribe` landed after the first pass, which is
+what closed the Done-when bullet above and let `orrery attach` take either
+endpoint `serve` prints.
 
 - `orrery-agui` — vendored AG-UI event enum (15 variants, diffed against the real `@ag-ui/core`), `Encoder`, `Frame` with `seq` and `merged_from`. `PatchOp::Append` is ours and documented as such: JSON Patch cannot express string concatenation, and re-sending a markdown body per token would undo the point of `SurfacePatch::Append`.
 - `orrery-transport` — `SeqAuthority`, `ReplayRing`, per-client `Coalescer`, `Hub`, `MonoClock` + `ConsentLedger` (translation #12), and all three listeners: in-process (generic, no serde bound anywhere), pipe/UDS over `interprocess` with length-prefixed framing, and HTTP+SSE on `axum`.
