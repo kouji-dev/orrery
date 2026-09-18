@@ -1,10 +1,16 @@
-Query the telemetry stream
+Query the telemetry stream: model requests and routing decisions
 
 Usage: orrery telemetry [OPTIONS]
 
 Options:
       --profile <NAME>
           Which profile to resolve
+
+      --session <ID>
+          Only this session's stream
+
+  -n, --limit <N>
+          Show at most this many, counted from the end
 
       --workspace <PATH>
           The workspace root. Defaults to the current directory

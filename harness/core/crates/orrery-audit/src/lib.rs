@@ -17,7 +17,9 @@
 //! # Append-only
 //!
 //! [`AuditSink`] has exactly one method. Nothing here removes, rewrites or
-//! truncates a record.
+//! truncates a record. [`read`] is the other half — an operator has to be able
+//! to *ask* the stream something, or "every decision is logged" is a claim
+//! about a file nobody can open — and it only ever scans and filters.
 //!
 //! Implementation plan: `harness/docs/plans/07-policy-broker-audit.md`
 
@@ -27,12 +29,14 @@
 pub mod error;
 pub mod event;
 pub mod layer;
+pub mod read;
 pub mod redact;
 pub mod sink;
 
 pub use error::AuditError;
 pub use event::{AuditEvent, AuditRecord, CallOutcome, Verdict};
 pub use layer::{LineSink, MemoryLines, Stream, StreamLayer};
+pub use read::{Query, Scan, scan, scan_str};
 pub use redact::{ContentRef, Digest};
 pub use sink::{AuditSink, FileSink, MemorySink, NullSink, Rotation};
 

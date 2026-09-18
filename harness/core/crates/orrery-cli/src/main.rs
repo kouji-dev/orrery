@@ -79,8 +79,15 @@ fn main() {
         Some(Command::Init { profile }) => cmd::init::dispatch(&cli, profile.as_deref()),
         Some(Command::Import { from }) => cmd::import::dispatch(&cli, *from),
         Some(Command::Eval { command }) => cmd::eval::dispatch(command),
-        Some(Command::Ledger) => cmd::ledger::ledger(),
-        Some(Command::Telemetry) => cmd::ledger::telemetry(),
+        Some(Command::Ledger {
+            session,
+            subject,
+            rule,
+            limit,
+        }) => cmd::ledger::ledger(&cli, session.as_deref(), subject.as_deref(), rule.as_deref(), *limit),
+        Some(Command::Telemetry { session, limit }) => {
+            cmd::ledger::telemetry(&cli, session.as_deref(), *limit)
+        }
     }
 }
 

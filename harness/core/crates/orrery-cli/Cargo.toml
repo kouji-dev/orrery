@@ -23,6 +23,7 @@ crossterm = { workspace = true }
 futures-util = { workspace = true }
 interprocess = { workspace = true }
 ratatui = { workspace = true }
+orrery-audit = { workspace = true }
 orrery-provider = { workspace = true }
 orrery-proto = { workspace = true }
 orrery-session = { workspace = true }

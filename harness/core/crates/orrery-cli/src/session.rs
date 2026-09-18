@@ -311,6 +311,84 @@ impl Provider for Narrating {
     }
 }
 
+/// Where a session's audit stream lives under the state directory.
+///
+/// One file per session, named by the session id. That is what makes
+/// `orrery ledger --session <id>` a file open rather than a scan-and-filter,
+/// and it is the only reason the CLI knows which decisions belong to which run
+/// — the events themselves carry no session, on purpose: the audit schema is
+/// about *what was decided*, and threading a session id through every variant
+/// would be a second identity for something the file name already says.
+#[must_use]
+pub fn audit_dir(state_dir: &std::path::Path) -> PathBuf {
+    state_dir.join("audit")
+}
+
+/// The audit sink a run writes through.
+///
+/// # Why it buffers
+///
+/// The file is named after the session, and the session does not exist until
+/// the store creates it — which happens *inside* `Harness::build`, after the
+/// sink has already been handed to it. So the sink starts closed, keeps what it
+/// is given, and opens the moment [`Recording::create`] tells it which session
+/// this is. Nothing is lost, and nothing had to be re-ordered in the facade to
+/// make an operator surface possible.
+#[derive(Debug)]
+struct SessionAudit {
+    dir: PathBuf,
+    state: std::sync::Mutex<AuditState>,
+}
+
+#[derive(Debug)]
+enum AuditState {
+    /// Before the session id is known: hold on to the events.
+    Waiting(Vec<orrery_audit::AuditEvent>),
+    /// After it is: a real file.
+    Open(orrery_audit::FileSink),
+    /// The file would not open. A session must not die because a disk is full,
+    /// so this drops records and says so once, on stderr.
+    Closed,
+}
+
+impl SessionAudit {
+    fn new(dir: PathBuf) -> Self {
+        Self {
+            dir,
+            state: std::sync::Mutex::new(AuditState::Waiting(Vec::new())),
+        }
+    }
+
+    /// The session exists now. Open its file and flush what was held.
+    fn bind(&self, session: SessionId) {
+        let mut state = self.state.lock().expect("audit");
+        let AuditState::Waiting(held) = std::mem::replace(&mut *state, AuditState::Closed) else {
+            return;
+        };
+        match orrery_audit::FileSink::open(self.dir.join(format!("{session}.jsonl"))) {
+            Ok(sink) => {
+                use orrery_audit::AuditSink as _;
+                for event in held {
+                    sink.append(event);
+                }
+                *state = AuditState::Open(sink);
+            }
+            Err(e) => eprintln!("orrery: not recording the audit stream: {e}"),
+        }
+    }
+}
+
+impl orrery_audit::AuditSink for SessionAudit {
+    fn append(&self, event: orrery_audit::AuditEvent) {
+        let mut state = self.state.lock().expect("audit");
+        match &mut *state {
+            AuditState::Waiting(held) => held.push(event),
+            AuditState::Open(sink) => orrery_audit::AuditSink::append(sink, event),
+            AuditState::Closed => {}
+        }
+    }
+}
+
 /// A session store that reports every tool call it is asked to record.
 ///
 /// Every other method delegates. `append` is the one that matters: a
@@ -319,12 +397,17 @@ impl Provider for Narrating {
 struct Recording {
     inner: Arc<dyn SessionStore>,
     publisher: Arc<Publisher>,
+    audit: Arc<SessionAudit>,
 }
 
 #[async_trait]
 impl SessionStore for Recording {
     async fn create(&self, workspace: &str, profile: &str) -> Result<SessionId, SessionError> {
-        self.inner.create(workspace, profile).await
+        let session = self.inner.create(workspace, profile).await?;
+        // The one place the session id is known early enough to name a file
+        // after it. See [`SessionAudit`].
+        self.audit.bind(session);
+        Ok(session)
     }
 
     async fn open(&self, session: SessionId) -> Result<SessionHandle, SessionError> {
@@ -450,10 +533,12 @@ impl Session {
             capabilities,
         });
 
+        let audit = Arc::new(SessionAudit::new(audit_dir(&setup.state_dir)));
         let store = orrery_harness::features::open_store(&setup.state_dir)?;
         let store: Arc<dyn SessionStore> = Arc::new(Recording {
             inner: store,
             publisher: publisher.clone(),
+            audit: audit.clone(),
         });
 
         let mut config = ResolvedConfig::fixture(&setup.workspace, setup.fixtures.clone());
@@ -461,6 +546,9 @@ impl Session {
         config.profile = setup.profile.clone();
         config.provider = ProviderChoice::Custom(provider);
         config.store = StoreChoice::Custom(store);
+        // Every decision this run makes is written down, per session, under the
+        // state directory. `orrery ledger` is what reads it back.
+        config.audit = audit;
         config.kernel = setup.kernel.clone();
 
         Ok(Self {

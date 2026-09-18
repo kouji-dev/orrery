@@ -337,6 +337,19 @@ clippy is clean across all targets.
   `ContentRef`), `AuditSink` with one method, `MemorySink`/`FileSink`/`NullSink`,
   size-based rotation, and the three `tracing` layers routed by target prefix
   (`orrery.load`, `orrery.audit`, `orrery.telemetry`).
+  **Added 2026-09-19: `read`, the other half.** "Every decision is logged" was
+  true of the *writer* and vacuous in the product: nothing could open the stream
+  and ask it anything, and the CLI was passing `orrery_audit::null()`, so a real
+  run logged into a bin. `orrery_audit::scan` now reads the JSONL back under a
+  `Query` — stream, subject, rule (by id **or** by the text it was written as),
+  and a limit counted from the end, because an audit is read from the end. A
+  line that will not parse is *counted* (`Scan::skipped`) rather than crashing
+  the scan or vanishing: a process killed mid-write leaves half a line, and an
+  operator surface has to be able to say "487 records, 1 unreadable line". It is
+  a scan and a filter, never an index: a second representation of the evidence
+  is a second thing that can disagree with it. `orrery ledger` and
+  `orrery telemetry` (plan 17 task 8) are the surface over it, one file per
+  session under `<state-dir>/audit/`.
 - **`orrery-policy`** — the grammar over all fourteen aspects with `*`, `**`,
   `prefix:`, `param:key=glob` and the `re:` escape hatch; `globset` + `dunce`
   path normalisation that resolves symlinks, `..`, UNC and drive-relative forms

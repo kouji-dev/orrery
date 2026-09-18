@@ -186,10 +186,33 @@ pub enum Command {
         #[command(subcommand)]
         command: EvalCommand,
     },
-    /// Query the decision ledger.
-    Ledger,
-    /// Query the telemetry stream.
-    Telemetry,
+    /// Query the decision ledger: what was asked, what was decided, and which
+    /// rule decided it.
+    Ledger {
+        /// Only this session's stream. Without it, every session in the state
+        /// directory, oldest first.
+        #[arg(long, value_name = "ID")]
+        session: Option<String>,
+        /// Only decisions by this subject: `agent`, `ext:<id>`, `agent:<name>`.
+        #[arg(long, value_name = "SUBJECT")]
+        subject: Option<String>,
+        /// Only decisions naming this rule, by id or by the text it was
+        /// written as.
+        #[arg(long, value_name = "RULE")]
+        rule: Option<String>,
+        /// Show at most this many, counted from the end.
+        #[arg(long, short = 'n', value_name = "N")]
+        limit: Option<usize>,
+    },
+    /// Query the telemetry stream: model requests and routing decisions.
+    Telemetry {
+        /// Only this session's stream.
+        #[arg(long, value_name = "ID")]
+        session: Option<String>,
+        /// Show at most this many, counted from the end.
+        #[arg(long, short = 'n', value_name = "N")]
+        limit: Option<usize>,
+    },
 }
 
 /// `orrery session ...`
