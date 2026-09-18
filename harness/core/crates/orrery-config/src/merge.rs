@@ -48,6 +48,25 @@ impl std::fmt::Display for Relaxation {
     }
 }
 
+/// A local layer claiming trust for itself. Never merged, always reported.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IgnoredClaim {
+    /// The dotted key that was written.
+    pub key: String,
+    /// Where it was written.
+    pub origin: Origin,
+}
+
+impl std::fmt::Display for IgnoredClaim {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: `{}` is ignored — a project does not get a vote on whether it is trusted",
+            self.origin, self.key
+        )
+    }
+}
+
 /// What the merge produced.
 #[derive(Clone, Debug, Default)]
 pub struct MergeReport {
@@ -55,6 +74,8 @@ pub struct MergeReport {
     pub values: Provenanced,
     /// Attempts to relax a managed deny. Logged, never honoured.
     pub relaxations: Vec<Relaxation>,
+    /// Trust claims a workspace or project layer made. Dropped, then reported.
+    pub ignored_trust_claims: Vec<IgnoredClaim>,
 }
 
 /// Merge layer files into one provenanced set of values.
@@ -68,7 +89,9 @@ pub struct MergeReport {
 /// When a file does not parse as TOML. The error names the file and the line.
 pub fn merge(files: &[LayerFile]) -> Result<MergeReport, ConfigError> {
     let mut values = Provenanced::new();
+    let mut ignored_trust_claims = Vec::new();
     for file in files {
+        let local = matches!(file.layer, Layer::Workspace | Layer::Project);
         let doc = file.document()?;
         let mut path = Vec::new();
         walk(
@@ -76,6 +99,16 @@ pub fn merge(files: &[LayerFile]) -> Result<MergeReport, ConfigError> {
             &mut path,
             &mut |leaf_path: &[String], value: toml::Value, offset: usize| {
                 let line = line_at(&file.text, offset);
+                let key = crate::provenance::join(leaf_path);
+                // A local layer never gets a vote on its own trust: the claim
+                // is dropped here, before anything can read it, and reported.
+                if local && crate::trust::is_trust_claim(&key) {
+                    ignored_trust_claims.push(IgnoredClaim {
+                        key,
+                        origin: Origin::new(file.layer, &file.path, line),
+                    });
+                    return;
+                }
                 let fold = fold_of(leaf_path);
                 values.record(
                     leaf_path.to_vec(),
@@ -92,6 +125,7 @@ pub fn merge(files: &[LayerFile]) -> Result<MergeReport, ConfigError> {
     Ok(MergeReport {
         values,
         relaxations,
+        ignored_trust_claims,
     })
 }
 
