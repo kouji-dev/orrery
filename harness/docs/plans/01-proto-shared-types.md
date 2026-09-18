@@ -41,6 +41,7 @@ orrery-proto/src/
 ├─ frame.rs        # Request, Event, UserInput, ConsentPrompt, Outcome, ErrorDetail
 ├─ expr.rs         # Expr, Predicate, Literal
 ├─ load.rs         # LoadOutcome, Contribution, ExtId
+├─ tool.rs         # ToolDescriptor — the one copy (task 11)
 └─ verdict.rs      # Verdict<P> (the phase-payload enum; the Phase trait is plan 05)
 ```
 
@@ -289,7 +290,7 @@ Deliberately not a language: a step input is a literal or a reference to an earl
 **Create**
 
 - `harness/core/crates/orrery-proto/Cargo.toml` — `publish = true`, `#![deny(missing_docs)]`
-- `harness/core/crates/orrery-proto/src/{lib,ids,grant,budget,scope,message,surface,frame,expr,load,verdict}.rs`
+- `harness/core/crates/orrery-proto/src/{lib,ids,grant,budget,scope,message,surface,frame,expr,load,tool,verdict}.rs`
 - `harness/core/crates/orrery-proto/tests/round_trip.rs`
 - `harness/core/crates/orrery-proto/tests/fixtures/*.json` — one per frame variant, one per surface variant
 - `harness/xtask/src/typegen.rs`
@@ -308,81 +309,102 @@ Deliberately not a language: a step input is a literal or a reference to an earl
 
 Files: `src/ids.rs`, `tests/round_trip.rs`
 
-- [ ] **Failing test first.** `ids::round_trips_as_plain_string` — a `TurnId` serialises to a bare JSON string, parses back equal, and `FromStr` rejects `"not-a-uuid"`. `ids::seq_is_ordered` — `Seq(1) < Seq(2)`.
-- [ ] Write the `opaque_id!` macro: newtype, `new()` (v7), `Display`, `FromStr`, `Serialize`/`Deserialize` as string, `JsonSchema` as `{"type":"string","format":"uuid"}`, `Copy` where the payload is `Uuid`.
-- [ ] Add `ExtId` with validation: lowercase alphanumeric and `-`; `.` only as the `mcp.` prefix. Test both accepted and rejected forms.
-- [ ] `SessionRef`.
+- [x] **Failing test first.** `ids::round_trips_as_plain_string` — a `TurnId` serialises to a bare JSON string, parses back equal, and `FromStr` rejects `"not-a-uuid"`. `ids::seq_is_ordered` — `Seq(1) < Seq(2)`.
+- [x] Write the `opaque_id!` macro: newtype, `new()` (v7), `Display`, `FromStr`, `Serialize`/`Deserialize` as string, `JsonSchema` as `{"type":"string","format":"uuid"}`, `Copy` where the payload is `Uuid`.
+- [x] Add `ExtId` with validation: lowercase alphanumeric and `-`; `.` only as the `mcp.` prefix. Test both accepted and rejected forms.
+- [x] `SessionRef`.
 
 ### Task 2 · Grant, capability, budget
 
 Files: `src/grant.rs`, `src/budget.rs`, `tests/grant_props.rs`
 
-- [ ] **Failing test first.** `grant::intersect_never_widens` (proptest): for arbitrary `a`, `b`, every capability in `a.intersect(&b)` is present in both, and `consent` is the minimum. `grant::intersect_is_commutative` and `..._idempotent`.
-- [ ] Implement `Aspect` with its serde renames (`mem.read`, `mem.write` are not kebab-case of the variant name — pin them in a test).
-- [ ] Implement `Grant::intersect`, `GrantSpec::apply_to`.
-- [ ] Document loudly that scope intersection here is set-based and the glob-aware version lives in `orrery-policy`.
-- [ ] `Budget`, `BudgetKind`, `Usage` + `AddAssign`, `TokenBudget`. Test that `Usage` accumulation is saturating, not wrapping.
+- [x] **Failing test first.** `grant::intersect_never_widens` (proptest): for arbitrary `a`, `b`, every capability in `a.intersect(&b)` is present in both, and `consent` is the minimum. `grant::intersect_is_commutative` and `..._idempotent`.
+- [x] Implement `Aspect` with its serde renames (`mem.read`, `mem.write` are not kebab-case of the variant name — pin them in a test).
+- [x] Implement `Grant::intersect`, `GrantSpec::apply_to`.
+- [x] Document loudly that scope intersection here is set-based and the glob-aware version lives in `orrery-policy`.
+- [x] `Budget`, `BudgetKind`, `Usage` + `AddAssign`, `TokenBudget`. Test that `Usage` accumulation is saturating, not wrapping.
 
 ### Task 3 · Scope, role, layer, subject
 
 Files: `src/scope.rs`
 
-- [ ] **Failing test first.** `scope::subject_string_forms` — `Subject::Ext(ExtId("buildgraph"))` ⇄ `"ext:buildgraph"`, `Subject::Agent` ⇄ `"agent"`, `Subject::SubAgent("critic")` ⇄ `"agent:critic"`. `scope::layer_ordering` — `Layer::Project > Layer::Managed`.
-- [ ] Implement, with the one-directional ordering note in the doc comment.
+- [x] **Failing test first.** `scope::subject_string_forms` — `Subject::Ext(ExtId("buildgraph"))` ⇄ `"ext:buildgraph"`, `Subject::Agent` ⇄ `"agent"`, `Subject::SubAgent("critic")` ⇄ `"agent:critic"`. `scope::layer_ordering` — `Layer::Project > Layer::Managed`.
+- [x] Implement, with the one-directional ordering note in the doc comment.
 
 ### Task 4 · Messages and outcome
 
 Files: `src/message.rs`, `src/frame.rs` (Outcome only)
 
-- [ ] **Failing test first.** `message::tool_result_carries_denial` — a `ContentBlock::ToolResult` holding `Outcome::Denied` round-trips and the rule id survives.
-- [ ] Implement `Message`, `MessageRole`, `ContentBlock`, `Outcome`, `CancelReason`.
+- [x] **Failing test first.** `message::tool_result_carries_denial` — a `ContentBlock::ToolResult` holding `Outcome::Denied` round-trips and the rule id survives.
+- [x] Implement `Message`, `MessageRole`, `ContentBlock`, `Outcome`, `CancelReason`.
 
 ### Task 5 · Surfaces
 
 Files: `src/surface.rs`, `tests/fixtures/surface-*.json`
 
-- [ ] **Failing test first.** `surface::every_variant_round_trips` — a table-driven test over one fixture per variant; failing until each is implemented. `surface::custom_requires_fallback` — a `custom` payload with no `fallback` fails to deserialize.
-- [ ] Implement `Surface`, `SurfaceKind` (all twelve), `SurfacePatch`, and the leaf types (`Status`, `TextStyle`, `Cell`, `TreeNode`, `Hunk`, `TaskItem`, `Choice`, `Field`, `StackDir`).
-- [ ] `SurfaceKind::validate(&self) -> Result<(), SurfaceError>` — `custom.kind` is namespaced; `question` with `deadline_ms` and no `default` is an error only when unattended, so it is **not** checked here (plan 09 owns that rule; note it).
+- [x] **Failing test first.** `surface::every_variant_round_trips` — a table-driven test over one fixture per variant; failing until each is implemented. `surface::custom_requires_fallback` — a `custom` payload with no `fallback` fails to deserialize.
+- [x] Implement `Surface`, `SurfaceKind` (all twelve), `SurfacePatch`, and the leaf types (`Status`, `TextStyle`, `Cell`, `TreeNode`, `Hunk`, `TaskItem`, `Choice`, `Field`, `StackDir`).
+- [x] `SurfaceKind::validate(&self) -> Result<(), SurfaceError>` — `custom.kind` is namespaced; `question` with `deadline_ms` and no `default` is an error only when unattended, so it is **not** checked here (plan 09 owns that rule; note it).
 
 ### Task 6 · Frames
 
 Files: `src/frame.rs`, `tests/fixtures/frame-*.json`
 
-- [ ] **Failing test first.** `frame::tag_names_are_dotted` — `Request::TurnSubmit` serialises with `"t":"turn.submit"`, not `"turn-submit"`. One assertion per variant; this is the test that catches a missing explicit `rename`.
-- [ ] `frame::every_request_has_an_id` — reflect over the fixtures, assert an `id` field.
-- [ ] Implement `Request`, `Event`, `UserInput`, `ConsentPrompt`, `ConsentAnswerKind`, `QueryOf`, `ErrorScope`, `ErrorDetail`, `ToolRef`.
-- [ ] `ToolRef::from_str` splits on the **last** dot; test `ripgrep.search` and `mcp.jira.create_issue`.
+- [x] **Failing test first.** `frame::tag_names_are_dotted` — `Request::TurnSubmit` serialises with `"t":"turn.submit"`, not `"turn-submit"`. One assertion per variant; this is the test that catches a missing explicit `rename`.
+- [x] `frame::every_request_has_an_id` — reflect over the fixtures, assert an `id` field.
+- [x] Implement `Request`, `Event`, `UserInput`, `ConsentPrompt`, `ConsentAnswerKind`, `QueryOf`, `ErrorScope`, `ErrorDetail`, `ToolRef`.
+- [x] `ToolRef::from_str` splits on the **last** dot; test `ripgrep.search` and `mcp.jira.create_issue`.
 
 ### Task 7 · CBOR
 
 Files: `tests/round_trip.rs`
 
-- [ ] **Failing test first.** `cbor::frames_round_trip` — every fixture, JSON → value → CBOR bytes → value → JSON, equal. This is the test that fails loudly if anyone adds a newtype variant to a tagged enum.
-- [ ] Add `ciborium` as a dev-dependency only. The crate itself stays format-agnostic.
+- [x] **Failing test first.** `cbor::frames_round_trip` — every fixture, JSON → value → CBOR bytes → value → JSON, equal. This is the test that fails loudly if anyone adds a newtype variant to a tagged enum.
+- [x] Add `ciborium` as a dev-dependency only. The crate itself stays format-agnostic.
 
 ### Task 8 · Verdict and Expr
 
 Files: `src/verdict.rs`, `src/expr.rs`
 
-- [ ] **Failing test first.** `expr::ref_and_literal_are_distinguishable` — `{"ref":"step1"}` parses as `Expr::Ref`, `{"a":1}` as `Expr::Literal`.
-- [ ] Implement both. `Verdict<P>` needs no serde (it never crosses the wire) — derive only `Debug`.
+- [x] **Failing test first.** `expr::ref_and_literal_are_distinguishable` — `{"ref":"step1"}` parses as `Expr::Ref`, `{"a":1}` as `Expr::Literal`.
+- [x] Implement both. `Verdict<P>` needs no serde (it never crosses the wire) — derive only `Debug`.
 
 ### Task 9 · typegen
 
 Files: `harness/xtask/src/typegen.rs`, `harness/protocol/*`
 
-- [ ] **Failing test first.** `xtask::typegen_is_committed` — run the generator into a temp dir, compare byte-for-byte with the committed files, fail on difference. This is the CI drift gate; it fails until task 9 lands.
-- [ ] Implement: `schemars::schema_for!` over a root type that references `Request`, `Event`, `Surface`, `SurfacePatch`, `Grant`, `Budget`, `Usage`, `Message`, `LoadOutcome`; write `protocol.schema.json`.
-- [ ] Shell out to `json-schema-to-typescript` via pnpm; write `protocol.d.ts`. Deterministic ordering — sort definitions, or the drift gate flaps.
-- [ ] `harness/protocol/package.json`: name `@orrery/protocol`, private, `types: protocol.d.ts`.
+- [x] **Failing test first.** `xtask::typegen_is_committed` — run the generator into a temp dir, compare byte-for-byte with the committed files, fail on difference. This is the CI drift gate; it fails until task 9 lands.
+- [x] Implement: `schemars::schema_for!` over a root type that references `Request`, `Event`, `Surface`, `SurfacePatch`, `Grant`, `Budget`, `Usage`, `Message`, `LoadOutcome`; write `protocol.schema.json`.
+- [x] Shell out to `json-schema-to-typescript` via pnpm; write `protocol.d.ts`. Deterministic ordering — sort definitions, or the drift gate flaps.
+- [x] `harness/protocol/package.json`: name `@orrery/protocol`, private, `types: protocol.d.ts`.
 
 ### Task 10 · `LoadOutcome`
 
 Files: `src/load.rs`
 
-- [ ] **Failing test first.** `load::outcome_variants` — `{"status":"degraded", …}` parses, and `skipped` requires a `reason` from the closed set.
-- [ ] Implement `LoadOutcome`, `Contribution`, `LoadStage`, `SkipReason`. `Contribution.kind` is a plain enum here; the derive macro that keeps it in step with the manifest is plan 06 (translation #10).
+- [x] **Failing test first.** `load::outcome_variants` — `{"status":"degraded", …}` parses, and `skipped` requires a `reason` from the closed set.
+- [x] Implement `LoadOutcome`, `Contribution`, `LoadStage`, `SkipReason`. `Contribution.kind` is a plain enum here; the derive macro that keeps it in step with the manifest is plan 06 (translation #10).
+
+---
+
+### Task 11 · `ToolDescriptor`
+
+Files: `src/tool.rs`, `tests/tool.rs`, `harness/xtask/src/typegen.rs`
+
+Added after the wave-1 audit: plan 03 and plan 04 each declared their own
+`ToolDescriptor`, with no conversion between them. It is a wire type — the
+registry builds it, the provider serialises it, the model is shown it — so it
+belongs here and nowhere else.
+
+- [x] **Failing test first.** `tool::round_trips_as_json`, `tool::round_trips_over_cbor`,
+  `tool::has_a_schema` — all four fields, `atomic` included, survive JSON and CBOR and
+  appear in the schemars output. Plus `descriptor::is_protos_type` in *both*
+  `orrery-provider` and `orrery-tools`: an assignment that only compiles if the
+  re-exported name is this type.
+- [x] Implement `ToolDescriptor { name, description, input_schema, atomic }` with the
+  schemars derive; delete `orrery-provider/src/request.rs`'s copy and
+  `orrery-tools/src/descriptor.rs`, and re-export from both.
+- [x] Add it to the typegen root so it lands in `protocol.schema.json` / `protocol.d.ts`.
 
 ---
 
@@ -392,6 +414,18 @@ Files: `src/load.rs`
 - `cargo xtask typegen` produces no diff.
 - No dependency on tokio, reqwest, or any I/O crate: `cargo tree -p orrery-proto` fits on a screen.
 - `cargo publish --dry-run -p orrery-proto` packages cleanly.
+
+## State
+
+Tasks 1-10 landed with phase 1 and are green as of 2026-09-18; task 11
+(`ToolDescriptor` consolidation) landed 2026-09-18 in the wave-1 audit cleanup.
+`cargo test -p orrery-proto` passes, `cargo test -p xtask` holds the typegen
+drift gate, and `harness/protocol/protocol.{schema.json,d.ts}` are committed in
+step with the derives. Three decisions are recorded under "Open questions":
+`Grant::intersect` became `Grant::intersect_exact` with the narrowing operation
+moved to `orrery-policy` (plan 07), `ContentBlock::Thinking` stays, and
+`ContentBlock::Image` ships base64 with the blob-store variant deferred to
+phase 4.
 
 ## Open questions
 
