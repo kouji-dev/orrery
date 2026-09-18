@@ -170,10 +170,7 @@ impl Encoder {
                 } else {
                     // The one op RFC 6902 cannot express. See `PatchOp::Append`.
                     vec![state_delta(PatchOp::Append {
-                        path: map::field_pointer(
-                            *id,
-                            &["kind".to_owned(), "value".to_owned()],
-                        ),
+                        path: map::field_pointer(*id, &["kind".to_owned(), "value".to_owned()]),
                         value: text.clone(),
                     })]
                 }

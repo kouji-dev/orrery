@@ -10,8 +10,7 @@
 pub const AGUI_PROTOCOL_VERSION: &str = "0.0.36";
 
 /// Where the drift job fetches upstream's event list from.
-pub const AGUI_SCHEMA_URL: &str =
-    "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/main/typescript-sdk/packages/core/src/events.ts";
+pub const AGUI_SCHEMA_URL: &str = "https://raw.githubusercontent.com/ag-ui-protocol/ag-ui/main/typescript-sdk/packages/core/src/events.ts";
 
 /// Every `type` tag this encoder can emit.
 ///
@@ -41,9 +40,15 @@ pub const EMITTED: &[&str] = &[
 /// Listed so the drift job does not report them as a gap every run. Each is a
 /// phase-2-or-later mapping, not an oversight.
 pub const KNOWN_UNEMITTED: &[(&str, &str)] = &[
-    ("MESSAGES_SNAPSHOT", "replay is ours: `session.attach(since)`"),
+    (
+        "MESSAGES_SNAPSHOT",
+        "replay is ours: `session.attach(since)`",
+    ),
     ("RAW", "we never forward a provider's own frames verbatim"),
-    ("THINKING_START", "§4.6 reasoning surfaces land with plan 09"),
+    (
+        "THINKING_START",
+        "§4.6 reasoning surfaces land with plan 09",
+    ),
     ("THINKING_END", "§4.6 reasoning surfaces land with plan 09"),
     (
         "THINKING_TEXT_MESSAGE_START",

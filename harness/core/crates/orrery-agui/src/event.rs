@@ -224,6 +224,14 @@ impl AguiEvent {
 pub struct Frame {
     /// Where this sits in the session's order.
     pub seq: u64,
+    /// The **first** `seq` this frame stands for, when a coalescer merged
+    /// several into it.
+    ///
+    /// Without it a coalesced client could not tell a merge from a dropped
+    /// frame: both look like a jump in `seq`. Absent means this frame is
+    /// exactly one event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merged_from: Option<u64>,
     /// The event.
     #[serde(flatten)]
     pub event: AguiEvent,
@@ -233,6 +241,19 @@ impl Frame {
     /// Stamp an event with a sequence number.
     #[must_use]
     pub fn new(seq: u64, event: AguiEvent) -> Self {
-        Self { seq, event }
+        Self {
+            seq,
+            merged_from: None,
+            event,
+        }
+    }
+
+    /// The first sequence number this frame accounts for.
+    ///
+    /// What a client checks contiguity against: the one after the last frame it
+    /// saw must equal this, merged or not.
+    #[must_use]
+    pub fn first_seq(&self) -> u64 {
+        self.merged_from.unwrap_or(self.seq)
     }
 }

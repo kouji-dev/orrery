@@ -1,6 +1,6 @@
 [package]
 name = "orrery-transport"
-version = "0.0.0"
+version = "0.1.0"
 description = "Framing, seq authority, the replay ring, the per-client coalescer and every listener."
 edition.workspace = true
 rust-version.workspace = true
@@ -9,3 +9,21 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-agui = { version = "0.1.0", path = "../orrery-agui" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ciborium = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+futures-util = { workspace = true }
+indexmap = { workspace = true }
+interprocess = { workspace = true }
+axum = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }
+reqwest = { workspace = true, features = ["json", "stream"] }
+rustls = { workspace = true }
+futures-util = { workspace = true }

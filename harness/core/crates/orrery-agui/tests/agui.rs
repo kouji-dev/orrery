@@ -3,16 +3,20 @@
 
 use orrery_agui::{AguiEvent, Encoder, PatchOp};
 use orrery_proto::{
-    Capability, CancelReason, ConsentPrompt, ErrorDetail, ErrorScope, Event, Outcome, PromptId,
+    CancelReason, Capability, ConsentPrompt, ErrorDetail, ErrorScope, Event, Outcome, PromptId,
     Subject, Surface, SurfaceId, SurfaceKind, SurfacePatch, ToolRef, TurnId, Usage,
 };
 
 fn sid(n: u8) -> SurfaceId {
-    SurfaceId::from_uuid(uuid::Uuid::from_u128(0x0192_f3a0_0000_7000_8000_0000_0000_0000 + n as u128))
+    SurfaceId::from_uuid(uuid::Uuid::from_u128(
+        0x0192_f3a0_0000_7000_8000_0000_0000_0000 + n as u128,
+    ))
 }
 
 fn tid() -> TurnId {
-    TurnId::from_uuid(uuid::Uuid::from_u128(0x0192_f3a0_0000_7000_8000_0000_0000_00ff))
+    TurnId::from_uuid(uuid::Uuid::from_u128(
+        0x0192_f3a0_0000_7000_8000_0000_0000_00ff,
+    ))
 }
 
 fn enc() -> Encoder {
