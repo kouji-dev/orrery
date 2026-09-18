@@ -8,8 +8,11 @@ version = "0.0.0"
 [provides]
 graders = ["command", "assertion", "model"]
 
-# The `command` grader runs a process; the `model` grader calls a provider the
-# eval runner binds, so it needs no net grant of its own.
+# The `command` grader runs a suite's own script, and the `assertion` grader
+# shells out to git for its diff checks — both through the broker, never around
+# it. Reads are brokered too, so a `file-contains` check is subject to the same
+# grant as anything else. The `model` grader calls a provider the eval runner
+# binds, so it needs no net grant of its own.
 [requires]
 spawn = ["*"]
 read = ["$WORKSPACE/**"]

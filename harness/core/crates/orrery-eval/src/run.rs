@@ -17,9 +17,9 @@ use futures_util::StreamExt as _;
 use orrery_grader::{CaseRef, EvalOutcome, GradeInput, Grader};
 use orrery_proto::{Budget, BudgetKind, ContentBlock, Role, SessionRef, Usage, UserInput};
 use orrery_provider::{ModelEvent, ModelRequest, Provider};
+use orrery_session::SessionStore;
 use orrery_session::algebra::CharsOverFour;
 use orrery_session::turn::{NewTurn, TurnKind};
-use orrery_session::SessionStore;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
@@ -397,7 +397,11 @@ impl CaseRunner for HarnessRunner {
             // cost.
             let view = self
                 .store
-                .materialise(handle.root, ctx.case.budget.into_token_budget(), &CharsOverFour)
+                .materialise(
+                    handle.root,
+                    ctx.case.budget.into_token_budget(),
+                    &CharsOverFour,
+                )
                 .await?;
 
             let model = if ctx.point.model == crate::matrix::DEFAULT_MODEL {
@@ -567,7 +571,7 @@ impl EvalRunner {
             .await
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
-        results.sort_by(|a, b| a.key().cmp(&b.key()));
+        results.sort_by_key(EvalResult::key);
 
         Ok(RunReport {
             run_id: format!("run-{}", uuid::Uuid::new_v4().simple()),
@@ -605,11 +609,15 @@ impl EvalRunner {
         } else {
             let grader = &self.graders[&case.grade.grader];
             let graded = grader
-                .grade(GradeInput {
-                    workspace: workspace.path().to_path_buf(),
-                    transcript: output.transcript.clone(),
-                    case: CaseRef::new(&suite.name, &case.id),
-                })
+                .grade(
+                    GradeInput::new(
+                        workspace.path(),
+                        output.transcript.clone(),
+                        CaseRef::new(&suite.name, &case.id),
+                    )
+                    // The case's own grader block, passed through unread.
+                    .with_config(case.grade.config.clone()),
+                )
                 .await;
             match graded {
                 Ok(s) => (s.outcome, s.score, Some(s.detail), s.judge_cost),
@@ -619,10 +627,12 @@ impl EvalRunner {
                 Err(e) => (
                     EvalOutcome::Error,
                     None,
-                    Some(orrery_proto::Surface::new(orrery_proto::SurfaceKind::Text {
-                        value: e.to_string(),
-                        style: Some(orrery_proto::TextStyle::Error),
-                    })),
+                    Some(orrery_proto::Surface::new(
+                        orrery_proto::SurfaceKind::Text {
+                            value: e.to_string(),
+                            style: Some(orrery_proto::TextStyle::Error),
+                        },
+                    )),
                     None,
                 ),
             }

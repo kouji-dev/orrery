@@ -196,25 +196,34 @@ async fn budget_exceeded_is_an_outcome() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let store: Arc<dyn SessionStore> = Arc::new(MemoryStore::default());
     let suite = Suite::new("cost").with_case(
-        EvalCase::new("one-file", "write out.txt", GraderSpec::new("always-passes")).with_budget(
-            Budget {
-                max_turns: 0,
-                max_tokens: 100,
-                wall_clock_ms: 0,
-                max_micro_usd: None,
-            },
-        ),
+        EvalCase::new(
+            "one-file",
+            "write out.txt",
+            GraderSpec::new("always-passes"),
+        )
+        .with_budget(Budget {
+            max_turns: 0,
+            max_tokens: 100,
+            wall_clock_ms: 0,
+            max_micro_usd: None,
+        }),
     );
 
     let report = orrery_eval::EvalRunner::new(Isolator::new(tmp.path()))
         .with_runner("review", Arc::new(three_roles(Arc::clone(&store))))
         .with_grader(Arc::new(AlwaysPasses))
-        .run(&EvalRun::new("cost", Matrix::new(["review"], ["m"])), &suite)
+        .run(
+            &EvalRun::new("cost", Matrix::new(["review"], ["m"])),
+            &suite,
+        )
         .await
         .expect("running out of budget is not a runner failure");
 
     assert_eq!(report.results[0].outcome, EvalOutcome::BudgetExceeded);
-    assert_eq!(report.results[0].turns, 1, "it stopped after the first pass");
+    assert_eq!(
+        report.results[0].turns, 1,
+        "it stopped after the first pass"
+    );
 }
 
 #[tokio::test]

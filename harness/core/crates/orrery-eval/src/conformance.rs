@@ -27,7 +27,7 @@ use std::sync::Arc;
 use futures_util::FutureExt as _;
 use orrery_grader::EvalOutcome;
 use orrery_memory::MemoryProvider;
-use orrery_policy::{Decision, PermissionHandler, PendingCall, no_rule};
+use orrery_policy::{Decision, PendingCall, PermissionHandler, no_rule};
 use orrery_proto::{
     Aspect, BranchId, ConsentPrompt, PromptId, SessionId, SessionRef, Subject, Surface,
     SurfaceKind, TextStyle,
@@ -123,7 +123,7 @@ pub async fn run_conformance(singletons: &Singletons) -> RunReport {
         results.push(case("permission-handler", outcome).await);
     }
 
-    results.sort_by(|a, b| a.key().cmp(&b.key()));
+    results.sort_by_key(EvalResult::key);
     RunReport {
         run_id: format!("run-{}", uuid::Uuid::new_v4().simple()),
         suite: SUITE.to_owned(),

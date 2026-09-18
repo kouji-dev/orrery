@@ -87,10 +87,7 @@ impl AdapterSpec {
     /// The command line, split into program and arguments.
     #[must_use]
     pub fn argv(&self) -> Vec<String> {
-        self.command
-            .split_whitespace()
-            .map(str::to_owned)
-            .collect()
+        self.command.split_whitespace().map(str::to_owned).collect()
     }
 }
 
@@ -327,7 +324,11 @@ impl ExternalRunner {
     /// No PATH lookup: this is how a pinned install is driven, and how a test
     /// drives a fake agent without installing one.
     #[must_use]
-    pub fn at(spec: AdapterSpec, store: Arc<dyn SessionStore>, program: impl Into<PathBuf>) -> Self {
+    pub fn at(
+        spec: AdapterSpec,
+        store: Arc<dyn SessionStore>,
+        program: impl Into<PathBuf>,
+    ) -> Self {
         Self {
             spec,
             store,

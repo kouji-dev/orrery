@@ -96,6 +96,13 @@ pub async fn replay_result(
 /// # Errors
 ///
 /// [`SessionError`] when the branch is gone.
-pub fn rows_of(view: &[TurnRow], branch: orrery_proto::BranchId) -> Result<Vec<TurnRow>, SessionError> {
-    Ok(view.iter().filter(|r| r.branch == branch).cloned().collect())
+pub fn rows_of(
+    view: &[TurnRow],
+    branch: orrery_proto::BranchId,
+) -> Result<Vec<TurnRow>, SessionError> {
+    Ok(view
+        .iter()
+        .filter(|r| r.branch == branch)
+        .cloned()
+        .collect())
 }

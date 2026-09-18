@@ -14,7 +14,9 @@ use common::{ScriptedProvider, fixture};
 use orrery_eval::case::{EvalCase, GraderSpec, Suite, WorkspaceSpec};
 use orrery_eval::matrix::{Matrix, MatrixPoint};
 use orrery_eval::report::CostProvenance;
-use orrery_eval::run::{CaseCtx, CaseRunner, EvalRun, HarnessRunner, Isolation, RoleBinding, RunOutput};
+use orrery_eval::run::{
+    CaseCtx, CaseRunner, EvalRun, HarnessRunner, Isolation, RoleBinding, RunOutput,
+};
 use orrery_eval::{EvalError, EvalRunner, GradeInput, Grader, Isolator, Score};
 use orrery_grader::GradeError;
 use orrery_proto::Role;
@@ -74,7 +76,9 @@ fn worktree_is_cleaned_up_after_a_panic() {
 
     let seen = Arc::clone(&leaked);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-        let workspace = isolator.prepare(&case("panics"), &point("p")).expect("prep");
+        let workspace = isolator
+            .prepare(&case("panics"), &point("p"))
+            .expect("prep");
         *seen.lock().expect("lock") = Some(workspace.path().to_path_buf());
         std::fs::write(workspace.path().join("half-done.txt"), "…").expect("write");
         panic!("the case blew up");
@@ -305,7 +309,10 @@ async fn a_case_runs_in_its_own_workspace() {
             Arc::new(HarnessRunner::new("ours", Arc::clone(&store), bindings)),
         )
         .with_grader(Arc::new(Noop))
-        .run(&EvalRun::new("one", Matrix::new(["p"], ["m"])), &Suite::new("one").with_case(case("w")))
+        .run(
+            &EvalRun::new("one", Matrix::new(["p"], ["m"])),
+            &Suite::new("one").with_case(case("w")),
+        )
         .await
         .expect("the run");
 

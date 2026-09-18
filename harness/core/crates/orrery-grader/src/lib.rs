@@ -105,9 +105,10 @@ impl CaseRef {
 
 /// Everything a grader is allowed to look at.
 ///
-/// The workspace as the case left it, and the transcript as the store kept it.
-/// Not the runner, not the provider, not the config: a grader that could reach
-/// those could change what it is grading.
+/// The workspace as the case left it, the transcript as the store kept it, and
+/// the case's own configuration for this grader. Not the runner, not the
+/// provider, not the harness: a grader that could reach those could change what
+/// it is grading.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GradeInput {
     /// The case's workspace, after the run.
@@ -116,6 +117,50 @@ pub struct GradeInput {
     pub transcript: SessionRef,
     /// Which case this is.
     pub case: CaseRef,
+    /// What the case wrote under its `[case.grade]` block: the assertions to
+    /// check, the command to run, the rubric to judge against.
+    ///
+    /// Opaque to the runner, which passes it through without reading it —
+    /// otherwise the runner would have to know what an assertion looks like.
+    pub config: serde_json::Value,
+}
+
+impl GradeInput {
+    /// A grade input with no configuration.
+    #[must_use]
+    pub fn new(workspace: impl Into<PathBuf>, transcript: SessionRef, case: CaseRef) -> Self {
+        Self {
+            workspace: workspace.into(),
+            transcript,
+            case,
+            config: serde_json::Value::Null,
+        }
+    }
+
+    /// Attach the case's configuration.
+    #[must_use]
+    pub fn with_config(mut self, config: serde_json::Value) -> Self {
+        self.config = config;
+        self
+    }
+
+    /// Read the configuration as a grader's own type.
+    ///
+    /// # Errors
+    ///
+    /// [`GradeError::Misconfigured`] naming the grader and what serde disliked.
+    pub fn parse_config<T: serde::de::DeserializeOwned + Default>(
+        &self,
+        grader: &str,
+    ) -> Result<T, GradeError> {
+        if self.config.is_null() {
+            return Ok(T::default());
+        }
+        serde_json::from_value(self.config.clone()).map_err(|e| GradeError::Misconfigured {
+            grader: grader.to_owned(),
+            detail: e.to_string(),
+        })
+    }
 }
 
 /// What a grader decided.

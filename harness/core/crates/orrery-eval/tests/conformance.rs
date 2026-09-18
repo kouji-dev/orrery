@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use common::store::MemoryStore;
-use orrery_eval::conformance::{SUITE, Singletons, check_permission_handler, run_conformance};
 use orrery_eval::EvalOutcome;
+use orrery_eval::conformance::{SUITE, Singletons, check_permission_handler, run_conformance};
 use orrery_policy::{
     Decision, HandlerError, PendingCall, PermissionHandler, ResolvedScope, Verdict, no_rule,
 };
@@ -267,7 +267,9 @@ async fn the_bound_memory_provider_is_checked() {
     // Plan 12's suite, over plan 12's own in-test provider: `orrery eval run
     // conformance` is how an alternative memory provider gets the same
     // treatment.
-    let provider = Arc::new(orrery_memory::testing::InMemoryProvider::anything("in-memory"));
+    let provider = Arc::new(orrery_memory::testing::InMemoryProvider::anything(
+        "in-memory",
+    ));
     let report = run_conformance(&Singletons::new().with_memory(provider)).await;
 
     let result = report

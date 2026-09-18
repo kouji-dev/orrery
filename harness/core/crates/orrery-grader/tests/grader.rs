@@ -22,18 +22,34 @@ impl Grader for AlwaysPasses {
 }
 
 fn input() -> GradeInput {
-    GradeInput {
-        workspace: PathBuf::from("."),
-        transcript: SessionRef {
+    GradeInput::new(
+        PathBuf::from("."),
+        SessionRef {
             session: SessionId::new(),
             branch: BranchId::new(),
             turn: None,
         },
-        case: CaseRef {
-            suite: "suite".into(),
-            case: "case".into(),
-        },
+        CaseRef::new("suite", "case"),
+    )
+}
+
+#[test]
+fn a_config_a_grader_cannot_read_is_a_misconfiguration_not_a_failure() {
+    #[derive(Debug, Default, serde::Deserialize)]
+    struct Checks {
+        #[allow(dead_code)]
+        checks: Vec<String>,
     }
+
+    // No config at all is the grader's own default, not an error.
+    assert!(input().parse_config::<Checks>("g").is_ok());
+
+    let wrong = input().with_config(serde_json::json!({ "checks": 7 }));
+    let err = wrong
+        .parse_config::<Checks>("g")
+        .expect_err("7 is not a list");
+    assert_eq!(err.grader(), "g");
+    assert!(err.to_string().contains("misconfigured"));
 }
 
 #[test]
@@ -48,7 +64,10 @@ fn is_object_safe() {
 async fn a_minimal_grader_scores() {
     let score = AlwaysPasses.grade(input()).await.expect("graded");
     assert_eq!(score.outcome, EvalOutcome::Pass);
-    assert!(score.judge_cost.is_none(), "a non-model grader costs nothing");
+    assert!(
+        score.judge_cost.is_none(),
+        "a non-model grader costs nothing"
+    );
 }
 
 #[test]

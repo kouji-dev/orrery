@@ -69,12 +69,18 @@ fn refuses_incomparable_runs() {
     let err = compare(&a, &b, false).expect_err("memory differs");
     let message = err.to_string();
     assert!(matches!(err, CompareError::Incomparable { .. }));
-    assert!(message.contains("memory"), "the message says why: {message}");
+    assert!(
+        message.contains("memory"),
+        "the message says why: {message}"
+    );
     assert!(message.contains("off") && message.contains("file"));
     assert!(message.contains("--force"), "and how to override it");
 
     let forced = compare(&a, &b, true).expect("--force compares anyway");
-    assert!(forced.forced, "and the comparison remembers that it was forced");
+    assert!(
+        forced.forced,
+        "and the comparison remembers that it was forced"
+    );
 }
 
 #[test]
@@ -165,7 +171,10 @@ fn exits_non_zero_on_regression() {
         ],
     );
     assert_eq!(exit_code(&red, Some(&baseline)), 1);
-    assert_eq!(baseline.regressions(&red), vec!["api-42·review/m".to_owned()]);
+    assert_eq!(
+        baseline.regressions(&red),
+        vec!["api-42·review/m".to_owned()]
+    );
 
     // With no baseline at all, any failure is non-zero: "no baseline" is not a
     // reason to call a red suite green.
@@ -225,8 +234,16 @@ async fn replay_opens_the_failing_session() {
     );
 
     let suite = Suite::new("s")
-        .with_case(EvalCase::new("api-42", "fix the thing", GraderSpec::new("always-passes")))
-        .with_case(EvalCase::new("api-43", "fix the other thing", GraderSpec::new("always-passes")));
+        .with_case(EvalCase::new(
+            "api-42",
+            "fix the thing",
+            GraderSpec::new("always-passes"),
+        ))
+        .with_case(EvalCase::new(
+            "api-43",
+            "fix the other thing",
+            GraderSpec::new("always-passes"),
+        ));
 
     let report = EvalRunner::new(Isolator::new(tmp.path()))
         .with_runner(
