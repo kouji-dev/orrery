@@ -206,12 +206,24 @@ fn outside_the_workspace_is_refused() {
 }
 
 /// The ledger reports what loaded, which is what `query extensions` answers.
+///
+/// Amended in round 5: the default set is three bundles, not one. `builtin` is
+/// the tools; `views-default` is the section 6.7 floor, without which a client
+/// has nothing bound and can legitimately draw a blank screen; `agents-default`
+/// is the section 4.6 roles. All three load through the same door, which is why
+/// they are all in one ledger and why this test looks the entry up by name
+/// rather than by position.
 #[test]
-fn the_builtin_bundle_is_in_the_ledger() {
+fn the_first_party_bundles_are_in_the_ledger() {
     let (_dir, harness) = harness(orrery_audit::null());
     let ledger = harness.ledger().all();
-    assert_eq!(ledger.len(), 1, "one first-party bundle: {ledger:?}");
-    let names: Vec<String> = ledger[0]
+    let by_name = |want: &str| {
+        ledger
+            .iter()
+            .find(|entry| entry.ext().as_str() == want)
+            .unwrap_or_else(|| panic!("`{want}` did not load: {ledger:?}"))
+    };
+    let names: Vec<String> = by_name("builtin")
         .contributions()
         .iter()
         .map(|c| c.name.clone())
@@ -221,6 +233,20 @@ fn the_builtin_bundle_is_in_the_ledger() {
             names.contains(&tool.to_owned()),
             "`{tool}` is missing: {names:?}"
         );
+    }
+    // The floor contributes views and agents rather than tools, which is what
+    // makes "a view is not a tool" true of the shipped set and not only of the
+    // vocabulary.
+    for (ext, contribution) in [
+        ("views-default", "assistant.text"),
+        ("agents-default", "planner"),
+    ] {
+        let names: Vec<String> = by_name(ext)
+            .contributions()
+            .iter()
+            .map(|c| c.name.clone())
+            .collect();
+        assert!(names.contains(&contribution.to_owned()), "{ext}: {names:?}");
     }
     assert!(
         harness

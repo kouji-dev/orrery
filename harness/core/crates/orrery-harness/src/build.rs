@@ -24,6 +24,7 @@ use std::sync::Arc;
 
 use orrery_audit::Audit;
 use orrery_broker::{EngineGate, LocalBroker};
+use orrery_ext_api::ExtensionManifest;
 use orrery_host::{NativeHost, NativeRegistry};
 use orrery_kernel::{Kernel, KernelConfig};
 use orrery_policy::{PolicyBuilder, PolicyEngine};
@@ -83,6 +84,23 @@ impl std::fmt::Debug for StoreChoice {
     }
 }
 
+/// An extension discovery found on disk, ready to be loaded.
+///
+/// Discovery is `orrery-config`'s; loading is the host's. This carries what sits
+/// between the two, and nothing else — in particular not a parsed manifest,
+/// because the manifest must go through the same parser a first-party bundle
+/// goes through, in the same place, so that one broken third-party `orrery.toml`
+/// is reported the way a broken first-party one would be.
+#[derive(Clone, Debug)]
+pub struct ExtensionSource {
+    /// Where its `orrery.toml` is.
+    pub manifest_path: PathBuf,
+    /// The directory its files live in. A `[process]` command is relative to it.
+    pub root: PathBuf,
+    /// Which layer contributed it.
+    pub layer: Layer,
+}
+
 /// Everything a harness needs to exist.
 ///
 /// This is the **kernel-shaped subset** of `orrery_config::ResolvedConfig`:
@@ -102,6 +120,11 @@ pub struct ResolvedConfig {
     pub provider: ProviderChoice,
     /// Where the turn tree lives.
     pub store: StoreChoice,
+    /// The extensions discovery found, beyond the compiled-in set.
+    ///
+    /// Empty is the honest default for a caller that built this by hand; a
+    /// caller that resolved config gets whatever the layers in force declare.
+    pub extensions: Vec<ExtensionSource>,
     /// The permission rules, as TOML. `None` takes the workspace default:
     /// read, write and spawn inside the workspace, and nothing outside it.
     pub policy_toml: Option<String>,
@@ -142,6 +165,29 @@ impl ResolvedConfig {
             },
             provider,
             store,
+            extensions: resolved
+                .manifest
+                .extensions
+                .iter()
+                .map(|found| {
+                    let (root, manifest_path) = if found.source.is_dir() {
+                        (found.source.clone(), found.source.join("orrery.toml"))
+                    } else {
+                        (
+                            found
+                                .source
+                                .parent()
+                                .map_or_else(|| found.source.clone(), std::path::Path::to_path_buf),
+                            found.source.clone(),
+                        )
+                    };
+                    ExtensionSource {
+                        manifest_path,
+                        root,
+                        layer: found.layer,
+                    }
+                })
+                .collect(),
             policy_toml: None,
             kernel,
             audit: orrery_audit::null(),
@@ -159,6 +205,7 @@ impl ResolvedConfig {
             profile: "default".to_owned(),
             provider: ProviderChoice::Fixture { passes },
             store: StoreChoice::Sqlite,
+            extensions: Vec::new(),
             policy_toml: None,
             kernel: KernelConfig::default(),
             audit: orrery_audit::null(),
@@ -289,8 +336,8 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
         config.kernel.tool_budget,
     );
 
-    // 5 · The extension table, and the native bundle.
-    let table = orrery_host::table::ExtensionTable::with_broker_source(facade);
+    // 5 · The extension table, the native bundle, and whatever discovery found.
+    let table = orrery_host::table::ExtensionTable::with_broker_source(facade.clone());
     let mut native = NativeRegistry::new();
     crate::features::register_native(&mut native);
     let host = Arc::new(NativeHost::new(native));
@@ -317,6 +364,71 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
                     message: format!("{other:?}"),
                 });
             }
+        }
+    }
+
+    // 5b · The installed set. Same table, same policy gate, same ledger: an
+    //      extension a person installed reaches the model through the identical
+    //      path a compiled-in one does, and the only difference is which host
+    //      runs its code.
+    //
+    //      A third-party failure is **not** a build failure. A first-party
+    //      bundle that contributes nothing means this build is wrong; somebody
+    //      else's extension that will not start means their extension will not
+    //      start, and a harness that refused to open over it would be unusable.
+    //      It lands in the ledger, which is what `orrery ext list` reads.
+    for source in &config.extensions {
+        let Ok(text) = std::fs::read_to_string(&source.manifest_path) else {
+            tracing::warn!(
+                target: "orrery.harness.build",
+                path = %source.manifest_path.display(),
+                "an extension was discovered but its manifest could not be read"
+            );
+            continue;
+        };
+        let manifest = match ExtensionManifest::from_toml_str(
+            &text,
+            source.manifest_path.display().to_string(),
+        ) {
+            Ok(manifest) => Arc::new(manifest),
+            Err(e) => {
+                tracing::warn!(
+                    target: "orrery.harness.build",
+                    path = %source.manifest_path.display(),
+                    error = %e,
+                    "an extension's manifest does not parse"
+                );
+                continue;
+            }
+        };
+        let ext = manifest.name.clone();
+        let Some(host) = crate::features::host_for(
+            manifest.runtime,
+            &ext,
+            &source.root,
+            facade.clone() as Arc<dyn orrery_ext_api::BrokerFacade>,
+        ) else {
+            tracing::warn!(
+                target: "orrery.harness.build",
+                ext = %ext,
+                runtime = %manifest.runtime,
+                "this build has no host for that runtime, so the extension is skipped"
+            );
+            continue;
+        };
+        match table
+            .load(host, manifest, source.layer, grant.clone())
+            .await
+        {
+            LoadOutcome::Ok { .. } | LoadOutcome::Degraded { .. } => {
+                table.register_into(&mut registry, &ext);
+            }
+            other => tracing::warn!(
+                target: "orrery.harness.build",
+                ext = %ext,
+                outcome = ?other,
+                "an installed extension did not load"
+            ),
         }
     }
 

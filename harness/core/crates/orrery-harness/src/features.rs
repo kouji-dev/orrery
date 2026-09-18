@@ -8,6 +8,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use orrery_ext_api::BrokerFacade;
 use orrery_host::NativeRegistry;
 use orrery_provider::Provider;
 use orrery_session::SessionStore;
@@ -40,6 +41,16 @@ pub fn compiled_in() -> Vec<&'static str> {
     out.push("provider-fixture");
     #[cfg(feature = "anthropic")]
     out.push("provider-anthropic");
+    #[cfg(feature = "views-default")]
+    out.push("views-default");
+    #[cfg(feature = "agents-default")]
+    out.push("agents-default");
+    #[cfg(feature = "memory-file")]
+    out.push("memory-file");
+    #[cfg(feature = "rpc-extensions")]
+    out.push("host-rpc");
+    #[cfg(feature = "wasm-extensions")]
+    out.push("host-wasm");
     out
 }
 
@@ -52,6 +63,48 @@ pub fn compiled_in() -> Vec<&'static str> {
 pub fn register_native(registry: &mut NativeRegistry) {
     #[cfg(feature = "builtin-tools")]
     registry.register(Arc::new(orrery_ext_tools_builtin::BuiltinTools::new()));
+    // The floor, section 6.7 and section 4.6. Registered here, through the same
+    // door the builtin tools go through, so each one gets a manifest parse, a
+    // policy check, a ledger entry and a deny rule that switches it off. A
+    // shortcut that installed either one inside the kernel would give the five
+    // bindings everybody needs a different path from everybody else's.
+    #[cfg(feature = "views-default")]
+    registry.register(Arc::new(orrery_ext_views_default::DefaultViews));
+    #[cfg(feature = "agents-default")]
+    registry.register(Arc::new(orrery_ext_agents_default::DefaultAgents));
+}
+
+/// A host for one extension's declared runtime.
+///
+/// `native` is not here on purpose: a compiled-in bundle is registered at build
+/// time by [`register_native`], and something discovered on disk claiming
+/// `runtime = "native"` has no code this process could run. It comes back
+/// `None`, which the caller reports as a skipped extension rather than loading
+/// something else instead.
+///
+/// The broker is handed over here rather than set later because a host with no
+/// broker denies everything, and "it silently did nothing" is the one failure a
+/// guest must not be able to have.
+#[allow(unused_variables)]
+#[must_use]
+pub fn host_for(
+    runtime: orrery_ext_api::RuntimeKind,
+    ext: &orrery_proto::ExtId,
+    root: &Path,
+    broker: Arc<dyn BrokerFacade>,
+) -> Option<Arc<dyn orrery_host::ExtensionHost>> {
+    use orrery_ext_api::RuntimeKind;
+    match runtime {
+        RuntimeKind::Native => None,
+        #[cfg(feature = "rpc-extensions")]
+        RuntimeKind::Node | RuntimeKind::Python | RuntimeKind::Process => {
+            let host = orrery_host_rpc::RpcHost::for_runtime(runtime);
+            host.install(ext, root);
+            host.set_broker(broker);
+            Some(Arc::new(host))
+        }
+        _ => None,
+    }
 }
 
 /// Open the default session store.
@@ -90,5 +143,32 @@ pub fn fixture_provider(paths: &[std::path::PathBuf]) -> Result<Arc<dyn Provider
         Err(BuildError::NoProvider {
             which: "fixture".to_owned(),
         })
+    }
+}
+
+/// The built-in graders, for `orrery eval`.
+///
+/// Behind the `graders` feature and **in the default set**: an eval runner with
+/// no grader can run a case and cannot score it, which is not a runner. The
+/// judge is optional because a judge costs money — a build with no provider
+/// bound for grading gets the two free graders rather than a failure.
+///
+/// This is here rather than in `orrery-eval` for the same reason everything
+/// else in this module is: `orrery-ext-graders` is an extension, and this is
+/// the one core crate allowed to name one.
+#[allow(unused_variables)]
+#[must_use]
+pub fn graders(
+    broker: Arc<dyn BrokerFacade>,
+    store: Option<Arc<dyn SessionStore>>,
+    judge: Option<(Arc<dyn Provider>, String)>,
+) -> Vec<Arc<dyn orrery_grader::Grader>> {
+    #[cfg(feature = "graders")]
+    {
+        orrery_ext_graders::graders(broker, store, judge)
+    }
+    #[cfg(not(feature = "graders"))]
+    {
+        Vec::new()
     }
 }

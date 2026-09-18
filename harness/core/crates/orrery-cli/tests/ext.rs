@@ -185,3 +185,34 @@ fn list_shows_an_installed_extension() {
     );
     assert!(stdout.contains("user"), "…and which layer it came from: {stdout}");
 }
+
+/// Round 5, item 1: the section 6.7 floor and the section 4.6 roles ship in the
+/// default build.
+///
+/// Without `views-default` a client has nothing bound and can legitimately draw
+/// a blank screen; without `agents-default` the five named roles are names
+/// nothing answers to. Both were compiled nowhere near the binary — not even
+/// with `--all-features` — so this asserts the shipped default set through the
+/// binary, which is the only place the claim means anything.
+#[test]
+fn the_default_build_ships_the_floor() {
+    let out = orrery(&["ext".to_owned(), "list".to_owned()]);
+    assert_eq!(out.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for ext in ["builtin", "views-default", "agents-default"] {
+        assert!(stdout.contains(ext), "`{ext}` is missing: {stdout}");
+    }
+}
+
+/// And each one loads through the same door a third-party bundle goes through.
+#[test]
+fn the_floor_loads_like_any_other_bundle() {
+    for ext in ["views-default", "agents-default"] {
+        let out = orrery(&["ext".to_owned(), "test".to_owned(), ext.to_owned()]);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "`{ext}`: {stderr}");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(stdout.contains(ext), "{stdout}");
+        assert!(stdout.contains("no model, no network"), "{stdout}");
+    }
+}

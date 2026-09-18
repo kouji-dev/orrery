@@ -15,11 +15,43 @@ publish = false
 # `anthropic` is off by default, which is a deliberate deviation from the plan's
 # `default = [.., "anthropic", ..]`: it pulls a TLS stack in, and nothing in
 # this repo's tests may reach the network. Turning it on is one flag.
-default = ["builtin-tools", "sqlite", "fixture-provider"]
+# `views-default` and `agents-default` are in the default set because without
+# them the product is missing its floor: a client with no view bindings can
+# legitimately draw a blank screen (section 6.7), and the five named roles
+# (section 4.6) are names nothing answers to. They are still ordinary
+# extensions - manifest, ledger entry, deny rule - which is the whole point.
+default = [
+  "builtin-tools", "sqlite", "fixture-provider", "views-default", "agents-default",
+  "memory-file", "rpc-extensions", "wasm-extensions", "graders",
+]
 builtin-tools = ["dep:orrery-ext-tools-builtin"]
+views-default = ["dep:orrery-ext-views-default"]
+agents-default = ["dep:orrery-ext-agents-default"]
+# Compiled in, and **not switched on**: the reference memory provider is
+# deliberately mediocre, and a mediocre default memory is worse than none for
+# evals. It is linked so a profile can name it (`[memory] provider = "file"`)
+# without a rebuild; naming it is what turns it on.
+memory-file = ["dep:orrery-ext-memory-file"]
+# Node, python and plain process extensions. On by default: `orrery install`
+# happily installs one, so a build that cannot start it is a build that lies.
+rpc-extensions = ["dep:orrery-host-rpc"]
+# The wasm runtime: the one runtime with a real sandbox, and the only reason
+# `orrery-wit`'s arena encoding is in the binary at all. On by default so the
+# engine a `runtime = "wasm"` manifest needs is present rather than a rebuild
+# away.
+#
+# **Known gap, named rather than hidden:** `orrery-host-wasm` does not implement
+# `orrery_host::ExtensionHost` yet, so `features::host_for` has no arm for it and
+# a discovered wasm extension is reported as skipped. The engine, the ceilings
+# and the imports are all here and tested (`tests/parity.rs`); what is missing is
+# the adapter between them and the extension table.
+wasm-extensions = ["dep:orrery-host-wasm"]
 sqlite = ["dep:orrery-ext-session-sqlite"]
 fixture-provider = ["dep:orrery-ext-provider-fixture"]
 anthropic = ["dep:orrery-ext-provider-anthropic"]
+# The three built-in graders, for `orrery eval`. On by default: an eval runner
+# with no grader can run a case and cannot score it, which is not a runner.
+graders = ["dep:orrery-ext-graders"]
 # `tests/parity.rs`'s fourth leg. TinyGo and wit-bindgen-go are not cargo
 # dependencies and no machine is required to have them, so the Go half of the
 # four-runtime comparison is opt-in. Off, the test **says** the leg was not
@@ -36,6 +68,9 @@ orrery-broker = { workspace = true }
 # The memory half of plan 12. Named here and nowhere else in `core/`: the kernel
 # owns a typed hole, this crate is the one allowed to fill it.
 orrery-memory = { workspace = true }
+# The grader trait, so `features::graders` has a return type that does not
+# depend on the extension being compiled in.
+orrery-grader = { workspace = true }
 orrery-ext-api = { workspace = true }
 # By path, not `workspace = true`: these are `publish = false`, so they are not
 # among the version+path pairs the root declares for the published half.
@@ -55,6 +90,17 @@ orrery-ext-tools-builtin = { path = "../../../extensions/crates/orrery-ext-tools
 orrery-ext-session-sqlite = { path = "../../../extensions/crates/orrery-ext-session-sqlite", optional = true }
 orrery-ext-provider-fixture = { path = "../../../extensions/crates/orrery-ext-provider-fixture", optional = true }
 orrery-ext-provider-anthropic = { path = "../../../extensions/crates/orrery-ext-provider-anthropic", optional = true }
+orrery-ext-graders = { path = "../../../extensions/crates/orrery-ext-graders", optional = true }
+orrery-ext-views-default = { path = "../../../extensions/crates/orrery-ext-views-default", optional = true }
+orrery-ext-agents-default = { path = "../../../extensions/crates/orrery-ext-agents-default", optional = true }
+orrery-ext-memory-file = { path = "../../../extensions/crates/orrery-ext-memory-file", optional = true }
+
+# The other extension runtimes. Real dependencies, on by default: a build that
+# cannot start a node or python extension is not a harness, it is a demo, and
+# these were dev-dependencies - reachable from `tests/parity.rs` and from
+# nowhere the product could use them.
+orrery-host-rpc = { path = "../orrery-host-rpc", optional = true }
+orrery-host-wasm = { path = "../orrery-host-wasm", optional = true }
 
 [dev-dependencies]
 # The kernel's own suites live here: `deps-check` rule 1 forbids a core crate
@@ -68,8 +114,6 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 # `tests/parity.rs` only: the other two runtime hosts, and the `native` worked
 # example. This is the one core crate allowed to name an `extensions/` crate,
 # which is why the four-runtime comparison lives here and nowhere else.
-orrery-host-rpc = { path = "../orrery-host-rpc" }
-orrery-host-wasm = { path = "../orrery-host-wasm" }
 native-hello = { path = "../../../extensions/examples/native-hello" }
 
 # `builtin::bash_is_contained` needs a real process tree to kill.
