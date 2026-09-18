@@ -1,0 +1,18 @@
+{
+  "kind": {
+    "t": "tree",
+    "nodes": [
+      {
+        "label": "src",
+        "expanded": true,
+        "children": [
+          {
+            "label": "lib.rs",
+            "expanded": false,
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

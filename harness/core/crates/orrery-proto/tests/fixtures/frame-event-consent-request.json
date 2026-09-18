@@ -1,0 +1,19 @@
+{
+  "t": "consent.request",
+  "seq": 5,
+  "deadline_ms": 30000,
+  "prompt": {
+    "id": "018f3a2b-0000-7000-8000-000000000013",
+    "subject": "ext:buildgraph",
+    "capabilities": [
+      {
+        "aspect": "write",
+        "scope": [
+          "./src/**"
+        ]
+      }
+    ],
+    "reason": "buildgraph wants to write generated sources",
+    "rule": "018f3a2b-0000-7000-8000-000000000015"
+  }
+}

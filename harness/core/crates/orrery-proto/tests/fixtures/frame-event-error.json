@@ -1,0 +1,10 @@
+{
+  "t": "error",
+  "seq": 7,
+  "scope": "turn",
+  "detail": {
+    "code": "provider.unavailable",
+    "message": "the provider returned 503",
+    "retryable": true
+  }
+}

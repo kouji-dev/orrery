@@ -1,0 +1,10 @@
+{
+  "t": "tool.settled",
+  "seq": 4,
+  "call": "018f3a2b-0000-7000-8000-000000000014",
+  "outcome": {
+    "t": "denied",
+    "rule": "018f3a2b-0000-7000-8000-000000000015",
+    "reason": "write outside the workspace"
+  }
+}

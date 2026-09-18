@@ -1,0 +1,11 @@
+{
+  "t": "turn.settled",
+  "seq": 6,
+  "turn": "018f3a2b-0000-7000-8000-000000000011",
+  "usage": {
+    "input_tokens": 1200,
+    "output_tokens": 340,
+    "cache_hits": 900,
+    "micro_usd": 4200
+  }
+}

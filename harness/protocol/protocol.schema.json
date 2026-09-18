@@ -1,0 +1,2991 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Protocol",
+  "description": "The root the schema is generated from.\n\nEvery type a client has to name, reachable from one place. schemars walks it and emits each reachable type once, under `definitions`, so the field names here are an index and nothing ever serialises as a `Protocol`.",
+  "type": "object",
+  "required": [
+    "budget",
+    "event",
+    "grant",
+    "load_outcome",
+    "message",
+    "request",
+    "surface",
+    "surface_patch",
+    "usage"
+  ],
+  "properties": {
+    "budget": {
+      "$ref": "#/definitions/Budget"
+    },
+    "event": {
+      "$ref": "#/definitions/Event"
+    },
+    "grant": {
+      "$ref": "#/definitions/Grant"
+    },
+    "load_outcome": {
+      "$ref": "#/definitions/LoadOutcome"
+    },
+    "message": {
+      "$ref": "#/definitions/Message"
+    },
+    "request": {
+      "$ref": "#/definitions/Request"
+    },
+    "surface": {
+      "$ref": "#/definitions/Surface"
+    },
+    "surface_patch": {
+      "$ref": "#/definitions/SurfacePatch"
+    },
+    "usage": {
+      "$ref": "#/definitions/Usage"
+    }
+  },
+  "definitions": {
+    "Aspect": {
+      "description": "What a capability is *about*.\n\nThe wire names are pinned per variant rather than derived, because two of them (`mem.read`, `mem.write`) are dotted and no `rename_all` rule produces a dot.",
+      "oneOf": [
+        {
+          "description": "Calling a named tool.",
+          "type": "string",
+          "enum": [
+            "tool"
+          ]
+        },
+        {
+          "description": "Talking to an MCP server.",
+          "type": "string",
+          "enum": [
+            "mcp"
+          ]
+        },
+        {
+          "description": "Running a skill.",
+          "type": "string",
+          "enum": [
+            "skill"
+          ]
+        },
+        {
+          "description": "Loading an extension.",
+          "type": "string",
+          "enum": [
+            "ext"
+          ]
+        },
+        {
+          "description": "Entering a mode.",
+          "type": "string",
+          "enum": [
+            "mode"
+          ]
+        },
+        {
+          "description": "Reading a path.",
+          "type": "string",
+          "enum": [
+            "read"
+          ]
+        },
+        {
+          "description": "Writing a path.",
+          "type": "string",
+          "enum": [
+            "write"
+          ]
+        },
+        {
+          "description": "Spawning a sub-agent or a process.",
+          "type": "string",
+          "enum": [
+            "spawn"
+          ]
+        },
+        {
+          "description": "Reaching a host over the network.",
+          "type": "string",
+          "enum": [
+            "net"
+          ]
+        },
+        {
+          "description": "Reading a credential.",
+          "type": "string",
+          "enum": [
+            "creds"
+          ]
+        },
+        {
+          "description": "Driving the user interface.",
+          "type": "string",
+          "enum": [
+            "ui"
+          ]
+        },
+        {
+          "description": "Contributing a renderer for a surface kind.",
+          "type": "string",
+          "enum": [
+            "render"
+          ]
+        },
+        {
+          "description": "Reading memory.",
+          "type": "string",
+          "enum": [
+            "mem.read"
+          ]
+        },
+        {
+          "description": "Writing memory.",
+          "type": "string",
+          "enum": [
+            "mem.write"
+          ]
+        }
+      ]
+    },
+    "BranchId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Budget": {
+      "description": "What a turn is allowed to spend.",
+      "type": "object",
+      "required": [
+        "max_tokens",
+        "max_turns",
+        "wall_clock_ms"
+      ],
+      "properties": {
+        "max_micro_usd": {
+          "description": "How much money, in micro-USD. `None` means unmetered.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_tokens": {
+          "description": "How many tokens, input and output together.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_turns": {
+          "description": "How many kernel turns.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "wall_clock_ms": {
+          "description": "How long, in milliseconds of wall clock.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "CallId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "CancelReason": {
+      "description": "Why something stopped early.",
+      "oneOf": [
+        {
+          "description": "Somebody asked.",
+          "type": "string",
+          "enum": [
+            "user"
+          ]
+        },
+        {
+          "description": "A budget ran out.",
+          "type": "string",
+          "enum": [
+            "budget"
+          ]
+        },
+        {
+          "description": "A deadline passed.",
+          "type": "string",
+          "enum": [
+            "timeout"
+          ]
+        },
+        {
+          "description": "The harness is going away.",
+          "type": "string",
+          "enum": [
+            "shutdown"
+          ]
+        },
+        {
+          "description": "A parent was cancelled, so this was too.",
+          "type": "string",
+          "enum": [
+            "parent"
+          ]
+        }
+      ]
+    },
+    "Capability": {
+      "description": "One aspect and the scope it is granted over.\n\nAn **empty** `scope` means unqualified: the whole aspect, not nothing. That is what makes an unscoped parent wider than a scoped child, which is the direction narrowing needs.",
+      "type": "object",
+      "required": [
+        "aspect"
+      ],
+      "properties": {
+        "aspect": {
+          "description": "What the capability is about.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Aspect"
+            }
+          ]
+        },
+        "scope": {
+          "description": "The names or patterns it covers. Empty means unqualified.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Cell": {
+      "description": "One cell of a [`SurfaceKind::Table`].",
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "style": {
+          "description": "How it is meant.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TextStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "description": "The cell's text, already formatted by whoever knows the units.",
+          "type": "string"
+        }
+      }
+    },
+    "Choice": {
+      "description": "One option of a [`SurfaceKind::Question`] or of a choice [`Field`].",
+      "type": "object",
+      "required": [
+        "label",
+        "value"
+      ],
+      "properties": {
+        "label": {
+          "description": "What is shown.",
+          "type": "string"
+        },
+        "value": {
+          "description": "What is sent back on selection.",
+          "type": "string"
+        }
+      }
+    },
+    "Consent": {
+      "description": "How often the user has to be asked.\n\nOrdered `Never < Once < Always`, and narrowing takes the minimum: a child that asks every time cannot be promoted to a child that never asks.",
+      "oneOf": [
+        {
+          "description": "Allowed without asking.",
+          "type": "string",
+          "enum": [
+            "always"
+          ]
+        },
+        {
+          "description": "Allowed once the user says so, each time.",
+          "type": "string",
+          "enum": [
+            "once"
+          ]
+        },
+        {
+          "description": "Not allowed at all.",
+          "type": "string",
+          "enum": [
+            "never"
+          ]
+        }
+      ]
+    },
+    "ConsentAnswerKind": {
+      "description": "The answer to a [`ConsentPrompt`].\n\nFour answers, not two: \"yes\" and \"yes, and stop asking\" are different decisions, and so are \"no\" and \"no, ever\".",
+      "oneOf": [
+        {
+          "description": "Allowed, this once.",
+          "type": "string",
+          "enum": [
+            "allow-once"
+          ]
+        },
+        {
+          "description": "Allowed, and remembered.",
+          "type": "string",
+          "enum": [
+            "allow-always"
+          ]
+        },
+        {
+          "description": "Refused, this once.",
+          "type": "string",
+          "enum": [
+            "deny"
+          ]
+        },
+        {
+          "description": "Refused, and remembered.",
+          "type": "string",
+          "enum": [
+            "deny-always"
+          ]
+        }
+      ]
+    },
+    "ConsentPrompt": {
+      "description": "What is being asked for, and why.",
+      "type": "object",
+      "required": [
+        "id",
+        "reason",
+        "subject"
+      ],
+      "properties": {
+        "capabilities": {
+          "description": "What they want.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Capability"
+          }
+        },
+        "id": {
+          "description": "The handle an answer is matched to.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/PromptId"
+            }
+          ]
+        },
+        "reason": {
+          "description": "Why, in words a person can act on.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "The rule that requires the ask, when one does.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RuleId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject": {
+          "description": "Who is asking.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Subject"
+            }
+          ]
+        },
+        "surface": {
+          "description": "Something to show alongside the question — the diff that is about to be written, the command that is about to run.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Surface"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ContentBlock": {
+      "description": "One piece of a message.",
+      "oneOf": [
+        {
+          "description": "Prose.",
+          "type": "object",
+          "required": [
+            "t",
+            "text"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "text"
+              ]
+            },
+            "text": {
+              "description": "The text.",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "An image, inline and base64. A provider without an `images` capability rejects a message carrying one rather than dropping it silently.",
+          "type": "object",
+          "required": [
+            "data",
+            "media_type",
+            "t"
+          ],
+          "properties": {
+            "data": {
+              "description": "Base64, without a data-URL prefix.",
+              "type": "string"
+            },
+            "media_type": {
+              "description": "The IANA media type, e.g. `image/png`.",
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "image"
+              ]
+            }
+          }
+        },
+        {
+          "description": "The model asking for a tool.",
+          "type": "object",
+          "required": [
+            "call",
+            "input",
+            "name",
+            "t"
+          ],
+          "properties": {
+            "call": {
+              "description": "The call this block opens.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CallId"
+                }
+              ]
+            },
+            "input": {
+              "description": "The arguments, already validated against the tool's schema."
+            },
+            "name": {
+              "description": "The fully-qualified tool name, `<ext>.<name>`.",
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "tool-use"
+              ]
+            }
+          }
+        },
+        {
+          "description": "What happened.\n\nCarries the same [`Outcome`] the `tool.settled` frame carries — one shape for \"what happened\", whether it is being shown to a person or fed back to a model. That is what makes a denial identical in the transcript and on the wire, instead of a rendered apology in one and a structured value in the other.",
+          "type": "object",
+          "required": [
+            "call",
+            "outcome",
+            "t"
+          ],
+          "properties": {
+            "call": {
+              "description": "The call this block closes.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CallId"
+                }
+              ]
+            },
+            "outcome": {
+              "description": "How it went.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Outcome"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "tool-result"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Reasoning the provider exposed.\n\nKept rather than dropped: every current provider emits it, the transcript is the audit record, and a turn tree that silently discards what the model was thinking cannot be replayed faithfully.",
+          "type": "object",
+          "required": [
+            "t",
+            "text"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "thinking"
+              ]
+            },
+            "text": {
+              "description": "The reasoning text.",
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "Contribution": {
+      "description": "What an extension added to the session.\n\n`kind` is a plain enum here. The derive macro that keeps it in step with the extension's manifest — so that a manifest promising a tool and a crate contributing a renderer is a build error rather than a surprise — is the extension host's (plan 06).",
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "description": "What kind of thing it is.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ContributionKind"
+            }
+          ]
+        },
+        "name": {
+          "description": "Its name, unqualified: the extension is already known.",
+          "type": "string"
+        }
+      }
+    },
+    "ContributionKind": {
+      "description": "The kinds of thing an extension can contribute.",
+      "oneOf": [
+        {
+          "description": "A tool the model can call.",
+          "type": "string",
+          "enum": [
+            "tool"
+          ]
+        },
+        {
+          "description": "A model provider.",
+          "type": "string",
+          "enum": [
+            "provider"
+          ]
+        },
+        {
+          "description": "A renderer for a custom surface kind.",
+          "type": "string",
+          "enum": [
+            "renderer"
+          ]
+        },
+        {
+          "description": "A slash command.",
+          "type": "string",
+          "enum": [
+            "command"
+          ]
+        },
+        {
+          "description": "A skill.",
+          "type": "string",
+          "enum": [
+            "skill"
+          ]
+        },
+        {
+          "description": "A memory store.",
+          "type": "string",
+          "enum": [
+            "memory"
+          ]
+        },
+        {
+          "description": "A grader for the eval runner.",
+          "type": "string",
+          "enum": [
+            "grader"
+          ]
+        },
+        {
+          "description": "A routing policy.",
+          "type": "string",
+          "enum": [
+            "router"
+          ]
+        },
+        {
+          "description": "A session store.",
+          "type": "string",
+          "enum": [
+            "session-store"
+          ]
+        },
+        {
+          "description": "A mode.",
+          "type": "string",
+          "enum": [
+            "mode"
+          ]
+        },
+        {
+          "description": "A named view over the session.",
+          "type": "string",
+          "enum": [
+            "view"
+          ]
+        }
+      ]
+    },
+    "DiffLine": {
+      "description": "One line inside a [`Hunk`].",
+      "type": "object",
+      "required": [
+        "kind",
+        "text"
+      ],
+      "properties": {
+        "kind": {
+          "description": "Added, removed or unchanged.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DiffLineKind"
+            }
+          ]
+        },
+        "text": {
+          "description": "The line itself, without its leading marker.",
+          "type": "string"
+        }
+      }
+    },
+    "DiffLineKind": {
+      "description": "What a line of a diff is.",
+      "oneOf": [
+        {
+          "description": "Unchanged.",
+          "type": "string",
+          "enum": [
+            "context"
+          ]
+        },
+        {
+          "description": "Added.",
+          "type": "string",
+          "enum": [
+            "add"
+          ]
+        },
+        {
+          "description": "Removed.",
+          "type": "string",
+          "enum": [
+            "remove"
+          ]
+        }
+      ]
+    },
+    "ErrorDetail": {
+      "description": "What went wrong.",
+      "type": "object",
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "description": "A stable, machine-readable code: `provider.unavailable`, `ext.crashed`.",
+          "type": "string"
+        },
+        "data": {
+          "description": "Anything structured a client could use."
+        },
+        "message": {
+          "description": "What went wrong, in words.",
+          "type": "string"
+        },
+        "retryable": {
+          "description": "Whether the same thing, tried again, might work.",
+          "type": "boolean"
+        }
+      }
+    },
+    "ErrorScope": {
+      "description": "How far an error reaches.",
+      "oneOf": [
+        {
+          "description": "The connection. Nothing else will arrive.",
+          "type": "string",
+          "enum": [
+            "transport"
+          ]
+        },
+        {
+          "description": "The session. Other sessions are fine.",
+          "type": "string",
+          "enum": [
+            "session"
+          ]
+        },
+        {
+          "description": "This turn. The session survives.",
+          "type": "string",
+          "enum": [
+            "turn"
+          ]
+        },
+        {
+          "description": "This call. The turn survives.",
+          "type": "string",
+          "enum": [
+            "tool"
+          ]
+        },
+        {
+          "description": "One extension. Everything else survives.",
+          "type": "string",
+          "enum": [
+            "ext"
+          ]
+        }
+      ]
+    },
+    "Event": {
+      "description": "Kernel to client.\n\nEvery variant carries a `seq`: a client detects a gap by arithmetic and re-attaches with `since`, which is only possible if the ordering is on the frame rather than implied by the transport.",
+      "oneOf": [
+        {
+          "description": "A turn began.",
+          "type": "object",
+          "required": [
+            "seq",
+            "t",
+            "turn"
+          ],
+          "properties": {
+            "seq": {
+              "description": "Where this sits in the session's order.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Seq"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "turn.started"
+              ]
+            },
+            "turn": {
+              "description": "Which turn.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/TurnId"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "description": "A surface changed.",
+          "type": "object",
+          "required": [
+            "patch",
+            "seq",
+            "surface",
+            "t"
+          ],
+          "properties": {
+            "patch": {
+              "description": "How it changed.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SurfacePatch"
+                }
+              ]
+            },
+            "seq": {
+              "description": "Where this sits in the session's order.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Seq"
+                }
+              ]
+            },
+            "surface": {
+              "description": "Which surface.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SurfaceId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "delta"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A tool call began.",
+          "type": "object",
+          "required": [
+            "call",
+            "ref",
+            "seq",
+            "t"
+          ],
+          "properties": {
+            "call": {
+              "description": "Which call.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CallId"
+                }
+              ]
+            },
+            "ref": {
+              "description": "Which tool.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ToolRef"
+                }
+              ]
+            },
+            "seq": {
+              "description": "Where this sits in the session's order.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Seq"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "tool.started"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A tool call ended, one way or another.",
+          "type": "object",
+          "required": [
+            "call",
+            "outcome",
+            "seq",
+            "t"
+          ],
+          "properties": {
+            "call": {
+              "description": "Which call.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CallId"
+                }
+              ]
+            },
+            "outcome": {
+              "description": "How it went.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Outcome"
+                }
+              ]
+            },
+            "seq": {
+              "description": "Where this sits in the session's order.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Seq"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "tool.settled"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Something needs permission.",
+          "type": "object",
+          "required": [
+            "deadline_ms",
+            "prompt",
+            "seq",
+            "t"
+          ],
+          "properties": {
+            "deadline_ms": {
+              "description": "How long there is to answer before the default applies.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "prompt": {
+              "description": "The question.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ConsentPrompt"
+                }
+              ]
+            },
+            "seq": {
+              "description": "Where this sits in the session's order.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Seq"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "consent.request"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A turn ended.",
+          "type": "object",
+          "required": [
+            "seq",
+            "t",
+            "turn",
+            "usage"
+          ],
+          "properties": {
+            "seq": {
+              "description": "Where this sits in the session's order.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Seq"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "turn.settled"
+              ]
+            },
+            "turn": {
+              "description": "Which turn.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/TurnId"
+                }
+              ]
+            },
+            "usage": {
+              "description": "What it cost.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Usage"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "description": "Something went wrong.",
+          "type": "object",
+          "required": [
+            "detail",
+            "scope",
+            "seq",
+            "t"
+          ],
+          "properties": {
+            "detail": {
+              "description": "What went wrong.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ErrorDetail"
+                }
+              ]
+            },
+            "scope": {
+              "description": "How far it reaches.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ErrorScope"
+                }
+              ]
+            },
+            "seq": {
+              "description": "Where this sits in the session's order.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Seq"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "error"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ExtId": {
+      "type": "string",
+      "pattern": "^(mcp\\.)?[a-z0-9-]+$"
+    },
+    "Field": {
+      "description": "One input of a [`SurfaceKind::Form`].",
+      "type": "object",
+      "required": [
+        "kind",
+        "label",
+        "name",
+        "required"
+      ],
+      "properties": {
+        "default": {
+          "description": "What it starts as.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "What it collects.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/FieldKind"
+            }
+          ]
+        },
+        "label": {
+          "description": "What is shown next to it.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The key this field's value is submitted under.",
+          "type": "string"
+        },
+        "required": {
+          "description": "Whether the form can be submitted without it.",
+          "type": "boolean"
+        }
+      }
+    },
+    "FieldKind": {
+      "description": "What a [`Field`] collects.",
+      "oneOf": [
+        {
+          "description": "A line of text.",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "text"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A line of text that must not be echoed, logged or stored.",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "secret"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A number, collected as text and parsed by whoever declared the field.",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "number"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A checkbox.",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "bool"
+              ]
+            }
+          }
+        },
+        {
+          "description": "One of a fixed set.",
+          "type": "object",
+          "required": [
+            "choices",
+            "t"
+          ],
+          "properties": {
+            "choices": {
+              "description": "The options.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Choice"
+              }
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "choice"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "Grant": {
+      "description": "What a subject is allowed to do.",
+      "type": "object",
+      "required": [
+        "consent"
+      ],
+      "properties": {
+        "capabilities": {
+          "description": "The capabilities, one entry per aspect-and-scope.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Capability"
+          }
+        },
+        "consent": {
+          "description": "How often to ask.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Consent"
+            }
+          ]
+        }
+      }
+    },
+    "Hunk": {
+      "description": "One changed region of a file.",
+      "type": "object",
+      "required": [
+        "new_lines",
+        "new_start",
+        "old_lines",
+        "old_start"
+      ],
+      "properties": {
+        "lines": {
+          "description": "The lines.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DiffLine"
+          }
+        },
+        "new_lines": {
+          "description": "How many lines it covers.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "new_start": {
+          "description": "First line of the region in the new file, 1-based.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "old_lines": {
+          "description": "How many lines it covered.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "old_start": {
+          "description": "First line of the region in the old file, 1-based.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "LoadOutcome": {
+      "description": "The result of trying to load one extension.",
+      "oneOf": [
+        {
+          "description": "It loaded and did everything it promised.",
+          "type": "object",
+          "required": [
+            "ext",
+            "ms",
+            "status"
+          ],
+          "properties": {
+            "contributions": {
+              "description": "What it added.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Contribution"
+              }
+            },
+            "ext": {
+              "description": "Which extension.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ExtId"
+                }
+              ]
+            },
+            "ms": {
+              "description": "How long it took.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "ok"
+              ]
+            }
+          }
+        },
+        {
+          "description": "It loaded, and something it promised is missing.\n\nThe interesting case, and the reason this is an enum rather than a `Result`: half an extension is usable, and saying which half is what stops a user hunting for a tool that quietly never registered.",
+          "type": "object",
+          "required": [
+            "ext",
+            "ms",
+            "status"
+          ],
+          "properties": {
+            "contributions": {
+              "description": "What it did add.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Contribution"
+              }
+            },
+            "ext": {
+              "description": "Which extension.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ExtId"
+                }
+              ]
+            },
+            "ms": {
+              "description": "How long it took.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "problems": {
+              "description": "What is missing, in words a person can act on.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "degraded"
+              ]
+            }
+          }
+        },
+        {
+          "description": "It was not tried.",
+          "type": "object",
+          "required": [
+            "ext",
+            "reason",
+            "status"
+          ],
+          "properties": {
+            "ext": {
+              "description": "Which extension.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ExtId"
+                }
+              ]
+            },
+            "reason": {
+              "description": "Why not.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SkipReason"
+                }
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "skipped"
+              ]
+            }
+          }
+        },
+        {
+          "description": "It was tried and it did not work.",
+          "type": "object",
+          "required": [
+            "ext",
+            "message",
+            "stage",
+            "status"
+          ],
+          "properties": {
+            "ext": {
+              "description": "Which extension.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ExtId"
+                }
+              ]
+            },
+            "message": {
+              "description": "What went wrong.",
+              "type": "string"
+            },
+            "stage": {
+              "description": "How far it got.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/LoadStage"
+                }
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "failed"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "LoadStage": {
+      "description": "How far loading got before it stopped.",
+      "oneOf": [
+        {
+          "description": "Reading and parsing the manifest.",
+          "type": "string",
+          "enum": [
+            "manifest"
+          ]
+        },
+        {
+          "description": "Resolving its dependencies and its version requirements.",
+          "type": "string",
+          "enum": [
+            "resolve"
+          ]
+        },
+        {
+          "description": "Linking the code: dynamic library, wasm module, child process.",
+          "type": "string",
+          "enum": [
+            "link"
+          ]
+        },
+        {
+          "description": "Running its activation.",
+          "type": "string",
+          "enum": [
+            "activate"
+          ]
+        },
+        {
+          "description": "Registering what it contributes.",
+          "type": "string",
+          "enum": [
+            "contribute"
+          ]
+        }
+      ]
+    },
+    "Message": {
+      "description": "One turn of the conversation.",
+      "type": "object",
+      "required": [
+        "role"
+      ],
+      "properties": {
+        "content": {
+          "description": "What they said.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ContentBlock"
+          }
+        },
+        "role": {
+          "description": "Who said it.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/MessageRole"
+            }
+          ]
+        }
+      }
+    },
+    "MessageRole": {
+      "description": "Who said it.",
+      "oneOf": [
+        {
+          "description": "The harness, setting the frame.",
+          "type": "string",
+          "enum": [
+            "system"
+          ]
+        },
+        {
+          "description": "The person, or a tool result being handed back.",
+          "type": "string",
+          "enum": [
+            "user"
+          ]
+        },
+        {
+          "description": "The model.",
+          "type": "string",
+          "enum": [
+            "assistant"
+          ]
+        }
+      ]
+    },
+    "Outcome": {
+      "description": "How something turned out.\n\nThe type that makes \"a denial is a value\" real at every layer: the tool registry returns it, the transcript stores it, the wire carries it, the renderer draws it. Nothing anywhere raises a denial as an error, because an error would have to be rendered by whoever caught it, and then two layers would be describing the same refusal in two different ways.",
+      "oneOf": [
+        {
+          "description": "It worked.",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "surface": {
+              "description": "What to show, when there is something to show.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Surface"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "ok"
+              ]
+            },
+            "value": {
+              "description": "What to feed back to the model, when that differs from what is shown."
+            }
+          }
+        },
+        {
+          "description": "Policy said no. The rule is named so the refusal can be explained and argued with, rather than being an opaque \"not allowed\".",
+          "type": "object",
+          "required": [
+            "reason",
+            "rule",
+            "t"
+          ],
+          "properties": {
+            "reason": {
+              "description": "Why, in words a person can act on.",
+              "type": "string"
+            },
+            "rule": {
+              "description": "Which rule.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/RuleId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "denied"
+              ]
+            }
+          }
+        },
+        {
+          "description": "It worked, but produced more than it was allowed to emit.",
+          "type": "object",
+          "required": [
+            "bytes_emitted",
+            "limit",
+            "t"
+          ],
+          "properties": {
+            "bytes_emitted": {
+              "description": "How much was produced.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "limit": {
+              "description": "How much was allowed.",
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "surface": {
+              "description": "What there is of it.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Surface"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "truncated"
+              ]
+            }
+          }
+        },
+        {
+          "description": "It was stopped.",
+          "type": "object",
+          "required": [
+            "reason",
+            "t"
+          ],
+          "properties": {
+            "reason": {
+              "description": "Why.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CancelReason"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "cancelled"
+              ]
+            }
+          }
+        },
+        {
+          "description": "The extension that owns it is no longer loaded.",
+          "type": "object",
+          "required": [
+            "ext",
+            "t"
+          ],
+          "properties": {
+            "ext": {
+              "description": "Which extension.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ExtId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "unloaded"
+              ]
+            }
+          }
+        },
+        {
+          "description": "It ran and went wrong.",
+          "type": "object",
+          "required": [
+            "code",
+            "message",
+            "t"
+          ],
+          "properties": {
+            "code": {
+              "description": "A stable, machine-readable code.",
+              "type": "string"
+            },
+            "message": {
+              "description": "What went wrong, in words.",
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "failed"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PromptId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "QueryOf": {
+      "description": "What a [`Request::Query`] is asking about.",
+      "oneOf": [
+        {
+          "description": "Every session.",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "sessions"
+              ]
+            }
+          }
+        },
+        {
+          "description": "One session's state.",
+          "type": "object",
+          "required": [
+            "session",
+            "t"
+          ],
+          "properties": {
+            "session": {
+              "description": "Which one.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SessionId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "session"
+              ]
+            }
+          }
+        },
+        {
+          "description": "The tools visible in a session.",
+          "type": "object",
+          "required": [
+            "session",
+            "t"
+          ],
+          "properties": {
+            "session": {
+              "description": "Which session.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SessionId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "tools"
+              ]
+            }
+          }
+        },
+        {
+          "description": "What is loaded, and how it went — see [`crate::load::LoadOutcome`].",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "extensions"
+              ]
+            }
+          }
+        },
+        {
+          "description": "The profiles a session can be created from.",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "t": {
+              "type": "string",
+              "enum": [
+                "profiles"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ReqId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Request": {
+      "description": "Client to kernel.\n\nEvery variant carries an `id`, because every response has to name what it is answering. It is repeated per variant rather than lifted to a struct field because serde cannot express a struct-level field alongside an internally tagged enum — a test asserts that no variant lost it.\n\nThe tags are **dotted** and spelled out one by one. No `rename_all` rule produces a dot, so an added variant without an explicit `rename` would show up as `turn-submit` instead of `turn.submit`; the tag test catches exactly that.",
+      "oneOf": [
+        {
+          "description": "Start a session.",
+          "type": "object",
+          "required": [
+            "id",
+            "profile",
+            "t",
+            "workspace"
+          ],
+          "properties": {
+            "id": {
+              "description": "The request id.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ReqId"
+                }
+              ]
+            },
+            "profile": {
+              "description": "Which profile to build it from.",
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "session.create"
+              ]
+            },
+            "workspace": {
+              "description": "The workspace root.",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "Attach to an existing session, optionally replaying from a sequence number the client already has.",
+          "type": "object",
+          "required": [
+            "id",
+            "session",
+            "t"
+          ],
+          "properties": {
+            "id": {
+              "description": "The request id.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ReqId"
+                }
+              ]
+            },
+            "session": {
+              "description": "Which session.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SessionId"
+                }
+              ]
+            },
+            "since": {
+              "description": "Replay from just after this. Absent means from the start.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Seq"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "session.attach"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Submit a turn.",
+          "type": "object",
+          "required": [
+            "id",
+            "input",
+            "session",
+            "t"
+          ],
+          "properties": {
+            "id": {
+              "description": "The request id.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ReqId"
+                }
+              ]
+            },
+            "input": {
+              "description": "What was submitted.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/UserInput"
+                }
+              ]
+            },
+            "session": {
+              "description": "Which session.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SessionId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "turn.submit"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Cancel a turn in flight.",
+          "type": "object",
+          "required": [
+            "id",
+            "session",
+            "t",
+            "turn"
+          ],
+          "properties": {
+            "id": {
+              "description": "The request id.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ReqId"
+                }
+              ]
+            },
+            "session": {
+              "description": "Which session.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SessionId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "turn.cancel"
+              ]
+            },
+            "turn": {
+              "description": "Which turn.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/TurnId"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "description": "Answer a surface: a form submitted, a choice picked.",
+          "type": "object",
+          "required": [
+            "id",
+            "session",
+            "surface",
+            "t",
+            "value"
+          ],
+          "properties": {
+            "id": {
+              "description": "The request id.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ReqId"
+                }
+              ]
+            },
+            "session": {
+              "description": "Which session.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SessionId"
+                }
+              ]
+            },
+            "surface": {
+              "description": "Which surface.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SurfaceId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "intent"
+              ]
+            },
+            "value": {
+              "description": "What the surface produced."
+            }
+          }
+        },
+        {
+          "description": "Answer a consent prompt.",
+          "type": "object",
+          "required": [
+            "answer",
+            "id",
+            "prompt",
+            "t"
+          ],
+          "properties": {
+            "answer": {
+              "description": "The answer.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ConsentAnswerKind"
+                }
+              ]
+            },
+            "id": {
+              "description": "The request id.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ReqId"
+                }
+              ]
+            },
+            "prompt": {
+              "description": "Which prompt.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/PromptId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "consent.answer"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Run a command.",
+          "type": "object",
+          "required": [
+            "id",
+            "name",
+            "session",
+            "t"
+          ],
+          "properties": {
+            "args": {
+              "description": "Its arguments."
+            },
+            "id": {
+              "description": "The request id.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ReqId"
+                }
+              ]
+            },
+            "name": {
+              "description": "The command's name.",
+              "type": "string"
+            },
+            "session": {
+              "description": "Which session.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SessionId"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "command"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Ask about state.",
+          "type": "object",
+          "required": [
+            "id",
+            "of",
+            "t"
+          ],
+          "properties": {
+            "id": {
+              "description": "The request id.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/ReqId"
+                }
+              ]
+            },
+            "of": {
+              "description": "What is being asked about.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/QueryOf"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "query"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "RuleId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Seq": {
+      "type": "integer",
+      "format": "uint64"
+    },
+    "SessionId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "SkipReason": {
+      "description": "Why an extension was not loaded at all.\n\nA **closed** set. \"It did not load\" is a thing a user has to be able to act on, and free text cannot be grouped, counted or matched against a rule.",
+      "oneOf": [
+        {
+          "description": "Turned off by configuration.",
+          "type": "string",
+          "enum": [
+            "disabled"
+          ]
+        },
+        {
+          "description": "Not built for this platform or this harness version.",
+          "type": "string",
+          "enum": [
+            "unsupported"
+          ]
+        },
+        {
+          "description": "Something it depends on is not there.",
+          "type": "string",
+          "enum": [
+            "dependency-missing"
+          ]
+        },
+        {
+          "description": "Policy refused it.",
+          "type": "string",
+          "enum": [
+            "policy-denied"
+          ]
+        },
+        {
+          "description": "Another copy is already loaded.",
+          "type": "string",
+          "enum": [
+            "already-loaded"
+          ]
+        }
+      ]
+    },
+    "StackDir": {
+      "description": "Which way a [`SurfaceKind::Stack`] lays its children out.",
+      "oneOf": [
+        {
+          "description": "Left to right.",
+          "type": "string",
+          "enum": [
+            "row"
+          ]
+        },
+        {
+          "description": "Top to bottom.",
+          "type": "string",
+          "enum": [
+            "column"
+          ]
+        }
+      ]
+    },
+    "Status": {
+      "description": "How far along whatever produced this surface is.",
+      "oneOf": [
+        {
+          "description": "Not started.",
+          "type": "string",
+          "enum": [
+            "pending"
+          ]
+        },
+        {
+          "description": "In flight; more patches are coming.",
+          "type": "string",
+          "enum": [
+            "running"
+          ]
+        },
+        {
+          "description": "Finished, successfully.",
+          "type": "string",
+          "enum": [
+            "done"
+          ]
+        },
+        {
+          "description": "Finished, unsuccessfully.",
+          "type": "string",
+          "enum": [
+            "failed"
+          ]
+        },
+        {
+          "description": "Stopped before it finished.",
+          "type": "string",
+          "enum": [
+            "cancelled"
+          ]
+        }
+      ]
+    },
+    "Subject": {
+      "type": "string",
+      "pattern": "^(agent|ext:[a-z0-9.-]+|agent:.+)$"
+    },
+    "Surface": {
+      "description": "A surface, with the handle a patch addresses it by and how far along it is.",
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "description": "The handle. Absent for a surface nothing will ever patch.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SurfaceId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "description": "What it is.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SurfaceKind"
+            }
+          ]
+        },
+        "status": {
+          "description": "How far along it is.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Status"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "SurfaceId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "SurfaceKind": {
+      "description": "What a surface *is*.",
+      "oneOf": [
+        {
+          "description": "A run of text.",
+          "type": "object",
+          "required": [
+            "t",
+            "value"
+          ],
+          "properties": {
+            "style": {
+              "description": "How it is meant.",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/TextStyle"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "text"
+              ]
+            },
+            "value": {
+              "description": "The text.",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "Rows under headers.",
+          "type": "object",
+          "required": [
+            "columns",
+            "t"
+          ],
+          "properties": {
+            "columns": {
+              "description": "The header row.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rows": {
+              "description": "The body. Every row is expected to be `columns.len()` long.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Cell"
+                }
+              }
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "table"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A hierarchy.",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "nodes": {
+              "description": "The roots.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TreeNode"
+              }
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "tree"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A change to one file.",
+          "type": "object",
+          "required": [
+            "path",
+            "t"
+          ],
+          "properties": {
+            "hunks": {
+              "description": "The changed regions.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Hunk"
+              }
+            },
+            "path": {
+              "description": "The file.",
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "diff"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Something taking a while. `done`/`total` absent means indeterminate.",
+          "type": "object",
+          "required": [
+            "label",
+            "t"
+          ],
+          "properties": {
+            "done": {
+              "description": "How much is done.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "label": {
+              "description": "What is happening.",
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "progress"
+              ]
+            },
+            "total": {
+              "description": "How much there is.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        {
+          "description": "An append-only channel. The content arrives as [`SurfacePatch::Append`], which is the hot path.",
+          "type": "object",
+          "required": [
+            "id",
+            "t"
+          ],
+          "properties": {
+            "id": {
+              "description": "Which channel: `stdout`, `stderr`, a log name.",
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "stream"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A checklist.",
+          "type": "object",
+          "required": [
+            "t"
+          ],
+          "properties": {
+            "items": {
+              "description": "The entries.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TaskItem"
+              }
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "task"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A question the run is blocked on.",
+          "type": "object",
+          "required": [
+            "free",
+            "multi",
+            "prompt",
+            "t"
+          ],
+          "properties": {
+            "choices": {
+              "description": "The offered answers.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Choice"
+              }
+            },
+            "deadline_ms": {
+              "description": "How long there is to answer.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "default": {
+              "description": "What is used if the deadline passes.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "free": {
+              "description": "Whether an answer outside `choices` is accepted.",
+              "type": "boolean"
+            },
+            "multi": {
+              "description": "Whether more than one may be picked.",
+              "type": "boolean"
+            },
+            "prompt": {
+              "description": "What is being asked.",
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "question"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Several values collected at once.",
+          "type": "object",
+          "required": [
+            "submit",
+            "t"
+          ],
+          "properties": {
+            "fields": {
+              "description": "The inputs.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Field"
+              }
+            },
+            "submit": {
+              "description": "The submit button's label.",
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "form"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Other surfaces, arranged.",
+          "type": "object",
+          "required": [
+            "collapsed",
+            "dir",
+            "t"
+          ],
+          "properties": {
+            "children": {
+              "description": "The contents.",
+              "default": [],
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Surface"
+              }
+            },
+            "collapsed": {
+              "description": "Whether it starts folded.",
+              "type": "boolean"
+            },
+            "dir": {
+              "description": "Which way.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/StackDir"
+                }
+              ]
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "stack"
+              ]
+            },
+            "title": {
+              "description": "An optional heading.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Markdown. `complete` is false while it is still streaming, so a client knows not to trust a half-open code fence.",
+          "type": "object",
+          "required": [
+            "complete",
+            "t",
+            "value"
+          ],
+          "properties": {
+            "complete": {
+              "description": "Whether the last patch has arrived.",
+              "type": "boolean"
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "markdown"
+              ]
+            },
+            "value": {
+              "description": "The source.",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "Anything an extension brought its own renderer for.",
+          "type": "object",
+          "required": [
+            "fallback",
+            "kind",
+            "payload",
+            "t"
+          ],
+          "properties": {
+            "fallback": {
+              "description": "What to show instead, for a client that has no such renderer.\n\nMandatory, and a `Box<Surface>` rather than an `Option`: a custom surface nobody can draw is a blank hole in a transcript, so the type refuses to express one.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Surface"
+                }
+              ]
+            },
+            "kind": {
+              "description": "`<ext>.<name>`, so two extensions cannot claim one renderer.",
+              "type": "string"
+            },
+            "payload": {
+              "description": "Whatever that renderer needs."
+            },
+            "t": {
+              "type": "string",
+              "enum": [
+                "custom"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "SurfacePatch": {
+      "description": "A change to a surface already on screen.\n\nThe whole point of the surface protocol: a streaming tool sends one [`SurfacePatch::Append`] per chunk rather than a whole new surface, so the hot path is a string and not a tree.",
+      "oneOf": [
+        {
+          "description": "Swap the whole surface.",
+          "type": "object",
+          "required": [
+            "id",
+            "op",
+            "value"
+          ],
+          "properties": {
+            "id": {
+              "description": "Which surface.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SurfaceId"
+                }
+              ]
+            },
+            "op": {
+              "type": "string",
+              "enum": [
+                "replace"
+              ]
+            },
+            "value": {
+              "description": "What it becomes.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Surface"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "description": "Add to the end of a stream or a markdown body.",
+          "type": "object",
+          "required": [
+            "id",
+            "op",
+            "text"
+          ],
+          "properties": {
+            "id": {
+              "description": "Which surface.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SurfaceId"
+                }
+              ]
+            },
+            "op": {
+              "type": "string",
+              "enum": [
+                "append"
+              ]
+            },
+            "text": {
+              "description": "What to add.",
+              "type": "string"
+            }
+          }
+        },
+        {
+          "description": "Set one field, addressed by a path of keys.",
+          "type": "object",
+          "required": [
+            "id",
+            "op",
+            "path",
+            "value"
+          ],
+          "properties": {
+            "id": {
+              "description": "Which surface.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SurfaceId"
+                }
+              ]
+            },
+            "op": {
+              "type": "string",
+              "enum": [
+                "set"
+              ]
+            },
+            "path": {
+              "description": "The path from the surface's root to the field.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "value": {
+              "description": "The new value."
+            }
+          }
+        },
+        {
+          "description": "Take the surface away.",
+          "type": "object",
+          "required": [
+            "id",
+            "op"
+          ],
+          "properties": {
+            "id": {
+              "description": "Which surface.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/SurfaceId"
+                }
+              ]
+            },
+            "op": {
+              "type": "string",
+              "enum": [
+                "remove"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "TaskItem": {
+      "description": "One entry of a [`SurfaceKind::Task`] list.",
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "description": "A stable handle, so a patch can update one item.",
+          "type": "string"
+        },
+        "label": {
+          "description": "What to show.",
+          "type": "string"
+        },
+        "status": {
+          "description": "How far along it is.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Status"
+            }
+          ]
+        }
+      }
+    },
+    "TextStyle": {
+      "description": "A hint about how a run of text is meant, never a colour.",
+      "oneOf": [
+        {
+          "description": "Ordinary prose.",
+          "type": "string",
+          "enum": [
+            "plain"
+          ]
+        },
+        {
+          "description": "Secondary: a count, a path, a timing.",
+          "type": "string",
+          "enum": [
+            "muted"
+          ]
+        },
+        {
+          "description": "Worth noticing.",
+          "type": "string",
+          "enum": [
+            "emphasis"
+          ]
+        },
+        {
+          "description": "Monospace: an identifier, a command.",
+          "type": "string",
+          "enum": [
+            "code"
+          ]
+        },
+        {
+          "description": "Something went wrong.",
+          "type": "string",
+          "enum": [
+            "error"
+          ]
+        },
+        {
+          "description": "Something went right.",
+          "type": "string",
+          "enum": [
+            "success"
+          ]
+        },
+        {
+          "description": "Something might go wrong.",
+          "type": "string",
+          "enum": [
+            "warning"
+          ]
+        }
+      ]
+    },
+    "ToolRef": {
+      "type": "string",
+      "pattern": "^(mcp\\.)?[a-z0-9-]+\\.[A-Za-z0-9_-]+$"
+    },
+    "TreeNode": {
+      "description": "One node of a [`SurfaceKind::Tree`].",
+      "type": "object",
+      "required": [
+        "expanded",
+        "label"
+      ],
+      "properties": {
+        "children": {
+          "description": "Its children. A leaf has none.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TreeNode"
+          }
+        },
+        "expanded": {
+          "description": "Whether the node starts open.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "A stable handle, when the client needs to address this node.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "description": "What to show.",
+          "type": "string"
+        }
+      }
+    },
+    "TurnId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "Usage": {
+      "description": "What was actually spent.",
+      "type": "object",
+      "required": [
+        "cache_hits",
+        "input_tokens",
+        "output_tokens"
+      ],
+      "properties": {
+        "cache_hits": {
+          "description": "Tokens served from a provider-side prompt cache.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "input_tokens": {
+          "description": "Tokens sent.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "micro_usd": {
+          "description": "Cost in micro-USD, when the provider reports one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "output_tokens": {
+          "description": "Tokens received.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "UserInput": {
+      "description": "What a person submitted.",
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "attachments": {
+          "description": "Anything else they attached: images, a pasted tool result.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ContentBlock"
+          }
+        },
+        "branch": {
+          "description": "Which branch of the turn tree to submit on. Absent means the current one; present means \"re-run from here\", which is how an edited turn forks rather than overwrites.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BranchId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "description": "What they typed.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

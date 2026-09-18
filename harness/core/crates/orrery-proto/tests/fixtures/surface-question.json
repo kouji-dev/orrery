@@ -1,0 +1,20 @@
+{
+  "kind": {
+    "t": "question",
+    "prompt": "Which branch?",
+    "choices": [
+      {
+        "value": "main",
+        "label": "main"
+      },
+      {
+        "value": "dev",
+        "label": "dev"
+      }
+    ],
+    "multi": false,
+    "free": false,
+    "default": "main",
+    "deadline_ms": 30000
+  }
+}

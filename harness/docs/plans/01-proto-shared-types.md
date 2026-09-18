@@ -398,5 +398,46 @@ Files: `src/load.rs`
 Answer these here when you decide them.
 
 1. **Glob-aware grant intersection.** `Grant::intersect` as specified is set-based and therefore wrong for path aspects. Three options: (a) leave it, document it as exact-match only, and have `orrery-policy` own the real narrowing — simplest, but a footgun with a correct-looking name; (b) move `intersect` out of this crate entirely into `orrery-policy` and have `orrery-proto` carry only the data; (c) pull `globset` in here. **(b) is the recommendation** — the type stays here, the operation moves — but it changes §4.15's shape, so record the decision.
+
+   **Decided: (b), with the footgun disarmed by name.** `orrery-proto` has no
+   method called `intersect`. The glob-aware narrowing the kernel enforces is
+   `orrery-policy`'s and lands with plan 07. What this crate ships is:
+
+   - `Consent::min` — the consent lattice (`Never < Once < Always`) is
+     format-independent and therefore correct here. `Consent` derives its `Ord`
+     from an explicit `rank()`, because the declaration order is widest-first
+     and the lattice order is the opposite.
+   - `Grant::intersect_exact` — string-set intersection, named for what it does.
+     Correct for `consent` and for the exact-match aspects; a doc comment spells
+     out that `read(./src/**) ∩ read(./**)` is empty here and `./src/**` under
+     policy semantics, and `Aspect::is_exact_match()` tells a caller which
+     aspects it may be used on.
+   - `GrantSpec::apply_to` resolves a declaration against its parent with the
+     same operation: an omitted field inherits, a present field is *intersected*
+     rather than substituted, so a spec can never widen what it was given.
+
+   One semantic addition the plan did not specify and the property tests forced:
+   an **empty `scope` means unqualified** — the whole aspect, not nothing — so
+   an unscoped parent is wider than a scoped child. Without that rule,
+   intersecting an unscoped `write` with `write(./src/**)` drops the capability
+   and narrowing is not a lattice. Two non-empty scopes that do not overlap drop
+   the capability rather than being promoted to unqualified.
+
+   §4.15 changes accordingly: the `Grant` *type* is `orrery-proto`'s, the
+   narrowing *operation* is `orrery-policy`'s.
+
 2. **`Thinking` content blocks.** Not in the spec. They exist in every current provider and the transcript should keep them. Keep, or drop until a provider needs them?
+
+   **Decided: keep.** Every current provider emits reasoning, the transcript is
+   the audit record, and a turn tree that silently discards what the model was
+   thinking cannot be replayed faithfully. It costs one variant. A provider that
+   does not produce them simply never constructs one.
+
 3. **Image content.** Base64 in the message is simple and matches the providers, but it means a screenshot sits in the turn tree and in every `materialise`. Reference-with-blob-store (the ADE's `history/mod.rs` shape) is the alternative. Phase 1 does not need images; decide before phase 4.
+
+   **Deferred, as the plan allows, but the shape is now pinned:**
+   `ContentBlock::Image { media_type, data }` ships with base64 `data`, because
+   phase 1 never constructs one and a type nobody builds costs nothing. The
+   blob-store variant, when it is needed, is an *additional* variant on a
+   `#[non_exhaustive]` enum rather than a change to this one — so taking the
+   decision in phase 4 is not a breaking change. Revisit before phase 4.

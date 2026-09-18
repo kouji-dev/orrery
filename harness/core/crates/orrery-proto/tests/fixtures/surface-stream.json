@@ -1,0 +1,8 @@
+{
+  "id": "018f3a2b-0000-7000-8000-000000000002",
+  "status": "running",
+  "kind": {
+    "t": "stream",
+    "id": "stdout"
+  }
+}

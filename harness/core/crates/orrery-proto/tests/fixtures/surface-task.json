@@ -1,0 +1,17 @@
+{
+  "kind": {
+    "t": "task",
+    "items": [
+      {
+        "id": "1",
+        "label": "read the plan",
+        "status": "done"
+      },
+      {
+        "id": "2",
+        "label": "write the test",
+        "status": "running"
+      }
+    ]
+  }
+}

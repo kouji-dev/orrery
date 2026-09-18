@@ -1,0 +1,55 @@
+{
+  "kind": {
+    "t": "form",
+    "submit": "Create",
+    "fields": [
+      {
+        "name": "title",
+        "label": "Title",
+        "kind": {
+          "t": "text"
+        },
+        "required": true
+      },
+      {
+        "name": "token",
+        "label": "Token",
+        "kind": {
+          "t": "secret"
+        },
+        "required": true
+      },
+      {
+        "name": "count",
+        "label": "Count",
+        "kind": {
+          "t": "number"
+        },
+        "required": false,
+        "default": "1"
+      },
+      {
+        "name": "draft",
+        "label": "Draft",
+        "kind": {
+          "t": "bool"
+        },
+        "required": false
+      },
+      {
+        "name": "kind",
+        "label": "Kind",
+        "required": true,
+        "kind": {
+          "t": "choice",
+          "choices": [
+            {
+              "value": "bug",
+              "label": "Bug"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

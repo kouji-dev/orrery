@@ -22,4 +22,8 @@ That is why this is not `ts-rs` or `specta`.
 **Source of truth:** [`harness/core/crates/orrery-proto`](../core/crates/orrery-proto).
 **Implementation plan:** [`harness/docs/plans/01-proto-shared-types.md`](../docs/plans/01-proto-shared-types.md).
 
-**Status.** The generator is a stub; there is nothing generated yet.
+**Status.** Generated. `protocol.schema.json` is emitted by `schemars` from a
+root type that names `Request`, `Event`, `Surface`, `SurfacePatch`, `Grant`,
+`Budget`, `Usage`, `Message` and `LoadOutcome`; `protocol.d.ts` is
+`json-schema-to-typescript` over it, pinned to one version so the drift gate
+does not flap. `cargo test -p xtask` runs the gate.

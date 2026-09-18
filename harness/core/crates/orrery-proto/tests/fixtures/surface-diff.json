@@ -1,0 +1,28 @@
+{
+  "kind": {
+    "t": "diff",
+    "path": "src/lib.rs",
+    "hunks": [
+      {
+        "old_start": 1,
+        "old_lines": 2,
+        "new_start": 1,
+        "new_lines": 3,
+        "lines": [
+          {
+            "kind": "context",
+            "text": "fn main() {"
+          },
+          {
+            "kind": "remove",
+            "text": "    old();"
+          },
+          {
+            "kind": "add",
+            "text": "    new();"
+          }
+        ]
+      }
+    ]
+  }
+}

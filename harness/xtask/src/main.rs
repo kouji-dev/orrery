@@ -67,10 +67,16 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
-        Task::Typegen => {
-            println!("typegen: not implemented — see harness/docs/plans/01-proto-shared-types.md");
-            ExitCode::SUCCESS
-        }
+        Task::Typegen => match xtask::typegen::run(&root) {
+            Ok(dir) => {
+                println!("typegen: wrote {}", dir.display());
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("typegen: {e}");
+                ExitCode::from(2)
+            }
+        },
         Task::WitCheck => {
             println!("wit-check: not implemented — see harness/docs/plans/14-wasm-wit.md");
             ExitCode::SUCCESS

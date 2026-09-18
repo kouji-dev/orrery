@@ -12,3 +12,5 @@ publish = false
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+schemars = { workspace = true }
+orrery-proto = { workspace = true }

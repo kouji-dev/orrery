@@ -1,0 +1,20 @@
+{
+  "kind": {
+    "t": "table",
+    "columns": [
+      "file",
+      "lines"
+    ],
+    "rows": [
+      [
+        {
+          "text": "src/lib.rs"
+        },
+        {
+          "text": "12",
+          "style": "code"
+        }
+      ]
+    ]
+  }
+}

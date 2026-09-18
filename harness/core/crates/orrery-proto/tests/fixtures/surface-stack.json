@@ -1,0 +1,22 @@
+{
+  "kind": {
+    "t": "stack",
+    "dir": "column",
+    "title": "Result",
+    "collapsed": false,
+    "children": [
+      {
+        "kind": {
+          "t": "text",
+          "value": "ok"
+        }
+      },
+      {
+        "kind": {
+          "t": "progress",
+          "label": "writing"
+        }
+      }
+    ]
+  }
+}

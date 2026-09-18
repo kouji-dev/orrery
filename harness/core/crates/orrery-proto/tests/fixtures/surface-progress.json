@@ -1,0 +1,8 @@
+{
+  "kind": {
+    "t": "progress",
+    "label": "indexing",
+    "done": 40,
+    "total": 100
+  }
+}

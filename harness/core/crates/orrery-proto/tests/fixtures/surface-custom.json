@@ -1,0 +1,15 @@
+{
+  "kind": {
+    "t": "custom",
+    "kind": "buildgraph.graph",
+    "payload": {
+      "nodes": 3
+    },
+    "fallback": {
+      "kind": {
+        "t": "text",
+        "value": "a 3-node graph"
+      }
+    }
+  }
+}

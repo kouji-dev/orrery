@@ -1,0 +1,6 @@
+{
+  "t": "tool.started",
+  "seq": 3,
+  "call": "018f3a2b-0000-7000-8000-000000000014",
+  "ref": "mcp.jira.create_issue"
+}
