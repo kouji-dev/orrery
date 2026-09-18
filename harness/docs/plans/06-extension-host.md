@@ -234,7 +234,16 @@ Files: `orrery-host/src/native.rs`
 
 ### Task 4 · The builtin tool bundle
 
-Files: `orrery-ext-tools-builtin/src/*`
+Files: `orrery-ext-tools-builtin/src/*`, `orrery-harness/tests/builtin.rs`
+
+> **Where the tests live, and why not here.** `cargo xtask deps-check` rule 3
+> forbids an extension crate from dev-depending on an unpublished core crate, so
+> that a community author runs the identical suite. `orrery-broker` is exactly
+> that, and these tests need the real one. They live in
+> `orrery-harness/tests/builtin.rs`, which may name both halves - and are better
+> for it: the facade under test is `PolicyBroker`, the one the harness wires in
+> production, rather than a rig written for the tests.
+> `orrery-ext-tools-builtin` has no dev-dependencies at all.
 
 > Deferred out of wave 2 and **landed in wave 3**, for the reason it was
 > deferred: every test in this task is a test *of the broker* — an output
@@ -304,7 +313,7 @@ Files: `extensions/node/ext-sdk/*`
 
 ## Done when
 
-- `cargo test -p orrery-ext-api -p orrery-host -p orrery-jsonrpc -p orrery-host-rpc -p orrery-ext-tools-builtin` green.
+- `cargo test -p orrery-ext-api -p orrery-host -p orrery-jsonrpc -p orrery-host-rpc` green, and the builtin bundle's own suite with `-p orrery-harness --test builtin` (see Task 4).
 - Two extensions claiming `search` coexist as `a.search` and `b.search`; unloading one leaves the session alive.
 - `builtin.read` on a huge file demonstrably does not buffer it —
   `builtin::read_respects_the_output_ceiling` reads 10 MB under a 4 KB ceiling
