@@ -1,9 +1,9 @@
 //! The census describes a section, a table and a summary — and nothing else.
 
-use orrery_ext_api::testing::load_path_for_test;
 use orrery_ext_api::NativeExtension;
-use workspace_census::{MANIFEST, WorkspaceCensus};
+use orrery_ext_api::testing::load_path_for_test;
 use orrery_proto::{Outcome, SurfaceKind};
+use workspace_census::{MANIFEST, WorkspaceCensus};
 
 fn input() -> serde_json::Value {
     serde_json::json!({
@@ -28,7 +28,9 @@ fn ships_a_manifest_a_third_party_would_ship() {
         "the manifest promises the tool the code contributes"
     );
     assert_eq!(
-        std::fs::read_to_string(&path).unwrap().replace("\r\n", "\n"),
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("\r\n", "\n"),
         MANIFEST.replace("\r\n", "\n"),
         "the compiled-in manifest is the file, not a copy of it"
     );
@@ -108,10 +110,7 @@ async fn everything_is_described_through_ctx_ui() {
 /// An unknown tool is a failure the harness carries, not a panic.
 #[tokio::test]
 async fn an_unknown_tool_fails_cleanly() {
-    let ctx = orrery_ext_api::CallCtx::inert(
-        "example-workspace-census".parse().unwrap(),
-        "nope",
-    );
+    let ctx = orrery_ext_api::CallCtx::inert("example-workspace-census".parse().unwrap(), "nope");
     let outcome = WorkspaceCensus
         .call("nope", serde_json::json!({}), &ctx)
         .await

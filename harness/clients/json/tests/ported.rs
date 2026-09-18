@@ -68,10 +68,7 @@ async fn the_custom_surface_emits_payload_and_fallback() {
     let text = fallback["fallback_text"].as_str().expect("rendered");
     for stage in stages {
         let label = stage["label"].as_str().expect("a label");
-        assert!(
-            text.contains(label),
-            "the fallback drops `{label}`: {text}"
-        );
+        assert!(text.contains(label), "the fallback drops `{label}`: {text}");
     }
     assert!(
         text.contains("stages shipped"),

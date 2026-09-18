@@ -47,7 +47,8 @@ use orrery_tools::Registry;
 use uuid::Uuid;
 
 /// The turn every ported scenario runs in. Constant, so a fixture is stable.
-pub const TURN: TurnId = TurnId::from_uuid(Uuid::from_u128(0x0193_7ce5_0000_7000_8000_0000_0000_00ff));
+pub const TURN: TurnId =
+    TurnId::from_uuid(Uuid::from_u128(0x0193_7ce5_0000_7000_8000_0000_0000_00ff));
 
 /// One ported extension, and what to call it with.
 pub struct Example {
@@ -215,7 +216,7 @@ pub async fn run(example: &Example) -> Ported {
     let mut returned = Vec::new();
     let mut outcomes = Vec::new();
 
-    let mut push = |event: Event, frames: &mut Vec<Frame>, encoder: &mut Encoder| {
+    let push = |event: Event, frames: &mut Vec<Frame>, encoder: &mut Encoder| {
         for agui in encoder.encode(&event) {
             let next = frames.len() as u64 + 1;
             frames.push(Frame::new(next, agui));
@@ -223,7 +224,11 @@ pub async fn run(example: &Example) -> Ported {
     };
 
     seq = seq.next();
-    push(Event::TurnStarted { seq, turn: TURN }, &mut frames, &mut encoder);
+    push(
+        Event::TurnStarted { seq, turn: TURN },
+        &mut frames,
+        &mut encoder,
+    );
 
     for input in (example.calls)() {
         let outcome = registry

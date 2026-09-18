@@ -73,7 +73,11 @@ fn stages(input: &Value) -> Vec<Stage> {
         .map(|list| {
             list.iter()
                 .map(|s| Stage {
-                    id: s.get("id").and_then(Value::as_str).unwrap_or("?").to_owned(),
+                    id: s
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("?")
+                        .to_owned(),
                     label: s
                         .get("label")
                         .and_then(Value::as_str)
@@ -167,9 +171,7 @@ impl NativeExtension for ReleaseTrain {
                 })
                 .collect(),
         );
-        let progress = ctx
-            .ui
-            .progress(release.clone(), Some(done), Some(total));
+        let progress = ctx.ui.progress(release.clone(), Some(done), Some(total));
 
         // The custom surface, and the fallback that has to stand in for it.
         let payload = serde_json::json!({
@@ -227,7 +229,6 @@ impl ReleaseTrain {
                 .iter()
                 .map(|s| [s.label.clone(), mark(s.status).to_owned()]),
         );
-        ctx.ui
-            .stack(StackDir::Column, vec![headline, table])
+        ctx.ui.stack(StackDir::Column, vec![headline, table])
     }
 }

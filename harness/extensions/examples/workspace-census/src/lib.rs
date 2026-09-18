@@ -66,10 +66,7 @@ fn members(input: &Value) -> Vec<Member> {
                         .and_then(Value::as_str)
                         .unwrap_or("workspace")
                         .to_owned(),
-                    published: c
-                        .get("published")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false),
+                    published: c.get("published").and_then(Value::as_bool).unwrap_or(false),
                 })
                 .collect()
         })
@@ -146,13 +143,11 @@ impl NativeExtension for WorkspaceCensus {
             "publish = false is a crate a community extension cannot depend on.",
             TextStyle::Muted,
         );
-        let census = ctx
-            .ui
-            .with_id(
-                ctx.ui
-                    .section("workspace census", false, vec![summary, table, footer]),
-                CENSUS,
-            );
+        let census = ctx.ui.with_id(
+            ctx.ui
+                .section("workspace census", false, vec![summary, table, footer]),
+            CENSUS,
+        );
 
         Ok(Outcome::Ok {
             surface: Some(census),

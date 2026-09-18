@@ -26,7 +26,9 @@ fn ships_a_manifest_a_third_party_would_ship() {
     assert_eq!(harness.manifest().name.as_str(), "example-patch-review");
     assert_eq!(harness.manifest().provides.tools, vec!["review".to_owned()]);
     assert_eq!(
-        std::fs::read_to_string(&path).unwrap().replace("\r\n", "\n"),
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("\r\n", "\n"),
         MANIFEST.replace("\r\n", "\n")
     );
 }

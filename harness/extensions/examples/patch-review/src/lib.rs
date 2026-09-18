@@ -193,10 +193,9 @@ impl NativeExtension for PatchReview {
             None,
         );
 
-        let review = ctx.ui.with_id(
-            ctx.ui.stack(StackDir::Column, vec![diff, question]),
-            REVIEW,
-        );
+        let review = ctx
+            .ui
+            .with_id(ctx.ui.stack(StackDir::Column, vec![diff, question]), REVIEW);
 
         Ok(Outcome::Ok {
             surface: Some(review),

@@ -76,8 +76,7 @@ fn markdown_snapshot() {
 #[test]
 fn markdown_renders_inline_emphasis_rather_than_showing_it() {
     let surface = Surface::new(orrery_proto::SurfaceKind::Markdown {
-        value: "**4** crates, **2** of them published. See `orrery.toml` and *this*."
-            .into(),
+        value: "**4** crates, **2** of them published. See `orrery.toml` and *this*.".into(),
         complete: true,
     });
     let drawn = draw(&surface, 60, Theme::colour());
