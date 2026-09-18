@@ -1,4 +1,15 @@
-//! Every loop event is a view (§6.7).
+//! Every loop event is a view (§6.7) — the vocabulary an extension contributes one in.
+//!
+//! # Why this is here and not in `orrery-surface`
+//!
+//! Contributing a view is an extension's job, exactly as contributing a tool
+//! is: [`ViewBinding`] is to [`ToolDef`](crate::ToolDef) what a view is to a
+//! tool. So the types an author needs in order to *contribute* — [`EventKind`],
+//! [`LoopEvent`], [`Placement`], [`Predicate`], [`ViewBinding`] and the
+//! [`ViewRegistry`] they check their bindings against — live in the published
+//! crate, beside the mock broker. `orrery-surface` keeps what the kernel owns:
+//! the differ, the hashes, the per-turn store, sealing and validation. It
+//! re-exports these, so kernel-side code reads as it did.
 //!
 //! Making the loop legible is **not** inventing a surface per concept. The
 //! catalogue already exists — the `Event` frames and the loop's own streams are

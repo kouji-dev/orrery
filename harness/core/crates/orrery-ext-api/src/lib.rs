@@ -18,6 +18,8 @@
 //! - [`broker`] — the only door out of an extension. Implemented in plan 07.
 //! - [`ledger`] — what loaded, degraded, failed or was skipped.
 //! - [`testing`] — the harness `orrery ext test` runs.
+//! - [`view`] — binding loop events to surfaces: what an extension contributes
+//!   a *view* with, as [`tool`] is what it contributes a *tool* with.
 //!
 //! The `ExtensionHost` trait and the instance table are **not** here: they name
 //! runtimes, spawn children and hold an `Arc<dyn>` per instance, none of which a
@@ -36,6 +38,7 @@ pub mod ledger;
 pub mod manifest;
 pub mod testing;
 pub mod tool;
+pub mod view;
 
 pub use broker::{
     BrokerError, BrokerFacade, BrokerResult, DeniesEverything, NetRequest, NetResponse, ReadChunk,
@@ -50,3 +53,7 @@ pub use manifest::{
     SUPPORTED_API_MAJOR, SingletonSlot,
 };
 pub use tool::{NativeExtension, ToolDef};
+pub use view::{
+    EventKind, LoopEvent, Placed, Placement, Predicate, ProfileError, ViewBinding, ViewRegistry,
+    floor, floor_kinds,
+};

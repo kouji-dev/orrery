@@ -12,11 +12,12 @@
 //!
 //! So the floor loads the way a third-party bundle does: an `orrery.toml`, an
 //! [`ExtensionManifest`](orrery_ext_api::ExtensionManifest) parsed by the same
-//! parser, a load through `orrery-host`, an entry in the ledger, and a deny
-//! rule that switches it off. Proving the mechanism on the one case that most
-//! tempts a shortcut is the point of the exercise.
+//! parser, a load through [`orrery_ext_api::testing`], an entry in the ledger,
+//! and a deny rule that switches it off. Proving the mechanism on the one case
+//! that most tempts a shortcut is the point of the exercise — and this crate
+//! depends on nothing a community author could not depend on.
 //!
-//! The binding *content* lives in [`orrery_surface::floor`], next to the
+//! The binding *content* lives in [`orrery_ext_api::floor`], next to the
 //! vocabulary it is written in so the two cannot drift. Nothing in the kernel
 //! calls it; this extension is the only thing that does.
 
@@ -24,9 +25,10 @@
 #![forbid(unsafe_code)]
 
 use async_trait::async_trait;
-use orrery_ext_api::{CallCtx, HostError, NativeExtension, ToolDef};
+use orrery_ext_api::{
+    CallCtx, HostError, NativeExtension, ToolDef, ViewBinding, ViewRegistry, floor, floor_kinds,
+};
 use orrery_proto::Outcome;
-use orrery_surface::{ViewBinding, ViewRegistry, floor, floor_kinds};
 use serde_json::Value;
 
 /// This extension's `orrery.toml`, compiled in.

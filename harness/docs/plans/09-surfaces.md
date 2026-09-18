@@ -111,7 +111,7 @@ A client with a matching renderer draws the rich version; every other draws the 
 
 **Create**
 
-- `harness/core/crates/orrery-surface/src/{lib,store,diff,hash,validate,view,sink}.rs`
+- `harness/core/crates/orrery-surface/src/{lib,store,diff,hash,validate,sink}.rs` (and `view` — **amended:** it landed in `orrery-ext-api/src/view.rs`, see Task 5)
 - `harness/core/crates/orrery-surface/tests/{diff,seal,view}.rs`
 - `harness/extensions/crates/orrery-ext-views-default/{Cargo.toml,orrery.toml,README.md,src/lib.rs}`
 - fixtures appended to `harness/clients/conformance/`
@@ -187,6 +187,18 @@ Files: `src/view.rs`, `tests/view.rs`
 - [x] `view::when_predicate` — a binding with `when` only fires on matching events.
 - [x] Implement `ViewBinding`, `Placement`, the registry, profile overrides.
 
+**Amended: the view vocabulary moved to `orrery-ext-api`.** The plan's file list
+puts `view.rs` in `orrery-surface`, and that made `orrery-ext-views-default` — an
+extension — depend on a `publish = false` core crate, which `xtask deps-check`
+rule 2 refuses and was right to. The diagnosis is that the types were in the
+wrong crate, not that the rule was too strict: contributing a *view* is an
+extension's job exactly as contributing a *tool* is, so `EventKind`, `LoopEvent`,
+`Placement`, `Predicate`, `ViewBinding`, `Placed`, `ViewRegistry` and `floor()`
+now live in `orrery-ext-api::view` beside `ToolDef` and `CallCtx`.
+`orrery-surface` keeps what the kernel owns — the differ, the hashes, the
+per-turn store, sealing, validation — and re-exports the view names, so
+kernel-side code and `tests/view.rs` read exactly as before.
+
 **Amended: `EventKind` and `LoopEvent` are defined here.** Neither existed. `EventKind` is a
 newtype over the dotted name a profile writes rather than an enum, because an extension
 contributes its own loop events and a closed enum would grow a variant per concept — which
@@ -199,7 +211,15 @@ plus `AssistantText` (prose arrives as deltas, not as a frame) and `Other { kind
 Files: `orrery-ext-views-default/*`
 
 - [x] Implement the floor bindings as a real extension with an `orrery.toml` — proving the mechanism on the thing that most tempts a built-in shortcut. `DefaultViews` implements `NativeExtension`, contributes five `views` and **no tools**, and asks for no capabilities, so it loads clean under `Grant::nothing()`.
-- [x] **Failing test first.** `views::ships_as_an_extension` — the bundle loads through `orrery-host` and appears in the ledger. Its manifest is parsed by the same parser a third party is held to, and a second test asserts the manifest's `views` list and the code's bindings are the same list in the same order.
+- [x] **Failing test first.** `views::ships_as_an_extension` — the bundle loads through `orrery_ext_api::testing::load_for_test` and appears in the ledger entry a real session would show. Its manifest is parsed by the same parser a third party is held to, and a second test asserts the manifest's `views` list and the code's bindings are the same list in the same order.
+
+**Amended: it loads through `orrery-ext-api::testing`, not `orrery-host`.** The
+test dev-depended on `orrery-host`, which is `publish = false`, and
+`deps-check` rule 3 refuses that for the reason the rule exists: an extension's
+tests use the published mock-broker harness, not kernel internals. That harness
+is the one `orrery ext test` runs and the one plan 18 points a community author
+at, so loading the floor through it is the proof that the path we recommend
+works. The crate now has no dev-dependencies at all.
 
 ### Task 7 · Conformance fixtures
 
@@ -228,6 +248,12 @@ no drawing code of their own". The TUIs are plans 09b and 09c and the porting is
 this plan built the vocabulary they consume and the fixtures they are checked against.
 
 ## State
+
+Amended 2026-09-18 (wave-3 audit repair): the view vocabulary moved from
+`orrery-surface` to `orrery-ext-api`, and `orrery-ext-views-default` now depends
+on `orrery-ext-api` alone and loads through its published test harness.
+`cargo run -q -p xtask -- deps-check` prints `ok`. Test counts are unchanged: 32
+in `orrery-surface`, 3 in `orrery-ext-views-default`.
 
 Landed 2026-09-18 on `feat/harness_claude-0917`. `orrery-surface` is implemented end to end
 — `validate`, `hash`, `diff` (+ its inverse `apply`), `store`, `sink`, `view` — and

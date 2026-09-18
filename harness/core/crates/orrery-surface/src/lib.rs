@@ -20,7 +20,10 @@
 //! - [`diff`] — the differ, the append fast path and the cost guard.
 //! - [`store`] — per-turn storage, and the seal at `turn.settled`.
 //! - [`sink`] — the builders an extension describes surfaces with.
-//! - [`view`] — binding loop events to surfaces, and the profile that moves them.
+//! - [`view`] — binding loop events to surfaces, and the profile that moves
+//!   them. Re-exported from `orrery-ext-api`: contributing a view is an
+//!   extension's job, so the vocabulary ships in the published crate and the
+//!   kernel borrows it rather than the other way round.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -30,7 +33,8 @@ pub mod hash;
 pub mod sink;
 pub mod store;
 pub mod validate;
-pub mod view;
+
+pub use orrery_ext_api::view;
 
 pub use diff::{COST_GUARD, DiffCost, apply, diff};
 pub use hash::{HashCounter, HashTree, NodeHash, hash_tree};
@@ -38,8 +42,8 @@ pub use sink::SurfaceBuilders;
 pub use store::SurfaceStore;
 pub use validate::{MAX_DEPTH, Warning, validate};
 pub use view::{
-    EventKind, LoopEvent, Placed, Placement, Predicate, ViewBinding, ViewRegistry, floor,
-    floor_kinds,
+    EventKind, LoopEvent, Placed, Placement, Predicate, ProfileError, ViewBinding, ViewRegistry,
+    floor, floor_kinds,
 };
 
 use orrery_proto::{SurfaceId, TurnId};

@@ -11,13 +11,11 @@ publish = false
 # Dependencies on core name BOTH halves: `version` makes this crate
 # publishable, `path` makes it build in-tree. At split time the path goes and
 # nothing else changes. See harness/extensions/README.md.
+# No dev-dependencies: the tests load this bundle through
+# `orrery-ext-api::testing`, the published mock-broker harness — the same door a
+# community author goes through. No kernel internals, nothing unpublished.
 [dependencies]
 orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
-orrery-surface = { version = "0.1", path = "../../../core/crates/orrery-surface" }
 orrery-proto = { workspace = true }
 async-trait = { workspace = true }
 serde_json = { workspace = true }
-
-[dev-dependencies]
-orrery-host = { path = "../../../core/crates/orrery-host" }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

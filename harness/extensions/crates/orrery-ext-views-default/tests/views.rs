@@ -1,48 +1,42 @@
 //! The floor ships as an extension, and loads like any other.
+//!
+//! It loads through [`orrery_ext_api::testing::load_for_test`] — the published
+//! mock-broker harness `orrery ext test` runs, and the one plan 18 tells a
+//! community author to use. Loading the floor through it is the proof that the
+//! path a third party is pointed at actually works: an extension's own tests
+//! never reach for the host.
 
-use std::sync::Arc;
-
-use orrery_ext_views_default::DefaultViews;
-use orrery_host::{ExtensionTable, NativeHost, NativeRegistry};
+use orrery_ext_api::testing::load_for_test;
+use orrery_ext_api::{LoopEvent, Placement};
+use orrery_ext_views_default::{DefaultViews, MANIFEST};
 use orrery_proto::{
-    Contribution, ContributionKind, ErrorDetail, ErrorScope, Event, ExtId, Grant, Layer,
-    LoadOutcome, Seq, SurfaceKind,
+    Contribution, ContributionKind, ErrorDetail, ErrorScope, Event, ExtId, LoadOutcome, Seq,
+    SurfaceKind,
 };
-use orrery_surface::{LoopEvent, Placement};
 
 fn id() -> ExtId {
     ExtId::new("views-default").expect("a valid ext id")
 }
 
-/// The bundle loads through `orrery-host` and appears in the ledger.
+/// The bundle loads through the published test harness and appears in the
+/// ledger entry a real session would show.
 ///
 /// Not "the kernel has a floor": the kernel has nothing, and this extension
 /// puts it there through the same door a third-party bundle uses.
-#[tokio::test]
-async fn ships_as_an_extension() {
-    let mut natives = NativeRegistry::new();
-    natives.register(Arc::new(DefaultViews));
-    assert!(
-        natives.broken().is_empty(),
-        "its own orrery.toml parses with the parser a third party is held to: {:?}",
-        natives.broken()
-    );
-
-    let host = Arc::new(NativeHost::new(natives));
-    let manifest = host.manifest_of(&id()).expect("the manifest is registered");
-    assert_eq!(manifest.name, id());
-
-    let table = ExtensionTable::new();
-    let outcome = table
-        .load(host.clone(), manifest, Layer::Managed, Grant::nothing())
-        .await;
-
-    // It asks for nothing, so `Grant::nothing()` is enough and the load is
+#[test]
+fn ships_as_an_extension() {
+    // It asks for nothing, so no grants at all are enough and the load is
     // clean rather than degraded.
+    let harness = load_for_test(MANIFEST, &[])
+        .expect("its own orrery.toml parses with the parser a third party is held to");
+
+    assert_eq!(harness.manifest().name, id());
+
+    let outcome = harness.load_outcome();
     let LoadOutcome::Ok { contributions, .. } = &outcome else {
         panic!("a view bundle needs no capabilities, so it loads clean: {outcome:?}");
     };
-    for kind in orrery_surface::floor_kinds() {
+    for kind in orrery_ext_api::floor_kinds() {
         assert!(
             contributions.contains(&Contribution {
                 kind: ContributionKind::View,
@@ -52,17 +46,16 @@ async fn ships_as_an_extension() {
         );
     }
 
-    // And the ledger is where a person goes to see it.
-    let recorded = table.ledger().of(&id()).expect("the ledger has it");
-    assert!(matches!(recorded, LoadOutcome::Ok { .. }));
-    let views: Vec<String> = table
-        .ledger()
-        .contributions()
-        .into_iter()
-        .filter(|(ext, c)| ext == &id() && c.kind == ContributionKind::View)
-        .map(|(_, c)| c.name)
+    // And the names in that entry are the floor, in order.
+    let views: Vec<String> = contributions
+        .iter()
+        .filter(|c| c.kind == ContributionKind::View)
+        .map(|c| c.name.clone())
         .collect();
     assert_eq!(views, DefaultViews::promised());
+
+    // Nothing was asked of the broker: a view bundle is pure rendering data.
+    assert!(harness.recorded().is_empty());
 }
 
 /// What it loads is what it renders. The extension is not a manifest with
