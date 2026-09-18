@@ -28,3 +28,23 @@ The rules that already hold:
 | `crates/` | First-party Rust extensions, `runtime = "native"`. |
 | `node/` | First-party TypeScript extensions and the `@orrery/ext` SDK. |
 | `examples/` | Wasm (Rust, TinyGo) and process samples. |
+
+## Installing one, and what the registry does not cover
+
+`orrery install <source>` takes seven forms (plan 15's Architecture table).
+**Only one of them is verified**: a bare registry name resolves against a signed
+index, which pins a `sha256` and mirrors the manifest's `requires` so a
+capability change is visible without downloading the package. The other six —
+`github:`, a git URL, `crate:`, `npm:`, a local path, and `--link` — have no
+signature and no hash to check against, so they install `pinned: false`, say so
+in the supply-chain ledger, and are refused outright under a managed
+`registry.unpinned = "refuse"`. The rule in one line: **the registry is how you
+trust an extension; the other sources are how you try one.**
+
+Worth saying plainly, because the registry does not solve it: a git or local
+install pulls a **transitive dependency tree nobody here reviews**. We pin the
+extension; its crates.io or npm dependencies are pinned by its own lockfile,
+which is not part of the review. A malicious transitive dependency is still a
+hole. The wasm runtime closes it — a guest reaches the host only through the
+`wit` world — and `native`, `node`, `python` and `process` do not. That is the
+threat model; implying otherwise would be the bug.
