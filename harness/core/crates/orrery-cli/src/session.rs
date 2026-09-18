@@ -46,7 +46,7 @@ use orrery_proto::{
 };
 use orrery_session::{
     BranchLease, BranchOutcome, CompactResult, Materialised, NewTurn, SessionError, SessionHandle,
-    SessionStore, StoredEvent, TokenCounter as SessionTokenCounter, TurnKind,
+    SessionStore, SessionSummary, StoredEvent, TokenCounter as SessionTokenCounter, TurnKind,
 };
 use orrery_transport::Hub;
 use tokio_util::sync::CancellationToken;
@@ -167,6 +167,27 @@ impl Publisher {
         });
     }
 
+    /// A fragment of a tool call's arguments, as the model produced it.
+    ///
+    /// Published as a patch on the surface **whose id is the call's id**, which
+    /// is what `orrery-agui` encodes as `TOOL_CALL_ARGS`. Our frames have no
+    /// argument event of their own; the call's surface is where its arguments
+    /// belong anyway, so nothing had to be invented to carry them.
+    pub fn tool_args(&self, call: orrery_proto::CallId, fragment: &str) {
+        if fragment.is_empty() {
+            return;
+        }
+        let id = SurfaceId::from_uuid(*call.as_uuid());
+        self.publish(Event::Delta {
+            seq: self.next(),
+            surface: id,
+            patch: SurfacePatch::Append {
+                id,
+                text: fragment.to_owned(),
+            },
+        });
+    }
+
     /// A tool call settled.
     pub fn tool_settled(&self, call: orrery_proto::CallId, outcome: Outcome) {
         self.state
@@ -269,6 +290,10 @@ impl Provider for Narrating {
                         ModelEvent::ToolUseStart { call, name } => {
                             publisher.tool_started(*call, name);
                         }
+                        ModelEvent::ToolUseDelta {
+                            call,
+                            json_fragment,
+                        } => publisher.tool_args(*call, json_fragment),
                         _ => {}
                     }
                 }
@@ -304,6 +329,10 @@ impl SessionStore for Recording {
 
     async fn open(&self, session: SessionId) -> Result<SessionHandle, SessionError> {
         self.inner.open(session).await
+    }
+
+    async fn list_sessions(&self) -> Result<Vec<SessionSummary>, SessionError> {
+        self.inner.list_sessions().await
     }
 
     async fn lease(&self, branch: BranchId) -> Result<BranchLease, SessionError> {
