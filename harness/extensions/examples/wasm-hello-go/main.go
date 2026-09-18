@@ -72,6 +72,20 @@ func call(name string, input string) (result cm.Result[surfaces.Surface, surface
 		}
 		return cm.OK[cm.Result[surfaces.Surface, surfaces.Surface, string]](
 			surfaces.Surface{Nodes: cm.ToList(nodes), Root: 0})
+	case "parity":
+		// The fourth writing of one tool. `native-hello`, `node-hello` and
+		// `wasm-hello-rs` return exactly this, and
+		// `orrery-harness/tests/parity.rs` asserts the four are equal. One
+		// node, so the root is a table rather than a stack.
+		nodes := []surfaces.SurfaceNode{
+			node(surfaces.NodeKindTable,
+				`{"t":"table","columns":["key","value"],`+
+					`"rows":[[{"text":"tool"},{"text":"parity"}],`+
+					`[{"text":"runtime"},{"text":"irrelevant"}]]}`,
+				nil),
+		}
+		return cm.OK[cm.Result[surfaces.Surface, surfaces.Surface, string]](
+			surfaces.Surface{Nodes: cm.ToList(nodes), Root: 0})
 	default:
 		return cm.Err[cm.Result[surfaces.Surface, surfaces.Surface, string]](
 			"no such tool: " + name)

@@ -16,6 +16,7 @@ members = [
   # clients/ also holds TypeScript packages, so it is listed crate by crate
   # rather than globbed.
   "harness/clients/sdk-rs", "harness/clients/ratatui", "harness/clients/json",
+  "harness/clients/ported",
   "harness/xtask",
 ]
 # `cargo build` at the root builds the harness and no Tauri code.
@@ -23,6 +24,7 @@ default-members = [
   "harness/core/crates/*",
   "harness/extensions/crates/*",
   "harness/clients/sdk-rs", "harness/clients/ratatui", "harness/clients/json",
+  "harness/clients/ported",
 ]
 
 [workspace.package]

@@ -1,0 +1,21 @@
+[package]
+name = "native-hello"
+version = "0.1.0"
+description = "The `native` worked example: the parity tool, compiled into the harness."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# An example, not a product. It is in the workspace so it builds and is
+# dependency-checked like everything else, but it is not something to publish.
+publish = false
+
+# Dependencies on core name BOTH halves — `version` makes the crate
+# publishable, `path` makes it build in-tree — which is what a third party's
+# copy of this file would say too. `workspace = true` resolves to exactly that
+# pair; see the root `[workspace.dependencies]`.
+[dependencies]
+orrery-ext-api = { workspace = true }
+orrery-proto = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }

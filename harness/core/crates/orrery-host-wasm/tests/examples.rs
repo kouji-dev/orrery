@@ -23,13 +23,20 @@ fn examples_dir() -> PathBuf {
 
 fn build_rust_example() -> Vec<u8> {
     let dir = examples_dir().join("wasm-hello-rs");
+    // `--target-dir` explicitly, and the same path is read back. Without it an
+    // inherited `CARGO_TARGET_DIR` sends the build elsewhere while the read
+    // below returns a **stale component from a previous run** — a green test
+    // over code that was never compiled.
+    let out = dir.join("target");
     let status = std::process::Command::new(env!("CARGO"))
         .args(["build", "--release", "--target", "wasm32-wasip2"])
+        .arg("--target-dir")
+        .arg(&out)
         .current_dir(&dir)
         .status()
         .expect("cargo runs");
     assert!(status.success(), "the Rust example did not build");
-    std::fs::read(dir.join("target/wasm32-wasip2/release/wasm_hello_rs.wasm"))
+    std::fs::read(out.join("wasm32-wasip2/release/wasm_hello_rs.wasm"))
         .expect("the component is where cargo put it")
 }
 

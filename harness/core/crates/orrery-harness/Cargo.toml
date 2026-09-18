@@ -20,6 +20,11 @@ builtin-tools = ["dep:orrery-ext-tools-builtin"]
 sqlite = ["dep:orrery-ext-session-sqlite"]
 fixture-provider = ["dep:orrery-ext-provider-fixture"]
 anthropic = ["dep:orrery-ext-provider-anthropic"]
+# `tests/parity.rs`'s fourth leg. TinyGo and wit-bindgen-go are not cargo
+# dependencies and no machine is required to have them, so the Go half of the
+# four-runtime comparison is opt-in. Off, the test **says** the leg was not
+# compared rather than passing quietly.
+tinygo-examples = []
 
 [dependencies]
 orrery-proto = { workspace = true }
@@ -59,6 +64,12 @@ serde_json = { workspace = true }
 parking_lot = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+# `tests/parity.rs` only: the other two runtime hosts, and the `native` worked
+# example. This is the one core crate allowed to name an `extensions/` crate,
+# which is why the four-runtime comparison lives here and nowhere else.
+orrery-host-rpc = { path = "../orrery-host-rpc" }
+orrery-host-wasm = { path = "../orrery-host-wasm" }
+native-hello = { path = "../../../extensions/examples/native-hello" }
 
 # `builtin::bash_is_contained` needs a real process tree to kill.
 [[example]]

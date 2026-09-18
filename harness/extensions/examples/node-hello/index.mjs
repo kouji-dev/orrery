@@ -44,5 +44,27 @@ export default defineExtension({
         });
       },
     },
+
+    // The fourth writing of one tool. `native-hello`, `wasm-hello-rs` and
+    // `wasm-hello-go` return exactly this, and
+    // `orrery-harness/tests/parity.rs` asserts the four are equal. It takes no
+    // input and asks for no capability on purpose: the comparison is about
+    // dispatch, not about policy.
+    parity: {
+      description:
+        "Describe a fixed two-row table. The same tool exists in the native and wasm " +
+        "examples and returns exactly this, which is how the harness proves the kernel " +
+        "cannot tell the runtimes apart.",
+      input: { type: "object", properties: {}, additionalProperties: false },
+      async run(_input, ctx) {
+        return ctx.ui.table({
+          columns: ["key", "value"],
+          rows: [
+            ["tool", "parity"],
+            ["runtime", "irrelevant"],
+          ],
+        });
+      },
+    },
   },
 });

@@ -1,0 +1,14 @@
+# The `native` worked example. Plan 18, task 4.
+#
+# Identical in shape to every other extension manifest in the tree: the same
+# parser reads it, the same loader acts on it. `runtime = "native"` is the only
+# line that says where the code came from.
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "hello"
+version = "0.1.0"
+
+[provides]
+tools = ["parity"]

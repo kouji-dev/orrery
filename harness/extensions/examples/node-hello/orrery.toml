@@ -7,7 +7,7 @@ id      = "hello"
 version = "0.1.0"
 
 [provides]
-tools = ["greet", "count_files"]
+tools = ["greet", "count_files", "parity"]
 
 [requires]
 read = ["$WORKSPACE/**"]

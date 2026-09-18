@@ -24,6 +24,20 @@ orrery_guest::export_extension! {
         ))
     },
 
+    // The fourth writing of one tool. `native-hello`, `node-hello` and
+    // `wasm-hello-go` return exactly this, and
+    // `orrery-harness/tests/parity.rs` asserts the four are equal. No input,
+    // no capability: the comparison is about dispatch, not about policy.
+    "parity" => |_input: &str, _ctx: &Ctx| -> Result<ui::Node, String> {
+        Ok(ui::table(
+            &["key", "value"],
+            &[
+                vec!["tool".to_owned(), "parity".to_owned()],
+                vec!["runtime".to_owned(), "irrelevant".to_owned()],
+            ],
+        ))
+    },
+
     // A denial is a value. This tool asks for something it was probably not
     // granted, and reports what it was told instead of failing.
     "try-spawn" => |_input: &str, ctx: &Ctx| -> Result<ui::Node, String> {
