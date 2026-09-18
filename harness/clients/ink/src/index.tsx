@@ -16,6 +16,10 @@ import { AguiSession, type Frame } from "@orrery/client";
 
 import { App, type Connection } from "./app.js";
 
+export { App, type AppProps, type Connection } from "./app.js";
+export { registerRenderer, rendererFor, registered, type CustomProps, type CustomRenderer } from "./registry.js";
+export { SurfaceNode, COMPONENTS, type Drawable, type SurfaceProps } from "./surfaces/index.js";
+
 /** The lowest Node this client runs on. Ink 5 and vitest 4 both want it. */
 export const NODE_FLOOR = "20.19.0";
 
@@ -128,7 +132,16 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
   const endpoint = resolveEndpoint(argv, env);
   const id = resolveSession(argv, env);
   const session = AguiSession.connect(endpoint);
-  await session.attach(id);
+  try {
+    await session.attach(id);
+  } catch (error) {
+    // `fetch failed` on its own tells a person nothing they can act on.
+    throw new Error(
+      `cannot reach the kernel at ${endpoint} (${
+        error instanceof Error ? error.message : String(error)
+      }). Is \`orrery serve\` still running?`,
+    );
+  }
   const connection = sessionConnection(session);
   const app = render(<App connection={connection} session={id} />, { exitOnCtrlC: false });
   await app.waitUntilExit();
@@ -137,11 +150,13 @@ export async function main(argv = process.argv.slice(2), env = process.env): Pro
 /* c8 ignore start — the process wrapper, exercised by the smoke test. */
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   main().catch((error: unknown) => {
-    if (error instanceof Misconfigured) {
-      process.stderr.write(`orrery ink: ${error.message}\n`);
-      process.exit(2);
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`orrery ink: ${message}\n`);
+    if (process.env["ORRERY_DEBUG"] && error instanceof Error) {
+      process.stderr.write(`${error.stack ?? ""}\n`);
     }
-    throw error;
+    // 2 is "you configured it wrong"; 1 is "the kernel would not talk to me".
+    process.exit(error instanceof Misconfigured ? 2 : 1);
   });
 }
 /* c8 ignore stop */
