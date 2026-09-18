@@ -1,0 +1,5 @@
+# A cheap compactor pass: 50 in, 10 out, 30 micro-USD.
+{"t":"started","id":"fixture-compact"}
+{"t":"text-delta","text":"Summary."}
+{"t":"usage","usage":{"input_tokens":50,"output_tokens":10,"cache_hits":0,"micro_usd":30}}
+{"t":"done","stop":"end-turn"}

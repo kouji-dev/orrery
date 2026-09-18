@@ -1,0 +1,8 @@
+# An executor pass with one tool call: 300 in, 150 out, 2500 micro-USD.
+{"t":"started","id":"fixture-exec"}
+{"t":"tool-use-start","call":"00000000-0000-4000-8000-000000000001","name":"builtin.write"}
+{"t":"tool-use-delta","call":"00000000-0000-4000-8000-000000000001","json_fragment":"{\"path\":\"out.txt\"}"}
+{"t":"tool-use-end","call":"00000000-0000-4000-8000-000000000001"}
+{"t":"text-delta","text":"Done."}
+{"t":"usage","usage":{"input_tokens":300,"output_tokens":150,"cache_hits":0,"micro_usd":2500}}
+{"t":"done","stop":"end-turn"}

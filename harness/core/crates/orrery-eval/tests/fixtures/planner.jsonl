@@ -1,0 +1,5 @@
+# A planner pass: 120 in, 40 out, 900 micro-USD. Hand written, no API call.
+{"t":"started","id":"fixture-plan"}
+{"t":"text-delta","text":"I will edit the file."}
+{"t":"usage","usage":{"input_tokens":120,"output_tokens":40,"cache_hits":0,"micro_usd":900}}
+{"t":"done","stop":"end-turn"}
