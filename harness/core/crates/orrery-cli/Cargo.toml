@@ -8,9 +8,40 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+# No `[lib]`, on purpose. This crate is the composition root: the one place
+# allowed to name a kernel, a transport and two renderers in the same file.
+# `cargo xtask deps-check` rule 1 excuses a binary-only core crate for exactly
+# that reason, and would flag the same dependency from a library.
 [[bin]]
 name = "orrery"
 path = "src/main.rs"
 
 [dependencies]
+async-trait = { workspace = true }
 clap = { workspace = true }
+crossterm = { workspace = true }
+futures-util = { workspace = true }
+interprocess = { workspace = true }
+ratatui = { workspace = true }
+orrery-provider = { workspace = true }
+orrery-proto = { workspace = true }
+orrery-session = { workspace = true }
+orrery-kernel = { path = "../orrery-kernel" }
+orrery-harness = { path = "../orrery-harness" }
+orrery-host = { path = "../orrery-host" }
+orrery-transport = { path = "../orrery-transport" }
+orrery-agui = { version = "0.1.0", path = "../orrery-agui" }
+orrery-ext-api = { workspace = true }
+orrery-client = { version = "0.1.0", path = "../../../clients/sdk-rs" }
+orrery-client-json = { version = "0.1.0", path = "../../../clients/json" }
+orrery-client-ratatui = { path = "../../../clients/ratatui" }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }

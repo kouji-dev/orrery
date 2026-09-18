@@ -33,6 +33,15 @@ pub struct Cli {
     #[arg(short = 'v', global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
 
+    /// Where the model comes from. Repeat it for one stream per pass, the last
+    /// repeating. This build understands `fixture:<path-to.jsonl>`.
+    #[arg(long, global = true, value_name = "SPEC")]
+    pub provider: Vec<String>,
+
+    /// Where the session database lives. Defaults to `<workspace>/.orrery`.
+    #[arg(long, global = true, value_name = "PATH")]
+    pub state_dir: Option<std::path::PathBuf>,
+
     /// The command to run. With none, start an interactive session.
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -81,6 +90,9 @@ pub enum Command {
         /// Replay from this sequence number instead of the start.
         #[arg(long, value_name = "SEQ")]
         since: Option<u64>,
+        /// Submit one turn after attaching, and render it.
+        #[arg(long, short = 'p', value_name = "PROMPT")]
+        submit: Option<String>,
     },
     /// Re-emit a stored session as events, so any renderer can draw any past session.
     Replay {
