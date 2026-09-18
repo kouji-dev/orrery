@@ -70,3 +70,26 @@ dist-ext/
 
 # Orrery Harness runtime state (sessions.db, trust answers, installed extensions)
 .orrery/
+
+# ── Junk that actually turned up while building the harness ──────────────
+# Cygwin/Git-Bash crash dumps (rtk shells them out; these reappeared repeatedly)
+*.stackdump
+
+# Rejected/backup hunks from patch and merge tools
+*.orig
+*.rej
+
+# insta snapshot drafts — review then `cargo insta accept`, never commit the .new
+*.snap.new
+*.pending-snap
+
+# Coverage instrumentation
+*.profraw
+*.profdata
+
+# Ad-hoc dev/build logs (the named ones above stay for clarity)
+dev.log
+*.local.log
+
+# Angular's whole cache dir, not just cache/ — it also writes .angular/ at ade/
+.angular/
