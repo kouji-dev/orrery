@@ -28,6 +28,9 @@ orrery-session = { workspace = true }
 orrery-audit = { workspace = true }
 orrery-policy = { workspace = true }
 orrery-broker = { workspace = true }
+# The memory half of plan 12. Named here and nowhere else in `core/`: the kernel
+# owns a typed hole, this crate is the one allowed to fill it.
+orrery-memory = { workspace = true }
 orrery-ext-api = { workspace = true }
 # By path, not `workspace = true`: these are `publish = false`, so they are not
 # among the version+path pairs the root declares for the published half.

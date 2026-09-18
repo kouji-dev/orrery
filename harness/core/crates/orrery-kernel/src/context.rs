@@ -202,6 +202,26 @@ pub trait MemoryRecall: Send + Sync {
 
     /// What is worth remembering about this input, within a ceiling.
     async fn recall(&self, input: &UserInput, budget: TokenBudget) -> Vec<RecalledEntry>;
+
+    /// The same answer, split by the store that gave it.
+    ///
+    /// The kernel writes one [`TurnKind::Recalled`](orrery_session::TurnKind)
+    /// row per pair, so a replay says **which** store said what — which is why
+    /// this and not `recall` is what the turn calls. The default is the single
+    /// store [`name`](MemoryRecall::name) describes; an implementation over
+    /// several providers overrides it and keeps them apart.
+    async fn recall_rows(
+        &self,
+        input: &UserInput,
+        budget: TokenBudget,
+    ) -> Vec<(String, Vec<RecalledEntry>)> {
+        let entries = self.recall(input, budget).await;
+        if entries.is_empty() {
+            Vec::new()
+        } else {
+            vec![(self.name().to_owned(), entries)]
+        }
+    }
 }
 
 /// The memory of a harness that has not been given one.

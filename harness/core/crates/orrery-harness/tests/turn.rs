@@ -329,7 +329,14 @@ async fn stable_prefix_is_first() {
         "the breakpoint ({}) must point past the descriptors ({tools_at})",
         draft.cache_breakpoint
     );
-    assert_eq!(draft.recalled.len(), 1, "memory contributed");
+    // **Amended with the `Recalled` row.** Memory is read once per turn and
+    // written to the branch before the question it answers, so what it
+    // contributed reaches the draft through `materialise` like every other row
+    // — which is what makes a replay reproduce this context. The ordering
+    // doctrine is unchanged and is what is asserted: recalled memory opens the
+    // volatile suffix. `draft.recalled` is now for a `context.build`
+    // interceptor that injects, and is empty here.
+    assert!(draft.recalled.is_empty(), "memory comes from the tree now");
     let messages = draft.messages();
     assert!(
         format!("{:?}", messages[0]).contains("prefers tabs"),

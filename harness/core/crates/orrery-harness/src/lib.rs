@@ -31,6 +31,7 @@
 pub mod broker;
 pub mod build;
 pub mod features;
+pub mod memory;
 #[cfg(feature = "fixture-provider")]
 pub mod fixture;
 
@@ -44,6 +45,7 @@ use orrery_session::SessionStore;
 use tokio_util::sync::CancellationToken;
 
 pub use broker::{LedgerRevoker, PolicyBroker};
+pub use memory::KernelMemory;
 pub use build::{
     BuildError, DEFAULT_RULES, ProviderChoice, ResolvedConfig, StoreChoice, default_tool_budget,
 };

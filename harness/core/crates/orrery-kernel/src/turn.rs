@@ -38,7 +38,7 @@ use tokio_util::sync::CancellationToken;
 use crate::budget::{PriceTable, TurnBudget};
 use crate::context::{
     CompactPlan, Compacted, Compactor, ContextDraft, MemoryRecall, NoCompactor, NoMemory, Section,
-    input_message, recalled_message, tools_section,
+    input_message, tools_section,
 };
 use crate::error::KernelError;
 use crate::intercept::{ChainOutcome, InterceptCtx, InterceptorSet, MatchCtx};
@@ -590,6 +590,10 @@ impl Kernel {
         // before it and nothing after, so a turn can never summarise away the
         // question it is answering.
         let floor = lease.next_seq();
+        // Memory first, and inside the floor so compaction cannot summarise it
+        // away mid-turn: recalled content opens the volatile suffix (§4.3), and
+        // the row is what makes that reproducible on a replay.
+        self.recall_into_tree(&lease, &input).await?;
         self.store
             .append(
                 &lease,
@@ -1011,14 +1015,14 @@ impl Kernel {
         let counter = self.provider.counter();
         let adapter = CounterAdapter(counter.clone());
 
-        // TODO(plan-12): memory also owes the tree a `TurnKind::Recalled` row,
-        // so a replay shows what the model saw rather than a query to re-run.
-        // The row is plan 12's to write; the recall itself happens here because
-        // the assembly order is this phase's.
-        let recalled = self.memory.recall(&input.input, window).await;
-        let recalled = recalled_message(self.memory.name(), &recalled)
-            .map(|m| vec![m])
-            .unwrap_or_default();
+        // **Memory is not read here.** It is read once, at turn start, and
+        // written to the branch as a `TurnKind::Recalled` row before the
+        // question it answers — so what the model saw is content in the tree
+        // rather than a query to re-run, and every later pass of this turn (and
+        // every replay) gets it from `materialise` like everything else.
+        // Reading it here as well would send it twice. `recalled` stays as a
+        // field because a `context.build` interceptor may still fill it.
+        let recalled: Vec<Message> = Vec::new();
 
         for attempt in 0..=self.config.compaction_attempts {
             // The store fits the history into what the system prompt leaves
@@ -1383,6 +1387,35 @@ impl Kernel {
             }
         }
         Ok(result)
+    }
+
+    /// Ask memory once, and write what it said into the branch.
+    ///
+    /// One row per contributing provider, as **resolved content** (§4.3) rather
+    /// than as a pointer at a store that will move on. Nothing is written when
+    /// memory had nothing to say, so a session with no memory configured has a
+    /// transcript indistinguishable from one that never asked.
+    async fn recall_into_tree(
+        &self,
+        lease: &BranchLease,
+        input: &TurnInput,
+    ) -> Result<(), KernelError> {
+        let window = TokenBudget {
+            max: self.provider.capabilities().max_context,
+            reserve: self.config.context_reserve_tokens,
+        };
+        for (provider, entries) in self.memory.recall_rows(&input.input, window).await {
+            if entries.is_empty() {
+                continue;
+            }
+            self.store
+                .append(
+                    lease,
+                    NewTurn::new(TurnKind::Recalled { provider, entries }),
+                )
+                .await?;
+        }
+        Ok(())
     }
 
     /// Keep whatever the model managed to say before it was stopped.

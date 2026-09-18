@@ -404,6 +404,33 @@ impl Rig {
         self.rows().await.into_iter().map(shape).collect()
     }
 
+    /// The branch as the model would be shown it: every row rendered, in order.
+    pub async fn materialised(&self) -> String {
+        let counter = orrery_session::CharsOverFour;
+        let view = self
+            .store
+            .materialise(
+                self.branch,
+                orrery_proto::TokenBudget {
+                    max: 1_000_000,
+                    reserve: 0,
+                },
+                &counter,
+            )
+            .await
+            .expect("the branch materialises");
+        view.messages
+            .iter()
+            .flat_map(|m| m.content.iter())
+            .filter_map(|b| match b {
+                orrery_proto::ContentBlock::Text { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("
+")
+    }
+
     /// A lease on the root branch.
     pub async fn lease(&self) -> orrery_session::BranchLease {
         self.store.lease(self.branch).await.expect("a lease")
