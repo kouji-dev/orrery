@@ -56,6 +56,13 @@ libc = "0.2"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 tempfile = "3.27.0"
+# gitoxide: the ADE's git backend, and now `orrery-ext-git`. One pin, so the two
+# trees link one copy. No network features — clone/push/fetch/pull stay on the
+# system git CLI, and a tool bundle has no business carrying a TLS stack.
+gix = { version = "0.87", default-features = false, features = [
+    "max-performance", "parallel", "sha1", "index", "attributes", "excludes", "status",
+    "dirwalk", "blob-diff", "revision", "blame",
+] }
 
 # --- new, each for a reason (see docs/plans/00-overview.md) ----------------
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util"] }

@@ -3,14 +3,18 @@ runtime = "native"
 
 [extension]
 id = "git"
-version = "0.0.0"
+version = "0.1.0"
 
+# Five read-only verbs. `branch` and `commit` were declared here while this
+# crate was a scaffold; they are not implemented, so they are not declared — a
+# manifest that lists a tool the extension does not have makes the ledger a lie.
 [provides]
-tools = ["status", "diff", "log", "show", "branch", "commit"]
+tools = ["status", "log", "show", "diff", "blame"]
 
-# gitoxide reads and writes the repository in place. Push, fetch, clone and pull
-# shell out, so `spawn` is required for those subcommands only.
+# Read, and nothing else. gitoxide opens the object database in place, so the
+# bundle asks the broker for permission on the repository path before any verb
+# touches it. The scaffold also asked for `write = ["$WORKSPACE/.git/**"]` and
+# `spawn = ["git"]`; neither is used by anything here, and a grant nothing uses
+# is a capability handed over for nothing. Both come back with the write verbs.
 [requires]
 read = ["$WORKSPACE/**"]
-write = ["$WORKSPACE/.git/**"]
-spawn = ["git"]

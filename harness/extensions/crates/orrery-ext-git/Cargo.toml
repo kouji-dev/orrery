@@ -1,6 +1,6 @@
 [package]
 name = "orrery-ext-git"
-version = "0.0.0"
+version = "0.1.0"
 description = "Git tools over gitoxide, reusing the knowledge in ade/src-tauri/src/git/."
 edition.workspace = true
 rust-version.workspace = true
@@ -13,3 +13,18 @@ publish = false
 # nothing else changes. See harness/extensions/README.md.
 [dependencies]
 orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
+orrery-proto = { version = "0.1", path = "../../../core/crates/orrery-proto" }
+async-trait = { workspace = true }
+# gitoxide, with the ADE's feature set minus everything the read-only verbs do
+# not need. No network features on purpose: clone, push, fetch and pull are not
+# this crate's, and pulling them in would put a TLS stack under a tool bundle.
+gix = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# A real repository on disk. `status`, `blame` and the rename detection are
+# exactly the things a mock cannot tell you the truth about.
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio-util = { workspace = true }
