@@ -74,6 +74,52 @@ pub fn register_native(registry: &mut NativeRegistry) {
     registry.register(Arc::new(orrery_ext_agents_default::DefaultAgents));
 }
 
+/// Build the Anthropic provider a config asked for.
+///
+/// # Errors
+///
+/// [`BuildError::NoProvider`] when the `anthropic` feature is off. That is the
+/// honest answer: the variant exists in every build so that configuration can
+/// name it and the error can say what to do, rather than the enum pretending
+/// real models do not exist.
+#[allow(unused_variables)]
+pub fn anthropic_provider(
+    model: &str,
+    credential: &str,
+    base_url: Option<&str>,
+) -> Result<Arc<dyn Provider>, BuildError> {
+    #[cfg(feature = "anthropic")]
+    {
+        use orrery_ext_api::creds::{CredStore, EnvCredStore, LayeredCredStore, MemoryCredStore};
+
+        // The key comes from the environment until a session broker is here to
+        // ask: `AnthropicProvider` takes a `CredStore`, and `EnvCredStore` is
+        // the documented development fallback. A credential the store does not
+        // hold is a `NeedsLogin` turn outcome, not a panic and not a silent
+        // unauthenticated request.
+        let store: Arc<dyn CredStore> = if credential == orrery_ext_provider_anthropic::GRANT {
+            Arc::new(EnvCredStore)
+        } else {
+            Arc::new(LayeredCredStore::new(
+                Arc::new(MemoryCredStore::default()),
+                Arc::new(EnvCredStore),
+            ))
+        };
+        let mut provider = orrery_ext_provider_anthropic::AnthropicProvider::new(store);
+        if let Some(base_url) = base_url {
+            provider = provider.with_base_url(base_url);
+        }
+        let _ = model;
+        Ok(Arc::new(provider))
+    }
+    #[cfg(not(feature = "anthropic"))]
+    {
+        Err(BuildError::NoProvider {
+            which: "anthropic".to_owned(),
+        })
+    }
+}
+
 /// A host for one extension's declared runtime.
 ///
 /// `native` is not here on purpose: a compiled-in bundle is registered at build

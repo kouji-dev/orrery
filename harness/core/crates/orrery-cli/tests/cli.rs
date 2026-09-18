@@ -110,35 +110,39 @@ fn a_typo_is_not_an_interactive_session() {
     );
 }
 
-/// A subcommand that has not landed yet exits 2 and names the plan file that
-/// will implement it, so the tree is complete from phase 0 and fills in.
+/// **Nothing is on this list any more.** Every subcommand in the tree is
+/// implemented as of 2026-09-19: `run`, `serve`, `attach`, `replay`,
+/// `session list|show|rm`, `install`, `remove`, `ext`, `permissions`, `config`,
+/// `init`, `import`, `eval`, `ledger`, `telemetry`, `mcp` and `skills` each
+/// have a suite of their own.
 ///
-/// `run`, `serve`, `attach`, `ext test`, `session list|show|rm`, `replay`,
-/// `ledger`, `telemetry`, both `explain`s, `init` and `import` are no longer on
-/// this list: they are implemented, and their own suites cover them.
+/// What is asserted here instead is the property the list existed to protect:
+/// **every command in `--help` does something.** A command that parses and then
+/// exits 2 saying "not implemented in this build" is a command that is in the
+/// tree and not in the product, which is exactly the gap this round closed.
 #[test]
-fn unimplemented_subcommands_name_their_plan() {
-    let cases: &[(&[&str], &str)] = &[
-        (&["eval", "run", "suite"], "16-eval-runner.md"),
-    ];
-    for (args, plan) in cases {
-        let out = orrery(args);
+fn no_subcommand_is_a_stub() {
+    let help = orrery(&["--help"]);
+    let text = String::from_utf8_lossy(&help.stdout);
+    let commands: Vec<&str> = text
+        .lines()
+        .skip_while(|l| !l.starts_with("Commands:"))
+        .skip(1)
+        .take_while(|l| !l.trim().is_empty())
+        .filter_map(|l| l.split_whitespace().next())
+        .filter(|w| *w != "help")
+        .collect();
+    assert!(commands.len() > 10, "the tree was read: {commands:?}");
+
+    for command in commands {
+        // No arguments, so most of these are a usage error — which is the
+        // point: a usage error is the *command* answering. What must never
+        // appear is the stub message.
+        let out = orrery(&[command]);
         let stderr = String::from_utf8_lossy(&out.stderr);
-        assert_eq!(
-            out.status.code(),
-            Some(2),
-            "`orrery {}` should exit 2 while unimplemented; stderr was: {stderr}",
-            args.join(" ")
-        );
         assert!(
-            stderr.contains("not implemented in this build"),
-            "`orrery {}` should say so: {stderr}",
-            args.join(" ")
-        );
-        assert!(
-            stderr.contains(plan),
-            "`orrery {}` should name {plan}: {stderr}",
-            args.join(" ")
+            !stderr.contains("not implemented in this build"),
+            "`orrery {command}` is still a stub: {stderr}"
         );
     }
 }
@@ -146,8 +150,8 @@ fn unimplemented_subcommands_name_their_plan() {
 /// Narration goes to stderr so `--json` stdout stays machine-readable
 /// (`17-cli.md`, streams discipline).
 #[test]
-fn not_implemented_does_not_pollute_stdout() {
-    let out = orrery(&["eval", "run", "suite", "--json"]);
+fn a_usage_error_does_not_pollute_stdout() {
+    let out = orrery(&["eval", "run", "no-such-suite", "--json"]);
     assert!(
         out.stdout.is_empty(),
         "stdout must stay clean: {:?}",

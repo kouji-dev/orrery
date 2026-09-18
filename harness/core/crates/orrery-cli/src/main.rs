@@ -78,7 +78,7 @@ fn main() {
         Some(Command::Config { command }) => cmd::config::dispatch(&cli, command),
         Some(Command::Init { profile }) => cmd::init::dispatch(&cli, profile.as_deref()),
         Some(Command::Import { from }) => cmd::import::dispatch(&cli, *from),
-        Some(Command::Eval { command }) => cmd::eval::dispatch(command),
+        Some(Command::Eval { command }) => cmd::eval::dispatch(&cli, command),
         Some(Command::Ledger {
             session,
             subject,

@@ -70,6 +70,17 @@ impl Exit {
 ///
 /// **stdout is data, stderr is narration**: this writes to stderr only, so
 /// `--json` stdout stays parseable even for a command that does nothing yet.
+///
+/// # It has no callers, on purpose
+///
+/// As of 2026-09-19 every subcommand in the tree is implemented, so nothing
+/// calls this. It is kept, rather than deleted, because the discipline it
+/// encodes is the reason the tree was complete from phase 0: a command that has
+/// not landed exits 2 on **stderr** naming the plan that owns it, instead of
+/// being absent from `--help` or printing a stack trace. The next command to be
+/// sketched ahead of its implementation should use it. `exit::tests` keeps it
+/// honest.
+#[allow(dead_code)]
 pub fn not_implemented(plan: &str) -> ! {
     eprintln!("not implemented in this build — see harness/docs/plans/{plan}");
     Exit::Usage.exit()

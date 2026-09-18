@@ -231,14 +231,7 @@ Files: `src/cmd/{replay,ledger}.rs`
 Files: `src/cmd/{init,import,eval}.rs`
 
 - [x] Thin wrappers over plan 10. ~~**Not landed: there is nothing to wrap.**~~ **Stale for `init` and `import`: plan 10 landed.** `orrery init` writes `<workspace>/.orrery/config.toml` from `orrery_config::import::init`, shorthands expanded so the file says what it does, and **refuses to overwrite** one that is already there. `orrery import --from claude-code|codex` finds the foreign file (workspace first, then the home directory), maps it, and prints the config on **stdout** with every unmapped note on **stderr** — so `orrery import --from codex > .orrery/config.toml` writes a file that parses and nothing is dropped in silence. `tests/init.rs` covers all four paths.
-- [ ] `orrery eval`. ~~**Blocked: `orrery-eval` is still a stub.**~~ **No longer
-  true, and re-checked rather than inherited: `orrery-eval` landed while this
-  wave was in flight** — `run`, `compare`, `replay`, `junit`, `matrix`,
-  `isolate` and the cross-harness adapters are all in the crate. What is left is
-  the wiring, three functions in `cmd/eval.rs`, and it belongs with plan 16's
-  own landing wave rather than being raced from here. In the tree it still exits
-  2 naming `16-eval-runner.md`; that is now a *stale* message, and plan 16 owns
-  removing it.
+- [x] `orrery eval`. ~~**Blocked: `orrery-eval` is still a stub.** … it belongs with plan 16's own landing wave rather than being raced from here.~~ **Neither plan built it, so it was built here.** The estimate — three functions of wiring — held. `run` loads a suite, expands the matrix, binds a `HarnessRunner` per point over one shared store, installs the built-in graders and writes the report to `<state-dir>/eval/<run-id>.json`; `compare` and `replay` read it back by run id or by path. `--format text|json|junit`, and a red suite exits non-zero through `junit::exit_code` so CI and the command cannot disagree. `tests/eval.rs` drives the binary end to end against a committed fixture stream. Ticked in plan 16 as well; the stale `not_implemented("16-eval-runner.md")` is gone from the tree.
 
 ### Task 10 · Terminal hygiene
 

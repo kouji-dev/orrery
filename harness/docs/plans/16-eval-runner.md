@@ -278,13 +278,29 @@ Files: `orrery-eval/src/junit.rs`
 - [x] `--format junit` exits non-zero on regression — `junit::exit_code`, **as a library
   call.**
 
-**Not done: the CLI wiring.** `orrery-cli/src/cmd/eval.rs` still answers
-`not_implemented("16-eval-runner.md")`, so `orrery eval run|compare|replay` is not yet
-something a person can type, even though everything behind it exists and is tested at the
-library boundary. The argument tree in `orrery-cli/src/args.rs` is already written and
-matches this plan's CLI section; wiring it is a dispatch function plus one dependency
-line in `orrery-cli/Cargo.toml`. Left to whoever owns that crate rather than edited from
-here while sibling work is in flight.
+~~**Not done: the CLI wiring.**~~ **Done, 2026-09-19, and the estimate was about
+right.** `orrery eval run|compare|replay` is something a person can type, and
+`orrery-cli/tests/eval.rs` drives the **binary** — a suite file in, an isolated fixture
+workspace, the assertion grader, a report on stdout, and a red suite exiting non-zero.
+Three decisions had to be made that a library cannot make for itself, and they are
+written down in `cmd/eval.rs`:
+
+- **A run id has to name something.** Reports are written to
+  `<state-dir>/eval/<run-id>.json`, which is what gives `compare` and `replay` arguments
+  that mean anything. Both also take a path, so a person holding the file does not have
+  to learn where the harness filed it.
+- **One store, many workspaces.** The cases share one session database under the state
+  directory so `eval replay` can re-open a transcript afterwards; the *workspaces* stay
+  one per case and still vanish on drop. `Isolator` is untouched.
+- **Every matrix point is bound to the same fixture runner**, because the fixture
+  provider is the only selectable one. Said out loud in the source, because a matrix
+  whose points are secretly identical reports agreement it did not measure. When a real
+  provider becomes selectable (plan 10), that binding is the only line that changes.
+
+The graders come through `orrery_harness::features::graders`, behind a new `graders`
+feature that is **in the default set**: `orrery-ext-graders` is an extension, `orrery-cli`
+is a core crate, and `deps-check` rule 1 excuses only the facade — so the facade is where
+it goes. The judge grader is not installed: it costs money and this build cannot pay.
 
 ## Open questions
 

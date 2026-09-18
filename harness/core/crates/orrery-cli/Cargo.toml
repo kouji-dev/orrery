@@ -28,6 +28,8 @@ orrery-provider = { workspace = true }
 orrery-proto = { workspace = true }
 orrery-session = { workspace = true }
 orrery-config = { path = "../orrery-config" }
+orrery-broker = { workspace = true }
+orrery-eval = { path = "../orrery-eval" }
 orrery-policy = { workspace = true }
 orrery-kernel = { path = "../orrery-kernel" }
 orrery-harness = { path = "../orrery-harness" }
