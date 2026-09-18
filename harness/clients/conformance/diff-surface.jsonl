@@ -1,0 +1,16 @@
+# diff-surface - a change to one file, arriving hunk by hunk.
+# Derived from streams/tool-call.jsonl: the edit tool returns the diff.
+#
+# What it pins: hunks are a collection, so a second hunk lands as one op on
+# `/kind/hunks` and the first hunk's lines are NOT re-sent. Line kinds are
+# `context`, `add` and `remove`, and carry no leading marker - the marker is
+# the renderer's, which is why a side-by-side pane and a unified hunk can both
+# be drawn from this one description.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-21"}}
+{"ev":{"seq":2,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/diff-1","value":{"id":"diff-1","status":"running","kind":{"t":"diff","path":"src/lib.rs","hunks":[{"old_start":1,"old_lines":2,"new_start":1,"new_lines":3,"lines":[{"kind":"context","text":"fn main() {"},{"kind":"add","text":"    println!(\"hi\");"},{"kind":"context","text":"}"}]}]}}}]}}
+{"expect":{"last_seq":2,"live":"turn-21","gaps":[],"turns":[{"id":"turn-21","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"diff-1","status":"running","kind":{"t":"diff","path":"src/lib.rs","hunks":[{"old_start":1,"old_lines":2,"new_start":1,"new_lines":3,"lines":[{"kind":"context","text":"fn main() {"},{"kind":"add","text":"    println!(\"hi\");"},{"kind":"context","text":"}"}]}]}}],"prompts":[]}]}}
+# A second hunk. The array changed length, so the array is the unit.
+{"ev":{"seq":3,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/diff-1/kind/hunks","value":[{"old_start":1,"old_lines":2,"new_start":1,"new_lines":3,"lines":[{"kind":"context","text":"fn main() {"},{"kind":"add","text":"    println!(\"hi\");"},{"kind":"context","text":"}"}]},{"old_start":40,"old_lines":1,"new_start":41,"new_lines":1,"lines":[{"kind":"remove","text":"let x = 1;"},{"kind":"add","text":"let x = 2;"}]}]}]}}
+{"expect":{"last_seq":3,"live":"turn-21","gaps":[],"turns":[{"id":"turn-21","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"diff-1","status":"running","kind":{"t":"diff","path":"src/lib.rs","hunks":[{"old_start":1,"old_lines":2,"new_start":1,"new_lines":3,"lines":[{"kind":"context","text":"fn main() {"},{"kind":"add","text":"    println!(\"hi\");"},{"kind":"context","text":"}"}]},{"old_start":40,"old_lines":1,"new_start":41,"new_lines":1,"lines":[{"kind":"remove","text":"let x = 1;"},{"kind":"add","text":"let x = 2;"}]}]}}],"prompts":[]}]}}
+{"ev":{"seq":4,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-21","result":null}}
+{"expect":{"last_seq":4,"live":null,"gaps":[],"turns":[{"id":"turn-21","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"diff-1","status":"done","kind":{"t":"diff","path":"src/lib.rs","hunks":[{"old_start":1,"old_lines":2,"new_start":1,"new_lines":3,"lines":[{"kind":"context","text":"fn main() {"},{"kind":"add","text":"    println!(\"hi\");"},{"kind":"context","text":"}"}]},{"old_start":40,"old_lines":1,"new_start":41,"new_lines":1,"lines":[{"kind":"remove","text":"let x = 1;"},{"kind":"add","text":"let x = 2;"}]}]}}],"prompts":[]}]}}

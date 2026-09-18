@@ -1,0 +1,18 @@
+# progress-surface - something taking a while.
+# Derived from streams/never-ends.jsonl: the long-running call that reports.
+#
+# What it pins: a tick is one op on `/kind/done`, never a new surface. A
+# renderer that appends a line per tick turns a nine-step index into nine lines
+# of transcript. `done`/`total` absent means indeterminate; this scenario
+# carries both, so a client that only implements the spinner is visibly not
+# implementing the bar.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-22"}}
+{"ev":{"seq":2,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/prog-1","value":{"id":"prog-1","status":"running","kind":{"t":"progress","label":"indexing the workspace","done":0,"total":9}}}]}}
+{"expect":{"last_seq":2,"live":"turn-22","gaps":[],"turns":[{"id":"turn-22","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"prog-1","status":"running","kind":{"t":"progress","label":"indexing the workspace","done":0,"total":9}}],"prompts":[]}]}}
+{"ev":{"seq":3,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/prog-1/kind/done","value":7}]}}
+{"expect":{"last_seq":3,"live":"turn-22","gaps":[],"turns":[{"id":"turn-22","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"prog-1","status":"running","kind":{"t":"progress","label":"indexing the workspace","done":7,"total":9}}],"prompts":[]}]}}
+# The last tick and the status together: finished is `done`, not 9/9.
+{"ev":{"seq":4,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/prog-1/kind/done","value":9},{"op":"replace","path":"/surfaces/prog-1/status","value":"done"}]}}
+{"expect":{"last_seq":4,"live":"turn-22","gaps":[],"turns":[{"id":"turn-22","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"prog-1","status":"done","kind":{"t":"progress","label":"indexing the workspace","done":9,"total":9}}],"prompts":[]}]}}
+{"ev":{"seq":5,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-22","result":null}}
+{"expect":{"last_seq":5,"live":null,"gaps":[],"turns":[{"id":"turn-22","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"prog-1","status":"done","kind":{"t":"progress","label":"indexing the workspace","done":9,"total":9}}],"prompts":[]}]}}

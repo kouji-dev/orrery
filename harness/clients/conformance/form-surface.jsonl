@@ -1,0 +1,24 @@
+# form-surface - several values collected at once.
+# Derived from streams/tool-call.jsonl: the extension asks before it acts.
+#
+# What it pins: all five field kinds - text, secret, number, bool and choice -
+# and that `secret` is a field KIND rather than a flag, because a renderer must
+# know not to echo it, log it or store it. Growing the field list is one op on
+# `/kind/fields`; the submit label is one op of its own.
+#
+# THE DEGRADATION RULE (plan 09, open question 2): a renderer that cannot draw
+# a form asks the fields one at a time, in declaration order, using its own
+# `question` rendering, and submits once the last required field is answered.
+# That is a rule, not a renderer's choice - two TUIs that each invented their
+# own order would not be comparable.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-25"}}
+{"ev":{"seq":2,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/form-1","value":{"id":"form-1","status":"running","kind":{"t":"form","fields":[{"name":"branch","label":"Branch","kind":{"t":"text"},"required":true,"default":"main"},{"name":"token","label":"Token","kind":{"t":"secret"},"required":true},{"name":"depth","label":"Depth","kind":{"t":"number"},"required":false,"default":"1"}],"submit":"Create"}}}]}}
+{"expect":{"last_seq":2,"live":"turn-25","gaps":[],"turns":[{"id":"turn-25","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"form-1","status":"running","kind":{"t":"form","fields":[{"name":"branch","label":"Branch","kind":{"t":"text"},"required":true,"default":"main"},{"name":"token","label":"Token","kind":{"t":"secret"},"required":true},{"name":"depth","label":"Depth","kind":{"t":"number"},"required":false,"default":"1"}],"submit":"Create"}}],"prompts":[]}]}}
+# Two more fields: bool and choice. The array's length changed.
+{"ev":{"seq":3,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/form-1/kind/fields","value":[{"name":"branch","label":"Branch","kind":{"t":"text"},"required":true,"default":"main"},{"name":"token","label":"Token","kind":{"t":"secret"},"required":true},{"name":"depth","label":"Depth","kind":{"t":"number"},"required":false,"default":"1"},{"name":"push","label":"Push when done","kind":{"t":"bool"},"required":false},{"name":"remote","label":"Remote","kind":{"t":"choice","choices":[{"value":"origin","label":"origin"},{"value":"upstream","label":"upstream"}]},"required":true,"default":"origin"}]}]}}
+{"expect":{"last_seq":3,"live":"turn-25","gaps":[],"turns":[{"id":"turn-25","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"form-1","status":"running","kind":{"t":"form","fields":[{"name":"branch","label":"Branch","kind":{"t":"text"},"required":true,"default":"main"},{"name":"token","label":"Token","kind":{"t":"secret"},"required":true},{"name":"depth","label":"Depth","kind":{"t":"number"},"required":false,"default":"1"},{"name":"push","label":"Push when done","kind":{"t":"bool"},"required":false},{"name":"remote","label":"Remote","kind":{"t":"choice","choices":[{"value":"origin","label":"origin"},{"value":"upstream","label":"upstream"}]},"required":true,"default":"origin"}],"submit":"Create"}}],"prompts":[]}]}}
+# And the button's label, on its own.
+{"ev":{"seq":4,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/form-1/kind/submit","value":"Create branch"}]}}
+{"expect":{"last_seq":4,"live":"turn-25","gaps":[],"turns":[{"id":"turn-25","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"form-1","status":"running","kind":{"t":"form","fields":[{"name":"branch","label":"Branch","kind":{"t":"text"},"required":true,"default":"main"},{"name":"token","label":"Token","kind":{"t":"secret"},"required":true},{"name":"depth","label":"Depth","kind":{"t":"number"},"required":false,"default":"1"},{"name":"push","label":"Push when done","kind":{"t":"bool"},"required":false},{"name":"remote","label":"Remote","kind":{"t":"choice","choices":[{"value":"origin","label":"origin"},{"value":"upstream","label":"upstream"}]},"required":true,"default":"origin"}],"submit":"Create branch"}}],"prompts":[]}]}}
+{"ev":{"seq":5,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-25","result":null}}
+{"expect":{"last_seq":5,"live":null,"gaps":[],"turns":[{"id":"turn-25","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"form-1","status":"done","kind":{"t":"form","fields":[{"name":"branch","label":"Branch","kind":{"t":"text"},"required":true,"default":"main"},{"name":"token","label":"Token","kind":{"t":"secret"},"required":true},{"name":"depth","label":"Depth","kind":{"t":"number"},"required":false,"default":"1"},{"name":"push","label":"Push when done","kind":{"t":"bool"},"required":false},{"name":"remote","label":"Remote","kind":{"t":"choice","choices":[{"value":"origin","label":"origin"},{"value":"upstream","label":"upstream"}]},"required":true,"default":"origin"}],"submit":"Create branch"}}],"prompts":[]}]}}

@@ -1,0 +1,15 @@
+# tree-surface - a hierarchy, and one node opening.
+# Derived from streams/tool-call.jsonl: the tool returns the tree.
+#
+# What it pins: a node opens with ONE op addressed at that node's `expanded`
+# flag. A renderer that rebuilds the whole tree to open one folder is paying
+# for the whole workspace on every keypress. Note also that the labels do not
+# move: expansion is the client's to draw, the tree's to describe.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-20"}}
+{"ev":{"seq":2,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/tree-1","value":{"id":"tree-1","status":"running","kind":{"t":"tree","nodes":[{"label":"harness","expanded":true,"children":[{"label":"core","expanded":false,"children":[]},{"label":"clients","expanded":false,"children":[]}]}]}}}]}}
+{"expect":{"last_seq":2,"live":"turn-20","gaps":[],"turns":[{"id":"turn-20","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"tree-1","status":"running","kind":{"t":"tree","nodes":[{"label":"harness","expanded":true,"children":[{"label":"core","expanded":false,"children":[]},{"label":"clients","expanded":false,"children":[]}]}]}}],"prompts":[]}]}}
+# Opening `core`: one op, at the one flag that changed.
+{"ev":{"seq":3,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/tree-1/kind/nodes/0/children/0/expanded","value":true}]}}
+{"expect":{"last_seq":3,"live":"turn-20","gaps":[],"turns":[{"id":"turn-20","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"tree-1","status":"running","kind":{"t":"tree","nodes":[{"label":"harness","expanded":true,"children":[{"label":"core","expanded":true,"children":[]},{"label":"clients","expanded":false,"children":[]}]}]}}],"prompts":[]}]}}
+{"ev":{"seq":4,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-20","result":null}}
+{"expect":{"last_seq":4,"live":null,"gaps":[],"turns":[{"id":"turn-20","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"tree-1","status":"done","kind":{"t":"tree","nodes":[{"label":"harness","expanded":true,"children":[{"label":"core","expanded":true,"children":[]},{"label":"clients","expanded":false,"children":[]}]}]}}],"prompts":[]}]}}

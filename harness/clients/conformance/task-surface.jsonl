@@ -1,0 +1,19 @@
+# task-surface - a checklist the agent keeps.
+# Derived from streams/tool-call.jsonl: the todo tool returns the list.
+#
+# What it pins: an item has a stable `id`, so ticking one is one op at
+# `/kind/items/<index>/status` and the other items are not re-sent. Appending
+# an item changes the array's length, so THAT is one op on `/kind/items`. Both
+# cases in one file, because a renderer that gets the first right and the
+# second wrong looks correct until the plan grows.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-24"}}
+{"ev":{"seq":2,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/task-1","value":{"id":"task-1","status":"running","kind":{"t":"task","items":[{"id":"read","label":"read the plan","status":"done"},{"id":"write","label":"write the differ","status":"running"},{"id":"test","label":"run the tests","status":"pending"}]}}}]}}
+{"expect":{"last_seq":2,"live":"turn-24","gaps":[],"turns":[{"id":"turn-24","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"task-1","status":"running","kind":{"t":"task","items":[{"id":"read","label":"read the plan","status":"done"},{"id":"write","label":"write the differ","status":"running"},{"id":"test","label":"run the tests","status":"pending"}]}}],"prompts":[]}]}}
+# Ticking one item.
+{"ev":{"seq":3,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/task-1/kind/items/1/status","value":"done"}]}}
+{"expect":{"last_seq":3,"live":"turn-24","gaps":[],"turns":[{"id":"turn-24","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"task-1","status":"running","kind":{"t":"task","items":[{"id":"read","label":"read the plan","status":"done"},{"id":"write","label":"write the differ","status":"done"},{"id":"test","label":"run the tests","status":"pending"}]}}],"prompts":[]}]}}
+# Adding one. The array is the unit when its length changes.
+{"ev":{"seq":4,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/task-1/kind/items","value":[{"id":"read","label":"read the plan","status":"done"},{"id":"write","label":"write the differ","status":"done"},{"id":"test","label":"run the tests","status":"pending"},{"id":"ship","label":"tick the plan","status":"pending"}]}]}}
+{"expect":{"last_seq":4,"live":"turn-24","gaps":[],"turns":[{"id":"turn-24","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"task-1","status":"running","kind":{"t":"task","items":[{"id":"read","label":"read the plan","status":"done"},{"id":"write","label":"write the differ","status":"done"},{"id":"test","label":"run the tests","status":"pending"},{"id":"ship","label":"tick the plan","status":"pending"}]}}],"prompts":[]}]}}
+{"ev":{"seq":5,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-24","result":null}}
+{"expect":{"last_seq":5,"live":null,"gaps":[],"turns":[{"id":"turn-24","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"task-1","status":"done","kind":{"t":"task","items":[{"id":"read","label":"read the plan","status":"done"},{"id":"write","label":"write the differ","status":"done"},{"id":"test","label":"run the tests","status":"pending"},{"id":"ship","label":"tick the plan","status":"pending"}]}}],"prompts":[]}]}}

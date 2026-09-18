@@ -1,0 +1,24 @@
+# stream-surface - an append-only channel from a child process.
+# Derived from streams/tool-call.jsonl: the bash tool runs something noisy.
+#
+# What it pins: the surface NAMES a channel and nothing else. A child process
+# gets pipes, never the frame - a subprocess writing straight to the terminal
+# would corrupt it - so the broker reads the output incrementally, truncates it
+# at the declared ceiling, and the bytes travel as `append` frames addressed to
+# this surface id.
+#
+# KNOWN GAP, for plans 09b and 09c: `SurfaceKind::Stream` carries no body
+# field, so there is nowhere in the store's state for those bytes to land and
+# this fixture cannot assert them. What it does assert is the part every
+# renderer must agree on: the channel is named, the surface opens `running`, it
+# can be re-pointed at another channel with one op, and the turn closes it. A
+# body field would be a protocol change (orrery-proto), not a fixture.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-23"}}
+{"ev":{"seq":2,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/stream-1","value":{"id":"stream-1","status":"running","kind":{"t":"stream","id":"stdout"}}}]}}
+{"expect":{"last_seq":2,"live":"turn-23","gaps":[],"turns":[{"id":"turn-23","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"stream-1","status":"running","kind":{"t":"stream","id":"stdout"}}],"prompts":[]}]}}
+# The same surface, re-pointed: one op on the channel name.
+{"ev":{"seq":3,"type":"STATE_DELTA","delta":[{"op":"replace","path":"/surfaces/stream-1/kind/id","value":"stderr"}]}}
+{"expect":{"last_seq":3,"live":"turn-23","gaps":[],"turns":[{"id":"turn-23","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"stream-1","status":"running","kind":{"t":"stream","id":"stderr"}}],"prompts":[]}]}}
+# A running surface is closed by the turn, never left open.
+{"ev":{"seq":4,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-23","result":null}}
+{"expect":{"last_seq":4,"live":null,"gaps":[],"turns":[{"id":"turn-23","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"stream-1","status":"done","kind":{"t":"stream","id":"stderr"}}],"prompts":[]}]}}

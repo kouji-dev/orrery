@@ -85,6 +85,43 @@ events alone.
 | `reattach-since` | `text-turn` | Replay picks up mid-turn, into the `(detached)` placeholder turn. |
 | `cancel-midturn` | `never-ends` | A stopped turn closes its message as `cancelled`, never as `done`. |
 | `custom-with-fallback` | `tool-call` | Payload and fallback are kept side by side; the store picks neither. |
+| `tree-surface` | `tool-call` | Opening one node is one op at that node's `expanded`. |
+| `diff-surface` | `tool-call` | A second hunk is one op on `/kind/hunks`; the first is not re-sent. |
+| `progress-surface` | `never-ends` | A tick is one op on `/kind/done`, never a new surface. |
+| `stream-surface` | `tool-call` | A channel is named, opens `running` and is closed by the turn. |
+| `task-surface` | `tool-call` | Ticking an item is one op; adding one is an op on the array. |
+| `form-surface` | `tool-call` | All five field kinds, and the sequential-prompt degradation rule. |
+
+### One scenario per core surface
+
+Every core surface has a scenario, and every renderer implements every core surface — one
+that cannot is not a renderer. [Plan 09](../../docs/plans/09-surfaces.md) task 7 added the
+six that were missing; plans 09b and 09c run this whole directory, so a surface with no row
+here is a surface two TUIs can quietly disagree about.
+
+| Surface | Scenario |
+|---|---|
+| `text` | `text-only` |
+| `markdown` | `streaming-markdown` — the `complete` flag, explicitly |
+| `table` | `table-then-resort` — the cost guard, explicitly |
+| `tree` | `tree-surface` |
+| `diff` | `diff-surface` |
+| `progress` | `progress-surface` |
+| `stream` | `stream-surface` |
+| `task` | `task-surface` |
+| `question` | `question-surface` |
+| `form` | `form-surface` |
+| `stack` | `tool-call` — a call and its result are children of one stack |
+| `custom` | `custom-with-fallback` |
+
+`table-then-resort` and `streaming-markdown` are called out because they are the two cases
+renderers get wrong: the first tempts a full rebuild on every sort, and the second tempts a
+markdown parser at a half-open fence.
+
+**One known gap.** `stream-surface` cannot assert a stream's *body*:
+[`SurfaceKind::Stream`](../../core/crates/orrery-proto/src/surface.rs) names a channel and
+carries no text, so the store has nowhere to put the bytes. The scenario pins everything
+else about a stream. Closing it means a protocol change, not a fixture.
 
 Adding one: give it a name that says what it pins, add a row here, and make sure it is
 derivable from a stream — a scenario nothing can drive end-to-end is a scenario that will
