@@ -199,3 +199,65 @@ async fn http_session_feeds_the_same_store() {
     );
     server.shutdown();
 }
+
+/// HTTP, passively: a client that submits nothing still sees the whole turn.
+///
+/// `run` is the run-scoped half of AG-UI's transport, and it is the half that
+/// kept `orrery attach` on a pipe. `subscribe` is the other half: `GET /events`,
+/// the same frames, for a session somebody else is driving.
+#[tokio::test]
+async fn http_subscribe_renders_somebody_elses_turn() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+
+    let hub = Hub::new(&a_session().to_string());
+    let kernel = Arc::new(FakeKernel { hub: hub.clone() });
+    let server = http::serve(
+        "127.0.0.1:0".parse().expect("loopback"),
+        hub.clone(),
+        Arc::clone(&kernel) as Arc<dyn ControlHandler>,
+        http::HttpConfig {
+            token: Some("t0ken".into()),
+            tick: Duration::ZERO,
+        },
+    )
+    .await
+    .expect("bind");
+
+    let endpoint: Endpoint = format!("http://t0ken@{}", server.addr())
+        .parse()
+        .expect("endpoint");
+    let mut watcher = AguiSession::connect(&endpoint).await.expect("connect");
+    watcher.subscribe(None).await.expect("subscribe");
+
+    // Somebody else's turn, submitted straight at the kernel.
+    kernel
+        .control(Request::TurnSubmit {
+            id: orrery_proto::ReqId::new(),
+            session: a_session(),
+            input: UserInput::text("what is in the workspace?"),
+        })
+        .expect("submit");
+
+    let mut store = SurfaceStore::new();
+    while store.settled().count() == 0 {
+        let Some(frame) = tokio::time::timeout(Duration::from_secs(5), watcher.next_frame())
+            .await
+            .expect("no timeout")
+        else {
+            break;
+        };
+        store.apply(&frame.expect("no gaps"));
+    }
+    let settled = store.turn(&a_turn().to_string()).expect("the turn");
+    let SurfaceKind::Markdown { value, .. } = &settled.surfaces[0].kind else {
+        panic!("a markdown surface");
+    };
+    assert_eq!(
+        value, "three crates",
+        "a passive subscriber sees what the submitter sees"
+    );
+    server.shutdown();
+}

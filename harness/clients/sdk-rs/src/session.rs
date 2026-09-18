@@ -71,7 +71,7 @@ impl AguiSession {
             }
             Endpoint::Http { url, token } => Ok(Self {
                 wire: Wire::Http {
-                    client: reqwest::Client::new(),
+                    client: http_client(),
                     url: url.clone(),
                     token: token.clone(),
                     events: None,
@@ -330,6 +330,64 @@ impl AguiSession {
         *events = Some(SseStream::new(response));
         Ok(())
     }
+
+    /// Subscribe to a session without starting a run.
+    ///
+    /// AG-UI's `POST /run` carries the frames of the run it opened and nothing
+    /// else, which is why a client that submits nothing used to have nothing to
+    /// read. `GET /events` is the passive half: `since` replays from where this
+    /// client left off, `None` takes the session from where it is.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError`] when the endpoint is not HTTP, or the subscribe is
+    /// refused — including [`ClientError::Refused`] with `410 Gone` when the
+    /// replay ring no longer reaches back to `since`.
+    pub async fn subscribe(&mut self, since: Option<Seq>) -> Result<(), ClientError> {
+        let Wire::Http {
+            client,
+            url,
+            token,
+            events,
+        } = &mut self.wire
+        else {
+            return Err(ClientError::Refused(
+                "`subscribe` is HTTP's passive route; a pipe subscribes by connecting".into(),
+            ));
+        };
+        let route = match since {
+            Some(Seq(since)) => format!("{url}/events?since={since}"),
+            None => format!("{url}/events"),
+        };
+        let mut get = client.get(route);
+        if let Some(token) = token {
+            get = get.bearer_auth(token);
+        }
+        let response = get
+            .send()
+            .await
+            .map_err(|e| ClientError::Http(e.to_string()))?;
+        if !response.status().is_success() {
+            return Err(ClientError::Refused(format!("{}", response.status())));
+        }
+        *events = Some(SseStream::new(response));
+        Ok(())
+    }
+}
+
+/// A `reqwest` client with a crypto provider behind it.
+///
+/// `reqwest` is built against `rustls-no-provider` — the updater's TLS setup,
+/// so no second crypto stack lands in the tree — and building a client without
+/// a provider installed **panics**. Installing it here rather than in every
+/// binary means an embedder gets a working client from `connect`, which is the
+/// only place this crate builds one.
+fn http_client() -> reqwest::Client {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+    reqwest::Client::new()
 }
 
 /// An SSE body, parsed one `data:` line at a time.

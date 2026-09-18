@@ -21,9 +21,12 @@ thiserror = { workspace = true }
 futures-util = { workspace = true }
 tokio = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }
+# `reqwest` here is built against `rustls-no-provider`: a client cannot be built
+# until a provider is installed, so this crate installs it rather than leaving
+# every binary to remember.
+rustls = { workspace = true }
 interprocess = { workspace = true }
 bytes = { workspace = true }
 
 [dev-dependencies]
 uuid = { workspace = true }
-rustls = { workspace = true }

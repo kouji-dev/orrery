@@ -171,23 +171,64 @@ fn outlives_a_client() {
 
 /// The endpoint `serve` prints is one `attach` accepts and one
 /// `ORRERY_ENDPOINT` carries — one string with a scheme prefix, and one parser.
+///
+/// **Both** endpoints, as of `GET /events`: the HTTP one used to be refused,
+/// because AG-UI's transport was run-scoped and a passive attach would have sat
+/// on a connection that never delivered anything. The transport now has a
+/// passive subscribe route, so the only thing `attach` refuses is `inproc:`.
 #[test]
 fn the_endpoint_round_trips() {
     let dir = common::workspace();
     let served = serve(dir.path(), &["text-turn.jsonl"]);
 
-    // The HTTP one is what the Ink client is handed. It is refused by `attach`
-    // with a sentence rather than a hang, because AG-UI's transport is
-    // run-scoped.
     let out = orrery(&args(
         &["--workspace".to_owned(), dir.path().display().to_string()],
-        &["attach", &served.http],
+        &["attach", "inproc:", "--ui", "json"],
     ));
     assert_eq!(out.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("run-scoped") && stderr.contains("pipe:"),
+        stderr.contains("inproc:"),
         "and it says what to use instead: {stderr}"
+    );
+    drop(served);
+}
+
+/// `attach http://…` subscribes to a session it did not start.
+///
+/// This is the half plan 08's Done-when was missing: the HTTP listener grew a
+/// `GET /events` route, so an SSE client — this one, Ink, any AG-UI client —
+/// renders somebody else's turn instead of only the run it posted itself.
+#[test]
+fn attach_over_http_renders_the_turn() {
+    let dir = common::workspace();
+    let served = serve(dir.path(), &["tool-call.jsonl", "text-turn.jsonl"]);
+
+    // The watcher: HTTP, passive, replaying from the start of the session.
+    let watcher = attach(
+        dir.path(),
+        &[&served.http, "--ui", "json", "--since", "0"],
+    );
+    // The submitter: the pipe, because one of them has to ask.
+    let submitter = attach(
+        dir.path(),
+        &[&served.pipe, "--ui", "json", "-p", "what is in Cargo.toml?"],
+    );
+
+    let submitter = submitter.wait_with_output().expect("the submitter finishes");
+    assert!(
+        String::from_utf8_lossy(&submitter.stdout).contains("RUN_FINISHED"),
+        "the pipe client saw the turn end"
+    );
+    let watcher = watcher.wait_with_output().expect("the watcher finishes");
+    let seen = String::from_utf8_lossy(&watcher.stdout);
+    assert!(
+        seen.contains("RUN_FINISHED"),
+        "the HTTP client saw the turn end: {seen}"
+    );
+    assert!(
+        seen.contains(FINAL_TAIL),
+        "…and what it said: {seen}"
     );
 }
 

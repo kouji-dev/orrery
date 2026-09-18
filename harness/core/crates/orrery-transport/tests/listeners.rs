@@ -533,3 +533,108 @@ fn run_agent_input_maps_to_user_input() {
         code: None,
     };
 }
+
+/// `GET /events` is a passive subscribe: a turn somebody else submitted, seen
+/// whole, replay first and then live.
+///
+/// This is what an SSE client needs to render a session it did not start —
+/// `POST /run` only ever carries the frames of the run it opened, which is why
+/// `orrery attach` could not take an `http://` endpoint.
+#[tokio::test]
+async fn http_events_is_a_passive_subscribe() {
+    let hub = Hub::new("sess-1");
+    let (server, _rec) = start_http(hub.clone(), false).await;
+    let client = http_client();
+
+    // A turn nobody on HTTP submitted, already over before anyone subscribes.
+    for event in a_turn() {
+        hub.publish(&event);
+    }
+
+    // No token: the route is guarded like every other.
+    let unauthorised = client
+        .get(format!("{}/events", server.base_url()))
+        .send()
+        .await
+        .expect("get /events");
+    assert_eq!(unauthorised.status(), 401);
+
+    let response = client
+        .get(format!("{}/events", server.base_url()))
+        .bearer_auth("t0ken")
+        .send()
+        .await
+        .expect("get /events");
+    assert_eq!(response.status(), 200);
+    assert!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.starts_with("text/event-stream")),
+        "a subscribe is AG-UI's own transport too"
+    );
+
+    // Five replayed frames, then one that had not happened when we connected.
+    let hub2 = hub.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        hub2.publish(&Event::Error {
+            seq: Seq(5),
+            scope: orrery_proto::ErrorScope::Turn,
+            detail: orrery_proto::ErrorDetail {
+                code: "late".into(),
+                message: "after the subscribe".into(),
+                retryable: false,
+                data: None,
+            },
+        });
+    });
+    let frames = read_sse(response, 6).await;
+    let types: Vec<&str> = frames.iter().map(|f| f.event.type_name()).collect();
+    assert_eq!(
+        types,
+        vec![
+            "RUN_STARTED",
+            "TEXT_MESSAGE_START",
+            "TEXT_MESSAGE_CONTENT",
+            "TEXT_MESSAGE_END",
+            "RUN_FINISHED",
+            "RUN_ERROR",
+        ],
+        "everything the session has, then everything it gets"
+    );
+    assert_eq!(
+        frames.iter().map(|f| f.seq).collect::<Vec<_>>(),
+        vec![1, 2, 3, 4, 5, 6],
+        "one numbering space, replay and live alike"
+    );
+    server.shutdown();
+}
+
+/// `GET /events?since=` replays from where a client left off, with no gap and
+/// no repeat.
+#[tokio::test]
+async fn http_events_since_is_contiguous() {
+    let hub = Hub::new("sess-1");
+    let (server, _rec) = start_http(hub.clone(), false).await;
+    let client = http_client();
+    for event in a_turn() {
+        hub.publish(&event);
+    }
+
+    let response = client
+        .get(format!("{}/events?since=2", server.base_url()))
+        .bearer_auth("t0ken")
+        .send()
+        .await
+        .expect("get /events");
+    assert_eq!(response.status(), 200);
+    let frames = read_sse(response, 3).await;
+    assert_eq!(
+        frames.iter().map(|f| f.seq).collect::<Vec<_>>(),
+        vec![3, 4, 5],
+        "since=2 means 3 onwards"
+    );
+    server.shutdown();
+}

@@ -1,6 +1,9 @@
 //! The HTTP + SSE listener: AG-UI's own transport, so an off-the-shelf client works.
 //!
 //! `POST /run` takes a `RunAgentInput` and returns `text/event-stream`.
+//! `GET /events` is the same stream without a run: a passive subscribe to a
+//! session somebody else is driving, which is what `orrery attach` needs and
+//! what AG-UI's own vocabulary has no route for.
 //! `POST /control` takes a [`Request`] and returns JSON — that is where
 //! `session.attach(since)`, `turn.cancel`, `intent`, `consent.answer` and
 //! `query` live, because AG-UI's input path is a run invocation and has no
@@ -25,7 +28,8 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event as SseEvent, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
+use axum::extract::Query;
+use axum::routing::{get, post};
 use futures_util::StreamExt;
 use orrery_proto::{Request, SessionId, UserInput};
 use serde::{Deserialize, Serialize};
@@ -184,6 +188,7 @@ pub async fn serve(
     };
     let app = Router::new()
         .route("/run", post(run))
+        .route("/events", get(events))
         .route("/control", post(control_rpc))
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -233,23 +238,72 @@ async fn run(
         return (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response();
     }
 
-    Sse::new(frame_stream(client)).into_response()
+    let stream =
+        live_frames(client).map(|frame| Ok::<_, std::convert::Infallible>(sse_frame(&frame)));
+    Sse::new(stream).into_response()
 }
 
-fn frame_stream(
-    client: ClientStream,
-) -> impl futures_util::Stream<Item = Result<SseEvent, std::convert::Infallible>> {
+/// Every frame this client is owed, batches flattened.
+fn live_frames(client: ClientStream) -> impl futures_util::Stream<Item = crate::Frame> {
     futures_util::stream::unfold(client, |mut client| async move {
         let batch = client.next_batch().await?;
         Some((batch, client))
     })
-    .flat_map(|batch| {
-        futures_util::stream::iter(batch.into_iter().map(|frame| {
-            Ok(SseEvent::default()
-                .event(frame.event.type_name())
-                .data(serde_json::to_string(&frame).unwrap_or_default()))
-        }))
-    })
+    .flat_map(futures_util::stream::iter)
+}
+
+/// One frame as one SSE event, named by its AG-UI type.
+fn sse_frame(frame: &crate::Frame) -> SseEvent {
+    SseEvent::default()
+        .event(frame.event.type_name())
+        .data(serde_json::to_string(frame).unwrap_or_default())
+}
+
+/// What `GET /events` accepts.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct EventsQuery {
+    /// Replay everything after this `seq` before going live. Absent is "from
+    /// wherever the session is now", which is what a fresh client wants.
+    #[serde(default)]
+    pub since: Option<u64>,
+}
+
+/// `GET /events` — subscribe to a session without starting a run.
+///
+/// The passive half of the transport, and the reason an SSE client can render a
+/// turn it did not submit. It serves exactly what the pipe handshake serves:
+/// [`Hub::attach`] for the replay, then this client's own coalescer for
+/// everything after it — one numbering space across both, because `seq` is
+/// assigned at the encoder's output and not per connection.
+///
+/// Subscribing *before* replaying is deliberate: the other order has a window
+/// between the two in which a frame belongs to neither.
+async fn events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<EventsQuery>,
+) -> Response {
+    if !authorised(&state, &headers) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let client = state.hub.subscribe(state.config.tick);
+    let replay = match state.hub.attach(query.since) {
+        Ok(frames) => frames,
+        // The ring no longer reaches back that far. A cold replay is the
+        // caller's to ask for — say so rather than serve a hole.
+        Err(err) => return (StatusCode::GONE, err.to_string()).into_response(),
+    };
+    let last = replay.last().map(|f| f.seq);
+    // The replay and the subscription overlap by however many frames landed
+    // between the two calls. Numbers a client already has are dropped here
+    // rather than deduplicated there.
+    let live = live_frames(client).filter(move |frame| {
+        std::future::ready(last.is_none_or(|last| frame.seq > last))
+    });
+    let stream = futures_util::stream::iter(replay)
+        .chain(live)
+        .map(|frame| Ok::<_, std::convert::Infallible>(sse_frame(&frame)));
+    Sse::new(stream).into_response()
 }
 
 /// `POST /control` — everything AG-UI has no vocabulary for.
