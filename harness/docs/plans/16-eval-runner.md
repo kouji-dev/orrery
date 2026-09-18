@@ -4,6 +4,13 @@
 
 **Covers.** §4.14 in full.
 
+**State (2026-09-19).** Tasks 1-9 implemented and green: `cargo test -p orrery-grader
+-p orrery-eval -p orrery-ext-graders` is 63 tests, `cargo clippy` is clean at
+`-D warnings`, `xtask deps-check` prints ok. Every open question below is settled.
+The one thing left is the CLI dispatch in `orrery-cli` - see **Done when**.
+No test in this plan calls a model, a network or an agent CLI: the providers replay
+committed `.jsonl` fixtures and the competing harness is a fake binary the test writes.
+
 **Crates.** `core/crates/orrery-grader` (published trait) · `core/crates/orrery-eval` · `extensions/crates/orrery-ext-graders`.
 
 **Depends on.** [`02`](02-session-store.md) (replay), [`05`](05-kernel-loop.md), [`07`](07-policy-broker-audit.md) (telemetry), [`10`](10-config-layers.md) (profiles), [`11`](11-router-roles-orchestrator.md) (role bindings for `byRole` cost).
@@ -140,89 +147,162 @@ orrery eval run --profile ci --format junit  # exits non-zero on regression agai
 
 Files: `orrery-grader/src/lib.rs`
 
-- [ ] **Failing test first.** `grader::is_object_safe` and a doc test showing a minimal grader.
-- [ ] Implement. Keep it tiny — it is published and it should never need a breaking change.
+- [x] **Failing test first.** `grader::is_object_safe` and a doc test showing a minimal grader.
+- [x] Implement. Keep it tiny — it is published and it should never need a breaking change.
+
+`GradeInput` carries one field the sketch above does not: `config`, the case's own
+`[case.grade]` block, which the runner passes through **unread**. Without it a grader
+cannot be told what to check, and the only alternative — the runner parsing assertions on
+the grader's behalf — is the coupling this crate exists to prevent. `Score` likewise
+carries `judge_cost`, which is what makes task 5's "the judge's tokens appear separately"
+expressible at all.
 
 ### Task 2 · Case and run types
 
 Files: `orrery-eval/src/{case,run,matrix}.rs`
 
-- [ ] **Failing test first.** `matrix::expands` — 2 profiles × 2 models × 2 seeds = 8 runs, in a deterministic order.
-- [ ] `run::defaults_are_reproducible` — a deserialized `EvalRun` with no `memory`/`router` keys has `Off` and `Declared`.
-- [ ] Implement.
+- [x] **Failing test first.** `matrix::expands` — 2 profiles × 2 models × 2 seeds = 8 runs, in a deterministic order.
+- [x] `run::defaults_are_reproducible` — a deserialized `EvalRun` with no `memory`/`router` keys has `Off` and `Declared`.
+- [x] Implement.
 
 ### Task 3 · Isolation
 
 Files: `orrery-eval/src/isolate.rs`, `tests/isolate.rs`
 
-- [ ] **Failing test first.** `isolate::cases_never_share_state` — two cases that both write the same path; assert neither sees the other's file.
-- [ ] `isolate::worktree_is_cleaned_up` — including after a panic.
-- [ ] `isolate::concurrency_is_honoured`.
-- [ ] Implement worktree isolation (git worktree per case). Container isolation is a later task — leave the enum variant and a clear `Unsupported` error.
+- [x] **Failing test first.** `isolate::cases_never_share_state` — two cases that both write the same path; assert neither sees the other's file.
+- [x] `isolate::worktree_is_cleaned_up` — including after a panic.
+- [x] `isolate::concurrency_is_honoured`.
+- [x] Implement worktree isolation (git worktree per case). Container isolation is a later task — leave the enum variant and a clear `Unsupported` error.
+
+Cleanup is in `Drop` rather than at the end of the run, which is what makes it survive a
+panic; `isolate::worktree_is_cleaned_up_after_a_panic` panics with a workspace open and
+then looks for the directory. `WorkspaceSpec::Fixture` (copy a directory) and `Empty` need
+no git, so a suite that is not over a repository still isolates.
 
 ### Task 4 · Running and telemetry
 
 Files: `orrery-eval/src/{run,report}.rs`, `tests/run.rs`
 
-- [ ] **Failing test first, and it is the one that makes the whole plan worth doing.** `run::cost_comes_from_telemetry` — run a case against the fixture provider with known token counts; assert `EvalResult.cost` matches exactly and is **not** a post-hoc estimate. Instrument to prove no estimation path exists.
-- [ ] `run::by_role_attribution` — a run with a cheap compactor and an expensive planner attributes tokens to the right roles.
-- [ ] `run::budget_exceeded_is_an_outcome` — not an error.
-- [ ] `run::transcript_is_replayable`.
-- [ ] Implement.
+- [x] **Failing test first, and it is the one that makes the whole plan worth doing.** `run::cost_comes_from_telemetry` — run a case against the fixture provider with known token counts; assert `EvalResult.cost` matches exactly and is **not** a post-hoc estimate. Instrument to prove no estimation path exists.
+- [x] `run::by_role_attribution` — a run with a cheap compactor and an expensive planner attributes tokens to the right roles.
+- [x] `run::budget_exceeded_is_an_outcome` — not an error.
+- [x] `run::transcript_is_replayable`.
+- [x] Implement.
+
+The proof is structural first and instrumented second. `BoundaryMeter` has **no method
+that takes a `Usage`**: the only way in is `observe(&ModelEvent)`, which ignores every
+variant but `Usage`, so there is no estimation path to audit because there is none to
+write. On top of that, `HarnessRunner` wires the provider's own `TokenCounter` behind an
+`EstimatorProbe`, and the test asserts the probe was asked **nothing** for a whole run.
+(The session-side `CharsOverFour` fits the context to the window; it prices nothing, and
+no cost reads it.)
+
+Open question 4 is answered and has a test: `run::by_role_separates_even_on_one_model`
+binds every role to one provider and the three lines stay separate, because attribution is
+by pass, not by model.
 
 ### Task 5 · Graders
 
 Files: `orrery-ext-graders/src/*`
 
-- [ ] **Failing test first.** `command::exit_code_is_the_score`; `command::runs_under_a_grant` — a grader script is brokered like anything else.
-- [ ] `assertion::checks_files_diffs_and_tool_calls`.
-- [ ] `model::counts_its_own_cost` — the judge's tokens appear in the result, separately from the run's.
-- [ ] Implement all three as one extension.
+- [x] **Failing test first.** `command::exit_code_is_the_score`; `command::runs_under_a_grant` — a grader script is brokered like anything else.
+- [x] `assertion::checks_files_diffs_and_tool_calls`.
+- [x] `model::counts_its_own_cost` — the judge's tokens appear in the result, separately from the run's.
+- [x] Implement all three as one extension.
+
+Both file and spawn access go through `BrokerFacade`, so a denied grader is
+`GradeError::Unavailable` — recorded as `error`, never as the case failing. The same rule
+covers a tool-call assertion with no session store bound: a safety check that could not be
+evaluated must not look like one that held.
 
 ### Task 6 · Compare and replay
 
 Files: `orrery-eval/src/{compare,replay}.rs`, `tests/compare.rs`
 
-- [ ] **Failing test first.** `compare::refuses_incomparable_runs` — two runs with different `memory` settings do not compare without `--force`, and the message says why.
-- [ ] `compare::reports_regressions`.
-- [ ] `replay::opens_the_failing_session` — replay a specific case and assert the transcript matches what the run recorded.
-- [ ] Implement.
+- [x] **Failing test first.** `compare::refuses_incomparable_runs` — two runs with different `memory` settings do not compare without `--force`, and the message says why.
+- [x] `compare::reports_regressions`.
+- [x] `replay::opens_the_failing_session` — replay a specific case and assert the transcript matches what the run recorded.
+- [x] Implement.
 
 ### Task 7 · Cross-harness adapters
 
 Files: `orrery-eval/src/adapter.rs`, `tests/adapter.rs`
 
-- [ ] **Failing test first, and it is the phase-9 criterion.** `adapter::one_suite_two_profiles_one_competitor` — run a small suite against two of our profiles and one external CLI (stubbed by a fake binary in tests), same graders; assert comparable outcomes and that the external run's cost is **labelled as reported-by-the-tool**.
-- [ ] `adapter::argv_reuses_ade_knowledge` — cite and port the argv/shim handling from `ade/src-tauri/src/agents/adapters/`.
-- [ ] Implement.
+- [x] **Failing test first, and it is the phase-9 criterion.** `adapter::one_suite_two_profiles_one_competitor` — run a small suite against two of our profiles and one external CLI (stubbed by a fake binary in tests), same graders; assert comparable outcomes and that the external run's cost is **labelled as reported-by-the-tool**.
+- [x] `adapter::argv_reuses_ade_knowledge` — cite and port the argv/shim handling from `ade/src-tauri/src/agents/adapters/`.
+- [x] Implement.
+
+The competitor in the test is a fake binary the test writes — a `.cmd` on Windows, a `sh`
+script elsewhere — so **no real agent CLI is started and no key is needed**. On Windows
+that fake is itself the exercise: a `.cmd` cannot be spawned directly, so the ported
+`launch_prefix` is what makes it start at all. Ported one for one: extension order with
+the bare name **last**, `.cmd`/`.bat` through `cmd.exe /c call`, `.ps1` through `pwsh`
+then `powershell.exe`, and the extensionless-to-sibling redirect for os error 193. Not
+ported: the probe cache, the registry PATH sweep and the hook merging, none of which a
+one-shot eval run needs.
 
 ### Task 8 · Singleton conformance as a suite
 
 Files: `orrery-eval/src/lib.rs`
 
-- [ ] Wire plans 02, 07 and 12's conformance suites so `orrery eval run conformance` runs them against the currently bound singletons.
-- [ ] **Failing test first.** `conformance::detects_a_widening_permission_handler` — plug in a deliberately broken handler; the suite fails with a clear message.
+- [x] Wire plans 02, 07 and 12's conformance suites so `orrery eval run conformance` runs them against the currently bound singletons.
+- [x] **Failing test first.** `conformance::detects_a_widening_permission_handler` — plug in a deliberately broken handler; the suite fails with a clear message.
+
+Plans 02 and 12 own their suites and are called as they are. Plan 07 has no
+`run_conformance`, so the handler check is written here, in
+`conformance::check_permission_handler` — and here is the right place for it: plan 07
+already stops a widening handler *mechanically* inside `review_narrowing`, so what was
+missing was not enforcement but **visibility**. Note that a handler outside
+`orrery-policy` cannot return `Allow` at all, because minting a token is private to that
+crate; the widening it can attempt is `Deny -> Ask`, and that is what the test plugs in.
+An unbound singleton is skipped, not failed.
 
 ### Task 9 · CI shape
 
 Files: `orrery-eval/src/junit.rs`
 
-- [ ] **Failing test first.** `junit::exits_non_zero_on_regression` against a baseline file.
-- [ ] Implement JUnit output.
+- [x] **Failing test first.** `junit::exits_non_zero_on_regression` against a baseline file.
+- [x] Implement JUnit output.
 
 ---
 
 ## Done when
 
-- `cargo test -p orrery-grader -p orrery-eval -p orrery-ext-graders` green.
-- One suite runs against two profiles and one competing harness with the same graders.
-- Cost numbers are read at the provider boundary, provably.
-- A failed case opens with `eval replay`.
-- `--format junit` exits non-zero on regression.
+- [x] `cargo test -p orrery-grader -p orrery-eval -p orrery-ext-graders` green. 63 tests.
+- [x] One suite runs against two profiles and one competing harness with the same graders —
+  `adapter::one_suite_two_profiles_one_competitor`, the competitor stubbed by a fake binary
+  because nothing here may call a real agent CLI.
+- [x] Cost numbers are read at the provider boundary, provably: no API accepts a `Usage`,
+  and the estimator probe is asked nothing for a whole run.
+- [x] A failed case opens with `replay::replay` — **as a library call.**
+- [x] `--format junit` exits non-zero on regression — `junit::exit_code`, **as a library
+  call.**
+
+**Not done: the CLI wiring.** `orrery-cli/src/cmd/eval.rs` still answers
+`not_implemented("16-eval-runner.md")`, so `orrery eval run|compare|replay` is not yet
+something a person can type, even though everything behind it exists and is tested at the
+library boundary. The argument tree in `orrery-cli/src/args.rs` is already written and
+matches this plan's CLI section; wiring it is a dispatch function plus one dependency
+line in `orrery-cli/Cargo.toml`. Left to whoever owns that crate rather than edited from
+here while sibling work is in flight.
 
 ## Open questions
 
-1. **Container isolation.** Worktrees are enough for a monorepo suite and not enough for SWE-bench-style cases that install dependencies. Docker is the obvious answer and a heavy one. Phase 9 can ship worktree-only; say so.
-2. **Seeds.** Most providers do not offer deterministic sampling, so `seed` in the matrix is aspirational for hosted models and real for local ones. Do not imply more determinism than exists — label runs accordingly.
-3. **Baseline storage.** Where does the regression baseline live — a committed file, or the registry? Committed file is simpler and reviewable. Probably that.
-4. **Is `by_role` cost attribution accurate when a role is bound to the same model as the main loop?** It should be, since attribution is by step not by model, but verify with a test that binds everything to one model and checks the numbers still separate.
+1. **Container isolation. Settled: worktree-only, and it says so.** `Isolation::Container`
+   is in the enum and returns `EvalError::Unsupported` naming itself and this question,
+   rather than quietly degrading to a worktree.
+2. **Seeds. Settled: labelled, never claimed.** `Matrix::seeds` documents that a seed is
+   real for a local model and a label for a hosted one, and `Reproducibility::seeded`
+   records only that one was *asked for*. Nothing in the crate calls a seeded run
+   reproducible.
+3. **Baseline storage. Settled: a committed file.** `junit::Baseline` is JSON in the
+   repository. A regression threshold that can change without a review is not a
+   threshold.
+4. **`by_role` with everything on one model. Settled: it separates.**
+   `run::by_role_separates_even_on_one_model` binds all three roles to one provider, and
+   the lines stay apart because the meter is told which role is taking the pass.
+
+   One shape note from building it: `by_role` is a `ByRole` keyed on the role's wire tag
+   rather than a `BTreeMap<Role, _>`. `orrery_proto::Role` derives no `Ord` and is
+   `#[non_exhaustive]`, and adding a derive to a crate this plan does not own is not this
+   plan's business.
