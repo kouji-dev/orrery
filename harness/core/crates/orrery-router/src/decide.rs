@@ -262,7 +262,10 @@ pub struct RouterProfile {
 #[derive(Clone)]
 pub struct Router {
     profile: RouterProfile,
-    audit: Option<Audit>,
+    /// Deliberately an [`Audit`] rather than an `Option<Audit>`: a call site
+    /// that can skip the audit is a call site that will, so a router built
+    /// without one records into the null sink instead of not recording.
+    audit: Audit,
 }
 
 impl std::fmt::Debug for Router {
@@ -280,7 +283,7 @@ impl Router {
     pub fn new(profile: RouterProfile) -> Self {
         Self {
             profile,
-            audit: None,
+            audit: orrery_audit::null(),
         }
     }
 
@@ -293,7 +296,7 @@ impl Router {
     /// Record every decision here.
     #[must_use]
     pub fn with_audit(mut self, audit: Audit) -> Self {
-        self.audit = Some(audit);
+        self.audit = audit;
         self
     }
 
@@ -327,9 +330,9 @@ impl Router {
         proposal: Option<Proposal>,
     ) -> Decided {
         let decided = self.judge(signals, scope, proposal);
-        if let Some(audit) = &self.audit {
-            audit.append(decided.audit_event());
-        }
+        // Unconditional. **Every** decision is audited with the signal values
+        // behind it; where that stream goes is the deployment's business.
+        self.audit.append(decided.audit_event());
         decided
     }
 
