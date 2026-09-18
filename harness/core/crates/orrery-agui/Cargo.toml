@@ -1,6 +1,6 @@
 [package]
 name = "orrery-agui"
-version = "0.0.0"
+version = "0.1.0"
 description = "The AG-UI encoder: kernel frames out to AG-UI events. Encode only, never decode."
 edition.workspace = true
 rust-version.workspace = true
@@ -9,3 +9,9 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+orrery-proto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }
