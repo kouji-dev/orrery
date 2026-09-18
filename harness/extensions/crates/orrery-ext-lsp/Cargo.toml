@@ -1,6 +1,6 @@
 [package]
 name = "orrery-ext-lsp"
-version = "0.0.0"
+version = "0.1.0"
 description = "Language-server tools: hover, definitions, references and diagnostics over a managed LSP client."
 edition.workspace = true
 rust-version.workspace = true
@@ -13,3 +13,13 @@ publish = false
 # nothing else changes. See harness/extensions/README.md.
 [dependencies]
 orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
+orrery-proto = { version = "0.1", path = "../../../core/crates/orrery-proto" }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time", "rt"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio-util = { workspace = true }

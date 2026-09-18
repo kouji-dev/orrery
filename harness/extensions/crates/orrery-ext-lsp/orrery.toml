@@ -3,11 +3,19 @@ runtime = "native"
 
 [extension]
 id = "lsp"
-version = "0.0.0"
+version = "0.1.0"
 
+# `symbols` was declared here while this crate was a scaffold. `workspace/symbol`
+# needs an indexing story this round did not build, so it is not declared: a
+# manifest that lists a tool the extension does not have makes the ledger a lie.
 [provides]
-tools = ["hover", "definition", "references", "diagnostics", "symbols"]
+tools = ["hover", "definition", "references", "diagnostics"]
 
 [requires]
+# The document is read through the broker and handed to the server, so a server
+# is only ever told about files this call was allowed to read.
 read = ["$WORKSPACE/**"]
+# A language server is a child process, and which one is profile configuration —
+# `rust-analyzer`, `pyright-langserver`, whatever a person has installed. Narrow
+# this in policy, where the list is actually known.
 spawn = ["*"]
