@@ -26,6 +26,7 @@
 pub mod discover;
 pub mod error;
 pub mod explain;
+pub mod import;
 pub mod layer;
 pub mod merge;
 pub mod profile;
@@ -44,6 +45,7 @@ pub use discover::{
 };
 pub use error::ConfigError;
 pub use explain::Explanation;
+pub use import::Imported;
 pub use layer::{CONFIG_DIR, CONFIG_FILE, ConfigPaths, LayerFile};
 pub use merge::{IgnoredClaim, MergeReport, Relaxation};
 pub use profile::{AgentDef, Assembled, Profile, Shorthand};

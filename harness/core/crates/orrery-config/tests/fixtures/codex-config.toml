@@ -1,0 +1,17 @@
+# A real-shaped Codex CLI config: ~/.codex/config.toml
+model = "o3"
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[mcp_servers.ripgrep]
+command = "rg-mcp"
+args = ["--stdio"]
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env = { GITHUB_TOKEN = "" }
+
+[hooks]
+pre_tool_use = "orrery hook pre-tool-use"
