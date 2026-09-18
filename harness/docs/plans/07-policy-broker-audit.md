@@ -164,10 +164,10 @@ Three streams as three `tracing` layers (§4.12): load ledger, audit, telemetry.
 **Create**
 
 - `harness/core/crates/orrery-audit/src/{lib,event,sink,layer,redact}.rs`
-- `harness/core/crates/orrery-policy/src/{lib,rule,parse,match,engine,token,handler,explain,error}.rs`
-- `harness/core/crates/orrery-policy/tests/{match_props,narrow,token}.rs`
-- `harness/core/crates/orrery-broker/src/{lib,fs,proc,net,creds,limit,contain,error}.rs`
-- `harness/core/crates/orrery-broker/tests/{limits,contain,atomic}.rs`
+- `harness/core/crates/orrery-policy/src/{lib,rule,parse,match,engine,token,handler,explain,error,call}.rs`
+- `harness/core/crates/orrery-policy/tests/{parse,match_props,layers,narrow,token,explain}.rs`
+- `harness/core/crates/orrery-broker/src/{lib,fs,proc,net,creds,limit,contain,error,gate}.rs`
+- `harness/core/crates/orrery-broker/tests/{limits,contain,atomic,creds,degrade}.rs`
 
 ---
 
@@ -179,99 +179,106 @@ Files: `orrery-audit/src/*`
 
 Everything else writes to it, so it comes first.
 
-- [ ] **Failing test first.** `audit::inputs_are_hashed` — record a tool call with a secret in its input; assert the raw value appears nowhere in the sink and the hash is stable.
-- [ ] `audit::append_only` — no API mutates or deletes.
-- [ ] Implement the event enum, the file sink (JSONL), the three tracing layers, `redact`.
+- [x] **Failing test first.** `audit::inputs_are_hashed` — record a tool call with a secret in its input; assert the raw value appears nowhere in the sink and the hash is stable.
+- [x] `audit::append_only` — no API mutates or deletes.
+- [x] Implement the event enum, the file sink (JSONL), the three tracing layers, `redact`.
 
 ### Task 2 · Rule parsing
 
 Files: `orrery-policy/src/{rule,parse}.rs`
 
-- [ ] **Failing test first.** `parse::every_aspect_form` — a table over the grammar table above; each string parses to the expected `Rule`.
-- [ ] `parse::re_escape_hatch_warns` — `re:` parses but emits a load warning and is rejected when disabled.
-- [ ] `parse::bad_rule_names_the_file_and_line`.
-- [ ] Implement.
+- [x] **Failing test first.** `parse::every_aspect_form` — a table over the grammar table above; each string parses to the expected `Rule`.
+- [x] `parse::re_escape_hatch_warns` — `re:` parses but emits a load warning and is rejected when disabled.
+- [x] `parse::bad_rule_names_the_file_and_line`.
+- [x] Implement.
 
 ### Task 3 · The matcher
 
 Files: `orrery-policy/src/match.rs`, `tests/match_props.rs`
 
-- [ ] **Failing test first.** `match::deny_beats_allow` — `deny(write(./**))` plus `allow(write(./src/**))` denies, because allow never carves an exception out of deny.
-- [ ] `match::first_match_wins_within_a_list`.
-- [ ] `match::paths_normalise` — a symlink out of the workspace, a `..` traversal, a UNC path and a drive-relative path all resolve before matching. This is the test that stops the rule being defeated by a link.
-- [ ] `match::case_folding_where_the_fs_is_insensitive` — Windows and macOS only.
-- [ ] Proptest: `match::never_panics` on arbitrary selectors and inputs.
-- [ ] Implement with `globset` and `dunce`.
+- [x] **Failing test first.** `match::deny_beats_allow` — `deny(write(./**))` plus `allow(write(./src/**))` denies, because allow never carves an exception out of deny.
+- [x] `match::first_match_wins_within_a_list`.
+- [x] `match::paths_normalise` — a symlink out of the workspace, a `..` traversal, a UNC path and a drive-relative path all resolve before matching. This is the test that stops the rule being defeated by a link.
+- [x] `match::case_folding_where_the_fs_is_insensitive` — Windows and macOS only.
+- [x] Proptest: `match::never_panics` on arbitrary selectors and inputs.
+- [x] Implement with `globset` and `dunce`.
 
 ### Task 4 · Layers and subjects
 
 Files: `orrery-policy/src/engine.rs`
 
-- [ ] **Failing test first.** `layer::managed_deny_is_final` — a user allow cannot relax a managed deny.
-- [ ] `layer::deny_is_a_union` — denies from three layers all apply.
-- [ ] `subject::child_is_intersected` — a sub-agent's allow list is narrowed by its parent's, never widened.
-- [ ] `subject::string_forms` — cross-check plan 01's `Subject` serialisation round-trips from TOML keys (translation #3).
-- [ ] Implement layer resolution, `ArcSwap` hot-swap.
+- [x] **Failing test first.** `layer::managed_deny_is_final` — a user allow cannot relax a managed deny.
+- [x] `layer::deny_is_a_union` — denies from three layers all apply.
+- [x] `subject::child_is_intersected` — a sub-agent's allow list is narrowed by its parent's, never widened.
+- [x] `subject::string_forms` — cross-check plan 01's `Subject` serialisation round-trips from TOML keys (translation #3).
+- [x] Implement layer resolution, `ArcSwap` hot-swap.
 
 ### Task 5 · Tokens
 
 Files: `orrery-policy/src/token.rs`, `tests/token.rs`
 
-- [ ] **Failing test first (compile-fail).** `token::cannot_be_constructed_externally` — `trybuild` proving an out-of-crate `CapabilityToken(..)` does not compile.
-- [ ] `token::is_not_serializable` — a compile-fail test on `serde_json::to_string(&token)`.
-- [ ] `token::single_use` — redeeming the same nonce twice fails.
-- [ ] `token::revoked_on_cancel` — revoke the call, then redeem; fails `Revoked`.
-- [ ] `token::expires` — past the deadline, redemption fails even with a live nonce.
-- [ ] Implement `CapabilityToken`, `TokenMinter`, `TokenLedger`.
+- [x] **Failing test first (compile-fail).** `token::cannot_be_constructed_externally` — proving an out-of-crate `CapabilityToken(..)` does not compile.
+- [x] `token::is_not_serializable` — a compile-fail test on the `Serialize` bound.
+
+  **Built with `compile_fail` doctests, not `trybuild`.** A doctest is compiled
+  as a separate crate against the real rlib, which is exactly the out-of-crate
+  vantage point the property is about, and it needs no dependency this
+  environment can fetch. Both live on `CapabilityToken` in `token.rs`, with a
+  third, *passing* doctest naming the type, so neither failure can be a typo
+  passing for a proof.
+- [x] `token::single_use` — redeeming the same nonce twice fails.
+- [x] `token::revoked_on_cancel` — revoke the call, then redeem; fails `Revoked`.
+- [x] `token::expires` — past the deadline, redemption fails even with a live nonce.
+- [x] Implement `CapabilityToken`, `TokenMinter`, `TokenLedger`.
 
 ### Task 6 · PermissionHandler
 
 Files: `orrery-policy/src/handler.rs`, `tests/narrow.rs`
 
-- [ ] **Failing test first.** `narrow::widening_is_dropped` (proptest) — for arbitrary proposed and returned decisions, the result is never more permissive than proposed, and a widening attempt is logged.
-- [ ] `narrow::panic_fails_closed` — a handler that panics ⇒ the call is denied, the session survives.
-- [ ] `narrow::never_reaches_managed` — a handler cannot affect a managed-layer decision.
-- [ ] Implement with `catch_unwind` at the boundary.
+- [x] **Failing test first.** `narrow::widening_is_dropped` (proptest) — for arbitrary proposed and returned decisions, the result is never more permissive than proposed, and a widening attempt is logged.
+- [x] `narrow::panic_fails_closed` — a handler that panics ⇒ the call is denied, the session survives.
+- [x] `narrow::never_reaches_managed` — a handler cannot affect a managed-layer decision.
+- [x] Implement with `catch_unwind` at the boundary.
 
 ### Task 7 · Broker — filesystem and limits
 
 Files: `orrery-broker/src/{fs,limit}.rs`, `tests/{limits,atomic}.rs`
 
-- [ ] **Failing test first.** `limits::read_is_bounded_while_reading` — a 100 MB file, a 4 KB ceiling; assert via an instrumented reader that total bytes pulled never exceeded the ceiling plus one buffer. Not "the result was truncated" — **peak** matters.
-- [ ] `atomic::write_reverts_on_cancel` — cancel mid-write; original intact, no temp file left.
-- [ ] `limits::no_token_no_call` — every broker method rejects without a valid token.
-- [ ] Implement `LimitedReader`, `take_bytes`, `WriteHandle` with temp-then-rename.
+- [x] **Failing test first.** `limits::read_is_bounded_while_reading` — a 100 MB file, a 4 KB ceiling; assert via an instrumented reader that total bytes pulled never exceeded the ceiling plus one buffer. Not "the result was truncated" — **peak** matters.
+- [x] `atomic::write_reverts_on_cancel` — cancel mid-write; original intact, no temp file left.
+- [x] `limits::no_token_no_call` — every broker method rejects without a valid token.
+- [x] Implement `LimitedReader`, `take_bytes`, `WriteHandle` with temp-then-rename.
 
 ### Task 8 · Broker — processes
 
 Files: `orrery-broker/src/{proc,contain}.rs`, `tests/contain.rs`
 
-- [ ] **Failing test first.** `contain::grandchildren_die` — spawn a child that spawns a grandchild; kill the call; assert both are gone. Windows via Job Object (port `ade/src-tauri/src/runtime/jobobj.rs`), unix via setsid + process-group kill.
-- [ ] `contain::wall_clock_watchdog` — a child that ignores SIGTERM is SIGKILLed after the grace window.
-- [ ] `contain::memory_ceiling` — Windows and Linux assert enforcement; **macOS asserts best-effort sampling and the test is marked as such.**
-- [ ] `contain::stdout_backpressure` — a child writing faster than we read gets EPIPE rather than growing our heap.
-- [ ] Implement.
+- [x] **Failing test first.** `contain::grandchildren_die` — spawn a child that spawns a grandchild; kill the call; assert both are gone. Windows via Job Object (port `ade/src-tauri/src/runtime/jobobj.rs`), unix via setsid + process-group kill.
+- [x] `contain::wall_clock_watchdog` — a child that ignores SIGTERM is SIGKILLed after the grace window.
+- [x] `contain::memory_ceiling` — Windows and Linux assert enforcement; **macOS asserts best-effort sampling and the test is marked as such.**
+- [x] `contain::stdout_backpressure` — a child writing faster than we read gets EPIPE rather than growing our heap.
+- [x] Implement.
 
 ### Task 9 · Credentials
 
 Files: `orrery-broker/src/creds.rs`
 
-- [ ] **Failing test first.** `creds::value_never_returned` — the API has no method returning a secret; a doc test shows the `use_it` shape.
-- [ ] `creds::rotation_is_transparent` — rewrite the stored value; a held reference keeps working.
-- [ ] Implement: OS keychain where available, `0600` file otherwise.
+- [x] **Failing test first.** `creds::value_never_returned` — the API has no method returning a secret; a doc test shows the `use_it` shape.
+- [x] `creds::rotation_is_transparent` — rewrite the stored value; a held reference keeps working.
+- [x] Implement: OS keychain where available, `0600` file otherwise.
 
 ### Task 10 · `permissions explain`
 
 Files: `orrery-policy/src/explain.rs`
 
-- [ ] **Failing test first.** `explain::names_rule_layer_and_file` — dry-run a call; the explanation carries the rule id, the layer, the source file and line, and the verdict.
-- [ ] Implement. The CLI surface is plan 17.
+- [x] **Failing test first.** `explain::names_rule_layer_and_file` — dry-run a call; the explanation carries the rule id, the layer, the source file and line, and the verdict.
+- [x] Implement. The CLI surface is plan 17.
 
 ### Task 11 · Degrade, end to end
 
 Files: `orrery-broker/tests/`
 
-- [ ] **Failing test first, and it is the phase-3 criterion.** `degrade::denied_spawn_degrades` — install an extension requesting `spawn`; deny it; assert the install succeeds, the spawn-needing tool is disabled, its other tools work, the ledger says `degraded`, and the audit holds the decision with its rule.
+- [x] **Failing test first, and it is the phase-3 criterion.** `degrade::denied_spawn_degrades` — install an extension requesting `spawn`; deny it; assert the install succeeds, the spawn-needing tool is disabled, its other tools work, the ledger says `degraded`, and the audit holds the decision with its rule.
 
 ---
 
@@ -285,6 +292,89 @@ Files: `orrery-broker/tests/`
 ## Open questions
 
 1. **Consent prompt ownership.** The prompt is minted by the policy engine but rendered in the client's own chrome (§6.2 distinguishes it from a `question` surface). Confirm the `ConsentPrompt` type carries enough for a client to render it without inventing copy.
+
+   **Confirmed, with one addition on our side.** Plan 01's `ConsentPrompt`
+   carries the prompt id, the subject, the capabilities asked for, a `reason` in
+   words, the rule id and an optional `Surface` — enough to render without
+   inventing copy. What it does *not* carry is the **call id**, because a prompt
+   is a thing shown to a person. So `Decision::Ask` carries `call`, `aspect` and
+   the resolved `scope` alongside the prompt, and `PolicyEngine::consent` mints
+   from those. The prompt shape is unchanged; the extra fields never leave the
+   engine.
 2. **`re:` default.** Off with a warning is specified. Should a managed layer be able to forbid it outright? Probably yes, as `ext`-style load-time policy. Cheap to add now.
+
+   **Decided: yes.** `PolicyBuilder::forbid_regex()` rejects any layer carrying a
+   `re:` rule, and `build` rejects one that slipped in. Off by default is a load
+   **error**, not a silent ignore — a rule that would not apply is worse than one
+   that does not parse. On deliberately, it parses and raises a `Warning` naming
+   the file and line. Covered by `parse::re_escape_hatch_warns` and
+   `parse::a_managed_layer_can_forbid_the_escape_hatch`.
 3. **Audit sink rotation.** JSONL grows forever. Size-based rotation with a retention count is the obvious answer; confirm before a long-running session fills a disk.
+
+   **Decided: size-based rotation with a retention count**, as
+   `orrery_audit::Rotation` — 16 MiB and four rolled files by default. A
+   time-based scheme needs a policy about idle days that nobody wants to reason
+   about. The live handle is dropped before the rename because Windows will not
+   rename an open file, and an append that cannot be written increments
+   `FileSink::errors` rather than killing a turn.
 4. **macOS memory ceilings.** Best-effort sampling is a real gap. Document it prominently, or refuse `memory_bytes` grants on macOS rather than pretending? Leaning toward documenting and reporting `Unenforced` in the ledger.
+
+   **Decided: document and report `Unenforced`.** `contain::MemoryEnforcement` is
+   `NotRequested | Enforced | Unenforced`, returned by `Child::memory_enforcement`
+   and carried on `Output`. Refusing the grant would make a portable manifest
+   unportable for a platform difference the manifest did not cause; pretending is
+   worse. `contain::memory_ceiling` asserts `Enforced` on Windows and Linux and
+   **asserts `Unenforced` on macOS**, so the test says what is true rather than
+   what we wish were true.
+
+## State
+
+**Landed**, `feat/harness_claude-0917`. `cargo test -p orrery-audit -p orrery-policy
+-p orrery-broker` is green, including the three `compile_fail` doctests, and
+clippy is clean across all targets.
+
+- **`orrery-audit`** — `AuditEvent` with redaction in the schema (`Digest`,
+  `ContentRef`), `AuditSink` with one method, `MemorySink`/`FileSink`/`NullSink`,
+  size-based rotation, and the three `tracing` layers routed by target prefix
+  (`orrery.load`, `orrery.audit`, `orrery.telemetry`).
+- **`orrery-policy`** — the grammar over all fourteen aspects with `*`, `**`,
+  `prefix:`, `param:key=glob` and the `re:` escape hatch; `globset` + `dunce`
+  path normalisation that resolves symlinks, `..`, UNC and drive-relative forms
+  and folds case where the filesystem does; deny-before-ask-before-allow across
+  every layer; subjects intersected with their parent (and **inheriting** when no
+  rules were written about them at all); `CapabilityToken` with no public
+  constructor, no `Serialize`, single-use nonces and per-call revocation;
+  `review_narrowing` with `catch_unwind`; `explain`.
+- **`orrery-broker`** — `LimitedReader` bounded *while* reading, temp-then-rename
+  `WriteHandle`, per-call Windows job object / unix `setsid` containment with a
+  wall-clock watchdog and stdout backpressure, `CredStore` with no `get`, and
+  `gate.rs`: the real `PolicyCheck` for plan 04's dispatch plus `install`, which
+  is what makes a denied `spawn` degrade.
+
+**Also done here, outside this plan:** plan 04 task 5 — `orrery-audit` is now in
+the workspace dependency table and `Registry::with_audit` sends every ledger
+decision to it (`resolve::ambiguity_reaches_the_audit`).
+
+**Deviations.**
+
+- `trybuild` is not used; the two compile-fail proofs are `compile_fail`
+  doctests. This environment has no network and `trybuild` is not in the registry
+  cache, and a doctest proves the same property from the same vantage point.
+- `TokenError` lives in `orrery-policy`, not `orrery-broker`: the ledger does the
+  checking and the broker depends on policy, not the other way round.
+  `BrokerError::Token` wraps it, so the plan's
+  `redeem(..) -> Result<(), BrokerError>` shape is what a broker caller sees.
+- `Decision::Ask` carries `call`, `aspect` and `scope` beside the prompt (see
+  open question 1), and `prompt` is boxed because a prompt can hold a whole
+  surface and a `Decision` is returned from every check.
+- A `PermissionHandler` is shown a decision whose token was minted against an
+  **inert ledger** — `CapabilityToken` is not `Clone`, and handing a reviewer the
+  live capability it is judging would be the opposite of the point.
+- `Broker::net` has no transport by default and answers `NoTransport`. Nothing in
+  this repository dials anything.
+- `read_is_bounded_while_reading` uses an instrumented 100 MB *source* rather
+  than a 100 MB file on disk: the assertion is about peak bytes pulled, which
+  only the source can witness.
+- A subject nobody wrote rules about **inherits** its parent's set rather than
+  getting nothing. "A rule file narrows a sub-agent" is about what a file does,
+  not about the absence of one.
