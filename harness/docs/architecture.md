@@ -1270,6 +1270,8 @@ The TUI has to pick one of two models, and they are different programs:
 
 Codex went full-screen, then replaced its history widget with an append-only log to get selection and scrolling back — and lost streaming doing it. **Decision: hybrid, built in React.** Settled turns are appended to scrollback and never redrawn; only the active turn and a footer live in a small screen-bottom region, so selection and scrollback stay native for everything finished. React is what makes the TUI and the web client one component set over the same surfaces, driven by the same AG-UI events — the alternative, a native Rust TUI, is faster to start but splits the component work in two. First target is the TUI; the web client reuses it.
 
+> **The build diverged here, on purpose.** This document is the source spec and its argument stands as written; what shipped is two reference renderers over one AG-UI stream — ratatui inside the binary and React/Ink beside it — because the web/ADE client is Angular + kouji-ui, so the shared-component argument above does not apply. What is actually shared is the surface vocabulary and one conformance suite all of them run. Recorded as **translation #16** in [`plans/00-overview.md`](plans/00-overview.md), built in plans 09b and 09c.
+
 ### 6.5 · Streaming text
 
 Partial markdown is unparseable — an unclosed fence or half a table renders as garbage. Hence `markdown.complete`: the renderer shows plain text while `false`, formats once `true`. Deltas are coalesced to a frame budget (\~30fps) so a fast stream does not pin a CPU redrawing.
