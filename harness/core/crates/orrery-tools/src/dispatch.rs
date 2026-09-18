@@ -68,6 +68,19 @@ impl CallCtx {
 
 /// Whatever actually runs a tool.
 ///
+/// # Dispatch is the only way to reach one
+///
+/// The registry holds its host in a private field and offers no public method
+/// that hands it out, so there is no route to a tool that skips the policy
+/// check:
+///
+/// ```compile_fail
+/// # use orrery_tools::Registry;
+/// let registry = Registry::new();
+/// let host = registry.host;    // private field
+/// let host = registry.host();  // private method
+/// ```
+///
 /// TODO(plan-06): the extension host implements this. Until then the registry
 /// ships [`UnavailableHost`], so every path below dispatch already exists and
 /// plan 06 drops in without touching the dispatch order.

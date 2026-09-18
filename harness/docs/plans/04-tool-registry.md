@@ -114,46 +114,63 @@ Objective 5, concretely. The registry carries it; the broker enforces it (plan 0
 
 Files: `src/registry.rs`, `tests/resolve.rs`
 
-- [ ] **Failing test first.** `resolve::two_extensions_claiming_search` — register `ripgrep.search` and `semantic.search`; both resolve by full name; a bare `search` returns `Ambiguous` with both candidates and a chosen ref; **nothing errors**.
-- [ ] `resolve::closest_layer_wins` — the same tool at project and user layers; the project one is chosen and the user one is in the ledger.
-- [ ] `resolve::unknown_suggests` — `serch` returns `Unknown` with `search` in `did_you_mean`.
-- [ ] `resolve::mcp_three_segments` — `mcp.jira.create_issue` resolves to `ExtId("mcp.jira") + "create_issue"`.
-- [ ] Implement `Registry`, `Entry`, registration from `Contribution`s, the alias table.
+- [x] **Failing test first.** `resolve::two_extensions_claiming_search` — register `ripgrep.search` and `semantic.search`; both resolve by full name; a bare `search` returns `Ambiguous` with both candidates and a chosen ref; **nothing errors**.
+- [x] `resolve::closest_layer_wins` — the same tool at project and user layers; the project one is chosen and the user one is in the ledger.
+- [x] `resolve::unknown_suggests` — `serch` returns `Unknown` with `search` in `did_you_mean`.
+- [x] `resolve::mcp_three_segments` — `mcp.jira.create_issue` resolves to `ExtId("mcp.jira") + "create_issue"`.
+- [x] Implement `Registry`, `Entry`, registration from `Contribution`s, the alias table.
 
 ### Task 2 · `visible`
 
 Files: `src/visible.rs`, `tests/visible.rs`
 
-- [ ] **Failing test first.** `visible::order_is_stable` — build twice from the same registry, assert byte-identical descriptor lists. Run it 20 times to catch hash ordering.
-- [ ] `visible::scope_is_a_real_subset` — a scope with `tools = ["git.*"]` sees only git tools, and a dispatch of a non-visible tool is refused.
-- [ ] `visible::draining_extension_is_hidden`.
-- [ ] Implement, backed by `IndexMap`.
+- [x] **Failing test first.** `visible::order_is_stable` — build twice from the same registry, assert byte-identical descriptor lists. Run it 20 times to catch hash ordering.
+- [x] `visible::scope_is_a_real_subset` — a scope with `tools = ["git.*"]` sees only git tools, and a dispatch of a non-visible tool is refused.
+- [x] `visible::draining_extension_is_hidden`.
+- [x] Implement, backed by `IndexMap`.
 
 ### Task 3 · Dispatch
 
 Files: `src/dispatch.rs`, `tests/dispatch.rs`
 
-- [ ] **Failing test first.** `dispatch::is_the_only_path` — a compile-level check: the `ToolHost` field is private and no public method returns it. Pair with a doc test showing the intended call.
-- [ ] `dispatch::validates_input` — a call whose input violates `input_schema` returns `Outcome::Failed` and the host is never invoked.
-- [ ] `dispatch::denial_is_ok_arm` — a denied call returns `Ok(Outcome::Denied)`, and a test asserts `ToolError` has no `Denied` variant.
-- [ ] `dispatch::budget_is_always_present` — constructing a dispatch without a `ToolBudget` does not compile.
-- [ ] Implement the seven-step order above.
+- [x] **Failing test first.** `dispatch::is_the_only_path` — a compile-level check: the `ToolHost` field is private and no public method returns it. Pair with a doc test showing the intended call.
+- [x] `dispatch::validates_input` — a call whose input violates `input_schema` returns `Outcome::Failed` and the host is never invoked.
+- [x] `dispatch::denial_is_ok_arm` — a denied call returns `Ok(Outcome::Denied)`, and a test asserts `ToolError` has no `Denied` variant.
+- [x] `dispatch::budget_is_always_present` — constructing a dispatch without a `ToolBudget` does not compile.
+- [x] Implement the seven-step order above.
 
 ### Task 4 · Budgets
 
 Files: `src/budget.rs`
 
-- [ ] **Failing test first.** `budget::derives_from_scope_and_manifest` — the effective budget is the minimum of the profile's, the agent's and the tool's declared ceiling.
-- [ ] Implement.
+- [x] **Failing test first.** `budget::derives_from_scope_and_manifest` — the effective budget is the minimum of the profile's, the agent's and the tool's declared ceiling.
+- [x] Implement.
 
 ### Task 5 · Ledger integration
 
 Files: `src/registry.rs`
 
-- [ ] **Failing test first.** `resolve::ambiguity_is_recorded` — after an ambiguous resolution, the ledger holds an entry naming both candidates and the winner.
-- [ ] Wire to `orrery-audit`.
+- [x] **Failing test first.** `resolve::ambiguity_is_recorded` — after an ambiguous resolution, the ledger holds an entry naming both candidates and the winner.
+- [x] Wire to `orrery-audit`.
 
 ---
+
+## Stubs standing in for plans not yet written
+
+The seams are traits in `src/dispatch.rs`, with the dispatch path already
+routed through every one of them, so each plan substitutes an implementation
+rather than reshaping this crate:
+
+- `ToolHost` — TODO(plan-06). Stub `UnavailableHost` answers `Outcome::Unloaded`.
+- `PolicyCheck` — TODO(plan-07). Stub `AllowAll` allows everything; step 4 of
+  dispatch calls it unconditionally.
+- `ToolInterceptor` — TODO(plan-05). No interceptors registered by default;
+  steps 1, 3 and 6 run the (empty) chain.
+- `ExtState` — TODO(plan-06). The registry keeps its own copy so `visible` can
+  hide a draining extension without a call across crates.
+- The ledger is in-crate (`Registry::ledger`), not `orrery-audit`: that crate is
+  an empty stub and is not in the workspace's dependency table, which this plan
+  may not edit. Step 7 emits a `tracing` event in the meantime.
 
 ## Done when
 
@@ -165,5 +182,26 @@ Files: `src/registry.rs`
 ## Open questions
 
 1. **`did_you_mean` cost.** Levenshtein over every registered name on every unknown call is fine at 50 tools and silly at 5000. Cap it, or precompute a trigram index? Cap for now.
+
+   **Decided: cap, no index.** `resolve.rs` scans at most `MAX_SUGGESTION_SCAN`
+   = 512 entries, keeps distances <= 2 and offers at most 3 names. A trigram
+   index is a second structure to keep in step with the name table, for a
+   suggestion nobody is entitled to; past the cap the list is merely shorter,
+   never wrong.
 2. **Schema validation placement.** Validating in the registry means `jsonschema` is a dependency of a hot crate. Alternative: validate in the host, once per runtime. Registry is better for uniformity — confirm the feature-gate keeps it out of lean builds.
+
+   **Decided: registry, behind the default-on `schema-validation` feature.**
+   `jsonschema` is `optional = true`, and `cargo check -p orrery-tools
+   --no-default-features` builds without it — step 2 of dispatch becomes a
+   no-op and every other step is unchanged. Uniformity where it is wanted, and
+   a lean build that genuinely drops the dependency.
+
+   Still open for plan 06: the validator is compiled per call. A per-entry
+   cached `jsonschema::Validator` is the obvious next move, once the host
+   exists and there is a real call rate to measure.
 3. **Short-name aliases in config.** §7 says "short-name aliases" are the user's. That is a config feature (plan 10) that writes into this table. Confirm the table has a place for user-declared aliases now, so plan 10 does not need to change this crate.
+
+   **Confirmed: `Registry::alias(name, ref)` exists and is checked first** —
+   before the fully-qualified parse and before the generated short-name table —
+   so a user can settle an ambiguity permanently. Plan 10 calls it and changes
+   nothing here. Covered by `resolve::user_alias_resolves`.

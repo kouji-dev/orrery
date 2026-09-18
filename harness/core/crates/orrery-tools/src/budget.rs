@@ -54,3 +54,62 @@ impl ToolBudget {
         }
     }
 }
+
+impl ToolBudget {
+    /// The budget a call actually runs under.
+    ///
+    /// The **minimum**, field by field, of the profile's ceiling, the agent's
+    /// own and whatever the tool's manifest declared. Three sources, one
+    /// direction: every one of them may tighten and none may loosen, so a tool
+    /// that asks for an hour inside an agent given a second gets a second.
+    ///
+    /// The manifest ceiling is optional because most tools do not declare one;
+    /// absent is "no opinion", never "no limit".
+    #[must_use]
+    pub fn effective(profile: Self, agent: Self, tool: Option<Self>) -> Self {
+        let base = profile.narrow(agent);
+        match tool {
+            Some(tool) => base.narrow(tool),
+            None => base,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ToolBudget;
+
+    #[test]
+    fn derives_from_scope_and_manifest() {
+        let profile = ToolBudget::new(60_000, 1 << 20).with_memory(1 << 30);
+        let agent = ToolBudget::new(10_000, 4 << 20);
+        let tool = ToolBudget::new(30_000, 1 << 10).with_memory(1 << 20);
+
+        assert_eq!(
+            ToolBudget::effective(profile, agent, Some(tool)),
+            ToolBudget {
+                wall_clock_ms: 10_000, // the agent's
+                output_bytes: 1 << 10, // the tool's
+                memory_bytes: Some(1 << 20),
+            }
+        );
+    }
+
+    #[test]
+    fn a_tool_without_a_ceiling_has_no_opinion() {
+        let profile = ToolBudget::new(60_000, 1 << 20);
+        let agent = ToolBudget::new(10_000, 4 << 20);
+        assert_eq!(
+            ToolBudget::effective(profile, agent, None),
+            ToolBudget::new(10_000, 1 << 20)
+        );
+    }
+
+    #[test]
+    fn narrowing_never_loosens() {
+        let tight = ToolBudget::new(1, 1).with_memory(1);
+        let loose = ToolBudget::new(u64::MAX, u64::MAX);
+        assert_eq!(tight.narrow(loose), tight);
+        assert_eq!(loose.narrow(tight), tight);
+    }
+}
