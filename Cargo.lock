@@ -342,6 +342,61 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
+name = "axum"
+version = "0.7.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edca88bc138befd0323b20752846e6587272d3b03b0343c8ea28a6f819e6e71f"
+dependencies = [
+ "async-trait",
+ "axum-core",
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "itoa",
+ "matchit",
+ "memchr",
+ "mime",
+ "percent-encoding",
+ "pin-project-lite",
+ "rustversion",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "serde_urlencoded",
+ "sync_wrapper",
+ "tokio",
+ "tower",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
+name = "axum-core"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09f2bd6146b97ae3359fa0cc6d6b376d9539582c7b4220f041a33ec24c226199"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "mime",
+ "pin-project-lite",
+ "rustversion",
+ "sync_wrapper",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1195,6 +1250,12 @@ dependencies = [
  "quote",
  "syn 2.0.117",
 ]
+
+[[package]]
+name = "doctest-file"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2db04e74f0a9a93103b50e90b96024c9b2bdca8bce6a632ec71b88736d3d359"
 
 [[package]]
 name = "dom_query"
@@ -3084,6 +3145,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
 name = "hyper"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3096,6 +3163,7 @@ dependencies = [
  "http",
  "http-body",
  "httparse",
+ "httpdate",
  "itoa",
  "pin-project-lite",
  "smallvec",
@@ -3369,6 +3437,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "interprocess"
+version = "2.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6cb02ffbf25e8ef0f4a95bff054eef75f6d1bf16919474cf2caa63b21997478a"
+dependencies = [
+ "doctest-file",
+ "futures-core",
+ "libc",
+ "recvmsg",
+ "tokio",
+ "widestring",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3859,6 +3942,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "matchers"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
+dependencies = [
+ "regex-automata",
+]
+
+[[package]]
+name = "matchit"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e7465ac9959cc2b1404e8e2367b43684a6d13790fe23056cc8c6c5a6b7bcb94"
+
+[[package]]
 name = "memchr"
 version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4057,6 +4155,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3b335231dfd352ffb0f8017f3b6027a4917f7df785ea2143d8af2adc66980ae"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "nu-ansi-term"
+version = "0.50.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4499,15 +4606,49 @@ dependencies = [
 
 [[package]]
 name = "orrery-agui"
-version = "0.0.0"
+version = "0.1.0"
+dependencies = [
+ "orrery-proto",
+ "serde",
+ "serde_json",
+ "uuid",
+]
 
 [[package]]
 name = "orrery-audit"
-version = "0.0.0"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "orrery-proto",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "tracing-subscriber",
+]
 
 [[package]]
 name = "orrery-broker"
-version = "0.0.0"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "dunce",
+ "libc",
+ "orrery-audit",
+ "orrery-policy",
+ "orrery-proto",
+ "orrery-tools",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "windows-sys 0.59.0",
+]
 
 [[package]]
 name = "orrery-cli"
@@ -4519,10 +4660,32 @@ dependencies = [
 [[package]]
 name = "orrery-client"
 version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "interprocess",
+ "orrery-agui",
+ "orrery-proto",
+ "orrery-transport",
+ "reqwest 0.13.4",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "orrery-client-json"
-version = "0.0.0"
+version = "0.1.0"
+dependencies = [
+ "orrery-agui",
+ "orrery-client",
+ "orrery-proto",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "orrery-client-ratatui"
@@ -4546,6 +4709,19 @@ dependencies = [
 [[package]]
 name = "orrery-ext-api"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "globset",
+ "orrery-proto",
+ "parking_lot",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "toml 0.8.2",
+]
 
 [[package]]
 name = "orrery-ext-git"
@@ -4660,10 +4836,38 @@ version = "0.0.0"
 [[package]]
 name = "orrery-host"
 version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "indexmap 2.14.0",
+ "orrery-ext-api",
+ "orrery-proto",
+ "orrery-tools",
+ "parking_lot",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
 
 [[package]]
 name = "orrery-host-rpc"
 version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "libc",
+ "orrery-ext-api",
+ "orrery-host",
+ "orrery-jsonrpc",
+ "orrery-proto",
+ "orrery-tools",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "windows-sys 0.59.0",
+]
 
 [[package]]
 name = "orrery-host-wasm"
@@ -4672,6 +4876,16 @@ version = "0.0.0"
 [[package]]
 name = "orrery-jsonrpc"
 version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
 
 [[package]]
 name = "orrery-kernel"
@@ -4691,7 +4905,28 @@ version = "0.0.0"
 
 [[package]]
 name = "orrery-policy"
-version = "0.0.0"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "async-trait",
+ "dashmap",
+ "dunce",
+ "futures-util",
+ "globset",
+ "indexmap 2.14.0",
+ "orrery-audit",
+ "orrery-proto",
+ "proptest",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "orrery-proto"
@@ -4752,12 +4987,13 @@ version = "0.0.0"
 
 [[package]]
 name = "orrery-tools"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "globset",
  "indexmap 2.14.0",
  "jsonschema",
+ "orrery-audit",
  "orrery-proto",
  "parking_lot",
  "serde",
@@ -4769,7 +5005,24 @@ dependencies = [
 
 [[package]]
 name = "orrery-transport"
-version = "0.0.0"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "ciborium",
+ "futures-util",
+ "indexmap 2.14.0",
+ "interprocess",
+ "orrery-agui",
+ "orrery-proto",
+ "reqwest 0.13.4",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "orrery-updater"
@@ -5321,6 +5574,12 @@ name = "raw-window-handle"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
+
+[[package]]
+name = "recvmsg"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3edd4d5d42c92f0a659926464d4cce56b562761267ecf0f469d85b7de384175"
 
 [[package]]
 name = "redox_syscall"
@@ -5921,6 +6180,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_path_to_error"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
+dependencies = [
+ "itoa",
+ "serde",
+ "serde_core",
+]
+
+[[package]]
 name = "serde_repr"
 version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6096,6 +6366,15 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "digest",
+]
+
+[[package]]
+name = "sharded-slab"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
+dependencies = [
+ "lazy_static",
 ]
 
 [[package]]
@@ -6917,6 +7196,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_local"
+version = "1.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "time"
 version = "0.3.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7176,6 +7464,7 @@ dependencies = [
  "tokio",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -7214,6 +7503,7 @@ version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
 dependencies = [
+ "log",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
@@ -7237,6 +7527,49 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+ "valuable",
+]
+
+[[package]]
+name = "tracing-log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee855f1f400bd0e5c02d150ae5de3840039a3f54b025156404e34c23c03f47c3"
+dependencies = [
+ "log",
+ "once_cell",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-subscriber"
+version = "0.3.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
+dependencies = [
+ "matchers",
+ "nu-ansi-term",
+ "once_cell",
+ "regex-automata",
+ "serde",
+ "serde_json",
+ "sharded-slab",
+ "smallvec",
+ "thread_local",
+ "tracing",
+ "tracing-core",
+ "tracing-log",
+ "tracing-serde",
 ]
 
 [[package]]
@@ -7475,6 +7808,12 @@ dependencies = [
  "uuid",
  "vsimd",
 ]
+
+[[package]]
+name = "valuable"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "value-bag"
@@ -7790,6 +8129,12 @@ dependencies = [
  "windows 0.61.3",
  "windows-core 0.61.2",
 ]
+
+[[package]]
+name = "widestring"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
 
 [[package]]
 name = "winapi"
@@ -8587,10 +8932,12 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "orrery-agui",
  "orrery-proto",
  "schemars 0.8.22",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
