@@ -247,10 +247,13 @@ impl InterceptorSet {
         if !P::ALLOWS_DENY && interceptor.can_deny() {
             return Err(RegisterError::DenyNotAllowed { phase: P::NAME });
         }
-        self.by_phase.entry(P::NAME).or_default().push(Arc::new(Typed {
-            inner: interceptor,
-            _phase: std::marker::PhantomData,
-        }));
+        self.by_phase
+            .entry(P::NAME)
+            .or_default()
+            .push(Arc::new(Typed {
+                inner: interceptor,
+                _phase: std::marker::PhantomData,
+            }));
         self.order.push(P::NAME);
         Ok(())
     }

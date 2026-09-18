@@ -19,11 +19,9 @@ use async_trait::async_trait;
 use futures_util::stream::BoxStream;
 use orrery_ext_provider_fixture::FixtureProvider;
 use orrery_ext_session_sqlite::SqliteSessionStore;
+use orrery_proto::{AgentScope, BranchId, Grant, Layer, Outcome, SessionId, ToolRef};
 use orrery_provider::{
     Capabilities, ModelEvent, ModelRequest, Provider, ProviderAuth, ProviderError, TokenCounter,
-};
-use orrery_proto::{
-    AgentScope, BranchId, Grant, Layer, Outcome, SessionId, ToolRef,
 };
 use orrery_session::{SessionStore, TurnKind, TurnRow};
 use orrery_tools::{CallCtx, Registry, ToolError, ToolHost, ToolSpec};
@@ -81,10 +79,7 @@ impl Passes {
     /// Replay these, in this order.
     #[must_use]
     pub fn of(streams: Vec<FixtureProvider>) -> Arc<Self> {
-        let capabilities = *streams
-            .first()
-            .expect("at least one stream")
-            .capabilities();
+        let capabilities = *streams.first().expect("at least one stream").capabilities();
         Arc::new(Self {
             streams,
             next: AtomicUsize::new(0),

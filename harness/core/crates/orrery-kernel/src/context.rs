@@ -83,8 +83,7 @@ impl ContextDraft {
     /// The conversation, oldest first: recalled, then history, then the input.
     #[must_use]
     pub fn messages(&self) -> Vec<Message> {
-        let mut out =
-            Vec::with_capacity(self.recalled.len() + self.history.len() + 1);
+        let mut out = Vec::with_capacity(self.recalled.len() + self.history.len() + 1);
         out.extend(self.recalled.iter().cloned());
         out.extend(self.history.iter().cloned());
         out.push(self.input.clone());

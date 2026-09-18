@@ -22,13 +22,13 @@ use std::sync::Arc;
 
 use futures_util::StreamExt as _;
 use orrery_audit::{Audit, AuditEvent, CallOutcome};
-use orrery_provider::{
-    CompletedToolCall, ModelEvent, ModelRequest, Provider, ProviderError, StopReason,
-    ToolCallAccumulator,
-};
 use orrery_proto::{
     AgentScope, Budget, BudgetKind, CallId, CancelReason, ContentBlock, ExtId, Message,
     MessageRole, Outcome, Seq, SessionId, Subject, TokenBudget, ToolRef, TurnId, Usage, UserInput,
+};
+use orrery_provider::{
+    CompletedToolCall, ModelEvent, ModelRequest, Provider, ProviderError, StopReason,
+    ToolCallAccumulator,
 };
 use orrery_session::{BranchLease, NewTurn, SessionStore, TurnKind};
 use orrery_tools::{CallCtx, Registry, Resolution, ToolBudget};
@@ -586,6 +586,10 @@ impl Kernel {
             });
         }
 
+        // Where this turn begins. Compaction may summarise everything strictly
+        // before it and nothing after, so a turn can never summarise away the
+        // question it is answering.
+        let floor = lease.next_seq();
         self.store
             .append(
                 &lease,
@@ -603,7 +607,7 @@ impl Kernel {
         };
 
         let outcome = self
-            .loop_until_done(&lease, &input, &mut budget, &mut state, &cancel)
+            .loop_until_done(&lease, &input, &mut budget, &mut state, floor, &cancel)
             .await?;
 
         // turn.end: a verdict on the summary, then the handlers that may not
@@ -649,9 +653,10 @@ impl Kernel {
     async fn needs_login(&self) -> Option<String> {
         match self.provider.auth().state().await {
             Ok(orrery_provider::AuthState::NeedsLogin { reason }) => Some(reason),
-            Ok(orrery_provider::AuthState::Expired) => {
-                Some(format!("the credential for `{}` has expired", self.provider.id()))
-            }
+            Ok(orrery_provider::AuthState::Expired) => Some(format!(
+                "the credential for `{}` has expired",
+                self.provider.id()
+            )),
             Ok(_) => None,
             // The broker could not be reached. That is not "signed out", and
             // reporting it as one would send a person to a login flow that will
@@ -669,12 +674,14 @@ impl Kernel {
     }
 
     /// Steps 2 to 8, until something stops them.
+    #[allow(clippy::too_many_arguments)]
     async fn loop_until_done(
         &self,
         lease: &BranchLease,
         input: &TurnInput,
         budget: &mut TurnBudget,
         state: &mut TurnState,
+        floor: Seq,
         cancel: &TurnCancel,
     ) -> Result<TurnOutcome, KernelError> {
         loop {
@@ -698,7 +705,10 @@ impl Kernel {
             let pass_cancel = cancel.child();
 
             // 2 · context.build, with compaction if it does not fit.
-            let draft = match self.build_context(lease, input, pass, budget, &pass_cancel).await? {
+            let draft = match self
+                .build_context(lease, input, pass, budget, floor, &pass_cancel)
+                .await?
+            {
                 Ok(draft) => draft,
                 Err(kind) => return Ok(self.stopped(state.turn, kind, budget)),
             };
@@ -722,10 +732,10 @@ impl Kernel {
             // 4 · the stream, with retry.
             let result = match self.stream_pass(request, pass, budget, &pass_cancel).await {
                 Ok(result) => result,
-                Err(PassFailure::Cancelled) => {
+                Err(PassFailure::Cancelled { partial }) => {
                     // The partial text is still worth keeping: it is what the
                     // person saw on their screen.
-                    self.append_partial(lease, state).await?;
+                    self.append_partial(lease, &partial).await?;
                     return Ok(TurnOutcome::Cancelled {
                         turn: state.turn,
                         reason: cancel.reason(),
@@ -903,7 +913,8 @@ impl Kernel {
             .run::<ToolBefore>(&ctx, &matching, tool_input);
         if let Some(outcome) = final_outcome(chain) {
             let outcome = self.after(&ctx, &matching, outcome);
-            self.append_result(lease, call.call, resolved, outcome).await?;
+            self.append_result(lease, call.call, resolved, outcome)
+                .await?;
             return Ok(None);
         }
 
@@ -982,12 +993,14 @@ impl Kernel {
     ///
     /// `Ok(Err(kind))` is "it still does not fit and we have stopped trying",
     /// which the caller turns into a [`TurnOutcome::StoppedByBudget`].
+    #[allow(clippy::too_many_arguments)]
     async fn build_context(
         &self,
         lease: &BranchLease,
         input: &TurnInput,
         pass: PassId,
         budget: &mut TurnBudget,
+        floor: Seq,
         cancel: &TurnCancel,
     ) -> Result<Result<ContextDraft, BudgetKind>, KernelError> {
         let capabilities = *self.provider.capabilities();
@@ -1008,10 +1021,26 @@ impl Kernel {
             .unwrap_or_default();
 
         for attempt in 0..=self.config.compaction_attempts {
+            // The store fits the history into what the system prompt leaves
+            // free, rather than into the whole window: a prompt and a
+            // conversation share one context, and giving the store the whole
+            // window would let the two of them overflow it between them.
+            let system_tokens = counter.count_text(&self.system_text(capabilities.tools, input));
+            let for_history = TokenBudget {
+                max: window.max,
+                reserve: window.reserve.saturating_add(system_tokens),
+            };
             let materialised = self
                 .store
-                .materialise(lease.branch(), window, &adapter)
+                .materialise(lease.branch(), for_history, &adapter)
                 .await?;
+            // **Elision is the compaction trigger.** `materialise` fits a
+            // branch by dropping turns out of the middle of the view, which
+            // costs the model the middle of its own conversation. Compacting
+            // instead keeps what was said, in fewer tokens, and writes it down
+            // — so a view that had to elide is not a view to send, it is a
+            // signal that the history needs shrinking for good.
+            let elided = !materialised.elided.is_empty();
             let mut history = materialised.messages;
             let newest = history.pop().unwrap_or_else(|| input_message(&input.input));
 
@@ -1050,20 +1079,73 @@ impl Kernel {
                 draft,
             );
 
-            if self.fits(&draft, counter.as_ref(), window) {
+            if !elided && self.fits(&draft, counter.as_ref(), window) {
                 return Ok(Ok(draft));
             }
             if attempt == self.config.compaction_attempts {
                 break;
             }
             if !self
-                .compact_once(lease, input, pass, budget, &draft, window, attempt + 1, cancel)
+                .compact_once(
+                    lease,
+                    input,
+                    pass,
+                    budget,
+                    &draft,
+                    window,
+                    floor,
+                    attempt + 1,
+                    cancel,
+                )
                 .await?
             {
                 break;
             }
         }
+        // Out of attempts, or nothing to compact with. Stopping is the honest
+        // answer: the alternative is to send a conversation with its middle
+        // silently missing and let the model answer about half of it.
+        tracing::info!(
+            target: "orrery.kernel.context",
+            %pass,
+            "the context does not fit and compaction did not make it fit"
+        );
         Ok(Err(BudgetKind::Tokens))
+    }
+
+    /// The system prompt this pass would carry, for measuring before the
+    /// history is fitted around it.
+    fn system_text(&self, tools_supported: bool, input: &TurnInput) -> String {
+        let mut out = self.config.system_prompt.clone();
+        if let Some(agent) = &self.config.agent_prompt {
+            out.push_str(
+                "
+
+",
+            );
+            out.push_str(agent);
+        }
+        if tools_supported {
+            out.push_str(
+                "
+
+",
+            );
+            out.push_str(&tools_section(&self.registry.visible(&input.scope)));
+        }
+        if !self.config.skills.is_empty() {
+            out.push_str(
+                "
+
+",
+            );
+            out.push_str(&self.config.skills.join(
+                "
+
+",
+            ));
+        }
+        out
     }
 
     /// Whether a draft fits the window it has to go into.
@@ -1089,13 +1171,17 @@ impl Kernel {
         budget: &mut TurnBudget,
         draft: &ContextDraft,
         window: TokenBudget,
+        floor: Seq,
         attempt: u32,
         cancel: &TurnCancel,
     ) -> Result<bool, KernelError> {
-        // The branch's last written sequence number: everything up to and
-        // including it is what a summary would stand in for.
-        let upto = Seq(lease.next_seq().0.saturating_sub(1));
+        // Everything written before this turn began. **Not** the branch's last
+        // sequence number: that would summarise away the question the model has
+        // not answered yet, and this turn's own tool results with it.
+        let upto = Seq(floor.0.saturating_sub(1));
         if upto.0 == 0 {
+            // Nothing older than this turn. What does not fit is the input
+            // itself, and no amount of summarising the past will help.
             return Ok(false);
         }
         let plan = CompactPlan {
@@ -1175,7 +1261,9 @@ impl Kernel {
         loop {
             attempts += 1;
             if cancel.is_cancelled() {
-                return Err(PassFailure::Cancelled);
+                return Err(PassFailure::Cancelled {
+                    partial: Box::new(empty_pass(pass, attempts)),
+                });
             }
             match self
                 .one_attempt(request.clone(), pass, attempts, cancel)
@@ -1185,10 +1273,9 @@ impl Kernel {
                     result.attempts = attempts;
                     return Ok(result);
                 }
-                Err(PassFailure::Cancelled) => return Err(PassFailure::Cancelled),
+                Err(cancelled @ PassFailure::Cancelled { .. }) => return Err(cancelled),
                 Err(PassFailure::Provider { error, .. }) => {
-                    let retryable =
-                        error.is_retryable() && self.config.retry.may_retry(attempts);
+                    let retryable = error.is_retryable() && self.config.retry.may_retry(attempts);
                     self.audit.append(AuditEvent::Content {
                         action: "provider.attempt".to_owned(),
                         content: orrery_audit::ContentRef::new(
@@ -1213,7 +1300,11 @@ impl Kernel {
                     }
                     tokio::select! {
                         () = tokio::time::sleep(wait) => {}
-                        () = cancel.token().cancelled() => return Err(PassFailure::Cancelled),
+                        () = cancel.token().cancelled() => {
+                            return Err(PassFailure::Cancelled {
+                                partial: Box::new(empty_pass(pass, attempts)),
+                            });
+                        }
                     }
                 }
             }
@@ -1246,16 +1337,23 @@ impl Kernel {
                 () = cancel.token().cancelled() => {
                     // Dropping the stream aborts the request, which is what
                     // makes cancellation stop costing money rather than stop
-                    // being rendered.
+                    // being rendered. What was said before that is kept.
                     drop(stream);
-                    return Err(PassFailure::Cancelled);
+                    return Err(PassFailure::Cancelled {
+                        partial: Box::new(result),
+                    });
                 }
                 item = stream.next() => item,
             };
             let Some(item) = next else { break };
             let event = match item {
                 Ok(event) => event,
-                Err(error) => return Err(PassFailure::Provider { error, attempts: attempt }),
+                Err(error) => {
+                    return Err(PassFailure::Provider {
+                        error,
+                        attempts: attempt,
+                    });
+                }
             };
             if let Some(completed) = accumulator.feed(&event) {
                 match completed {
@@ -1291,19 +1389,18 @@ impl Kernel {
     async fn append_partial(
         &self,
         lease: &BranchLease,
-        state: &TurnState,
+        partial: &PassResult,
     ) -> Result<(), KernelError> {
-        if state.text.is_empty() {
+        let content = partial.content();
+        if content.is_empty() {
             return Ok(());
         }
         self.store
             .append(
                 lease,
                 NewTurn::new(TurnKind::Assistant {
-                    content: vec![ContentBlock::Text {
-                        text: state.text.clone(),
-                    }],
-                    usage: Usage::default(),
+                    content,
+                    usage: partial.usage,
                 }),
             )
             .await?;
@@ -1372,11 +1469,29 @@ struct TurnState {
 
 /// Why a pass did not produce a result.
 enum PassFailure {
-    Cancelled,
+    /// Stopped. Carries whatever the model managed to say first, because that
+    /// is what the person was already looking at when they stopped it.
+    Cancelled {
+        partial: Box<PassResult>,
+    },
     Provider {
         error: ProviderError,
         attempts: u32,
     },
+}
+
+/// A pass that produced nothing at all, for a cancellation that arrived before
+/// the stream opened.
+fn empty_pass(pass: PassId, attempts: u32) -> PassResult {
+    PassResult {
+        pass,
+        text: String::new(),
+        thinking: String::new(),
+        calls: Vec::new(),
+        usage: Usage::default(),
+        stop: None,
+        attempts,
+    }
 }
 
 /// A chain outcome that stops a phase, as the outcome it settles as.

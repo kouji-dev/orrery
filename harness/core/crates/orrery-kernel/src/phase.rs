@@ -51,8 +51,8 @@
 //! # assert_eq!(ToolBefore::NAME, "tool.before");
 //! ```
 
-use orrery_provider::ModelRequest;
 use orrery_proto::Outcome;
+use orrery_provider::ModelRequest;
 
 use crate::context::{CompactPlan, ContextDraft};
 use crate::turn::{PassResult, PendingCall, ResolvedManifest, ToolInput, TurnInput, TurnSummary};

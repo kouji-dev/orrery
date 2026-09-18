@@ -40,9 +40,7 @@ pub use error::KernelError;
 pub use intercept::{
     ChainOutcome, InterceptCtx, Interceptor, InterceptorSet, MatchCtx, RegisterError,
 };
-pub use lifecycle::{
-    LifecycleCtx, LifecycleError, LifecycleHandler, LifecyclePoint, LifecycleSet,
-};
+pub use lifecycle::{LifecycleCtx, LifecycleError, LifecycleHandler, LifecyclePoint, LifecycleSet};
 pub use phase::{
     ALL_PHASES, ContextBuild, ContextCompact, Phase, PhaseScope, ProviderAfter, ProviderBefore,
     SessionStart, ToolAfter, ToolBefore, ToolResolve, TurnEnd, TurnStart,

@@ -152,7 +152,11 @@ impl TurnBudget {
     /// How long the turn has been running.
     #[must_use]
     pub fn elapsed_ms(&self) -> u64 {
-        self.started.elapsed().as_millis().try_into().unwrap_or(u64::MAX)
+        self.started
+            .elapsed()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX)
     }
 
     /// What is left on the wall clock, for a timeout on a pass.

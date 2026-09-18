@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use common::{Passes, Rig, TestHost, fixture, registry};
 use orrery_kernel::{
-    ChainOutcome, ContextBuild, InterceptCtx, InterceptorSet, Interceptor, Kernel, KernelConfig,
+    ChainOutcome, ContextBuild, InterceptCtx, Interceptor, InterceptorSet, Kernel, KernelConfig,
     MatchCtx, PassId, PendingCall, RegisterError, ToolBefore, ToolInput, TurnInput, TurnOutcome,
 };
 use orrery_proto::{
@@ -76,12 +76,7 @@ impl Interceptor<orrery_kernel::ToolResolve> for Marker {
 struct DenyAll;
 
 impl PolicyCheck for DenyAll {
-    fn check(
-        &self,
-        _ref: &ToolRef,
-        _input: &serde_json::Value,
-        _ctx: &CallCtx,
-    ) -> PolicyDecision {
+    fn check(&self, _ref: &ToolRef, _input: &serde_json::Value, _ctx: &CallCtx) -> PolicyDecision {
         PolicyDecision::Deny {
             rule: nil_rule(),
             reason: "the policy in this test refuses everything".to_owned(),
@@ -245,7 +240,10 @@ async fn handled_short_circuits() {
     let rows = rig.rows().await;
     match common::first_outcome(&rows).expect("a tool result was appended") {
         Outcome::Ok { value, .. } => assert_eq!(
-            value.as_ref().and_then(|v| v.get("from")).and_then(|v| v.as_str()),
+            value
+                .as_ref()
+                .and_then(|v| v.get("from"))
+                .and_then(|v| v.as_str()),
             Some("the interceptor's own data")
         ),
         other => panic!("the interceptor's own answer is what settles: {other:?}"),
