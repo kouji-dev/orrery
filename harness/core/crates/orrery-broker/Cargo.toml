@@ -1,6 +1,6 @@
 [package]
 name = "orrery-broker"
-version = "0.0.0"
+version = "0.1.0"
 description = "The only path to the outside world: read, write, spawn, net and creds behind a capability token."
 edition.workspace = true
 rust-version.workspace = true

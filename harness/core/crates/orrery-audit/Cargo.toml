@@ -1,6 +1,6 @@
 [package]
 name = "orrery-audit"
-version = "0.0.0"
+version = "0.1.0"
 description = "The append-only structured stream: three tracing layers, redaction in schema, file and OTLP sinks."
 edition.workspace = true
 rust-version.workspace = true
@@ -8,4 +8,21 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+default = []
+# OTLP export is a deployment choice, not a schema choice: the events are the
+# same either way. Off by default so a lean build has no exporter in it.
+otlp = []
+
 [dependencies]
+orrery-proto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
+parking_lot = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

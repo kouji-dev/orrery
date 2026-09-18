@@ -88,3 +88,6 @@ orrery-provider = { version = "0.1.0", path = "harness/core/crates/orrery-provid
 orrery-session = { version = "0.1.0", path = "harness/core/crates/orrery-session" }
 orrery-memory = { version = "0.1.0", path = "harness/core/crates/orrery-memory" }
 orrery-grader = { version = "0.1.0", path = "harness/core/crates/orrery-grader" }
+orrery-audit = { version = "0.1.0", path = "harness/core/crates/orrery-audit" }
+orrery-policy = { version = "0.1.0", path = "harness/core/crates/orrery-policy" }
+orrery-broker = { version = "0.1.0", path = "harness/core/crates/orrery-broker" }
