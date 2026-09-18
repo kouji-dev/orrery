@@ -124,75 +124,202 @@ A client with a matching renderer draws the rich version; every other draws the 
 
 Files: `src/validate.rs`
 
-- [ ] **Failing test first.** `validate::custom_kind_is_namespaced` — `kind: "flamegraph"` is rejected; `kind: "buildgraph.flamegraph"` is accepted.
-- [ ] `validate::fallback_must_not_be_trivial` — a fallback that is `text` with fewer than N characters, or whose text matches a deny-list of phrases like "open the", produces a **load-time warning** (not an error — we cannot judge content, but we can nudge).
-- [ ] `validate::nesting_depth_is_capped` — a 1000-deep stack is rejected before it reaches a renderer.
-- [ ] Implement.
+- [x] **Failing test first.** `validate::custom_kind_is_namespaced` — `kind: "flamegraph"` is rejected; `kind: "buildgraph.flamegraph"` is accepted.
+- [x] `validate::fallback_must_not_be_trivial` — a fallback that is `text` with fewer than N characters, or whose text matches a deny-list of phrases like "open the", produces a **load-time warning** (not an error — we cannot judge content, but we can nudge). `N = MIN_FALLBACK_CHARS = 16`, and the phrase check runs *first* because "open the web UI" is also short and naming the phrase is the more useful thing to say.
+- [x] `validate::nesting_depth_is_capped` — a 1000-deep stack is rejected before it reaches a renderer. `MAX_DEPTH = 64`.
+- [x] Implement.
+
+These three live in `src/validate.rs` as a `#[cfg(test)] mod tests`, not in `tests/`, because they exercise a private walk and the plan's own file list gives `validate.rs` no test file.
 
 ### Task 2 · Hashing and the differ
 
 Files: `src/{hash,diff}.rs`, `tests/diff.rs`
 
-- [ ] **Failing test first.** `diff::append_fast_path` — a markdown surface growing by one word produces exactly one `Append` carrying only the new word.
-- [ ] `diff::unchanged_subtree_is_skipped` — a stack of 100 children where one changes produces one `Set`, and an instrumented hash counter proves the other 99 subtrees were not walked.
-- [ ] `diff::discriminant_change_replaces`.
-- [ ] `diff::stack_children_match_by_id` — reordering children with stable ids produces moves, not wholesale replacement.
-- [ ] `diff::cost_guard_collapses` — a table whose rows are all reordered produces one `Replace`, not N `Set`s. Assert on patch count and byte size.
-- [ ] `diff::patches_reconstruct` (proptest) — for arbitrary `prev`/`next`, applying `diff(prev,next)` to `prev` yields `next`. **This is the property that matters most.**
-- [ ] Implement.
+- [x] **Failing test first.** `diff::append_fast_path` — a markdown surface growing by one word produces exactly one `Append` carrying only the new word.
+- [x] `diff::unchanged_subtree_is_skipped` — a stack of 100 children where one changes produces one `Set`, and an instrumented hash counter proves the other 99 subtrees were not walked. `DiffCost` carries `nodes_walked` (2: the root and the child) and `subtrees_skipped` (99).
+- [x] `diff::discriminant_change_replaces`.
+- [x] `diff::stack_children_match_by_id` — reordering children with stable ids produces moves, not wholesale replacement. **Amended:** the vocabulary has no `Move` op, so a move is expressed as one `Set` at the slot that took a different child — two ops for a three-child reversal, and neither subtree is walked. That is "not wholesale replacement" within the ops that exist; adding a `Move` op is an `orrery-proto` change, not this plan's.
+- [x] `diff::cost_guard_collapses` — a table whose rows are all reordered produces one `Replace`, not N `Set`s. Assert on patch count and byte size.
+- [x] `diff::patches_reconstruct` (proptest) — for arbitrary `prev`/`next`, applying `diff(prev,next)` to `prev` yields `next`. **This is the property that matters most.** 256 cases over all twelve variants, stacks and custom fallbacks nested three deep. Its inverse, `diff::apply`, is public — clients have their own copy in their own language, and this is the one the property is checked against.
+- [x] Implement.
+
+**Amended: the guard needed a floor.** Every op carries a surface id and a path, which on a
+two-row table costs more than the table does — so a bare `patch_bytes > 0.6 × replace_bytes`
+collapsed one-cell edits into whole-surface resends and took the append fast path with them.
+`COST_GUARD_FLOOR = 512` bytes: below that a surface is too small for the guard to be worth
+having, and the guard exists to stop a re-sorted *table*, not to punish a one-word edit.
 
 ### Task 3 · The store and sealing
 
 Files: `src/store.rs`, `tests/seal.rs`
 
-- [ ] **Failing test first.** `seal::patch_after_settle_is_refused` — emit, seal, emit again ⇒ `Err(SurfaceError::Sealed)` returned **to the extension**, and no frame produced.
-- [ ] `seal::new_surface_in_the_current_turn_is_fine` — an extension with something to add after its turn ends emits a new surface in the current turn.
-- [ ] Implement per-turn storage and `seal`.
+- [x] **Failing test first.** `seal::patch_after_settle_is_refused` — emit, seal, emit again ⇒ `Err(SurfaceError::Sealed)` returned **to the extension**, and no frame produced. `remove` is refused on the same rule.
+- [x] `seal::new_surface_in_the_current_turn_is_fine` — an extension with something to add after its turn ends emits a new surface in the current turn.
+- [x] Implement per-turn storage and `seal`.
+
+**Amended: `SurfaceError` is this crate's, not `orrery-proto`'s.** `orrery_proto::SurfaceError`
+describes what is wrong with a surface's *shape* and is `#[non_exhaustive]` in a crate this
+plan does not own. `Sealed` needs a turn and a store to be wrong about, so
+`orrery_surface::SurfaceError` wraps the proto one (`Malformed`) and adds `Sealed` and
+`TooDeep`.
 
 ### Task 4 · The surface sink for extensions
 
 Files: `src/sink.rs`
 
-- [ ] **Failing test first.** `sink::describes_never_draws` — the API exposes no way to write bytes to a terminal; a doc test shows `ctx.ui.table(..)`.
-- [ ] Implement `SurfaceSink` with builders for each core surface (`text`, `table`, `tree`, `diff`, `progress`, `stream`, `task`, `question`, `form`, `stack`, `markdown`, `custom`).
+- [x] **Failing test first.** `sink::describes_never_draws` — the API exposes no way to write bytes to a terminal; a doc test shows `ctx.ui.table(..)`. Two halves: every builder returns a `Surface` and takes no terminal, buffer or width, and a source scan refuses `std::io`, `Stdout`, `print!`, `crossterm`, `ratatui` and friends in this file.
+- [x] Implement `SurfaceSink` with builders for each core surface (`text`, `table`, `tree`, `diff`, `progress`, `stream`, `task`, `question`, `form`, `stack`, `markdown`, `custom`).
+
+**Amended: an extension trait, not a second sink.** `orrery_ext_api::SurfaceSink` already
+exists and is what `ctx.ui` *is* — it carries `text`, `table` and `markdown`. Defining a
+second `SurfaceSink` here would mean two `ctx.ui` types and two places a surface is emitted.
+So `src/sink.rs` adds the other nine as `trait SurfaceBuilders for SurfaceSink`. The cost is
+one `use orrery_surface::SurfaceBuilders;` in an extension that wants them.
 
 ### Task 5 · View bindings
 
 Files: `src/view.rs`, `tests/view.rs`
 
-- [ ] **Failing test first.** `view::unbound_is_hidden` — an event with no binding produces no surface.
-- [ ] `view::floor_is_always_bound` — with zero configuration, assistant text, tool started/settled, consent and errors all render.
-- [ ] `view::placement_from_profile` — a `[views.*]` table moves a binding to the footer.
-- [ ] `view::json_ignores_placement`.
-- [ ] `view::when_predicate` — a binding with `when` only fires on matching events.
-- [ ] Implement `ViewBinding`, `Placement`, the registry, profile overrides.
+- [x] **Failing test first.** `view::unbound_is_hidden` — an event with no binding produces no surface.
+- [x] `view::floor_is_always_bound` — with zero configuration, assistant text, tool started/settled, consent and errors all render. **Amended:** "zero configuration" means "once the floor extension has loaded, and with no profile" — a bare `ViewRegistry::new()` binds nothing, because unbound-is-hidden has no exceptions. The test asserts against `orrery_surface::floor()`, the binding *content*; `orrery-ext-views-default`'s own `views::ships_as_an_extension` asserts the *loading path*.
+- [x] `view::placement_from_profile` — a `[views.*]` table moves a binding to the footer. An override for an event nothing binds is kept, not refused: a profile is written once and extensions come and go.
+- [x] `view::json_ignores_placement`.
+- [x] `view::when_predicate` — a binding with `when` only fires on matching events.
+- [x] Implement `ViewBinding`, `Placement`, the registry, profile overrides.
+
+**Amended: `EventKind` and `LoopEvent` are defined here.** Neither existed. `EventKind` is a
+newtype over the dotted name a profile writes rather than an enum, because an extension
+contributes its own loop events and a closed enum would grow a variant per concept — which
+is what §6.7 exists to avoid. `LoopEvent` wraps `orrery_proto::Event` (the wire catalogue),
+plus `AssistantText` (prose arrives as deltas, not as a frame) and `Other { kind, payload }`
+(an extension's own). `render: Box<dyn Fn>` is an `Arc<dyn Fn>` so a registry can be cloned.
 
 ### Task 6 · Default views extension
 
 Files: `orrery-ext-views-default/*`
 
-- [ ] Implement the floor bindings as a real extension with an `orrery.toml` — proving the mechanism on the thing that most tempts a built-in shortcut.
-- [ ] **Failing test first.** `views::ships_as_an_extension` — the bundle loads through `orrery-host` and appears in the ledger.
+- [x] Implement the floor bindings as a real extension with an `orrery.toml` — proving the mechanism on the thing that most tempts a built-in shortcut. `DefaultViews` implements `NativeExtension`, contributes five `views` and **no tools**, and asks for no capabilities, so it loads clean under `Grant::nothing()`.
+- [x] **Failing test first.** `views::ships_as_an_extension` — the bundle loads through `orrery-host` and appears in the ledger. Its manifest is parsed by the same parser a third party is held to, and a second test asserts the manifest's `views` list and the code's bindings are the same list in the same order.
 
 ### Task 7 · Conformance fixtures
 
 Files: `harness/clients/conformance/*`
 
-- [ ] Add one scenario per core surface: emit, mutate, assert the patch sequence and the resulting store state. These are what plans 09b and 09c run.
-- [ ] Add `table-then-resort` (cost guard) and `streaming-markdown` (complete flag) explicitly — they are the two cases renderers get wrong.
+- [x] Add one scenario per core surface: emit, mutate, assert the patch sequence and the resulting store state. These are what plans 09b and 09c run. Six were missing and are new: `tree-surface`, `diff-surface`, `progress-surface`, `stream-surface`, `task-surface`, `form-surface`. The other six were already covered by plan 08's fixtures, and the conformance README now carries a surface-to-scenario table so a gap is visible rather than inferred.
+- [x] Add `table-then-resort` (cost guard) and `streaming-markdown` (complete flag) explicitly — they are the two cases renderers get wrong. Both existed from plan 08; they are now named as such in the README, with *why* each is the one renderers get wrong.
+
+**Amended: `stream-surface` cannot assert a stream's body.** `SurfaceKind::Stream` names a
+channel and carries no text field, so there is nowhere in a client's store for a child
+process's bytes to land. The scenario pins everything else — the channel is named, the
+surface opens `running`, it can be re-pointed with one op, the turn closes it — and the file
+and the README both say plainly what is missing. Closing it is an `orrery-proto` change.
 
 ---
 
 ## Done when
 
-- `cargo test -p orrery-surface -p orrery-ext-views-default` green, including the reconstruct proptest.
-- The conformance fixtures cover every core surface.
-- An extension can produce every core surface without importing a drawing library.
-- A sealed surface's patch is reported to the extension, never sent.
+- [x] `cargo test -p orrery-surface -p orrery-ext-views-default` green, including the reconstruct proptest. 32 tests in `orrery-surface` (11 unit, 9 diff, 5 seal, 6 view, 1 doc), 3 in `orrery-ext-views-default`.
+- [x] The conformance fixtures cover every core surface — **with one stated exception**: `stream-surface` covers the stream surface but not a stream's *body*, which the type cannot carry. The gap is documented in the fixture and in the conformance README rather than left to be discovered.
+- [x] An extension can produce every core surface without importing a drawing library. `sink::describes_never_draws` builds all twelve through `ctx.ui` and then scans this crate's source for anything that could write a byte.
+- [x] A sealed surface's patch is reported to the extension, never sent. `SurfaceStore::emit` into a sealed turn returns `Err(SurfaceError::Sealed)` and produces no patch at all.
+
+**Not claimed.** The plan's goal line says "three ported extensions render in both TUIs with
+no drawing code of their own". The TUIs are plans 09b and 09c and the porting is phase 4;
+this plan built the vocabulary they consume and the fixtures they are checked against.
+
+## State
+
+Landed 2026-09-18 on `feat/harness_claude-0917`. `orrery-surface` is implemented end to end
+— `validate`, `hash`, `diff` (+ its inverse `apply`), `store`, `sink`, `view` — and
+`orrery-ext-views-default` ships the floor through `orrery-host`. Six conformance scenarios
+added, one per previously-uncovered core surface; all 16 pass under `orrery-client`'s
+runner. Every "Amended" note above is a place the plan and the code disagreed and the code
+won for a stated reason. Open questions 1–4 are decided below.
 
 ## Open questions
 
 1. **How far may a client re-style a surface before output stops being comparable across clients?** §7 names this as the one unsettled line. It matters for evals (two runs must be comparable) and for docs. Propose: themes and spacing are free; content, ordering and which surface was used are not. Write the rule here.
+
+   **Decided: the comparability rule.** A client may change *how* a surface looks. It may
+   not change *what* was said, *in what order*, or *which surface said it*.
+
+   **Free — a client may do any of this without becoming incomparable:**
+   - colour, including mapping `TextStyle` to whatever its palette says (`style` is a hint
+     about meaning, never a colour);
+   - typeface, weight, spacing, padding, borders, box-drawing, indentation and wrapping;
+   - glyphs and iconography — a bullet, a spinner, a check mark, nothing at all;
+   - **progressive disclosure**: collapsing a `stack`, paginating a long `table`, folding a
+     `diff` hunk, truncating with an affordance that reveals the rest. What is hidden must
+     be reachable without re-running the turn;
+   - layout: a `stack` with `dir: row` laid out as a column on a narrow terminal;
+   - `placement` — inline, footer or hidden, per the profile. This is the one *content*
+     omission that is free, and it is why **the json renderer ignores `placement`**: the
+     comparable rendering is the one that omits nothing.
+
+   **Not free — any of this makes two runs incomparable, and is a renderer bug:**
+   - changing, summarising, reordering, re-sorting or reformatting the *values* in a
+     surface. A table's rows are drawn in the order they arrived unless the person sorts
+     them; a re-sort is the person's, never the renderer's;
+   - changing the order surfaces are drawn in relative to their arrival order;
+   - substituting a different surface kind for the one the extension chose — drawing a
+     `table` as prose, a `question` as a `form`, a `diff` as a `stream`;
+   - drawing a `custom` payload when the client has no renderer for that `kind`, or drawing
+     *neither* the payload nor the fallback;
+   - dropping a surface that is not `Hidden` by placement.
+
+   **The one legitimate substitution is degradation**, and it is a documented rule rather
+   than a choice — see question 2. A renderer that cannot draw a surface falls back by the
+   published rule for that surface, not by inventing one.
+
+   **How it is enforced.** The conformance fixtures assert store *state*, which is content
+   and ordering, and say nothing about pixels — so the line above is exactly the line
+   between "the fixtures check it" and "the fixtures do not". An eval compares two runs'
+   json rendering, which ignores placement and omits nothing. Drawing snapshots live with
+   each client and are a second layer on top.
 2. **`form` degradation.** §6.3 says `form` → sequential prompts in a constrained renderer. Is that a renderer's choice or a documented rule? Make it a rule, or two TUIs will differ.
+
+   **Decided: a rule.** A renderer that cannot draw a whole `form` asks one field at a time:
+
+   - **in declaration order** — `fields` as the extension wrote them, never sorted, never
+     "required first";
+   - **each as that renderer's own `question`**, with the field's `label` as the prompt. A
+     `choice` field offers its `choices`; `bool` offers yes/no; `text`, `number` and
+     `secret` are free-text, and `secret` is not echoed, not logged and not stored;
+   - **`default` pre-fills**, and an empty answer takes it;
+   - **an optional field may be skipped**; a required field with no answer and no default
+     re-asks, and cancelling the sequence cancels the whole form — never a partial submit;
+   - **submit once the last field is answered**, with `submit` as the confirmation label.
+     One submission, carrying every field, exactly as a whole-form renderer would send it.
+
+   The rule behind this and every other degradation: *degrade to another core surface by a
+   published rule, never by invention.* `form-surface` in the conformance directory carries
+   this rule in its header, so a renderer author meets it where they meet the fixture.
+
 3. **Trivial-fallback detection.** A warning based on a phrase deny-list is crude. Better idea: require the fallback to be a different variant than `text`, unless the custom surface is itself textual? Probably too strict. Keep the warning, revisit after phase 4's porting exercise.
+
+   **Decided: keep the warning exactly as proposed, and do not make it an error.**
+   Implemented as `MIN_FALLBACK_CHARS = 16` plus an eight-phrase list, checked phrase-first
+   so the more useful message wins; only `text` fallbacks are judged, since a `table` or
+   `tree` fallback is by construction saying something. The "different variant than `text`"
+   idea is rejected: the honest fallback for a flamegraph *is* a line of text saying where
+   the time went, and a rule that refused it would be a rule people route around.
+
+   It is a warning and not an error for one reason worth writing down: a bad fallback makes
+   a transcript worse, while refusing to load makes the extension useless. The nudge belongs
+   on the cheaper side of that trade. Revisit after phase 4's porting exercise, with real
+   fallbacks to look at — and if the phrase list is still crude then, the answer is a lint in
+   `orrery ext test`, not a load-time refusal.
+
 4. **Surface ids.** Who mints them — the extension or the kernel? Extension-minted is simpler for re-emission; kernel-minted prevents collisions across extensions. Suggest extension-minted, namespaced by ext id at the kernel.
+
+   **Decided: extension-minted, scoped by the kernel — and the scope is the turn, not the
+   extension.** An extension mints a `SurfaceId` and re-emits under it; that is what makes
+   re-emission the whole API and the diff the store's job. The kernel is what keeps ids
+   apart: `SurfaceStore` is keyed `(TurnId, SurfaceId)`, so the same id in two turns is two
+   surfaces and nothing leaks across a session — `seal::new_surface_in_the_current_turn_is
+   _fine` pins exactly that.
+
+   Per-extension namespacing on top is unnecessary *while* ids are uuid v7: a collision
+   between two extensions would be a uuid collision. If ids ever become human-chosen strings,
+   the kernel prefixes with the ext id inside `emit` — a change in one function, and it is
+   one function precisely because the kernel already owns the keying.
