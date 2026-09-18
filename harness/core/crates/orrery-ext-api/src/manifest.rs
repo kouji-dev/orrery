@@ -298,26 +298,21 @@ provides! {
     collections {
         tools:        Some(ContributionKind::Tool),
         providers:    Some(ContributionKind::Provider),
-        // TODO(orrery-proto): `ContributionKind` has no `Agent`, `Workflow`,
-        // `Interceptor`, `Lifecycle`, `Permissions` or `Mcp` variant yet. The
-        // enum is `#[non_exhaustive]` precisely so those can be added without
-        // breaking anyone; until they are, these fields parse and are held but
-        // are not reported in the ledger.
-        agents:       None,
-        workflows:    None,
-        interceptors: None,
-        lifecycle:    None,
+        agents:       Some(ContributionKind::Agent),
+        workflows:    Some(ContributionKind::Workflow),
+        interceptors: Some(ContributionKind::Interceptor),
+        lifecycle:    Some(ContributionKind::Lifecycle),
         graders:      Some(ContributionKind::Grader),
         commands:     Some(ContributionKind::Command),
         views:        Some(ContributionKind::View),
         renderers:    Some(ContributionKind::Renderer),
         skills:       Some(ContributionKind::Skill),
-        mcp:          None,
+        mcp:          Some(ContributionKind::Mcp),
     }
     singletons {
         memory:      Some(ContributionKind::Memory),
         session:     Some(ContributionKind::SessionStore),
-        permissions: None,
+        permissions: Some(ContributionKind::Permissions),
         router:      Some(ContributionKind::Router),
     }
 }

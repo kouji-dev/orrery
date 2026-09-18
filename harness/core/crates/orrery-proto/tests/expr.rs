@@ -173,3 +173,46 @@ mod load {
         assert_eq!(*stage, LoadStage::Activate);
     }
 }
+
+mod contribution_kinds {
+    use orrery_proto::ContributionKind;
+
+    /// Every kind an extension manifest can declare has a wire name, and the
+    /// six that plan 05 needs — an agent, a workflow, an interceptor, a
+    /// lifecycle handler, a permission handler, an MCP server — are among
+    /// them. Without these the kernel can register an interceptor and the
+    /// ledger cannot say so.
+    #[test]
+    fn every_provides_field_has_a_kind() {
+        let expected = [
+            (ContributionKind::Tool, "tool"),
+            (ContributionKind::Provider, "provider"),
+            (ContributionKind::Renderer, "renderer"),
+            (ContributionKind::Command, "command"),
+            (ContributionKind::Skill, "skill"),
+            (ContributionKind::Memory, "memory"),
+            (ContributionKind::Grader, "grader"),
+            (ContributionKind::Router, "router"),
+            (ContributionKind::SessionStore, "session-store"),
+            (ContributionKind::Mode, "mode"),
+            (ContributionKind::View, "view"),
+            (ContributionKind::Agent, "agent"),
+            (ContributionKind::Workflow, "workflow"),
+            (ContributionKind::Interceptor, "interceptor"),
+            (ContributionKind::Lifecycle, "lifecycle"),
+            (ContributionKind::Permissions, "permissions"),
+            (ContributionKind::Mcp, "mcp"),
+        ];
+        for (kind, wire) in expected {
+            assert_eq!(
+                serde_json::to_value(kind).unwrap(),
+                serde_json::Value::String(wire.to_owned()),
+                "{kind:?} must serialise as `{wire}`"
+            );
+            assert_eq!(
+                serde_json::from_value::<ContributionKind>(serde_json::json!(wire)).unwrap(),
+                kind
+            );
+        }
+    }
+}

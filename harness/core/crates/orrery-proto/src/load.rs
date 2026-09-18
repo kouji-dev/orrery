@@ -49,6 +49,25 @@ pub enum ContributionKind {
     Mode,
     /// A named view over the session.
     View,
+    /// A sub-agent definition.
+    Agent,
+    /// A multi-step workflow.
+    Workflow,
+    /// An interceptor on one of the kernel's phases (plan 05).
+    ///
+    /// The name is the phase it is registered for, so a ledger line reads
+    /// `interceptor: tool.before` — which is the question a person asks when a
+    /// call was rewritten and they want to know by whom.
+    Interceptor,
+    /// A lifecycle handler (plan 05).
+    ///
+    /// The name is the lifecycle point it fires at, spelled as it is written
+    /// in a manifest: `turn.end`.
+    Lifecycle,
+    /// A permission handler.
+    Permissions,
+    /// An MCP server, reached as the extension `mcp.<name>`.
+    Mcp,
 }
 
 /// How far loading got before it stopped.
