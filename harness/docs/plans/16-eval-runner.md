@@ -61,7 +61,7 @@ pub struct EvalResult {
 
 A memory provider reading a mutable `global` store and a `router` bound to a model both make the same case behave differently on two days. So an `EvalRun` declares both, and the defaults are the reproducible ones. A run with `memory` on or `router` bound is still useful — it is just labelled as what it is, and `eval compare` refuses to compare across differing reproducibility settings without `--force`.
 
-Also pinned per run: the profile, the model, the extension version set (plan 15), the seed where a provider supports it, and wasm fuel (plan 14) for deterministic guest execution.
+Also pinned per run: the profile, the model, the extension version set (plan 15), the seed where a provider supports it, and wasm fuel (plan 14) for deterministic guest execution. **Plan 14 answered the how:** `consume_fuel` is a `Config` setting and `Config` is per-`Engine`, so the eval runner needs its **own** engine, not a per-run flag. `orrery_host_wasm::WasmHost::for_eval()` is it.
 
 ### The singleton conformance suites live here
 
