@@ -8,4 +8,24 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# Schema validation lives in the registry so that every source of tools is
+# validated the same way. It is a feature so a lean build can drop the
+# `jsonschema` dependency; with it off, `dispatch` skips step 2.
+default = ["schema-validation"]
+schema-validation = ["dep:jsonschema"]
+
 [dependencies]
+orrery-proto = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+indexmap = { workspace = true }
+globset = { workspace = true }
+parking_lot = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+jsonschema = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
