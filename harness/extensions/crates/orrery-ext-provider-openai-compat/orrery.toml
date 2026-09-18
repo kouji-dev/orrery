@@ -1,0 +1,15 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "openai-compat"
+version = "0.0.0"
+
+[provides]
+providers = ["openai-compat"]
+
+# The base URL is configuration, so the scope is broad here and narrowed by the
+# profile that binds a concrete endpoint.
+[requires]
+net = ["http://localhost/**", "https://**"]
+creds = ["openai-compat"]

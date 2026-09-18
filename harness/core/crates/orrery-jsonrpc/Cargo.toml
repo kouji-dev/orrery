@@ -1,0 +1,11 @@
+[package]
+name = "orrery-jsonrpc"
+version = "0.0.0"
+description = "JSON-RPC 2.0 with pluggable framing, async correlation, bidirectional calls and cancellation."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

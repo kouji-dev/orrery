@@ -1,0 +1,11 @@
+[package]
+name = "orrery-memory"
+version = "0.1.0"
+description = "The MemoryProvider trait, scope lifetimes, the token clamp and the visibility rule. No provider."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = true
+
+[dependencies]

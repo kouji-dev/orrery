@@ -13,3 +13,35 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  # The harness is a separate product from the ADE, so it gets its own job and
+  # neither waits on the other. Deliberately NOT `cargo test --workspace`: the
+  # repo convention is per-crate test runs, and each plan adds its own line here
+  # as it lands.
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: rustfmt, clippy }
+      # Keyed on the root Cargo.lock, so this shares one cache with the ADE job.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ hashFiles('Cargo.lock') }}
+      # Harness crates only. `cargo fmt --all` would also reformat the ADE,
+      # which is not rustfmt-clean and is not this job's business; rustfmt has
+      # no --exclude, so the package list is computed instead.
+      - name: cargo fmt --check (harness crates)
+        run: |
+          pkgs=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.workspace_root as $r
+                     | .packages[]
+                     | select(.manifest_path | startswith($r + "/harness/"))
+                     | "-p " + .name' \
+            | tr '\n' ' ')
+          cargo fmt $pkgs -- --check
+      - run: cargo clippy --workspace --exclude orrery-ade --exclude orrery-updater -- -D warnings
+      - run: cargo test -p orrery-proto
+      - run: cargo test -p orrery-cli
+      - run: cargo test -p xtask
+      - run: cargo xtask deps-check

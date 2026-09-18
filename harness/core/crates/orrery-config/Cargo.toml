@@ -1,0 +1,11 @@
+[package]
+name = "orrery-config"
+version = "0.0.0"
+description = "The five configuration layers, their TOML merge, provenance, profiles and trust gating."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

@@ -1,0 +1,11 @@
+[package]
+name = "orrery-provider"
+version = "0.1.0"
+description = "The Provider trait and its request, event and auth types. No concrete providers."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = true
+
+[dependencies]

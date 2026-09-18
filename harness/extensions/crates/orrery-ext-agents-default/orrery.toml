@@ -1,0 +1,12 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "agents-default"
+version = "0.0.0"
+
+[provides]
+agents = ["planner", "executor", "verifier", "compactor", "summariser"]
+
+# Role agents run turns through the kernel; they hold no capability of their own.
+[requires]

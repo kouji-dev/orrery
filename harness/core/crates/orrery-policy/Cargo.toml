@@ -1,0 +1,11 @@
+[package]
+name = "orrery-policy"
+version = "0.0.0"
+description = "Rules, the selector matcher, check/consent/explain, and the capability-token minter. Fully sync."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

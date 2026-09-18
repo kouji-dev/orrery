@@ -1,0 +1,11 @@
+[package]
+name = "orrery-registry"
+version = "0.0.0"
+description = "The signed registry client: pinning, signature checks, and refusing unpinned extensions under a managed profile."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

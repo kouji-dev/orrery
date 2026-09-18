@@ -1,0 +1,41 @@
+Inspect stored sessions
+
+Usage: orrery session [OPTIONS] <COMMAND>
+
+Commands:
+  list  List stored sessions
+  show  Show one session
+  rm    Delete one session. History cannot be reconstructed, so this asks first
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --profile <NAME>
+          Which profile to resolve
+
+      --workspace <PATH>
+          The workspace root. Defaults to the current directory
+
+      --ui <UI>
+          Renderer. Defaults to ratatui on a tty, json otherwise
+
+          Possible values:
+          - ratatui: The default TUI, linked into this binary (`orrery-client-ratatui`)
+          - ink:     The React/Ink TUI, spawned as a Node process
+          - json:    Line-delimited AG-UI events on stdout
+
+      --json
+          Shorthand for `--ui json`
+
+      --consent <MODE>
+          Override the profile's consent mode, within the managed clamp
+
+          Possible values:
+          - always: Ask every time
+          - once:   Ask once per matching call, then remember for the session
+          - never:  Never ask: deny instead, so CI cannot hang
+
+  -v...
+          Log level on stderr. Never mixed into `--json` stdout. Repeatable
+
+  -h, --help
+          Print help (see a summary with '-h')

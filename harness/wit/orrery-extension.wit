@@ -1,0 +1,182 @@
+// The Orrery extension world.
+//
+// Implementation plan: harness/docs/plans/14-wasm-wit.md
+//
+// This is the SKETCH the scaffold commits so `cargo xtask wit-check` has a
+// target and so the flat-arena question is visible rather than deferred
+// silently. It is not final and nothing binds against it yet.
+//
+// Two rules it exists to make structural:
+//
+//   1. The guest never holds a capability token. The type is not serialisable,
+//      so it physically cannot cross this boundary. Every capability arrives as
+//      an imported host function; the host looks up the current call's token on
+//      its own side. The guest asks, the host decides.
+//   2. There are no WASI preopens. The filesystem arrives only through
+//      `broker.read-file` / `broker.write-file`. A preopen would be a hole
+//      straight past the policy engine.
+
+package orrery:extension@1.0.0;
+
+/// Everything an extension can reach outside itself. Each function is gated by
+/// the policy engine host-side before it does anything.
+interface broker {
+    /// Why an operation did not happen. Denial and budget stops are values, not
+    /// failures: the guest is expected to report them and re-plan, not retry.
+    variant error {
+        /// A policy rule said no. Terminal — retrying will not help.
+        denied(string),
+        /// A budget ceiling was reached.
+        budget(string),
+        /// The operation was attempted and the platform refused.
+        io(string),
+        /// The turn was cancelled. Work stopped; it was not undone.
+        cancelled,
+    }
+
+    /// Ceilings for one spawned process.
+    record run-opts {
+        /// Wall-clock ceiling in milliseconds. 0 means the call's remaining budget.
+        timeout-ms: u64,
+        /// Output ceiling. Output is truncated at it, never buffered whole.
+        max-output-bytes: u64,
+    }
+
+    /// What a spawned process produced.
+    record proc-out {
+        /// The child's exit code.
+        exit-code: s32,
+        /// Standard output, up to `max-output-bytes`.
+        stdout: list<u8>,
+        /// Standard error, up to `max-output-bytes`.
+        stderr: list<u8>,
+        /// True when either stream hit the ceiling.
+        truncated: bool,
+    }
+
+    /// One outbound HTTP request.
+    record fetch-opts {
+        /// The HTTP method.
+        method: string,
+        /// Request headers, as name/value pairs.
+        headers: list<tuple<string, string>>,
+        /// The request body, if any.
+        body: option<list<u8>>,
+        /// Wall-clock ceiling in milliseconds.
+        timeout-ms: u64,
+        /// Response ceiling in bytes.
+        max-response-bytes: u64,
+    }
+
+    /// What an outbound HTTP request returned.
+    record fetch-out {
+        /// The HTTP status code.
+        status: u16,
+        /// Response headers.
+        headers: list<tuple<string, string>>,
+        /// The response body, up to `max-response-bytes`.
+        body: list<u8>,
+        /// True when the body hit the ceiling.
+        truncated: bool,
+    }
+
+    /// How a credential is about to be used, so the grant can be narrowed to it.
+    record cred-usage {
+        /// The host the credential will be sent to.
+        host: string,
+        /// The purpose recorded in the audit ledger.
+        purpose: string,
+    }
+
+    /// Spawn a process under the call's containment and budget.
+    run-proc: func(cmd: string, args: list<string>, opts: run-opts) -> result<proc-out, error>;
+
+    /// Read a file, truncated at `max-bytes`. Never reads to end.
+    read-file: func(path: string, max-bytes: u64) -> result<list<u8>, error>;
+
+    /// Write a file. With `atomic`, the broker writes a temp file and renames,
+    /// so a cancelled write leaves the original intact.
+    write-file: func(path: string, bytes: list<u8>, atomic: bool) -> result<_, error>;
+
+    /// Make one outbound HTTP request.
+    fetch: func(url: string, opts: fetch-opts) -> result<fetch-out, error>;
+
+    /// Ask the broker to attach a credential to an upcoming call. The secret
+    /// itself never enters guest memory.
+    use-credential: func(name: string, usage: cred-usage) -> result<_, error>;
+}
+
+/// The surface vocabulary, flattened.
+///
+/// TRANSLATION #9, and the largest single impedance mismatch in the design:
+/// WIT has no recursive types, but `Surface` has `stack.children: Vec<Surface>`
+/// and `custom.fallback: Box<Surface>`. Across this boundary a surface is a
+/// flat arena — a `list<surface-node>` plus child indices — rebuilt host-side
+/// into the real `Surface`. Every guest language binds against this shape, so
+/// **settle it before phase 2 freezes the WIT**.
+interface surfaces {
+    /// Which kind of node this is. Payload-carrying fields travel in
+    /// `surface-node`, because a variant with recursive payloads is exactly
+    /// what WIT cannot express.
+    enum node-kind {
+        /// Plain text.
+        text,
+        /// Streaming text, appended to as it arrives.
+        %stream,
+        /// Markdown.
+        markdown,
+        /// A vertical or horizontal stack of children.
+        stack,
+        /// A table.
+        table,
+        /// A key/value detail list.
+        details,
+        /// A diff.
+        diff,
+        /// A progress indicator.
+        progress,
+        /// An extension-defined node, with a fallback child to draw instead.
+        custom,
+    }
+
+    /// One node of the arena.
+    record surface-node {
+        /// What kind of node this is.
+        kind: node-kind,
+        /// A stable id, used to match children across diffs. Empty when unset.
+        id: string,
+        /// The node's own payload, JSON-encoded.
+        ///
+        /// FLAGGED in `00-overview.md`: JSON crosses as a `string`, so payloads
+        /// double-encode. Measure the cost on delta-heavy extensions before
+        /// phase 2 ends.
+        payload: string,
+        /// Indices into `surface.nodes`. Must be greater than this node's own
+        /// index, so the arena is acyclic by construction.
+        children: list<u32>,
+    }
+
+    /// A whole surface as an arena.
+    record surface {
+        /// Every node. Index 0 is not special; `root` says where to start.
+        nodes: list<surface-node>,
+        /// The index of the root node.
+        root: u32,
+    }
+}
+
+/// What an extension exports.
+interface tools {
+    use surfaces.{surface};
+
+    /// Call one tool by its unqualified name. `input` is JSON against the
+    /// tool's declared schema; the error string is the failure message the
+    /// model sees.
+    call: func(name: string, input: string) -> result<surface, string>;
+}
+
+/// The world a wasm extension is compiled against.
+world orrery-extension {
+    import broker;
+    export tools;
+}

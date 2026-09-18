@@ -1,0 +1,16 @@
+[package]
+name = "orrery-cli"
+version = "0.0.0"
+description = "The orrery command tree. Links the ratatui and json clients."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "orrery"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }

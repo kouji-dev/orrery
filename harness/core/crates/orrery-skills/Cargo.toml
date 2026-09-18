@@ -1,0 +1,11 @@
+[package]
+name = "orrery-skills"
+version = "0.0.0"
+description = "SKILL.md front matter, the discovery pass, and running a skill's scripts under a grant."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

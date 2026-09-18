@@ -1,0 +1,11 @@
+[package]
+name = "orrery-transport"
+version = "0.0.0"
+description = "Framing, seq authority, the replay ring, the per-client coalescer and every listener."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

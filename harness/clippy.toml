@@ -1,0 +1,17 @@
+# Clippy configuration for the harness crates.
+#
+# Clippy walks up from a package's manifest directory and uses the FIRST
+# clippy.toml it finds, so this file shadows the root one for everything under
+# `harness/` — it does not merge with it.
+#
+# That is deliberate. The root `clippy.toml` bans `std::process::Command::new`
+# and `tauri::Emitter::emit` in favour of `crate::core::proc::cmd()` and
+# `crate::core::emit::*`, which are modules of the ADE (`ade/src-tauri`). Neither
+# path exists here, and the harness is a CLI rather than a windowed app: it has
+# no console-flash problem to solve and no Tauri event bus to funnel.
+#
+# Spawning in the harness is not unrestricted, it is restricted somewhere else:
+# every child process goes through `orrery-broker`, behind a capability token,
+# with containment and a watchdog (see `harness/docs/plans/07-policy-broker-audit.md`).
+# When the broker lands, add its sanctioned constructor here and ban the raw one.
+disallowed-methods = []

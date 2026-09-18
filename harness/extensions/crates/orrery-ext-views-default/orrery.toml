@@ -1,0 +1,12 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "views-default"
+version = "0.0.0"
+
+[provides]
+views = ["assistant.text", "tool.started", "tool.settled", "consent", "error"]
+
+# Pure rendering data. It touches nothing.
+[requires]

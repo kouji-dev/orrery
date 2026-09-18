@@ -1,0 +1,11 @@
+[package]
+name = "orrery-host-wasm"
+version = "0.0.0"
+description = "The wasmtime extension host: one Store per instance, resource limits, epoch deadlines and zero WASI preopens."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

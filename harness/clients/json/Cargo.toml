@@ -1,0 +1,11 @@
+[package]
+name = "orrery-client-json"
+version = "0.0.0"
+description = "The json Orrery renderer: line-delimited AG-UI events for CI, evals and adapters."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

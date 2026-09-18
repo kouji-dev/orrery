@@ -1,0 +1,11 @@
+[package]
+name = "orrery-proto"
+version = "0.1.0"
+description = "The wire and the shared types, and nothing else. No async, no I/O."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = true
+
+[dependencies]

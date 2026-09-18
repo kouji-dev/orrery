@@ -4292,6 +4292,206 @@ dependencies = [
 ]
 
 [[package]]
+name = "orrery-agui"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-audit"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-broker"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-cli"
+version = "0.0.0"
+dependencies = [
+ "clap",
+]
+
+[[package]]
+name = "orrery-client"
+version = "0.1.0"
+
+[[package]]
+name = "orrery-client-json"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-client-ratatui"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-config"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-eval"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-ext-agents-default"
+version = "0.0.0"
+dependencies = [
+ "orrery-ext-api",
+]
+
+[[package]]
+name = "orrery-ext-api"
+version = "0.1.0"
+
+[[package]]
+name = "orrery-ext-git"
+version = "0.0.0"
+dependencies = [
+ "orrery-ext-api",
+]
+
+[[package]]
+name = "orrery-ext-graders"
+version = "0.0.0"
+dependencies = [
+ "orrery-grader",
+]
+
+[[package]]
+name = "orrery-ext-lsp"
+version = "0.0.0"
+dependencies = [
+ "orrery-ext-api",
+]
+
+[[package]]
+name = "orrery-ext-memory-file"
+version = "0.0.0"
+dependencies = [
+ "orrery-memory",
+]
+
+[[package]]
+name = "orrery-ext-provider-anthropic"
+version = "0.0.0"
+dependencies = [
+ "orrery-provider",
+]
+
+[[package]]
+name = "orrery-ext-provider-fixture"
+version = "0.0.0"
+dependencies = [
+ "orrery-provider",
+]
+
+[[package]]
+name = "orrery-ext-provider-openai-compat"
+version = "0.0.0"
+dependencies = [
+ "orrery-provider",
+]
+
+[[package]]
+name = "orrery-ext-session-sqlite"
+version = "0.0.0"
+dependencies = [
+ "orrery-session",
+]
+
+[[package]]
+name = "orrery-ext-tools-builtin"
+version = "0.0.0"
+dependencies = [
+ "orrery-ext-api",
+]
+
+[[package]]
+name = "orrery-ext-views-default"
+version = "0.0.0"
+dependencies = [
+ "orrery-ext-api",
+]
+
+[[package]]
+name = "orrery-grader"
+version = "0.1.0"
+
+[[package]]
+name = "orrery-harness"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-host"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-host-rpc"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-host-wasm"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-jsonrpc"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-kernel"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-mcp"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-memory"
+version = "0.1.0"
+
+[[package]]
+name = "orrery-orchestrator"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-policy"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-proto"
+version = "0.1.0"
+
+[[package]]
+name = "orrery-provider"
+version = "0.1.0"
+
+[[package]]
+name = "orrery-registry"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-router"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-session"
+version = "0.1.0"
+
+[[package]]
+name = "orrery-skills"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-surface"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-tools"
+version = "0.0.0"
+
+[[package]]
+name = "orrery-transport"
+version = "0.0.0"
+
+[[package]]
 name = "orrery-updater"
 version = "0.1.0"
 dependencies = [
@@ -4300,6 +4500,10 @@ dependencies = [
  "winresource",
  "wry",
 ]
+
+[[package]]
+name = "orrery-wit"
+version = "0.0.0"
 
 [[package]]
 name = "osakit"
@@ -7922,6 +8126,15 @@ checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
  "rustix",
+]
+
+[[package]]
+name = "xtask"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

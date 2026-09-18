@@ -1,0 +1,11 @@
+[package]
+name = "orrery-wit"
+version = "0.0.0"
+description = "The WIT world as data plus the generated host bindings, including the flat-arena surface encoding."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

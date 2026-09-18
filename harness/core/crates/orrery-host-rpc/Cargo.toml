@@ -1,0 +1,11 @@
+[package]
+name = "orrery-host-rpc"
+version = "0.0.0"
+description = "Extension hosts that run a child process: node, python and plain process children, contained per platform."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

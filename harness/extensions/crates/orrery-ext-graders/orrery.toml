@@ -1,0 +1,15 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "graders"
+version = "0.0.0"
+
+[provides]
+graders = ["command", "assertion", "model"]
+
+# The `command` grader runs a process; the `model` grader calls a provider the
+# eval runner binds, so it needs no net grant of its own.
+[requires]
+spawn = ["*"]
+read = ["$WORKSPACE/**"]

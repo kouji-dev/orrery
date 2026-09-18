@@ -1,0 +1,15 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+# `session` is a singleton field: exactly one extension may claim it, and the
+# closer configuration layer wins.
+[extension]
+id = "sqlite"
+version = "0.0.0"
+
+[provides]
+session = "sqlite"
+
+[requires]
+read = ["$STATE/**"]
+write = ["$STATE/**"]

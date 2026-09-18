@@ -1,5 +1,9 @@
 packages:
   - ade
+  - harness/protocol
+  - harness/clients/sdk-ts
+  - harness/clients/ink
+  - harness/extensions/node/*
 
 # pnpm blocks dependency build/postinstall scripts by default (supply-chain
 # safety). These trusted native deps are explicitly allowed to run their install

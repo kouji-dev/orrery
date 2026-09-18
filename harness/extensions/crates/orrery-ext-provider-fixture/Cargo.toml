@@ -1,0 +1,15 @@
+[package]
+name = "orrery-ext-provider-fixture"
+version = "0.0.0"
+description = "A scripted provider that replays a recorded ModelEvent stream from a .jsonl file. Deterministic, no API key."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# Dependencies on core name BOTH halves: `version` makes this crate
+# publishable, `path` makes it build in-tree. At split time the path goes and
+# nothing else changes. See harness/extensions/README.md.
+[dependencies]
+orrery-provider = { version = "0.1", path = "../../../core/crates/orrery-provider" }

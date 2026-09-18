@@ -1,0 +1,14 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "builtin"
+version = "0.0.0"
+
+[provides]
+tools = ["read", "write", "edit", "bash", "grep", "glob"]
+
+[requires]
+read = ["$WORKSPACE/**"]
+write = ["$WORKSPACE/**"]
+spawn = ["*"]

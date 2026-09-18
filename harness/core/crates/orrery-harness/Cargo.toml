@@ -1,0 +1,11 @@
+[package]
+name = "orrery-harness"
+version = "0.0.0"
+description = "The facade: builds a Kernel from resolved config, owns the tokio runtime, links the first-party set behind features."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

@@ -1,0 +1,11 @@
+[package]
+name = "orrery-eval"
+version = "0.0.0"
+description = "The evaluation runner: isolation, results, compare, replay and cross-harness adapters."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

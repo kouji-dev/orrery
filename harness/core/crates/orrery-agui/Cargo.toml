@@ -1,0 +1,11 @@
+[package]
+name = "orrery-agui"
+version = "0.0.0"
+description = "The AG-UI encoder: kernel frames out to AG-UI events. Encode only, never decode."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

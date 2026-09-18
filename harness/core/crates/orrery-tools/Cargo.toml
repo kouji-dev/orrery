@@ -1,0 +1,11 @@
+[package]
+name = "orrery-tools"
+version = "0.0.0"
+description = "Tool namespacing, resolution, visibility and dispatch: the only path to a tool."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

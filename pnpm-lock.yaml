@@ -153,6 +153,12 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(jsdom@29.1.1)(vite@8.1.5(esbuild@0.28.2)(jiti@2.7.0)(sass@1.101.0))
 
+  harness/clients/ink: {}
+
+  harness/clients/sdk-ts: {}
+
+  harness/protocol: {}
+
 packages:
 
   '@ampproject/remapping@2.3.0':

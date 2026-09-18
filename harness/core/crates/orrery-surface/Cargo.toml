@@ -1,0 +1,11 @@
+[package]
+name = "orrery-surface"
+version = "0.0.0"
+description = "The kernel-side surface differ, its validation, the per-turn store and the seal at turn.settled."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

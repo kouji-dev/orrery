@@ -1,0 +1,11 @@
+[package]
+name = "orrery-kernel"
+version = "0.0.0"
+description = "The phase pipeline, the sync interceptor chain, context building and run_turn."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

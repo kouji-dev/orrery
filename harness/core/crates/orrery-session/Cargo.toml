@@ -1,0 +1,11 @@
+[package]
+name = "orrery-session"
+version = "0.1.0"
+description = "The turn tree, the SessionStore trait, the branch lease, and the pure materialise/compact algebra."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = true
+
+[dependencies]

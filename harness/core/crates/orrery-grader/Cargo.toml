@@ -1,0 +1,11 @@
+[package]
+name = "orrery-grader"
+version = "0.1.0"
+description = "The Grader trait and its input and score types, published so a grader extension never depends on the runner."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = true
+
+[dependencies]

@@ -1,0 +1,11 @@
+[package]
+name = "orrery-host"
+version = "0.0.0"
+description = "The ExtensionHost trait, the instance table keyed by generation id, the load/degrade/unload machine and the native runtime."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

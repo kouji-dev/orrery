@@ -1,0 +1,16 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "git"
+version = "0.0.0"
+
+[provides]
+tools = ["status", "diff", "log", "show", "branch", "commit"]
+
+# gitoxide reads and writes the repository in place. Push, fetch, clone and pull
+# shell out, so `spawn` is required for those subcommands only.
+[requires]
+read = ["$WORKSPACE/**"]
+write = ["$WORKSPACE/.git/**"]
+spawn = ["git"]

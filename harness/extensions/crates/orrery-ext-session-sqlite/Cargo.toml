@@ -1,0 +1,15 @@
+[package]
+name = "orrery-ext-session-sqlite"
+version = "0.0.0"
+description = "The default session backend: SQLite in WAL mode, one transaction per turn append, a writer actor per session."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# Dependencies on core name BOTH halves: `version` makes this crate
+# publishable, `path` makes it build in-tree. At split time the path goes and
+# nothing else changes. See harness/extensions/README.md.
+[dependencies]
+orrery-session = { version = "0.1", path = "../../../core/crates/orrery-session" }

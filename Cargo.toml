@@ -1,24 +1,90 @@
 [workspace]
 resolver = "2"
-members = ["ade/src-tauri", "ade/src-tauri/updater-stub"]
-default-members = ["ade/src-tauri"]
+members = [
+  "ade/src-tauri", "ade/src-tauri/updater-stub",
+  "harness/core/crates/*",
+  "harness/extensions/crates/*",
+  # clients/ also holds TypeScript packages, so it is listed crate by crate
+  # rather than globbed.
+  "harness/clients/sdk-rs", "harness/clients/ratatui", "harness/clients/json",
+  "harness/xtask",
+]
+# `cargo build` at the root builds the harness and no Tauri code.
+default-members = [
+  "harness/core/crates/*",
+  "harness/extensions/crates/*",
+  "harness/clients/sdk-rs", "harness/clients/ratatui", "harness/clients/json",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.86"
+license = "MIT"
+repository = "https://github.com/kouji-dev/orrery"
 
 # Shared version pins. Every member takes these with `{ workspace = true }` so
 # the ADE and the harness crates link ONE copy of each, not two.
 [workspace.dependencies]
+# --- reused from the ADE's tree, same versions, one resolution -------------
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2.0.18"
 rusqlite = { version = "0.40.0", features = ["bundled"] }
-uuid = { version = "1.23.2", features = ["v4", "serde"] }
+uuid = { version = "1.23.2", features = ["v4", "v7", "serde"] }
 blake3 = "1"
 regex = "1"
 semver = "1"
 clap = { version = "4.5", features = ["derive"] }
 toml_edit = "0.22"
 sha2 = "0.10"
+sysinfo = "0.33"
+windows-sys = "0.59"
+libc = "0.2"
 # reqwest mirrors tauri-plugin-updater's TLS setup exactly (rustls + ring, no
 # provider from reqwest itself) so no second crypto stack lands in the tree.
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 tempfile = "3.27.0"
+
+# --- new, each for a reason (see docs/plans/00-overview.md) ----------------
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+futures-core = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+async-trait = "0.1"
+globset = "0.4"
+dunce = "1"
+dashmap = "6"
+arc-swap = "1"
+parking_lot = "0.12"
+indexmap = { version = "2", features = ["serde"] }
+bytes = "1"
+getrandom = "0.2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+schemars = "0.8"
+jsonschema = "0.26"
+ciborium = "0.2"
+interprocess = { version = "2", features = ["tokio"] }
+axum = "0.7"
+tower = "0.5"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+wasmtime = "43"
+wasmtime-wasi = "43"
+wit-bindgen = "0.36"
+toml = "0.8"
+serde_yaml_ng = "0.10"
+ratatui = "0.29"
+crossterm = "0.28"
+# dev
+insta = "1"
+proptest = "1"
+tokio-test = "0.4"
+
+# --- harness crates, by path + version (both halves) ----------------------
+orrery-proto = { version = "0.1.0", path = "harness/core/crates/orrery-proto" }
+orrery-ext-api = { version = "0.1.0", path = "harness/core/crates/orrery-ext-api" }
+orrery-provider = { version = "0.1.0", path = "harness/core/crates/orrery-provider" }
+orrery-session = { version = "0.1.0", path = "harness/core/crates/orrery-session" }
+orrery-memory = { version = "0.1.0", path = "harness/core/crates/orrery-memory" }
+orrery-grader = { version = "0.1.0", path = "harness/core/crates/orrery-grader" }

@@ -1,0 +1,13 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "fixture"
+version = "0.0.0"
+
+[provides]
+providers = ["fixture"]
+
+# Reads the recorded .jsonl stream it replays, and nothing else. No network.
+[requires]
+read = ["$WORKSPACE/**"]

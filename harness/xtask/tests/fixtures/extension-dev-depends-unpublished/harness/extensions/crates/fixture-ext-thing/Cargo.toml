@@ -1,0 +1,10 @@
+[package]
+name = "fixture-ext-thing"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+fixture-core-kernel = { version = "0.0.0", path = "../../../core/crates/fixture-core-kernel" }

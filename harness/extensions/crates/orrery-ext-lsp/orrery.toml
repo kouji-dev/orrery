@@ -1,0 +1,13 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+[extension]
+id = "lsp"
+version = "0.0.0"
+
+[provides]
+tools = ["hover", "definition", "references", "diagnostics", "symbols"]
+
+[requires]
+read = ["$WORKSPACE/**"]
+spawn = ["*"]

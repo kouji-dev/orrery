@@ -1,0 +1,11 @@
+[package]
+name = "orrery-client"
+version = "0.1.0"
+description = "The Rust Orrery client SDK: an AG-UI session and a SurfaceStore. Pure data, no drawing."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = true
+
+[dependencies]

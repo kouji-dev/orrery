@@ -1,0 +1,15 @@
+api = "orrery-ext/1"
+runtime = "native"
+
+# `memory` is a singleton field. This is the reference provider and is
+# deliberately NOT in any default feature set — see harness/docs/plans/12-memory.md.
+[extension]
+id = "memory-file"
+version = "0.0.0"
+
+[provides]
+memory = "file"
+
+[requires]
+read = ["$STATE/memory/**"]
+write = ["$STATE/memory/**"]

@@ -1,0 +1,11 @@
+[package]
+name = "orrery-router"
+version = "0.0.0"
+description = "Roles, bindings, declarative rules, and the sync signals-to-decision function. Returns data, acts on nothing."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]

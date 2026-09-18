@@ -1,0 +1,11 @@
+[package]
+name = "orrery-mcp"
+version = "0.0.0"
+description = "The MCP client and server: an MCP server is an extension id like any other."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
