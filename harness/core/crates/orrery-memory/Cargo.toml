@@ -8,4 +8,29 @@ license.workspace = true
 repository.workspace = true
 publish = true
 
+# Published, because `orrery-ext-memory-file` depends on it and `deps-check`
+# rule 2 says an extension reaches core only through published crates. That is
+# why the permission check and the audit stream are **traits here** rather than
+# direct dependencies on `orrery-policy` and `orrery-audit`, both of which are
+# `publish = false`: the real engine is wired in by the host, and by this
+# crate's own tests.
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-session = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+# The real rule grammar, so `perm::mem_write_global_can_be_denied` is a test of
+# `deny = ["mem.write(global)"]` as written, not of a stub. A dev-dependency, so
+# the published crate still carries nothing unpublished.
+orrery-policy = { path = "../orrery-policy" }
+orrery-audit = { path = "../orrery-audit" }
+# `clamp::order_is_prefix_then_memory` asserts against the real `ContextDraft`
+# from plan 05 rather than a copy of its field order.
+orrery-kernel = { path = "../orrery-kernel" }
