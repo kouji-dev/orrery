@@ -53,6 +53,31 @@ fn orrery_harness_is_the_one_exception() {
     assert_eq!(violations("harness-facade-exception"), Vec::<String>::new());
 }
 
+/// Rule 1's second allow-list entry: a **binary-only** `core/` crate is the
+/// composition root, and 00-overview's crate table has it linking the clients
+/// (`orrery-cli` → `client-ratatui`, `client-json`). A library may not.
+#[test]
+fn a_core_binary_may_link_a_client() {
+    assert_eq!(violations("core-binary-links-client"), Vec::<String>::new());
+}
+
+/// …and the same dependency from a core **library** is still a violation.
+#[test]
+fn a_core_library_may_not_link_a_client() {
+    let found = violations("core-lib-links-client");
+    assert_eq!(
+        found.len(),
+        1,
+        "expected exactly one violation, got {found:#?}"
+    );
+    let msg = &found[0];
+    assert!(msg.contains("fixture-core-lib"), "names the library: {msg}");
+    assert!(
+        msg.contains("fixture-client-renderer"),
+        "names the client: {msg}"
+    );
+}
+
 /// Rule 2 — an `extensions/` → `core/` dependency must carry a version, or the
 /// crate cannot be published.
 #[test]

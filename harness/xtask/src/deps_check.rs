@@ -2,9 +2,14 @@
 //!
 //! Three rules, from `harness/docs/plans/00-overview.md`:
 //!
-//! 1. No `core/` crate depends on an `extensions/` or `clients/` crate. Exactly
-//!    one exception: [`FACADE`], which links the first-party set behind cargo
-//!    features.
+//! 1. No `core/` crate depends on an `extensions/` or `clients/` crate. Two
+//!    exceptions, and both are composition roots rather than libraries:
+//!    [`FACADE`], which links the first-party extension set behind cargo
+//!    features, and any **binary-only** core crate — `orrery-cli`, which
+//!    00-overview's crate table has linking `client-ratatui` and `client-json`.
+//!    A binary is the one place where the wiring is allowed to be concrete;
+//!    a core *library* that named a client would put a renderer underneath the
+//!    kernel, which is the thing the rule exists to stop.
 //! 2. Every `extensions/` → `core/` dependency names a `publish = true` crate
 //!    **and** carries a `version`. `version` is what makes an extension
 //!    publishable; `path` is only what makes it build in-tree.
@@ -87,14 +92,39 @@ struct Package {
     #[serde(default)]
     publish: Option<Vec<String>>,
     dependencies: Vec<Dependency>,
+    #[serde(default)]
+    targets: Vec<Target>,
 }
 
 impl Package {
+    /// Whether this crate produces no library at all: a binary, and therefore a
+    /// composition root rather than something another crate can link.
+    fn is_binary_only(&self) -> bool {
+        !self.targets.iter().any(Target::is_library)
+    }
+
     fn is_published(&self) -> bool {
         match &self.publish {
             None => true,
             Some(registries) => !registries.is_empty(),
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct Target {
+    /// `["lib"]`, `["bin"]`, `["test"]`, `["custom-build"]`, …
+    kind: Vec<String>,
+}
+
+impl Target {
+    fn is_library(&self) -> bool {
+        self.kind.iter().any(|k| {
+            matches!(
+                k.as_str(),
+                "lib" | "rlib" | "dylib" | "cdylib" | "staticlib" | "proc-macro"
+            )
+        })
     }
 }
 
@@ -174,15 +204,21 @@ fn check_metadata(metadata: &Metadata) -> Vec<String> {
             };
             let target_area = Area::of(&target.manifest_path, &metadata.workspace_root);
 
-            // Rule 1.
+            // Rule 1. The facade may link an extension; a binary-only core
+            // crate — the composition root — may link a client.
+            let excused = match target_area {
+                Area::Extension => package.name == FACADE,
+                Area::Client => package.is_binary_only(),
+                _ => false,
+            };
             if area == Area::Core
                 && matches!(target_area, Area::Extension | Area::Client)
-                && package.name != FACADE
+                && !excused
             {
                 violations.push(format!(
                     "rule 1: core crate `{}` depends on {} crate `{}` — \
-                     no core crate may depend on extensions/ or clients/ \
-                     (the only exception is `{FACADE}`)",
+                     no core library may depend on extensions/ or clients/ \
+                     (the exceptions are `{FACADE}` and a binary-only crate)",
                     package.name,
                     target_area.label(),
                     target.name,

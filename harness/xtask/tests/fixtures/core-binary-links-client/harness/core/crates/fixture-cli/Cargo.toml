@@ -1,0 +1,14 @@
+[package]
+name = "fixture-cli"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# No `[lib]`: this crate is a binary, the composition root. It is allowed to
+# link a client, exactly as `orrery-harness` is allowed to link an extension.
+[[bin]]
+name = "fixture-cli"
+path = "src/main.rs"
+
+[dependencies]
+fixture-client-renderer = { path = "../../../clients/renderer" }
