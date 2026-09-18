@@ -495,12 +495,14 @@ struct RawExtension {
 
 impl RawManifest {
     fn resolve(self, file: String) -> Result<ExtensionManifest, ManifestError> {
-        let api = self.extension.api.or(self.api).ok_or_else(|| {
-            ManifestError::MissingField {
+        let api = self
+            .extension
+            .api
+            .or(self.api)
+            .ok_or_else(|| ManifestError::MissingField {
                 file: file.clone(),
                 field: "api",
-            }
-        })?;
+            })?;
         if !api.is_supported() {
             return Err(ManifestError::UnknownApi {
                 file,
@@ -509,14 +511,12 @@ impl RawManifest {
             });
         }
 
-        let name = self
-            .extension
-            .name
-            .or(self.extension.id)
-            .ok_or_else(|| ManifestError::MissingField {
+        let name = self.extension.name.or(self.extension.id).ok_or_else(|| {
+            ManifestError::MissingField {
                 file: file.clone(),
                 field: "extension.name",
-            })?;
+            }
+        })?;
         let name = ExtId::new(name).map_err(|e| ManifestError::BadName {
             file: file.clone(),
             message: e.to_string(),
