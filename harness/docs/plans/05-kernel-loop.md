@@ -317,7 +317,9 @@ Files: `src/turn.rs`
 
 ## Done when
 
-- `cargo test -p orrery-kernel` and `-p orrery-harness` green. **46 tests.** The
+- `cargo test -p orrery-kernel` and `-p orrery-harness` green. **54 tests**
+  (~~46~~ — amended: 46 was the `orrery-harness` suites alone and left out the
+  kernel's own 8; measured, it is 46 + 8). The
   kernel's own binary runs its unit tests and the two `phase.rs` doctests, one
   of which is the compile-fail that is translation #2's proof; the six
   behavioural suites run under `-p orrery-harness`, for the dependency reason

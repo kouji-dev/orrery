@@ -209,8 +209,12 @@ Files: `src/import.rs`, `tests/import.rs`
   agents* — different model, different visible tool set, `review` denied a
   write that `ci` is allowed, `ci` refusing a spawn that `review` asks about —
   asserted in `profile::two_profiles_differ_measurably`. They are not fed to a
-  kernel: `orrery-kernel` is plan 03's and was an empty stub when this landed, so `Assembled` is
-  exactly the set of inputs a kernel takes.
+  kernel. **The caveat holds; its reason was wrong and is corrected here:**
+  `orrery-kernel` is **plan 05**'s, not plan 03's, and it is not an empty stub —
+  it landed in wave 3 with a working loop. Nothing here feeds a profile to it,
+  because wiring config to the kernel is the CLI's job and `orrery-cli` is still
+  a stub (plan 17). `Assembled` is exactly the set of inputs a kernel takes, and
+  that is still all this plan claims.
 - A Claude Code settings file imports into working rules. **True** —
   `import::claude_code_permissions` round-trips a real-shaped fixture through a
   real `PolicyEngine` and checks the verdicts.

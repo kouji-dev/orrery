@@ -218,7 +218,15 @@ Files: `orrery-transport/src/lib.rs`
 
 - `cargo test -p orrery-transport -p orrery-agui -p orrery-client -p orrery-client-json` green; `pnpm -C harness/clients/sdk-ts test` green.
 - The **same** conformance fixtures pass in Rust and TypeScript.
-- `orrery serve --provider fixture:…` accepts a ratatui client and an Ink client on one session simultaneously; both render the turn.
+- ~~`orrery serve --provider fixture:…` accepts a ratatui client and an Ink
+  client on one session simultaneously; both render the turn.~~
+  **Not true, and amended here rather than caveated below: none of the three
+  pieces exists.** The ratatui client is plan 09b, the Ink client is plan 09c,
+  and the `orrery serve` command is plan 17; all three are unlanded. What this
+  plan does have is the property those two clients would be exercising — one
+  session fans out to many attached clients over the same transport, with the
+  same conformance fixtures passing in Rust and TypeScript. Two *fixture*
+  clients on one session is what is asserted; two *real* TUIs is not.
 - A client that stops reading does not stall the kernel.
 
 ## Open questions

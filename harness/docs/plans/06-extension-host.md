@@ -319,7 +319,14 @@ Files: `extensions/node/ext-sdk/*`
   `builtin::read_respects_the_output_ceiling` reads 10 MB under a 4 KB ceiling
   and asserts, through `LimitedReader`'s own pull counter, that no more than the
   ceiling plus one 8 KB buffer was ever pulled from the file.
-- `orrery ext test` runs an extension with no model and no network.
+- ~~`orrery ext test` runs an extension with no model and no network.~~
+  **Not true, and amended here rather than caveated below: the command is not
+  wired.** Plan 17 owns `orrery ext test` and has not landed. What exists is the
+  harness it will call — `orrery_ext_api::testing::load_for_test`, with the mock
+  broker, the recorded calls and the real ledger — and it is under test in
+  `orrery-ext-api/tests/testing.rs` and used by `orrery-ext-views-default`'s own
+  suite, which loads a real bundle through it with no model and no network. The
+  no-model, no-network property holds; the *command* does not exist.
 
 ## Open questions
 
