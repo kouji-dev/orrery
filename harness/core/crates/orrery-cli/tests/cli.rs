@@ -113,21 +113,14 @@ fn a_typo_is_not_an_interactive_session() {
 /// A subcommand that has not landed yet exits 2 and names the plan file that
 /// will implement it, so the tree is complete from phase 0 and fills in.
 ///
-/// `run`, `serve`, `attach` and `ext` are no longer on this list: they are
-/// implemented, and their own suites cover them.
+/// `run`, `serve`, `attach`, `ext test`, `session list|show`, both `explain`s,
+/// `init` and `import` are no longer on this list: they are implemented, and
+/// their own suites cover them.
 #[test]
 fn unimplemented_subcommands_name_their_plan() {
     let cases: &[(&[&str], &str)] = &[
         (&["replay", "s1"], "17-cli.md"),
-        (&["session", "list"], "02-session-store.md"),
         (&["ext", "install", "x"], "15-registry-supply-chain.md"),
-        (
-            &["permissions", "explain", "read"],
-            "07-policy-broker-audit.md",
-        ),
-        (&["config", "explain", "model"], "10-config-layers.md"),
-        (&["init"], "10-config-layers.md"),
-        (&["import"], "10-config-layers.md"),
         (&["eval", "run", "suite"], "16-eval-runner.md"),
         (&["ledger"], "07-policy-broker-audit.md"),
         (&["telemetry"], "07-policy-broker-audit.md"),
@@ -163,5 +156,21 @@ fn not_implemented_does_not_pollute_stdout() {
         out.stdout.is_empty(),
         "stdout must stay clean: {:?}",
         String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+
+/// `session rm` is in the tree, takes `--yes`, and refuses for a reason that is
+/// about the store rather than about this plan: there is no delete on
+/// `SessionStore`, and plan 02 parked retention. It says so.
+#[test]
+fn session_rm_names_the_missing_piece() {
+    let out = orrery(&["session", "rm", "s1", "--yes"]);
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("02-session-store.md"), "{stderr}");
+    assert!(
+        stderr.contains("retention"),
+        "and why, not just which file: {stderr}"
     );
 }

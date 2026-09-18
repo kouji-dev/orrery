@@ -8,6 +8,7 @@ pub mod ext;
 pub mod import;
 pub mod interactive;
 pub mod init;
+pub mod layers;
 pub mod ledger;
 pub mod permissions;
 pub mod replay;

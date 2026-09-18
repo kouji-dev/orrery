@@ -121,3 +121,35 @@ pub fn event_types(stdout: &[u8]) -> Vec<String> {
         })
         .collect()
 }
+
+/// Run the binary with a **sandboxed home**: `HOME`, `USERPROFILE` and
+/// `ProgramData` all point inside `home`, so a test that resolves config layers
+/// reads what it wrote and never the developer's own `~/.orrery`.
+#[must_use]
+pub fn orrery_in(home: &Path, args: &[String]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_orrery"))
+        .args(args)
+        .env("COLUMNS", "100")
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("ProgramData", home.join("ProgramData"))
+        .stdin(Stdio::null())
+        .output()
+        .expect("the orrery binary runs")
+}
+
+/// A home directory with a user config layer in it, and nothing else.
+#[must_use]
+pub fn home_with(config: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().expect("a temporary home");
+    std::fs::create_dir_all(dir.path().join(".orrery")).expect("the user directory");
+    std::fs::write(dir.path().join(".orrery/config.toml"), config).expect("the user config");
+    dir
+}
+
+/// Everything after the command in a sandboxed run: a workspace, and no
+/// provider, because none of these commands starts a model.
+#[must_use]
+pub fn quiet(dir: &Path) -> Vec<String> {
+    vec!["--workspace".to_owned(), dir.display().to_string()]
+}
