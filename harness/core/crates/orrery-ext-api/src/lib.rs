@@ -4,3 +4,10 @@
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
+
+pub mod manifest;
+
+pub use manifest::{
+    ApiVersion, ExtensionManifest, ManifestError, ProcessSpec, Provides, Requirement, RuntimeKind,
+    SingletonSlot, SUPPORTED_API_MAJOR,
+};
