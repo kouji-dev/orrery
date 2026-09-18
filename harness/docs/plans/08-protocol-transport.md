@@ -55,6 +55,7 @@ And one tension named rather than papered over: **AG-UI's shared state is bidire
 | `turn.started` / `turn.settled` / `error` | `RunStarted` / `RunFinished` / `RunError` |
 | `delta` carrying text | `TextMessageStart` / `Content` / `End` |
 | `tool.started` / `tool.settled` | `ToolCallStart` / `Args` / `ToolCallResult` / `End` |
+| `delta` on the surface whose id **is** an open call's id | `ToolCallArgs` — our frames have no argument event; the call's own surface carries them |
 | `delta` carrying a `SurfacePatch` | `StateDelta` — our four ops are already JSON-Patch in shape |
 | step boundary, mode change (§4.6) | `StepStarted` / `StepFinished`, `ActivitySnapshot` |
 | sub-agent spawn and return (§4.10) | `SubagentStarted` / `Finished` / `Error` |
@@ -132,7 +133,7 @@ Files: `harness/clients/conformance/*`
 The fixtures are the contract between five implementations. They come before any of them.
 
 - [x] Define the format in `README.md`: one JSONL file per scenario; each line is either `{"ev": <AguiEvent>}` or `{"expect": <SurfaceStore state>}`.
-- [x] Write the scenarios: `text-only`, `tool-call`, `streaming-markdown` (partial fences), `consent-prompt`, `question-surface`, `table-then-resort` (the cost-guard case), `seq-gap`, `reattach-since`, `cancel-midturn`, `custom-with-fallback`.
+- [x] Write the scenarios: `text-only`, `tool-call`, `tool-args-interleaved`, `streaming-markdown` (partial fences), `consent-prompt`, `question-surface`, `table-then-resort` (the cost-guard case), `seq-gap`, `reattach-since`, `cancel-midturn`, `custom-with-fallback`.
 - [x] Each scenario must be derivable from one of plan 03's six provider stream fixtures, so the same turn can be driven end-to-end or replayed as events alone.
 
 ### Task 2 · AG-UI encoder
@@ -142,6 +143,12 @@ Files: `orrery-agui/src/*`
 - [x] **Failing test first.** `agui::maps_every_frame` — a table over every `Event` variant asserting the AG-UI event(s) it produces; fails until each mapping lands.
 - [x] `agui::state_delta_is_json_patch_shaped` — a `SurfacePatch::Set` encodes as an RFC 6902 `replace` op with the right path.
 - [x] `agui::consent_is_custom` — round-trips through `Custom` with name and payload intact.
+- [x] **Added after the fact:** `agui::tool_args_are_emitted` and
+  `agui::interleaved_calls_keep_their_arguments`. `TOOL_CALL_ARGS` was in the
+  enum and never constructed, so a client saw a call start and end with no
+  input between them. A `delta` on an open call's surface is that call's
+  arguments; `clients/conformance/tool-args-interleaved.jsonl` is the
+  seventeenth scenario and pins the reconstruction in both SDKs.
 - [x] Implement the vendored event enum and the encoder.
 - [x] `cargo xtask agui-drift` — fetch upstream's schema, diff variant names, fail on unknown additions. Networked, so CI-only and skippable offline.
 
