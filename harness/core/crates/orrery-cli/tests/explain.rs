@@ -129,3 +129,68 @@ fn config_explain_says_when_nobody_set_it() {
     assert_eq!(v["contributions"].as_array().map(Vec::len), Some(0));
     assert!(v["winner"].is_null());
 }
+
+/// Round 5, item 5: `--profile X` is not decoration. With `model` set under
+/// `[profile.review]`, `config explain model` must answer from the profile
+/// overlay rather than reporting the bare key nobody set.
+#[test]
+fn config_explain_reads_the_profile_overlay() {
+    let home = home_with(
+        "model = \"sonnet\"\n\
+         [profile.review]\n\
+         model = \"review-model\"\n",
+    );
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(
+        home.path(),
+        &args(
+            &quiet(ws.path()),
+            &[
+                "--json",
+                "--profile",
+                "review",
+                "config",
+                "explain",
+                "model",
+            ],
+        ),
+    );
+    assert!(out.status.success(), "explaining is not a failure");
+    let v = &jsonl(&out.stdout)[0];
+    assert_eq!(v["key"], "model");
+    assert_eq!(
+        v["winner"]["value"], "review-model",
+        "the profile overlay wins over the bare key: {v}"
+    );
+    assert_eq!(
+        v["resolved_from"], "profile.review.model",
+        "and the answer says which key it actually read: {v}"
+    );
+    // The bare key is still reported, as the thing the overlay beat.
+    assert!(
+        v["contributions"]
+            .as_array()
+            .is_some_and(|c| c.iter().any(|c| c["value"] == "sonnet")),
+        "the bare key is still named: {v}"
+    );
+}
+
+/// And the raw dotted path keeps working, unchanged, with or without a profile.
+#[test]
+fn config_explain_still_takes_the_raw_dotted_path() {
+    let home = home_with("[profile.review]\nmodel = \"review-model\"\n");
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(
+        home.path(),
+        &args(
+            &quiet(ws.path()),
+            &["--json", "config", "explain", "profile.review.model"],
+        ),
+    );
+    assert!(out.status.success());
+    let v = &jsonl(&out.stdout)[0];
+    assert_eq!(v["key"], "profile.review.model");
+    assert_eq!(v["winner"]["value"], "review-model");
+}

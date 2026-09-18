@@ -184,8 +184,19 @@ impl ResolvedConfig {
     }
 
     /// Where one key's value came from, and what it beat.
+    ///
+    /// Reads the profile in force as the overlay it is: with `--profile review`
+    /// and `model` set under `[profile.review]`, asking about `model` answers
+    /// from there and says so. A key that already names a profile is taken
+    /// literally.
     #[must_use]
     pub fn explain(&self, key: &str) -> Explanation {
+        explain::explain_in(&self.values, key, Some(self.profile.name.as_str()))
+    }
+
+    /// The same, ignoring the profile overlay: the raw dotted path only.
+    #[must_use]
+    pub fn explain_raw(&self, key: &str) -> Explanation {
         explain::explain(&self.values, key)
     }
 

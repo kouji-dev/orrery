@@ -27,6 +27,14 @@ pub struct Contribution {
 pub struct Explanation {
     /// The key asked about.
     pub key: String,
+    /// The key actually read.
+    ///
+    /// The same as [`key`](Self::key) unless a profile overlay answered: with
+    /// `--profile review` and `model` set under `[profile.review]`, this is
+    /// `profile.review.model`. Naming it is the difference between an answer
+    /// and a riddle — the person asked about `model` and the value they are
+    /// looking at is not written next to that word anywhere.
+    pub resolved_from: String,
     /// How it folds: closest-wins, or a union.
     pub fold: Fold,
     /// Every layer that set it, winner first.
@@ -63,18 +71,15 @@ impl fmt::Display for Explanation {
                 writeln!(f)?;
             }
             let layer = format!("{:?}", c.origin.layer).to_lowercase();
+            let key = &self.resolved_from;
             if c.in_force {
                 let word = match self.fold {
                     Fold::Union => "in force (union)",
                     Fold::Override => "in force",
                 };
-                write!(f, "{} = {} — {layer}, {} — {word}", self.key, c.value, c.origin)?;
+                write!(f, "{key} = {} — {layer}, {} — {word}", c.value, c.origin)?;
             } else {
-                write!(
-                    f,
-                    "{} = {} — {layer}, {} — shadowed",
-                    self.key, c.value, c.origin
-                )?;
+                write!(f, "{key} = {} — {layer}, {} — shadowed", c.value, c.origin)?;
             }
         }
         Ok(())
@@ -85,7 +90,62 @@ impl fmt::Display for Explanation {
 #[must_use]
 pub fn explain(values: &Provenanced, key: &str) -> Explanation {
     let fold = values.fold(key).unwrap_or(Fold::Override);
-    let contributions = values
+    Explanation {
+        key: key.to_owned(),
+        resolved_from: key.to_owned(),
+        fold,
+        contributions: contributions(values, key, fold),
+    }
+}
+
+/// Explain one key **as a profile sees it**.
+///
+/// A profile is an overlay, so `--profile review` asking about `model` is
+/// asking about `profile.review.model` *and* about `model`, in that order. A
+/// bare key that a profile overrode is still printed, as shadowed: naming only
+/// the winner is how somebody spends an afternoon editing a file that is not in
+/// force, and that reasoning does not stop being true one key deeper.
+///
+/// A key that already names a profile explicitly — `profile.review.model` — is
+/// left exactly as it was typed, so the raw dotted path keeps working.
+#[must_use]
+pub fn explain_in(values: &Provenanced, key: &str, profile: Option<&str>) -> Explanation {
+    let Some(profile) = profile.filter(|p| !p.is_empty()) else {
+        return explain(values, key);
+    };
+    if key.starts_with("profile.") {
+        return explain(values, key);
+    }
+    let overlaid = format!("profile.{profile}.{key}");
+    let fold = values
+        .fold(&overlaid)
+        .or_else(|| values.fold(key))
+        .unwrap_or(Fold::Override);
+    let mut from_profile = contributions(values, &overlaid, fold);
+    if from_profile.is_empty() {
+        // Nothing under the profile: the bare key is the whole answer, and the
+        // key it was read from is the one that was typed.
+        return explain(values, key);
+    }
+    // Everything the overlay beat, which under an override is all of it.
+    let mut beaten = contributions(values, key, fold);
+    if fold == Fold::Override {
+        for c in &mut beaten {
+            c.in_force = false;
+        }
+    }
+    from_profile.extend(beaten);
+    Explanation {
+        key: key.to_owned(),
+        resolved_from: overlaid,
+        fold,
+        contributions: from_profile,
+    }
+}
+
+/// Every layer that set one key, winner first.
+fn contributions(values: &Provenanced, key: &str, fold: Fold) -> Vec<Contribution> {
+    values
         .all(key)
         .iter()
         .enumerate()
@@ -96,12 +156,7 @@ pub fn explain(values: &Provenanced, key: &str) -> Explanation {
             // the closest does.
             in_force: fold == Fold::Union || i == 0,
         })
-        .collect();
-    Explanation {
-        key: key.to_owned(),
-        fold,
-        contributions,
-    }
+        .collect()
 }
 
 #[cfg(test)]
@@ -155,6 +210,40 @@ mod tests {
         assert!(explained.shadowed().is_empty(), "deny is a union: {explained}");
         assert_eq!(explained.contributions.len(), 2);
         assert!(explained.to_string().contains("union"));
+    }
+
+    /// Round 5: a profile is an overlay, and `explain_in` reads it.
+    #[test]
+    fn a_profile_overlay_wins_and_names_the_key_it_read() {
+        let vals = values(&[LayerFile::new(
+            Layer::User,
+            "user.toml",
+            "model = \"sonnet\"
+[profile.review]
+model = \"review-model\"
+",
+        )]);
+
+        let explained = explain_in(&vals, "model", Some("review"));
+        assert_eq!(explained.resolved_from, "profile.review.model");
+        let winner = explained.winner().expect("the overlay is in force");
+        assert_eq!(winner.value.as_str(), Some("review-model"));
+        let shadowed = explained.shadowed();
+        assert_eq!(shadowed.len(), 1, "the bare key is still named: {explained}");
+        assert_eq!(shadowed[0].value.as_str(), Some("sonnet"));
+
+        // A profile that sets nothing falls through to the bare key.
+        let plain = explain_in(&vals, "model", Some("other"));
+        assert_eq!(plain.resolved_from, "model");
+        assert_eq!(
+            plain.winner().and_then(|c| c.value.as_str()),
+            Some("sonnet")
+        );
+
+        // And an explicit dotted path is left exactly as typed.
+        let raw = explain_in(&vals, "profile.review.model", Some("review"));
+        assert_eq!(raw.resolved_from, "profile.review.model");
+        assert_eq!(raw.contributions.len(), 1);
     }
 
     #[test]

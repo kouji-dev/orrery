@@ -45,6 +45,7 @@ fn contribution(c: &Contribution) -> serde_json::Value {
 fn json(explanation: &Explanation) -> serde_json::Value {
     serde_json::json!({
         "key": explanation.key,
+        "resolved_from": explanation.resolved_from,
         "fold": match explanation.fold {
             Fold::Union => "union",
             Fold::Override => "override",
