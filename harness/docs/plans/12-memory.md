@@ -176,7 +176,7 @@ Files: `src/lib.rs`
 
 - `cargo test -p orrery-memory -p orrery-ext-memory-file` green, including both compile-fail tests. **True** — 20 test-binary cases across eight binaries, plus 4 doctests, two of which are the compile-fails.
 - A sub-agent's branch-scoped notes vanish with the branch, with no cleanup code anywhere. **True** — `scope::branch_scope_dies_with_the_branch` calls nothing but `drop(guard)`.
-- A replayed session reproduces its context even after the memory store has changed. **True** — `record::recalled_is_in_the_turn` swaps the whole provider between the two halves.
+- A replayed session reproduces its context even after the memory store has changed. **True, and now at the kernel too.** `record::recalled_is_in_the_turn` proves the algebra with hand-built `TurnRow`s; `orrery-harness`'s `memory::a_turn_records_what_memory_contributed` proves the writing — a real turn through the real kernel against the real sqlite store, provider swapped between the halves, same context.
 - `mem.write(global)` can be denied per subject. **True** — `perm::mem_write_global_can_be_denied`, through the real `PolicyEngine`.
 - ~~The file provider is off behind an `orrery-harness` feature.~~ **Amended: half true.** No build links it, because nothing in `orrery-harness` names it at all; the named `memory-file` feature on the facade is not wired, because this wave forbids editing that crate. See task 7.
 
@@ -214,9 +214,20 @@ value in this crate rather than dependencies on `orrery-policy` and `orrery-audi
 which are both `publish = false`; and the `memory-file` feature on `orrery-harness` is
 not wired, because that crate belongs to another agent this wave.
 
-One follow-up, and it is small. Add `memory-file = ["dep:orrery-ext-memory-file"]` to
-`orrery-harness`, outside its `default` set, and have the facade build a `MemoryKernel`
-from resolved config: wire `PolicyEngine` into `MemPermissions`, drain
-`MemoryKernel::ledger()` into the audit stream, and fill the `MemoryRecall` hole in
-`orrery-kernel::context` with `MemoryKernel::recall`. Nothing in this plan required
-changing that hole, and it is still where `recall` plugs in.
+**Amended 2026-09-18 — the kernel writes the row.** `orrery-kernel`'s
+`turn.rs` carried `TODO(plan-12)`: nothing wrote a `TurnKind::Recalled` row, so
+this plan's third Done-when held only inside this crate. It does now. The kernel
+reads memory **once per turn**, at turn start, and appends one `Recalled` row per
+contributing provider before the `User` row and inside the compaction floor;
+`context.build` no longer reads memory at all, because a row in the branch plus
+an injection would send the same content twice. `MemoryRecall` grew
+`recall_rows`, which is what keeps one row per provider (open question 1's
+answer, now load-bearing). `orrery-harness::KernelMemory` is the adapter, and the
+facade is the one crate allowed to name both halves.
+
+Two follow-ups remain, both small. Add `memory-file =
+["dep:orrery-ext-memory-file"]` to `orrery-harness`, outside its `default` set,
+and have the facade build the `MemoryKernel` **from resolved config** rather than
+leaving an embedder to construct one: wire `PolicyEngine` into `MemPermissions`,
+drain `MemoryKernel::ledger()` into the audit stream, and build the `Actor` from
+the branch the turn runs on.
