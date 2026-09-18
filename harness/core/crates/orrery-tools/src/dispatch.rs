@@ -9,6 +9,7 @@ use orrery_proto::{AgentScope, CallId, Outcome, RuleId, Subject, ToolRef, Verdic
 
 use crate::budget::ToolBudget;
 use crate::error::ToolError;
+use crate::registry::Registry;
 
 /// Everything one call needs that is not its input.
 ///
@@ -165,3 +166,176 @@ pub trait ToolInterceptor: Send + Sync {
     }
 }
 
+
+impl Registry {
+    /// Run one tool call, all seven steps, and report how it went.
+    ///
+    /// ```
+    /// # use std::sync::Arc;
+    /// # use orrery_proto::{AgentScope, BranchId, CallId, Grant, Layer, Subject, ToolRef};
+    /// # use orrery_tools::{CallCtx, Registry, ToolBudget, ToolSpec};
+    /// # async fn example() {
+    /// let mut registry = Registry::new();
+    /// registry.register(&"builtin".parse().unwrap(), Layer::Project, ToolSpec::new("read"));
+    ///
+    /// let scope = AgentScope {
+    ///     agent: "main".into(),
+    ///     branch: BranchId::new(),
+    ///     tools: vec!["builtin.*".into()],
+    ///     grant: Grant::nothing(),
+    /// };
+    /// let ctx = CallCtx::new(
+    ///     CallId::new(),
+    ///     Subject::Agent,
+    ///     scope,
+    ///     ToolBudget::new(30_000, 1 << 20),
+    /// );
+    /// let r#ref: ToolRef = "builtin.read".parse().unwrap();
+    /// let outcome = registry.dispatch(&r#ref, serde_json::json!({}), ctx).await;
+    /// assert!(outcome.is_ok());
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError`] when the harness itself could not carry the call: an
+    /// unknown reference, an unusable schema, an unreachable host. A refusal is
+    /// **not** an error — it is `Ok(Outcome::Denied)`.
+    pub async fn dispatch(
+        &self,
+        r#ref: &ToolRef,
+        input: serde_json::Value,
+        ctx: CallCtx,
+    ) -> Result<Outcome, ToolError> {
+        // 1 · `tool.resolve` interceptors.
+        let mut r#ref = r#ref.clone();
+        for i in &self.interceptors {
+            match i.on_resolve(&r#ref) {
+                Verdict::Continue => {}
+                Verdict::Rewrite(next) => r#ref = next,
+                Verdict::Deny { reason } => return Ok(denied(reason)),
+                Verdict::Handled { result } => return Ok(result),
+                // `Verdict` is `#[non_exhaustive]`: a variant this crate has
+                // not been taught about is not a licence to skip a step.
+                _ => {}
+            }
+        }
+
+        let entry = self
+            .entries
+            .get(&r#ref)
+            .ok_or_else(|| ToolError::NoSuchTool {
+                name: r#ref.to_string(),
+            })?;
+
+        // A tool the scope was never offered is refused, not called. This is
+        // what makes `visible` a real subset rather than a prompt-level hint.
+        if !self.is_callable(&r#ref, &ctx.scope) {
+            return Ok(denied(format!(
+                "`{ref}` is not in the tool set of agent `{agent}`",
+                r#ref = r#ref,
+                agent = ctx.scope.agent
+            )));
+        }
+
+        // 2 · The input is validated at the boundary. A malformed call is a
+        //     `Failed` outcome; it never panics and never reaches the host.
+        if let Err(message) = validate(&entry.spec.input_schema, &input, &r#ref)? {
+            return Ok(Outcome::Failed {
+                code: "invalid-input".to_owned(),
+                message,
+            });
+        }
+
+        // 3 · `tool.before` interceptors. A `Deny` here narrows.
+        let mut input = input;
+        for i in &self.interceptors {
+            match i.before(&r#ref, &input) {
+                Verdict::Continue => {}
+                Verdict::Rewrite(next) => input = next,
+                Verdict::Deny { reason } => return Ok(denied(reason)),
+                Verdict::Handled { result } => return Ok(result),
+                // `Verdict` is `#[non_exhaustive]`: a variant this crate has
+                // not been taught about is not a licence to skip a step.
+                _ => {}
+            }
+        }
+
+        // 4 · The policy check. There is no path around this.
+        if let PolicyDecision::Deny { rule, reason } = self.policy.check(&r#ref, &input, &ctx) {
+            return Ok(Outcome::Denied { rule, reason });
+        }
+
+        // 5 · The call itself, under the ceiling the manifest declared.
+        let ctx = match entry.spec.ceiling {
+            Some(ceiling) => ctx.narrowed_to(ceiling),
+            None => ctx,
+        };
+        let mut outcome = self.host().call(&r#ref, input, &ctx).await?;
+
+        // 6 · `tool.after` interceptors.
+        for i in &self.interceptors {
+            match i.after(&r#ref, &outcome) {
+                Verdict::Continue => {}
+                Verdict::Rewrite(next) => outcome = next,
+                Verdict::Deny { reason } => return Ok(denied(reason)),
+                Verdict::Handled { result } => return Ok(result),
+                // `Verdict` is `#[non_exhaustive]`: a variant this crate has
+                // not been taught about is not a licence to skip a step.
+                _ => {}
+            }
+        }
+
+        // 7 · Audit, and return.
+        // TODO(plan-07): this event belongs in `orrery-audit`'s stream. Until
+        // that crate exists as a dependency, tracing carries it.
+        tracing::info!(
+            target: "orrery.tools.dispatch",
+            tool = %r#ref,
+            call = %ctx.call,
+            subject = %ctx.subject,
+            ok = outcome.is_ok(),
+            "tool call settled"
+        );
+        Ok(outcome)
+    }
+}
+
+/// The rule id a refusal carries when no configured rule is responsible for it
+/// — the registry's own "not in your tool set" and an interceptor's `Deny`.
+const NO_RULE: &str = "00000000-0000-0000-0000-000000000000";
+
+/// A refusal that did not come from a numbered rule.
+fn denied(reason: impl Into<String>) -> Outcome {
+    Outcome::Denied {
+        rule: NO_RULE.parse().expect("the nil uuid is a uuid"),
+        reason: reason.into(),
+    }
+}
+
+/// `Ok(Ok(()))` when the input fits, `Ok(Err(message))` when it does not,
+/// `Err` when the schema itself is unusable.
+#[cfg(feature = "schema-validation")]
+fn validate(
+    schema: &serde_json::Value,
+    input: &serde_json::Value,
+    r#ref: &ToolRef,
+) -> Result<Result<(), String>, ToolError> {
+    let validator = jsonschema::validator_for(schema).map_err(|e| ToolError::InvalidSchema {
+        name: r#ref.to_string(),
+        message: e.to_string(),
+    })?;
+    match validator.validate(input) {
+        Ok(()) => Ok(Ok(())),
+        Err(e) => Ok(Err(e.to_string())),
+    }
+}
+
+#[cfg(not(feature = "schema-validation"))]
+fn validate(
+    _schema: &serde_json::Value,
+    _input: &serde_json::Value,
+    _ref: &ToolRef,
+) -> Result<Result<(), String>, ToolError> {
+    Ok(Ok(()))
+}
