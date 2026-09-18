@@ -19,7 +19,6 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
-use orrery_ext_api::manifest::covers;
 use orrery_ext_api::{
     CallCtx, ExtensionManifest, HostError, ManifestError, NativeExtension, RuntimeKind, ToolDef,
 };
@@ -202,23 +201,10 @@ impl ExtensionHost for NativeHost {
 
         // A tool whose aspect was not granted is disabled rather than broken:
         // it is never offered to the model, so it cannot be called and fail.
-        let mut disabled = Vec::new();
-        for tool in &tools {
-            let ungranted: Vec<&'static str> = tool
-                .requires
-                .iter()
-                .filter(|a| !covers(&grant.capabilities, **a, None))
-                .map(|a| orrery_ext_api::broker::aspect_name(*a))
-                .collect();
-            if !ungranted.is_empty() {
-                problems.push(format!(
-                    "tool `{name}` is disabled: no `{missing}` grant",
-                    name = tool.name,
-                    missing = ungranted.join("`, no `")
-                ));
-                disabled.push(tool.name.clone());
-            }
-        }
+        // The same rule, and the same function, a child-process guest goes
+        // through.
+        let (disabled, ungranted) = crate::host::disabled_by_grant(&tools, &grant);
+        problems.extend(ungranted);
 
         // What it actually contributes: the manifest's list, minus the tools
         // that are not there and the tools that cannot work.

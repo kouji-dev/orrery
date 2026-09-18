@@ -1,0 +1,9 @@
+# A hand-written guest, for the host's tests. Not shipped.
+[extension]
+api     = "orrery-ext/1"
+name    = "echo"
+version = "0.1.0"
+runtime = "node"
+
+[provides]
+tools = ["say", "boom", "wait"]

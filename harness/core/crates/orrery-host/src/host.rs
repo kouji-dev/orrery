@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use orrery_ext_api::manifest::covers;
 use orrery_ext_api::{CallCtx, ExtensionManifest, HostError, RuntimeKind, ToolDef};
 use orrery_proto::{ExtId, Grant, LoadOutcome, Outcome};
 use serde_json::Value;
@@ -63,6 +64,35 @@ pub fn ceiling_of(budget: orrery_tools::ToolBudget) -> orrery_ext_api::ToolBudge
         output_bytes: budget.output_bytes,
         memory_bytes: budget.memory_bytes,
     }
+}
+
+/// Which of these tools cannot work under this grant, and why.
+///
+/// Returns the disabled names and the ledger lines that explain them. One
+/// function rather than one per runtime: "is this granted" answered twice would
+/// agree right up until the day it did not, and the day it did not, a `native`
+/// tool would be offered where a `node` one was hidden.
+#[must_use]
+pub fn disabled_by_grant(tools: &[ToolDef], grant: &Grant) -> (Vec<String>, Vec<String>) {
+    let mut disabled = Vec::new();
+    let mut problems = Vec::new();
+    for tool in tools {
+        let ungranted: Vec<&'static str> = tool
+            .requires
+            .iter()
+            .filter(|aspect| !covers(&grant.capabilities, **aspect, None))
+            .map(|aspect| orrery_ext_api::broker::aspect_name(*aspect))
+            .collect();
+        if !ungranted.is_empty() {
+            problems.push(format!(
+                "tool `{name}` is disabled: no `{missing}` grant",
+                name = tool.name,
+                missing = ungranted.join("`, no `")
+            ));
+            disabled.push(tool.name.clone());
+        }
+    }
+    (disabled, problems)
 }
 
 /// The same, the other way, for a ceiling a manifest declared.

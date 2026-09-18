@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
@@ -68,6 +68,14 @@ pub struct Peer {
     outbound: mpsc::UnboundedSender<Envelope>,
     pending: Pending,
     next_id: Arc<AtomicU64>,
+    /// Set when the read loop ends.
+    ///
+    /// Needed because the outbound channel outlives the connection: the peer
+    /// handle itself holds a sender, so `send` keeps succeeding after the child
+    /// is gone and a new call would wait for a reply that cannot come. Without
+    /// this flag the *second* call to a crashed extension waits out its whole
+    /// wall-clock budget instead of failing at once.
+    closed: Arc<AtomicBool>,
 }
 
 impl std::fmt::Debug for Peer {
@@ -94,10 +102,12 @@ impl Peer {
         let (outbound, mut rx) = mpsc::unbounded_channel::<Envelope>();
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
 
+        let closed = Arc::new(AtomicBool::new(false));
         let peer = Self {
             outbound: outbound.clone(),
             pending: pending.clone(),
             next_id: Arc::new(AtomicU64::new(1)),
+            closed: closed.clone(),
         };
 
         // Outbound.
@@ -146,8 +156,10 @@ impl Peer {
                     }
                 }
             }
-            // 5 · The connection is gone. Every pending call is told, once,
-            //     rather than waiting on a reply that cannot arrive.
+            // The connection is gone. Every pending call is told, once, rather
+            // than waiting on a reply that cannot arrive — and every *future*
+            // call is told immediately rather than waiting out its budget.
+            closed.store(true, Ordering::SeqCst);
             let waiting: Vec<_> = pending.lock().drain().map(|(_, tx)| tx).collect();
             for tx in waiting {
                 let _ = tx.send(Err(RpcError::Closed));
@@ -174,9 +186,20 @@ impl Peer {
         params: Value,
         cancel_token: &CancellationToken,
     ) -> Result<Value, RpcError> {
+        if !self.is_connected() {
+            return Err(RpcError::Closed);
+        }
+
         let id = Id::Num(self.next_id.fetch_add(1, Ordering::SeqCst));
         let (tx, rx) = oneshot::channel();
         self.pending.lock().insert(id.clone(), tx);
+
+        // The read loop may have ended between the check above and the insert,
+        // in which case it has already drained the map and will not see ours.
+        if !self.is_connected() {
+            self.pending.lock().remove(&id);
+            return Err(RpcError::Closed);
+        }
 
         if self
             .outbound
@@ -209,9 +232,12 @@ impl Peer {
     }
 
     /// Whether the connection is still there.
+    ///
+    /// False as soon as the read loop ends, which is the moment a child dies —
+    /// not whenever the last handle is dropped.
     #[must_use]
     pub fn is_connected(&self) -> bool {
-        !self.outbound.is_closed()
+        !self.closed.load(Ordering::SeqCst) && !self.outbound.is_closed()
     }
 }
 

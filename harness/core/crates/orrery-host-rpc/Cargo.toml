@@ -9,3 +9,29 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-ext-api = { workspace = true }
+orrery-host = { path = "../orrery-host" }
+orrery-jsonrpc = { path = "../orrery-jsonrpc" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["process", "io-util", "sync", "rt", "time", "macros"] }
+tokio-util = { workspace = true }
+parking_lot = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]
+orrery-tools = { path = "../orrery-tools" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "process"] }

@@ -16,13 +16,15 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+pub mod consent;
 pub mod host;
 pub mod native;
 pub mod state;
 pub mod table;
 pub mod unload;
 
-pub use host::{ExtensionHost, budget_of, ceiling_of};
+pub use consent::grant_diff;
+pub use host::{ExtensionHost, budget_of, ceiling_of, disabled_by_grant};
 pub use native::{NativeHost, NativeRegistry};
 pub use state::{CallGuard, InFlight, StateCell};
 pub use table::{ExtensionInstance, ExtensionTable};

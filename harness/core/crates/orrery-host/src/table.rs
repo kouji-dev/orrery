@@ -455,14 +455,35 @@ impl ExtensionTable {
         )
         .with_ui(self.ui.read().clone());
 
-        instance
+        match instance
             .host
             .call(&r#ref.ext, &r#ref.name, input, call_ctx)
             .await
-            .map_err(|e| ToolError::Host {
+        {
+            Ok(outcome) => Ok(outcome),
+            // The runtime is gone: the child exited, the module trapped, the
+            // socket closed. The extension **degrades** and the call settles
+            // `Failed`; the session lives. This is the rule for every runtime,
+            // which is why it is here and not in one of them.
+            Err(HostError::Transport { ext, message }) => {
+                instance.set_state(InstanceState::Degraded);
+                tracing::warn!(
+                    target: "orrery.host",
+                    %ext,
+                    tool = %r#ref,
+                    message,
+                    "the extension's runtime failed mid-call; degrading it"
+                );
+                Ok(Outcome::Failed {
+                    code: "extension-unreachable".to_owned(),
+                    message,
+                })
+            }
+            Err(e) => Err(ToolError::Host {
                 name: r#ref.to_string(),
                 message: e.to_string(),
-            })
+            }),
+        }
     }
 
     /// Drop an instance out of the table, freeing whatever it held.
