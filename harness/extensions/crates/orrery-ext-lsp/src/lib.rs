@@ -49,9 +49,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use orrery_ext_api::{
-    BrokerError, CallCtx, HostError, NativeExtension, ReadRequest, ToolDef,
-};
+use orrery_ext_api::{BrokerError, CallCtx, HostError, NativeExtension, ReadRequest, ToolDef};
 use orrery_proto::{Aspect, CancelReason, Outcome};
 use parking_lot::Mutex;
 use serde_json::{Value, json};
@@ -139,7 +137,9 @@ impl Servers {
     #[must_use]
     pub fn for_path(&self, path: &Path) -> Option<&ServerSpec> {
         let ext = path.extension()?.to_str()?.to_ascii_lowercase();
-        self.0.iter().find(|s| s.extensions.iter().any(|e| *e == ext))
+        self.0
+            .iter()
+            .find(|s| s.extensions.contains(&ext))
     }
 }
 
@@ -244,9 +244,7 @@ impl LspTools {
         // would otherwise leave one server running with nobody holding it.
         let client = {
             let mut held = self.clients.lock();
-            held.entry(spec.program.clone())
-                .or_insert(client)
-                .clone()
+            held.entry(spec.program.clone()).or_insert(client).clone()
         };
         Ok((client, spec))
     }
@@ -421,10 +419,7 @@ impl NativeExtension for LspTools {
                 if let Some(map) = params.as_object_mut() {
                     // Without this the server omits the declaration itself, and
                     // "every use" quietly means "every use but one".
-                    map.insert(
-                        "context".to_owned(),
-                        json!({ "includeDeclaration": true }),
-                    );
+                    map.insert("context".to_owned(), json!({ "includeDeclaration": true }));
                 }
                 match client.request("textDocument/references", params).await {
                     Ok(result) => locations_outcome(ctx, &locations(&result)),

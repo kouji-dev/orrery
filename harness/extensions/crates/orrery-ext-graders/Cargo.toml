@@ -13,7 +13,7 @@ publish = false
 # nothing else changes. See harness/extensions/README.md.
 [dependencies]
 orrery-grader = { version = "0.1", path = "../../../core/crates/orrery-grader" }
-orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
+orrery-ext-api = { version = "0.2", path = "../../../core/crates/orrery-ext-api" }
 orrery-proto = { version = "0.1", path = "../../../core/crates/orrery-proto" }
 orrery-provider = { version = "0.1", path = "../../../core/crates/orrery-provider" }
 orrery-session = { version = "0.1", path = "../../../core/crates/orrery-session" }

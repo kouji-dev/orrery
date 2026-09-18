@@ -126,7 +126,9 @@ async fn drops_the_body() {
 #[tokio::test]
 async fn dropping_the_stream_also_closes_it() {
     let (base_url, closed) = never_ending_server().await;
-    let mut stream = provider(base_url).await.stream(request(), CancellationToken::new());
+    let mut stream = provider(base_url)
+        .await
+        .stream(request(), CancellationToken::new());
     let _ = tokio::time::timeout(Duration::from_secs(10), stream.next())
         .await
         .expect("the server answered");

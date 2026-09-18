@@ -31,16 +31,19 @@ use crate::framing::{read_message, write_message};
 /// quiet for minutes.
 const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 
-
 /// The server's stdin, shared: the reader thread needs it to answer a
 /// server-to-client request without waiting for anybody.
 type Stdin = Arc<Mutex<Option<std::process::ChildStdin>>>;
+
+/// Requests waiting for an answer, by id. The reader thread completes them from
+/// one side and `request` inserts from the other.
+type Pending = Arc<Mutex<HashMap<i64, oneshot::Sender<Result<Value, LspError>>>>>;
 
 /// A language server in a child process.
 pub struct ChildTransport {
     stdin: Stdin,
     child: Mutex<Option<Child>>,
-    pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Result<Value, LspError>>>>>,
+    pending: Pending,
     notifications: Arc<Mutex<Vec<(String, Value)>>>,
     timeout_ms: u64,
 }
@@ -87,8 +90,7 @@ impl ChildTransport {
             .take()
             .ok_or_else(|| LspError::NotRunning(format!("{program}: no stdout")))?;
 
-        let pending: Arc<Mutex<HashMap<i64, oneshot::Sender<Result<Value, LspError>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
         let notifications = Arc::new(Mutex::new(Vec::new()));
 
         let reader_pending = Arc::clone(&pending);
@@ -102,7 +104,12 @@ impl ChildTransport {
                         let Ok(frame) = serde_json::from_slice::<Value>(&body) else {
                             continue;
                         };
-                        route(&frame, &reader_pending, &reader_notifications, &reader_stdin);
+                        route(
+                            &frame,
+                            &reader_pending,
+                            &reader_notifications,
+                            &reader_stdin,
+                        );
                     }
                     // A clean end, or a broken one. Either way every pending
                     // request must be failed, or its caller waits out its whole
@@ -151,7 +158,7 @@ impl ChildTransport {
 /// One server-to-client frame, by shape.
 fn route(
     frame: &Value,
-    pending: &Mutex<HashMap<i64, oneshot::Sender<Result<Value, LspError>>>>,
+    pending: &Pending,
     notifications: &Mutex<Vec<(String, Value)>>,
     stdin: &Stdin,
 ) {

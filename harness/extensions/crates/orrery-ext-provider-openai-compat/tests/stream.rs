@@ -41,9 +41,7 @@ fn request() -> ModelRequest {
     )
 }
 
-async fn drain(
-    transport: Arc<dyn ChatTransport>,
-) -> Vec<Result<ModelEvent, ProviderError>> {
+async fn drain(transport: Arc<dyn ChatTransport>) -> Vec<Result<ModelEvent, ProviderError>> {
     provider(transport)
         .stream(request(), CancellationToken::new())
         .collect()
@@ -84,9 +82,12 @@ async fn a_text_turn_maps() {
         2
     );
     assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, ModelEvent::Done { stop: StopReason::EndTurn })),
+        events.iter().any(|e| matches!(
+            e,
+            ModelEvent::Done {
+                stop: StopReason::EndTurn
+            }
+        )),
         "{events:?}"
     );
 }
@@ -124,9 +125,12 @@ async fn a_tool_call_accumulates_into_one_parsed_call() {
     assert_eq!(done[0].name, "read");
     assert_eq!(done[0].input["path"], "Cargo.toml");
     assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, ModelEvent::Done { stop: StopReason::ToolUse })),
+        events.iter().any(|e| matches!(
+            e,
+            ModelEvent::Done {
+                stop: StopReason::ToolUse
+            }
+        )),
         "{events:?}"
     );
 }
@@ -137,9 +141,12 @@ async fn a_truncated_turn_says_so() {
     // Never `EndTurn`: "the turn finished normally" is the lie that hides a
     // truncation.
     assert!(
-        events
-            .iter()
-            .any(|e| matches!(e, ModelEvent::Done { stop: StopReason::MaxTokens })),
+        events.iter().any(|e| matches!(
+            e,
+            ModelEvent::Done {
+                stop: StopReason::MaxTokens
+            }
+        )),
         "{events:?}"
     );
 }
@@ -193,7 +200,11 @@ async fn a_stream_that_ends_without_done_still_closes_its_tool_call() {
     // Everything up to, but not including, the `[DONE]` sentinel — which is
     // what a server that dies mid-turn leaves behind.
     let whole = String::from_utf8(fixture("tool-call.sse")).expect("utf-8");
-    let truncated = whole.split("data: [DONE]").next().expect("a prefix").to_owned();
+    let truncated = whole
+        .split("data: [DONE]")
+        .next()
+        .expect("a prefix")
+        .to_owned();
     let events: Vec<ModelEvent> = drain(Arc::new(RecordedTransport::ok(truncated)))
         .await
         .into_iter()
@@ -274,7 +285,10 @@ async fn cancelling_stops_the_stream() {
         .stream(request(), cancel)
         .collect()
         .await;
-    assert!(out.is_empty(), "a cancelled stream produces nothing: {out:?}");
+    assert!(
+        out.is_empty(),
+        "a cancelled stream produces nothing: {out:?}"
+    );
 }
 
 #[tokio::test]

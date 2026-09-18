@@ -37,9 +37,7 @@ pub mod repo;
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use orrery_ext_api::{
-    BrokerError, CallCtx, HostError, NativeExtension, ReadRequest, ToolDef,
-};
+use orrery_ext_api::{BrokerError, CallCtx, HostError, NativeExtension, ReadRequest, ToolDef};
 use orrery_proto::{Aspect, Outcome};
 use serde_json::{Value, json};
 

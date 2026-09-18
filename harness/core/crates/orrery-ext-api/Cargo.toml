@@ -1,6 +1,6 @@
 [package]
 name = "orrery-ext-api"
-version = "0.1.0"
+version = "0.2.0"
 description = "The extension-facing API: manifest, instance, tool definitions, call context, and the mock broker extension authors test against."
 edition.workspace = true
 rust-version.workspace = true

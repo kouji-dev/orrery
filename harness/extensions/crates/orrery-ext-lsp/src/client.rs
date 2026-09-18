@@ -245,7 +245,11 @@ impl LspClient {
     /// Whatever the server has published for a document, latest set only.
     pub async fn diagnostics(&self, uri: &str) -> Vec<Value> {
         self.collect().await;
-        self.diagnostics.lock().get(uri).cloned().unwrap_or_default()
+        self.diagnostics
+            .lock()
+            .get(uri)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// Move pushed notifications into the per-document store.

@@ -204,7 +204,10 @@ async fn the_shipped_manifest_matches_what_is_implemented() {
         .iter()
         .map(|c| c.name.clone())
         .collect();
-    assert_eq!(declared, ["hover", "definition", "references", "diagnostics"]);
+    assert_eq!(
+        declared,
+        ["hover", "definition", "references", "diagnostics"]
+    );
     let implemented: Vec<String> = LspTools::with_launcher(
         Servers::none(),
         Arc::new(FakeLauncher {
@@ -236,7 +239,10 @@ async fn hover_handshakes_once_opens_the_document_and_answers() {
     // notifications rather than requests — waiting for a notification is how a
     // client hangs on the first call.
     assert_eq!(rig.harness.surfaces().len(), 1, "one surface, described");
-    assert_eq!(server.methods().first().map(String::as_str), Some("initialize"));
+    assert_eq!(
+        server.methods().first().map(String::as_str),
+        Some("initialize")
+    );
     assert_eq!(
         server.notifications(),
         ["initialized", "textDocument/didOpen"]
@@ -247,7 +253,11 @@ async fn hover_handshakes_once_opens_the_document_and_answers() {
     let _ = rig.call("hover", rig.at(1, 0)).await;
     assert_eq!(*rig.launcher.launches.lock(), 1);
     assert_eq!(
-        server.methods().iter().filter(|m| *m == "initialize").count(),
+        server
+            .methods()
+            .iter()
+            .filter(|m| *m == "initialize")
+            .count(),
         1
     );
     // And the second read is a `didChange`, not a second `didOpen`, which most
@@ -381,7 +391,11 @@ async fn diagnostics_that_arrive_during_another_request_are_not_lost() {
     let _ = rig.call("hover", rig.at(0, 0)).await;
     let out = rig.call("diagnostics", json!({ "path": rig.path })).await;
     let items = value_of(&out).as_array().expect("an array").clone();
-    assert_eq!(items.len(), 1, "a push collected only by `diagnostics` is lost");
+    assert_eq!(
+        items.len(),
+        1,
+        "a push collected only by `diagnostics` is lost"
+    );
 }
 
 #[tokio::test]
@@ -396,7 +410,11 @@ async fn a_file_no_server_serves_says_so() {
         }),
     );
     let out = tools
-        .call("hover", json!({ "path": "/work/notes.md" }), &harness.ctx("hover"))
+        .call(
+            "hover",
+            json!({ "path": "/work/notes.md" }),
+            &harness.ctx("hover"),
+        )
         .await
         .expect("the harness carried the call");
     match out {
@@ -421,8 +439,8 @@ async fn a_server_that_refuses_is_reported_not_swallowed() {
 #[tokio::test]
 async fn a_document_the_policy_refuses_never_reaches_the_server() {
     let server = FakeServer::answering(&[("textDocument/hover", json!({ "contents": "x" }))]);
-    let harness = load_for_test(MANIFEST, &["read:/elsewhere/**", "spawn"])
-        .expect("the manifest loads");
+    let harness =
+        load_for_test(MANIFEST, &["read:/elsewhere/**", "spawn"]).expect("the manifest loads");
     let tools = LspTools::with_launcher(
         servers(),
         Arc::new(FakeLauncher {
@@ -471,9 +489,7 @@ async fn a_cancelled_call_starts_no_server() {
     let rig = Rig::new(Arc::clone(&server));
     let cancel = tokio_util::sync::CancellationToken::new();
     cancel.cancel();
-    let ctx = rig
-        .harness
-        .ctx_with("hover", ToolBudget::default(), cancel);
+    let ctx = rig.harness.ctx_with("hover", ToolBudget::default(), cancel);
     let out = rig
         .tools
         .call("hover", rig.at(0, 0), &ctx)
@@ -485,7 +501,10 @@ async fn a_cancelled_call_starts_no_server() {
 
 #[test]
 fn a_uri_is_the_shape_every_editor_agrees_on() {
-    assert_eq!(uri_of(Path::new("/work/src/lib.rs")), "file:///work/src/lib.rs");
+    assert_eq!(
+        uri_of(Path::new("/work/src/lib.rs")),
+        "file:///work/src/lib.rs"
+    );
     // A Windows path: the drive letter must not start the path component, or
     // half the servers in the world reject it.
     assert_eq!(

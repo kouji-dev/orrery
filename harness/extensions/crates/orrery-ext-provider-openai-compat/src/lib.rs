@@ -368,10 +368,7 @@ pub fn classify(status: u16, retry_after: Option<&str>, body: &str) -> ProviderE
         // prose. Reporting it as `BadRequest` would make the kernel fail the
         // turn instead of compacting, so the shape of the message is what
         // separates the two.
-        400 if is_context_overflow(&message) => ProviderError::ContextTooLong {
-            tokens: 0,
-            max: 0,
-        },
+        400 if is_context_overflow(&message) => ProviderError::ContextTooLong { tokens: 0, max: 0 },
         400..=499 => ProviderError::BadRequest(message),
         500..=599 => ProviderError::ServerError { status },
         other => ProviderError::BadRequest(format!("unexpected status {other}: {message}")),

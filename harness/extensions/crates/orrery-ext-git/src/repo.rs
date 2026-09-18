@@ -114,9 +114,9 @@ fn rel(p: &BStr) -> String {
 ///
 /// [`GitError`] when the repository is bare or gitoxide refuses the walk.
 pub fn status(repo: &gix::Repository) -> Result<Vec<Change>, GitError> {
+    use gix::status::Item;
     use gix::status::index_worktree::Item as IwItem;
     use gix::status::plumbing::index_as_worktree::EntryStatus;
-    use gix::status::Item;
 
     if repo.workdir().is_none() {
         return Err(GitError::NoWorktree { what: "status" });
@@ -231,7 +231,11 @@ pub fn status(repo: &gix::Repository) -> Result<Vec<Change>, GitError> {
 ///
 /// [`GitError`] when the revision names nothing, or the repository has no
 /// commits at all.
-pub fn log(repo: &gix::Repository, rev: Option<&str>, limit: usize) -> Result<Vec<Entry>, GitError> {
+pub fn log(
+    repo: &gix::Repository,
+    rev: Option<&str>,
+    limit: usize,
+) -> Result<Vec<Entry>, GitError> {
     let start = resolve(repo, rev)?;
     let walk = repo
         .rev_walk([start])

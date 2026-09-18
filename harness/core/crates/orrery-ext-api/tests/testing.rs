@@ -125,7 +125,9 @@ async fn a_manifest_the_host_would_refuse_is_refused_here_too() {
 async fn a_listing_omits_what_the_grants_do_not_cover() {
     let harness = load_for_test(MANIFEST, &["read:$WORKSPACE/src/**"]).unwrap();
     let ctx = harness.ctx("impacted");
-    harness.broker.add_file("$WORKSPACE/src/a.rs", "fn main() {}");
+    harness
+        .broker
+        .add_file("$WORKSPACE/src/a.rs", "fn main() {}");
     harness.broker.add_file("$WORKSPACE/secret.txt", "shh");
 
     let listing = ctx
@@ -149,6 +151,9 @@ async fn a_listing_omits_what_the_grants_do_not_cover() {
     );
     assert!(matches!(
         harness.recorded().last(),
-        Some(BrokerCall::List { recursive: true, .. })
+        Some(BrokerCall::List {
+            recursive: true,
+            ..
+        })
     ));
 }

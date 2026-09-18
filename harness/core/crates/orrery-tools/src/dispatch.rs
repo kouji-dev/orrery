@@ -186,7 +186,6 @@ pub trait ToolInterceptor: Send + Sync {
     }
 }
 
-
 impl Registry {
     /// Run one tool call, all seven steps, and report how it went.
     ///
@@ -238,9 +237,7 @@ impl Registry {
         // record a call that did not happen.
         let mut resolved = r#ref.clone();
 
-        let out = self
-            .dispatch_inner(r#ref, input, ctx, &mut resolved)
-            .await;
+        let out = self.dispatch_inner(r#ref, input, ctx, &mut resolved).await;
 
         // Every settled call, including a refusal. A stream that recorded only
         // what succeeded answers "what did this agent do" and not "what did it

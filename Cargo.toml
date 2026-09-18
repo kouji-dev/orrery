@@ -101,7 +101,7 @@ tokio-test = "0.4"
 
 # --- harness crates, by path + version (both halves) ----------------------
 orrery-proto = { version = "0.1.0", path = "harness/core/crates/orrery-proto" }
-orrery-ext-api = { version = "0.1.0", path = "harness/core/crates/orrery-ext-api" }
+orrery-ext-api = { version = "0.2.0", path = "harness/core/crates/orrery-ext-api" }
 orrery-provider = { version = "0.1.0", path = "harness/core/crates/orrery-provider" }
 orrery-session = { version = "0.1.0", path = "harness/core/crates/orrery-session" }
 orrery-memory = { version = "0.1.0", path = "harness/core/crates/orrery-memory" }

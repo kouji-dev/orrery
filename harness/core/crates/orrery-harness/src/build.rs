@@ -220,8 +220,8 @@ impl ResolvedConfig {
         // A `[provider]` table in force wins over the caller's default. Without
         // this the enum has a real-model variant nothing can select, which is
         // the same dead end one level up.
-        let provider = crate::config::provider_choice(&resolved.values, &profile)
-            .unwrap_or(provider);
+        let provider =
+            crate::config::provider_choice(&resolved.values, &profile).unwrap_or(provider);
         let kernel = crate::config::kernel_config(
             &resolved.values,
             &profile,

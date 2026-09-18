@@ -118,18 +118,20 @@ impl ProviderAuth for ApiKeyAuth {
     }
 
     async fn state(&self) -> Result<AuthState, ProviderError> {
-        Ok(match self.store.has(&self.grant).await.map_err(store_error)? {
-            true => AuthState::Ready {
-                // An API key names no account and never expires. Saying so
-                // beats inventing a value, and beats a round trip to
-                // `/v1/models` that would cost money to answer a UI question.
-                account: None,
-                expires_at: None,
+        Ok(
+            match self.store.has(&self.grant).await.map_err(store_error)? {
+                true => AuthState::Ready {
+                    // An API key names no account and never expires. Saying so
+                    // beats inventing a value, and beats a round trip to
+                    // `/v1/models` that would cost money to answer a UI question.
+                    account: None,
+                    expires_at: None,
+                },
+                false => AuthState::NeedsLogin {
+                    reason: self.missing(),
+                },
             },
-            false => AuthState::NeedsLogin {
-                reason: self.missing(),
-            },
-        })
+        )
     }
 
     async fn login(&self, ctx: &dyn AuthCtx) -> Result<AuthState, ProviderError> {
@@ -144,7 +146,10 @@ impl ProviderAuth for ApiKeyAuth {
                 "no API key was provided; nothing was stored".to_owned(),
             ));
         }
-        self.store.put(&self.grant, key).await.map_err(store_error)?;
+        self.store
+            .put(&self.grant, key)
+            .await
+            .map_err(store_error)?;
         self.state().await
     }
 

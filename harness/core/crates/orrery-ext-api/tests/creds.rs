@@ -25,7 +25,9 @@ creds = ["signer"]
 #[tokio::test]
 async fn a_granted_credential_comes_through_the_broker_and_is_recorded() {
     let harness = load_for_test(MANIFEST, &["creds:signer"]).expect("the manifest loads");
-    harness.broker.add_credential("signer", "sk-from-the-broker");
+    harness
+        .broker
+        .add_credential("signer", "sk-from-the-broker");
     let store = BrokerCredStore::new("ext", harness.ctx("sign").broker);
 
     assert_eq!(

@@ -16,7 +16,7 @@ publish = false
 # `publish = false`, so naming either would break `cargo xtask deps-check`
 # rule 2 — and an agent is declared data, which `orrery-proto` can already say.
 [dependencies]
-orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
+orrery-ext-api = { version = "0.2", path = "../../../core/crates/orrery-ext-api" }
 orrery-proto = { workspace = true }
 async-trait = { workspace = true }
 serde_json = { workspace = true }

@@ -349,7 +349,11 @@ impl DeviceCodeAuth {
                 other => {
                     return Err(ProviderError::Auth(format!(
                         "the authorization server refused the login: {}",
-                        if other.is_empty() { "no reason given" } else { other }
+                        if other.is_empty() {
+                            "no reason given"
+                        } else {
+                            other
+                        }
                     )));
                 }
             }

@@ -183,7 +183,11 @@ async fn the_happy_path_stores_a_token_and_reports_the_account() {
         Some("oat-live-1")
     );
     assert_eq!(
-        store.get("anthropic.refresh").await.expect("read").as_deref(),
+        store
+            .get("anthropic.refresh")
+            .await
+            .expect("read")
+            .as_deref(),
         Some("ort-live-1")
     );
 
@@ -293,14 +297,20 @@ async fn expired_token_ends_the_flow_and_stores_nothing() {
     let e = auth.login(&Watcher::default()).await.expect_err("expired");
     assert_eq!(e.code(), "auth");
     assert!(e.to_string().contains("expired"), "{e}");
-    assert!(!e.is_retryable(), "a person has to start over, not the kernel");
+    assert!(
+        !e.is_retryable(),
+        "a person has to start over, not the kernel"
+    );
     assert_eq!(store.get("anthropic").await.expect("read"), None);
 }
 
 #[tokio::test]
 async fn a_denial_is_reported_as_a_denial_not_a_timeout() {
     let clock = Arc::new(TestClock::default());
-    let server = FakeAuthServer::new(device_body(), vec![(400, json!({ "error": "access_denied" }))]);
+    let server = FakeAuthServer::new(
+        device_body(),
+        vec![(400, json!({ "error": "access_denied" }))],
+    );
     let auth = build(
         server,
         clock,
@@ -368,7 +378,11 @@ async fn refresh_swaps_the_token_and_keeps_the_new_refresh_token() {
     );
     // A rotating refresh token that is not stored is a login next hour.
     assert_eq!(
-        store.get("anthropic.refresh").await.expect("read").as_deref(),
+        store
+            .get("anthropic.refresh")
+            .await
+            .expect("read")
+            .as_deref(),
         Some("ort-live-2")
     );
     let forms = server.forms();
@@ -452,7 +466,10 @@ async fn a_pending_state_carries_what_a_client_has_to_draw() {
     // `pending_state` is what `login` hands a caller that will not block —
     // `orrery auth login --no-wait`, and the ADE, which draws the wait itself.
     let clock = Arc::new(TestClock::default());
-    let server = FakeAuthServer::new(device_body(), vec![(400, json!({"error":"authorization_pending"}))]);
+    let server = FakeAuthServer::new(
+        device_body(),
+        vec![(400, json!({"error":"authorization_pending"}))],
+    );
     let auth = build(
         server,
         Arc::clone(&clock),

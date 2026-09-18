@@ -57,9 +57,10 @@ pub fn read_message(r: &mut impl BufRead) -> io::Result<Option<Vec<u8>>> {
             ));
         };
         if name.trim().eq_ignore_ascii_case("content-length") {
-            let len: usize = value.trim().parse().map_err(|_| {
-                io::Error::new(io::ErrorKind::InvalidData, "bad Content-Length")
-            })?;
+            let len: usize = value
+                .trim()
+                .parse()
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "bad Content-Length"))?;
             content_length = Some(len);
         }
         // `Content-Type` and anything else is ignored, as the spec says to.

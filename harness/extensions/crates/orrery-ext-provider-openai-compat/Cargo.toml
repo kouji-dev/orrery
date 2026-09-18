@@ -21,7 +21,7 @@ http = ["dep:reqwest", "dep:rustls"]
 [dependencies]
 orrery-provider = { version = "0.1", path = "../../../core/crates/orrery-provider" }
 orrery-proto = { version = "0.1", path = "../../../core/crates/orrery-proto" }
-orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
+orrery-ext-api = { version = "0.2", path = "../../../core/crates/orrery-ext-api" }
 async-trait = { workspace = true }
 futures-core = { workspace = true }
 futures-util = { workspace = true }

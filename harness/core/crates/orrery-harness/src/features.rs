@@ -120,15 +120,14 @@ pub fn openai_compat_provider(
         // reason: the broker's store applies a secret and never returns one, so
         // reading falls through to the documented development fallback until
         // plan 14's transport lets the broker sign the request itself.
-        let store: Arc<dyn CredStore> =
-            if credential == orrery_ext_provider_openai_compat::GRANT {
-                Arc::new(EnvCredStore)
-            } else {
-                Arc::new(LayeredCredStore::new(
-                    Arc::new(MemoryCredStore::default()),
-                    Arc::new(EnvCredStore),
-                ))
-            };
+        let store: Arc<dyn CredStore> = if credential == orrery_ext_provider_openai_compat::GRANT {
+            Arc::new(EnvCredStore)
+        } else {
+            Arc::new(LayeredCredStore::new(
+                Arc::new(MemoryCredStore::default()),
+                Arc::new(EnvCredStore),
+            ))
+        };
         let provider =
             orrery_ext_provider_openai_compat::OpenAiCompatProvider::over_http(base_url, store);
         // The model id is the request's, not the provider's: one endpoint

@@ -96,13 +96,14 @@ async fn the_shipped_manifest_is_the_same_shape_a_third_party_ships() {
         .collect();
     assert_eq!(names, ["status", "log", "show", "diff", "blame"]);
     // Every declared tool exists, which is the half a scaffold gets wrong.
-    let implemented: Vec<String> = GitTools::new().tools().into_iter().map(|t| t.name).collect();
+    let implemented: Vec<String> = GitTools::new()
+        .tools()
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
     assert_eq!(names, implemented);
     assert!(
-        matches!(
-            harness.load_outcome(),
-            orrery_proto::LoadOutcome::Ok { .. }
-        ),
+        matches!(harness.load_outcome(), orrery_proto::LoadOutcome::Ok { .. }),
         "{:?}",
         harness.load_outcome()
     );
@@ -270,10 +271,10 @@ async fn denied_before_gitoxide_is_opened() {
     // And the refusal is in the ledger, which is the point of routing a
     // permission question through the broker that gitoxide cannot use.
     assert!(
-        harness
-            .recorded()
-            .iter()
-            .any(|c| matches!(c, orrery_ext_api::testing::BrokerCall::Read { allowed: false, .. })),
+        harness.recorded().iter().any(|c| matches!(
+            c,
+            orrery_ext_api::testing::BrokerCall::Read { allowed: false, .. }
+        )),
         "{:?}",
         harness.recorded()
     );

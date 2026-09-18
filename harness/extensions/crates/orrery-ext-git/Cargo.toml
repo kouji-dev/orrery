@@ -12,7 +12,7 @@ publish = false
 # publishable, `path` makes it build in-tree. At split time the path goes and
 # nothing else changes. See harness/extensions/README.md.
 [dependencies]
-orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
+orrery-ext-api = { version = "0.2", path = "../../../core/crates/orrery-ext-api" }
 orrery-proto = { version = "0.1", path = "../../../core/crates/orrery-proto" }
 async-trait = { workspace = true }
 # gitoxide, with the ADE's feature set minus everything the read-only verbs do
