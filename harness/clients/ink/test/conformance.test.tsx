@@ -28,7 +28,10 @@ const scenarios = conformance.loadAll();
 describe("the conformance fixtures", () => {
   it("are the same files the Rust SDK runs", () => {
     expect(conformance.fixturesDir().replaceAll("\\", "/")).toContain("clients/conformance");
-    expect(scenarios.length).toBeGreaterThanOrEqual(10);
+    // The same count the Rust clients assert, from the same named constant:
+    // a floor of its own here is how six fixtures could be deleted and only
+    // the ratatui suite would notice.
+    expect(scenarios.length).toBe(conformance.SCENARIO_COUNT);
   });
 
   for (const scenario of scenarios) {

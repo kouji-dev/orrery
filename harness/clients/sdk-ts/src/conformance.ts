@@ -84,6 +84,20 @@ export function load(path: string): Scenario {
   return { name, path, steps };
 }
 
+/**
+ * How many scenarios there are — the whole set, exactly.
+ *
+ * The twin of `orrery_client::conformance::SCENARIO_COUNT`. Every client
+ * asserts this number rather than a floor of its own; two floors is how
+ * fixtures get deleted and only one suite notices.
+ *
+ * It counts the `*.jsonl` files in `clients/conformance` and nothing below it:
+ * `conformance/streams/` holds `ModelEvent` scripts for the fixture provider,
+ * not AG-UI scenarios for a renderer, and `loadAll` is deliberately not
+ * recursive.
+ */
+export const SCENARIO_COUNT = 16;
+
 /** Load every `*.jsonl` scenario in a directory, sorted by name. */
 export function loadAll(dir: string = fixturesDir()): Scenario[] {
   return readdirSync(dir)

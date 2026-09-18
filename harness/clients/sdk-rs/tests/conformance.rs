@@ -13,10 +13,10 @@ use orrery_proto::{Status, SurfaceKind};
 fn all_scenarios() {
     let dir = conformance::fixtures_dir();
     let scenarios = conformance::load_all(&dir).expect("the fixtures load");
-    assert!(
-        scenarios.len() >= 10,
-        "expected the ten scenarios, found {}",
-        scenarios.len()
+    assert_eq!(
+        scenarios.len(),
+        conformance::SCENARIO_COUNT,
+        "the conformance set is the contract, and every client asserts the same count: add a scenario and bump `conformance::SCENARIO_COUNT`, or find out which one was deleted"
     );
 
     let mut failures = Vec::new();

@@ -67,6 +67,28 @@ client detects a lost frame by arithmetic.
 - Ids are opaque strings. They are stable and readable rather than generated, so the file
   is diffable; nothing may parse them.
 
+## The set is exact, and `streams/` is not part of it
+
+Every client asserts the **same** count, from one named constant per language —
+`orrery_client::conformance::SCENARIO_COUNT` and `@orrery/client`'s
+`conformance.SCENARIO_COUNT`, both currently **16**. It is an equality, not a floor.
+Floors were how this drifted: ratatui asked for at least 16 and Ink for at least 10, so
+deleting six fixtures would have turned one suite red and left the other quiet. Adding a
+scenario means adding a row below and bumping both constants in the same commit; the set is
+a contract, not a directory listing.
+
+**`streams/` is deliberately not run by the renderers, and its absence is not a gap.** The
+six files under [`streams/`](streams/README.md) are `ModelEvent` scripts crossing the
+*provider* boundary, replayed by `orrery-ext-provider-fixture` to drive a whole turn
+end-to-end. The files here are AG-UI event scripts crossing the *client* boundary, replayed
+against a `SurfaceStore`. Different format, different boundary, different assertions — a
+renderer has nothing to do with a `ModelEvent`. `load_all` / `loadAll` therefore read this
+directory only and never recurse, which is why the count above is 16 and not 22.
+
+The two sets stay related in the way that matters: every scenario below names the stream it
+is derivable from, so the same turn can be driven through the fixture provider or replayed
+as events alone.
+
 ## The scenarios
 
 Each is derivable from one of [plan 03's six provider streams](streams/README.md), so the

@@ -3,7 +3,7 @@
 //! The same fixtures the SDK and the `json` client run. A scenario only the SDK
 //! checks is a scenario that has stopped describing the clients.
 
-use orrery_client::conformance::{fixtures_dir, load_all, run};
+use orrery_client::conformance::{SCENARIO_COUNT, fixtures_dir, load_all, run};
 use orrery_client_ratatui::app::App;
 use orrery_client_ratatui::scrollback::{Recording, lines_of};
 use orrery_client_ratatui::testing::frames_of;
@@ -16,10 +16,10 @@ use ratatui::layout::Rect;
 #[test]
 fn every_scenario_renders() {
     let scenarios = load_all(&fixtures_dir()).expect("the fixtures load");
-    assert!(
-        scenarios.len() >= 16,
-        "the conformance set is the contract; it should not shrink: {}",
-        scenarios.len()
+    assert_eq!(
+        scenarios.len(),
+        SCENARIO_COUNT,
+        "the conformance set is the contract, and every client asserts the same count: add a scenario and bump `conformance::SCENARIO_COUNT`, or find out which one was deleted"
     );
     for scenario in &scenarios {
         // First the store: if this renderer disagreed with the SDK about what

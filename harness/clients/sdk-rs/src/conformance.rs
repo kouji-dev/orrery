@@ -60,6 +60,22 @@ pub enum FixtureError {
     },
 }
 
+/// How many scenarios there are — the whole set, exactly.
+///
+/// Every client asserts **this** number rather than a floor of its own. Two
+/// clients with two different floors is how six fixtures get deleted and only
+/// one suite notices, which is what nearly happened: ratatui asked for 16 and
+/// Ink for 10.
+///
+/// It counts the `*.jsonl` files in `clients/conformance` and nothing below it.
+/// The scripts in `conformance/streams/` are `ModelEvent` streams for
+/// `orrery-ext-provider-fixture`, not AG-UI scenarios for a renderer, and
+/// [`load_all`] is deliberately not recursive — see that directory's README.
+///
+/// Adding a scenario means bumping this by one in the same commit, which is the
+/// point: the set is a contract, not a directory listing.
+pub const SCENARIO_COUNT: usize = 16;
+
 /// Where the fixtures live, relative to this crate.
 #[must_use]
 pub fn fixtures_dir() -> PathBuf {

@@ -13,8 +13,8 @@ import { conformance, SurfaceStore, type Frame } from "../src/index.js";
 const scenarios = conformance.loadAll();
 
 describe("the conformance fixtures", () => {
-  it("has the ten scenarios", () => {
-    expect(scenarios.length).toBeGreaterThanOrEqual(10);
+  it("has the whole set, exactly", () => {
+    expect(scenarios.length).toBe(conformance.SCENARIO_COUNT);
     for (const scenario of scenarios) {
       expect(
         scenario.steps.some((s) => s.kind === "expect"),
