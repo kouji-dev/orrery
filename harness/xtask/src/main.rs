@@ -1,6 +1,7 @@
 //! `cargo xtask <task>`.
 //!
-//! `deps-check` enforces the dependency-direction rule for real; `typegen`
+//! `deps-check` enforces the dependency-direction rule for real;
+//! `publish-check` says whether every published crate could be uploaded; `typegen`
 //! regenerates `harness/protocol`; `agui-drift` checks the vendored AG-UI enum
 //! against upstream. `wit-check` runs `orrery-wit`'s `.wit` drift tests.
 
@@ -29,6 +30,11 @@ struct Cli {
 enum Task {
     /// Check the core / extensions / clients dependency direction.
     DepsCheck,
+    /// Check that every `publish = true` crate could actually be published.
+    ///
+    /// Offline: the manifest preconditions `cargo publish` evaluates before it
+    /// touches the network. The networked dry run is a CI step.
+    PublishCheck,
     /// Regenerate `harness/protocol` from the `orrery-proto` schemars derives.
     Typegen,
     /// Check `harness/wit/orrery-extension.wit` against the host bindings.
@@ -74,6 +80,26 @@ fn main() -> ExitCode {
                 }
                 eprintln!(
                     "deps-check: {} violation(s) — see harness/docs/plans/00-overview.md",
+                    violations.len()
+                );
+                ExitCode::FAILURE
+            }
+        },
+        Task::PublishCheck => match xtask::publish_check::check(&root) {
+            Err(e) => {
+                eprintln!("publish-check: {e}");
+                ExitCode::from(2)
+            }
+            Ok(violations) if violations.is_empty() => {
+                println!("publish-check: ok");
+                ExitCode::SUCCESS
+            }
+            Ok(violations) => {
+                for v in &violations {
+                    eprintln!("publish-check: {v}");
+                }
+                eprintln!(
+                    "publish-check: {} crate(s) could not be published —                      see harness/docs/plans/18-writing-an-extension.md",
                     violations.len()
                 );
                 ExitCode::FAILURE

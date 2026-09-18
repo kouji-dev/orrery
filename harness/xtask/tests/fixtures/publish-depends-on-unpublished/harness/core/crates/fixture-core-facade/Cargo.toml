@@ -1,0 +1,12 @@
+[package]
+name = "fixture-core-facade"
+version = "0.1.0"
+edition = "2021"
+publish = true
+description = "A published crate reaching for kernel internals."
+license = "MIT"
+repository = "https://github.com/kouji-dev/orrery"
+
+[dependencies]
+# Both halves declared, and still unpublishable: the target is `publish = false`.
+fixture-core-kernel = { version = "0.1", path = "../fixture-core-kernel" }

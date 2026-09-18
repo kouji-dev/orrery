@@ -3,7 +3,7 @@ name = "fixture-core-proto"
 version = "0.1.0"
 edition = "2021"
 publish = true
-description = "A fixture, standing in for a published crate."
+description = "A fixture, standing in for a published core crate."
 license = "MIT"
 repository = "https://github.com/kouji-dev/orrery"
 

@@ -1,0 +1,10 @@
+[package]
+name = "fixture-core-internal"
+version = "0.1.0"
+edition = "2021"
+# No description, no licence, no repository, and a path dependency with no
+# version — and all of it is fine, because this is never uploaded.
+publish = false
+
+[dependencies]
+fixture-core-kernel = { path = "../fixture-core-kernel" }

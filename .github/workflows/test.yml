@@ -53,11 +53,31 @@ jobs:
       - run: cargo test -p orrery-client
       - run: cargo test -p orrery-client-json
       - run: cargo xtask deps-check
-      # The one step in this repo that is allowed a network read, and the only
-      # one that has to be: the vendored AG-UI enum is checked against what
+      # Plan 18. The offline half: the manifest preconditions `cargo publish`
+      # evaluates before it opens a socket. `cargo test -p xtask` covers it too;
+      # this line is here so a red build names the rule rather than a test file.
+      - run: cargo xtask publish-check
+      # Plan 18, task 4: the same logical tool in four runtimes, one Outcome.
+      # `tinygo-examples` is left off — the runner has neither tinygo nor
+      # wit-bindgen-go, and the test prints that the Go leg was not compared.
+      - run: cargo test -p orrery-harness --test parity
+      # One of the two steps in this repo allowed a network read (the other is
+      # the publish dry run below): the vendored AG-UI enum is checked against what
       # upstream actually publishes. `--fetch` is passed here and nowhere else,
       # so the same task offline reads the installed `@ag-ui/core` or falls back
       # to the pinned list and stays green. It fails only on a name we invented,
       # never on being unable to reach the network.
       - name: cargo xtask agui-drift (networked, CI only)
         run: cargo xtask agui-drift --fetch
+      # Plan 18, task 5. The real dry run, which needs the crates.io index and
+      # therefore cannot be a test: nothing in this repo's suite may reach the
+      # network. It is the second and last networked step here, and it runs in
+      # dependency order — the trait crates before anything that names them —
+      # because an unpublished dependency is exactly what it is looking for.
+      - name: cargo publish --dry-run (networked, CI only)
+        run: |
+          set -euo pipefail
+          crates="orrery-proto orrery-ext-api orrery-provider orrery-session orrery-memory orrery-grader orrery-guest"
+          for crate in $crates; do
+            cargo publish --dry-run -p "$crate" --allow-dirty
+          done

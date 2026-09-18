@@ -167,7 +167,10 @@ async fn node() -> Option<Surface> {
     // degrades. `parity` asks for nothing and is unaffected — which is the
     // degrade rule working rather than a wrinkle in this test.
     assert!(
-        matches!(outcome, LoadOutcome::Ok { .. } | LoadOutcome::Degraded { .. }),
+        matches!(
+            outcome,
+            LoadOutcome::Ok { .. } | LoadOutcome::Degraded { .. }
+        ),
         "node: did not load: {outcome:?} (stderr: {:?})",
         host.stderr_tail(&id())
     );
@@ -241,7 +244,13 @@ fn build_wasm_go() -> Vec<u8> {
     let wit = Path::new("../../../../wit");
 
     let generated = std::process::Command::new("wit-bindgen-go")
-        .args(["generate", "--world", "orrery-extension", "--out", "internal"])
+        .args([
+            "generate",
+            "--world",
+            "orrery-extension",
+            "--out",
+            "internal",
+        ])
         .arg(wit)
         .current_dir(&dir)
         .status()

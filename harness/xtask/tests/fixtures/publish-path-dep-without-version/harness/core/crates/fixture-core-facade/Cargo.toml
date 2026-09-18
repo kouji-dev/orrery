@@ -1,0 +1,12 @@
+[package]
+name = "fixture-core-facade"
+version = "0.1.0"
+edition = "2021"
+publish = true
+description = "A published crate that names a path dependency and forgets its version."
+license = "MIT"
+repository = "https://github.com/kouji-dev/orrery"
+
+[dependencies]
+# No `version`. It builds in-tree and can never be uploaded.
+fixture-core-proto = { path = "../fixture-core-proto" }
