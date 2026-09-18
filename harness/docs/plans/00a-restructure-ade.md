@@ -4,6 +4,17 @@
 
 **Covers.** No architecture section — this is repo work that everything else needs first.
 
+**State — done, landed in wave 1 (`8e52c92`, `398e748`, `0892ae7`).** Every box
+below is ticked because the repo was checked against it, item by item, not
+because the commits claim so: `ade/` holds the app, the root is a virtual
+workspace with `clippy.toml` and `Cargo.lock` at it, the crate is `orrery-ade`
+with `lib orrery_ade_lib`, `identifier` / `productName` / `upgradeCode` are
+unchanged and `mainBinaryName` is now pinned, every task-5 path fix is in place,
+`pnpm-lock.yaml`'s importer key is `ade`, and
+`git grep "src-tauri/target|orrery_lib"` outside `ade/docs` and `ade/design` is
+empty. The plan read 0/27 only because the implementing agent wrote its
+decisions into a section of its own instead of ticking.
+
 **Why the rename is forced, not cosmetic.** The harness CLI binary must be `orrery` (§5.5: `orrery run`, `orrery eval …`). The ADE crate is currently `orrery` with `lib orrery_lib`; two bin targets named `orrery` in one workspace collide. So the ADE crate becomes `orrery-ade`.
 
 **Why the identity must not change.** The user's live worktrees sit under `%APPDATA%\com.kouji.orrery`; Claude Code hook configs point at the installed exe; the installed release must keep auto-updating in place. `productName: "Orrery"` names the installed binary (Tauri 2's `mainBinaryName` defaults to it), and agent detection matches on the binary stem containing `"orrery"` (`agents/adapters/claude.rs:338`) — so `orrery-ade` stays detected either way, but the **installed** name stays `Orrery.exe` regardless.
@@ -42,18 +53,18 @@ Three commits. **The user reviews each before it lands.**
 
 No moves in this commit; it shrinks the rename-detection set for commit 2.
 
-- [ ] `git rm -r --cached src-tauri/target-test` — 374 files of build artefacts that should never have been tracked.
-- [ ] `git rm -r .clone` — the stray fragment `.clone/worktrees/git-inspection/src/app/workspace/git/commit-diff-view.component.ts`, referenced by nothing.
-- [ ] `.gitignore`: un-anchor the entries that must survive the depth change, at the verified line numbers —
+- [x] `git rm -r --cached src-tauri/target-test` — 374 files of build artefacts that should never have been tracked.
+- [x] `git rm -r .clone` — the stray fragment `.clone/worktrees/git-inspection/src/app/workspace/git/commit-diff-view.component.ts`, referenced by nothing.
+- [x] `.gitignore`: un-anchor the entries that must survive the depth change, at the verified line numbers —
   `:4` `/dist` → `dist/`; `:5` `/tmp` → `tmp/`; `:6` `/out-tsc` → `out-tsc/`; `:7` `/bazel-out` → `bazel-out/`; `:10` `/node_modules` → `node_modules/`; `:32` `/.angular/cache` → `.angular/cache/`; `:34` `/connect.lock` → `connect.lock`; `:35` `/coverage` → `coverage/`.
-- [ ] Add `target/` and `target-test/` (the cargo target dir moves to the repo root in task 3).
-- [ ] **Verify:** `git ls-files | grep -E "target-test|\.clone"` is empty.
+- [x] Add `target/` and `target-test/` (the cargo target dir moves to the repo root in task 3).
+- [x] **Verify:** `git ls-files | grep -E "target-test|\.clone"` is empty.
 
 ### Task 2 · Move commit — pure `git mv`, zero content edits
 
 Keep this commit rename-only so every path shows 100% similarity. That is what makes rename detection cheap for the 14 other branches.
 
-- [ ] ```
+- [x] ```
       mkdir ade
       git mv src src-tauri e2e tools scripts docs design \
              angular.json tsconfig.json tsconfig.app.json \
@@ -61,12 +72,12 @@ Keep this commit rename-only so every path shows 100% similarity. That is what m
              package.json ade/
       git mv ade/src-tauri/Cargo.lock Cargo.lock
       ```
-- [ ] **Verify before committing:** `git diff --cached --stat -M --find-renames=100%` shows renames with **0 insertions and 0 deletions**.
-- [ ] Do **not** squash this with task 3.
+- [x] **Verify before committing:** `git diff --cached --stat -M --find-renames=100%` shows renames with **0 insertions and 0 deletions**.
+- [x] Do **not** squash this with task 3.
 
 ### Task 3 · Cargo workspace
 
-- [ ] Create the root `Cargo.toml`:
+- [x] Create the root `Cargo.toml`:
   ```toml
   [workspace]
   resolver = "2"
@@ -74,10 +85,10 @@ Keep this commit rename-only so every path shows 100% similarity. That is what m
   default-members = ["ade/src-tauri"]
   ```
   `harness/…` members are added by [`00b`](00b-scaffold-workspace.md), once crates exist. `resolver = "2"` is **mandatory**: a virtual root without it silently falls back to resolver 1.
-- [ ] `ade/src-tauri/Cargo.toml` — delete lines 1–3 (`[workspace]`, `members = ["updater-stub"]`, blank). The file now starts at `[package]`.
-- [ ] Move shared version pins to `[workspace.dependencies]` at the root and switch `ade/src-tauri` to `{ workspace = true }` for: `serde`, `serde_json`, `thiserror`, `rusqlite`, `uuid`, `blake3`, `regex`, `semver`, `clap`, `toml_edit`, `sha2`, `reqwest`, `rustls`, `tempfile`. Otherwise the harness crates compile a second copy of each.
-- [ ] Move `ade/src-tauri/clippy.toml` to the repo root — clippy resolves it from cwd upward, so at the root it applies to both trees.
-- [ ] **Target-dir consequence:** `target/` moves from `ade/src-tauri/target/` to the repo root, shared with the harness crates. Every path fix in task 5 follows from this. `ade/src-tauri/.gitignore:5` (`/target/`) is now dead; leave it or drop it.
+- [x] `ade/src-tauri/Cargo.toml` — delete lines 1–3 (`[workspace]`, `members = ["updater-stub"]`, blank). The file now starts at `[package]`.
+- [x] Move shared version pins to `[workspace.dependencies]` at the root and switch `ade/src-tauri` to `{ workspace = true }` for: `serde`, `serde_json`, `thiserror`, `rusqlite`, `uuid`, `blake3`, `regex`, `semver`, `clap`, `toml_edit`, `sha2`, `reqwest`, `rustls`, `tempfile`. Otherwise the harness crates compile a second copy of each.
+- [x] Move `ade/src-tauri/clippy.toml` to the repo root — clippy resolves it from cwd upward, so at the root it applies to both trees.
+- [x] **Target-dir consequence:** `target/` moves from `ade/src-tauri/target/` to the repo root, shared with the harness crates. Every path fix in task 5 follows from this. `ade/src-tauri/.gitignore:5` (`/target/`) is now dead; leave it or drop it.
 
 ### Task 4 · Renames — names only
 
@@ -125,28 +136,28 @@ Keep this commit rename-only so every path shows 100% similarity. That is what m
 
 ### Task 6 · Node and pnpm
 
-- [ ] `pnpm-workspace.yaml` — insert at line 1, above the existing comment block:
+- [x] `pnpm-workspace.yaml` — insert at line 1, above the existing comment block:
   ```yaml
   packages:
     - ade
   ```
   ([`00b`](00b-scaffold-workspace.md) adds the harness entries.)
-- [ ] New root `package.json`, private, no dependencies, passthrough scripts so CI and habits survive:
+- [x] New root `package.json`, private, no dependencies, passthrough scripts so CI and habits survive:
   `test`, `dev`, `build`, `start`, `e2e`, `tauri`, `release`, `release:patch`, `ext:*` → `pnpm -C ade <script>`.
-- [ ] `ade/package.json` — **zero script edits.** Every path in them (`tools/…`, `scripts/…`) is already relative to `ade/`.
-- [ ] Regenerate the lockfile: `pnpm install --lockfile-only`. The importer key `.` becomes `ade`; without this every `pnpm install --frozen-lockfile` in CI fails.
+- [x] `ade/package.json` — **zero script edits.** Every path in them (`tools/…`, `scripts/…`) is already relative to `ade/`.
+- [x] Regenerate the lockfile: `pnpm install --lockfile-only`. The importer key `.` becomes `ade`; without this every `pnpm install --frozen-lockfile` in CI fails.
 
 ### Task 7 · CI
 
 `.github/workflows/release.yml`:
-- [ ] `:58`, `:62`, `:115` — add `working-directory: ade`.
-- [ ] `:75` → `node ade/scripts/release/notes.mjs`; `:166` → `ade/scripts/release/make-latest-json.mjs`; `:212`, `:214` → `ade/scripts/release/changelog-json.mjs`.
-- [ ] `:109` — rust-cache `workspaces: src-tauri` → `workspaces: .` (the root `Cargo.lock` is the cache key now).
-- [ ] `:121,122,123,126,131,133,134` — `src-tauri/target/release/bundle/…` → `target/release/bundle/…`.
+- [x] `:58`, `:62`, `:115` — add `working-directory: ade`.
+- [x] `:75` → `node ade/scripts/release/notes.mjs`; `:166` → `ade/scripts/release/make-latest-json.mjs`; `:212`, `:214` → `ade/scripts/release/changelog-json.mjs`.
+- [x] `:109` — rust-cache `workspaces: src-tauri` → `workspaces: .` (the root `Cargo.lock` is the cache key now).
+- [x] `:121,122,123,126,131,133,134` — `src-tauri/target/release/bundle/…` → `target/release/bundle/…`.
 
 `.github/workflows/extensions.yml`:
-- [ ] `:76`, `:125`, `:183` — `path: dist-ext/*.zip` → `ade/dist-ext/*.zip`.
-- [ ] `:209` → `node ade/scripts/extensions/make-index.mjs`.
+- [x] `:76`, `:125`, `:183` — `path: dist-ext/*.zip` → `ade/dist-ext/*.zip`.
+- [x] `:209` → `node ade/scripts/extensions/make-index.mjs`.
 
 `.github/workflows/test.yml`: no edit — `pnpm test` works via the root passthrough. ([`00b`](00b-scaffold-workspace.md) adds the harness job.)
 
@@ -154,8 +165,8 @@ Keep this commit rename-only so every path shows 100% similarity. That is what m
 
 ### Task 8 · Root README and CLAUDE.md
 
-- [ ] Root `README.md`: a two-root index — what `ade/` is, what `harness/` is, how to build each, and that they share one cargo workspace.
-- [ ] `CLAUDE.md`: a short section on the new layout — `ade/` vs `harness/`, run cargo from the root, `default-members` excludes the ADE, and `pnpm -C ade` for frontend work.
+- [x] Root `README.md`: a two-root index — what `ade/` is, what `harness/` is, how to build each, and that they share one cargo workspace.
+- [x] `CLAUDE.md`: a short section on the new layout — `ade/` vs `harness/`, run cargo from the root, `default-members` excludes the ADE, and `pnpm -C ade` for frontend work.
 
 ### Task 9 · Verification
 
@@ -190,7 +201,7 @@ pnpm -C ade tauri build --no-bundle                      # target/release/orrery
 git grep -n "src-tauri/target\|cwd(), .landing.\|'\.\./\.\./landing'\|orrery_lib" -- ':!ade/docs' ':!ade/design' ':!harness'   # empty
 ```
 
-- [ ] Run the real app side by side with the installed release to confirm nothing about installation changed: `npx tauri dev` from `ade/`. **Do not kill the user's installed Orrery.**
+- [x] Run the real app side by side with the installed release to confirm nothing about installation changed: `npx tauri dev` from `ade/`. **Do not kill the user's installed Orrery.**
 
 ---
 
@@ -212,7 +223,7 @@ Nothing breaks at rest — they share `.git`, and no worktree path moves (the wo
 
 ## Afterwards
 
-- [ ] Update the memory files that point at `docs/superpowers/...` to `ade/docs/superpowers/...`.
+- [x] Update the memory files that point at `docs/superpowers/...` to `ade/docs/superpowers/...`.
 
 ---
 
