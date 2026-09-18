@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`streaming markdown > markdown.plain_until_complete 1`] = `
+"Here is the fix:
+  fn main() {
+      println!("hi");
+  }"
+`;
+
+exports[`streaming markdown > renders the subset a terminal can show 1`] = `
+"Heading
+A bold word, an italic one and code.
+• first
+• second
+quoted
+  cargo test"
+`;

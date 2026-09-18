@@ -1,0 +1,137 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the surface components > surfaces.custom 1`] = `
+"buildgraph.dag (no renderer)
+proto -> agui -> kernel"
+`;
+
+exports[`the surface components > surfaces.custom.narrow 1`] = `
+"buildgraph.dag (no rend…
+proto -> agui -> kernel"
+`;
+
+exports[`the surface components > surfaces.diff 1`] = `
+"src/lib.rs +2 -1
+@@ -1,2 +1,3 @@
+ fn main() {
++    println!("hi");
+ }
+@@ -40,1 +41,1 @@
+-let x = 1;
++let x = 2;"
+`;
+
+exports[`the surface components > surfaces.diff.narrow 1`] = `
+"src/lib.rs +2 -1
+@@ -1,2 +1,3 @@
+ fn main() {
++    println!("hi");
+ }
+@@ -40,1 +41,1 @@
+-let x = 1;
++let x = 2;"
+`;
+
+exports[`the surface components > surfaces.form 1`] = `
+"  Branch         * main
+  Token          * ••••
+  Depth            1
+  Push when done   no
+  Remote         * origin
+[Create branch] · required fields empty"
+`;
+
+exports[`the surface components > surfaces.form.narrow 1`] = `
+"  Branch         * main
+  Token          * ••••
+  Depth            1
+  Push when done   no
+  Remote         * ori…
+[Create branch] · requi…"
+`;
+
+exports[`the surface components > surfaces.markdown 1`] = `"The workspace has three crates: proto, provider and kernel."`;
+
+exports[`the surface components > surfaces.markdown.narrow 1`] = `
+"The workspace has three
+crates: proto, provider
+and kernel."
+`;
+
+exports[`the surface components > surfaces.progress 1`] = `"████████████████████ 9/9 indexing the workspace"`;
+
+exports[`the surface components > surfaces.progress.narrow 1`] = `"indexing the worksp… 9/9"`;
+
+exports[`the surface components > surfaces.question 1`] = `
+"Which crate?
+  orrery-proto
+❯ orrery-kernel
+↑↓ enter · default kernel · 60s"
+`;
+
+exports[`the surface components > surfaces.question.narrow 1`] = `
+"Which crate?
+  orrery-proto
+❯ orrery-kernel
+↑↓ enter · default kern…"
+`;
+
+exports[`the surface components > surfaces.stack 1`] = `
+"builtin.read
+{"path":"Cargo.toml"}
+name = "orrery""
+`;
+
+exports[`the surface components > surfaces.stack.narrow 1`] = `
+"builtin.read
+{"path":"Cargo.toml"}
+name = "orrery""
+`;
+
+exports[`the surface components > surfaces.stream 1`] = `"⟨stderr⟩ closed"`;
+
+exports[`the surface components > surfaces.stream.narrow 1`] = `"⟨stderr⟩ closed"`;
+
+exports[`the surface components > surfaces.table 1`] = `
+"crate        lines
+orrery-agui  612
+orrery-proto 2358"
+`;
+
+exports[`the surface components > surfaces.table.narrow 1`] = `
+"crate        lines
+orrery-agui  612
+orrery-proto 2358"
+`;
+
+exports[`the surface components > surfaces.task 1`] = `
+"2/4 done
+✓ read the plan
+✓ write the differ
+· run the tests
+· tick the plan"
+`;
+
+exports[`the surface components > surfaces.task.narrow 1`] = `
+"2/4 done
+✓ read the plan
+✓ write the differ
+· run the tests
+· tick the plan"
+`;
+
+exports[`the surface components > surfaces.text 1`] = `"proto -> agui -> kernel"`;
+
+exports[`the surface components > surfaces.text.narrow 1`] = `"proto -> agui -> kernel"`;
+
+exports[`the surface components > surfaces.tree 1`] = `
+"└▾ harness
+  ├· core
+  └· clients"
+`;
+
+exports[`the surface components > surfaces.tree.narrow 1`] = `
+"└▾ harness
+  ├· core
+  └· clients"
+`;

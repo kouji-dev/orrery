@@ -12,32 +12,39 @@ import type { ComponentType, ReactElement } from "react";
 
 import type { SurfaceKind } from "@orrery/protocol";
 
+import { CustomSurface } from "./Custom.js";
+import { DiffSurface } from "./Diff.js";
+import { FormSurface } from "./Form.js";
+import { MarkdownSurface } from "./Markdown.js";
+import { ProgressSurface } from "./Progress.js";
+import { QuestionSurface } from "./Question.js";
+import { StackSurface } from "./Stack.js";
+import { StreamSurface } from "./Stream.js";
+import { TableSurface } from "./Table.js";
+import { TaskSurface } from "./Task.js";
+import { TextSurface } from "./Text.js";
+import { TreeSurface } from "./Tree.js";
 import type { Drawable, SurfaceProps } from "./kinds.js";
 
 export type { Drawable, Intent, KindOf, SurfaceProps } from "./kinds.js";
 export { drawable } from "./kinds.js";
 
-/** Placeholder until the component for this kind lands (task 3). */
-function NotDrawn<T extends SurfaceKind["t"]>({ node }: SurfaceProps<T>): ReactElement {
-  return <Text color="red">[no renderer for {node.kind.t}]</Text>;
-}
-
 /** Every kind, by tag. A missing key is a type error. */
 export const COMPONENTS: {
   [T in SurfaceKind["t"]]: ComponentType<SurfaceProps<T>>;
 } = {
-  text: NotDrawn,
-  markdown: NotDrawn,
-  table: NotDrawn,
-  tree: NotDrawn,
-  diff: NotDrawn,
-  progress: NotDrawn,
-  stream: NotDrawn,
-  task: NotDrawn,
-  question: NotDrawn,
-  form: NotDrawn,
-  stack: NotDrawn,
-  custom: NotDrawn,
+  text: TextSurface,
+  markdown: MarkdownSurface,
+  table: TableSurface,
+  tree: TreeSurface,
+  diff: DiffSurface,
+  progress: ProgressSurface,
+  stream: StreamSurface,
+  task: TaskSurface,
+  question: QuestionSurface,
+  form: FormSurface,
+  stack: StackSurface,
+  custom: CustomSurface,
 };
 
 /** Draw one surface. */

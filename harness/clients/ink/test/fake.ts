@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { conformance, type Frame } from "@orrery/client";
 
 import type { Connection } from "../src/app.js";
+import { drawable, type Drawable } from "../src/surfaces/index.js";
 
 /** One scenario by file name, without the extension. */
 export function scenario(name: string): conformance.Scenario {
@@ -93,4 +94,25 @@ export async function settle(ticks = 8): Promise<void> {
   for (let i = 0; i < ticks; i += 1) {
     await new Promise((r) => setTimeout(r, 4));
   }
+}
+
+/**
+ * One surface out of a scenario, as a component takes it.
+ *
+ * `<id>:fallback` reaches the fallback of a custom surface, which is how the
+ * `text` component gets a fixture of its own rather than a hand-written one.
+ */
+export function surfaceFrom(name: string, id: string): Drawable {
+  const [surfaceId, part] = id.split(":");
+  const store = conformance.replay(scenario(name));
+  const found = store
+    .state()
+    .turns.flatMap((t) => t.surfaces)
+    .find((s) => s.id === surfaceId);
+  if (!found) throw new Error(`${name} has no surface ${surfaceId}`);
+  if (part === "fallback") {
+    if (found.kind.t !== "custom") throw new Error(`${surfaceId} is not a custom surface`);
+    return drawable(found.kind.fallback);
+  }
+  return found;
 }
