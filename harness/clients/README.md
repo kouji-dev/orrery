@@ -25,3 +25,14 @@ on the control channel.
 
 `seq` is assigned once, per session, at the differ's output — never per connection — so a
 re-attaching client asks for `since = <last seq it saw>` and gets exactly the gap.
+
+A **coalesced** frame is not a gap. A client that asked for a slow tick gets merged frames,
+and a merged frame carries `merged_from` as well as `seq`; contiguity is checked against
+`merged_from`, not `seq`. Without it a slow client would re-attach every tick.
+
+## The fixtures are the contract
+
+[`conformance/`](conformance) holds ten scenarios as line-delimited AG-UI frames plus the
+`SurfaceStore` state expected at each checkpoint. `orrery-client` and `@orrery/client` both
+run them; ratatui, Ink and `json` run them on top of their own drawing snapshots. A green
+run in one language means nothing on its own — that is the whole point of there being two.

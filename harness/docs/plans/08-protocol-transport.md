@@ -131,86 +131,86 @@ Files: `harness/clients/conformance/*`
 
 The fixtures are the contract between five implementations. They come before any of them.
 
-- [ ] Define the format in `README.md`: one JSONL file per scenario; each line is either `{"ev": <AguiEvent>}` or `{"expect": <SurfaceStore state>}`.
-- [ ] Write the scenarios: `text-only`, `tool-call`, `streaming-markdown` (partial fences), `consent-prompt`, `question-surface`, `table-then-resort` (the cost-guard case), `seq-gap`, `reattach-since`, `cancel-midturn`, `custom-with-fallback`.
-- [ ] Each scenario must be derivable from one of plan 03's six provider stream fixtures, so the same turn can be driven end-to-end or replayed as events alone.
+- [x] Define the format in `README.md`: one JSONL file per scenario; each line is either `{"ev": <AguiEvent>}` or `{"expect": <SurfaceStore state>}`.
+- [x] Write the scenarios: `text-only`, `tool-call`, `streaming-markdown` (partial fences), `consent-prompt`, `question-surface`, `table-then-resort` (the cost-guard case), `seq-gap`, `reattach-since`, `cancel-midturn`, `custom-with-fallback`.
+- [x] Each scenario must be derivable from one of plan 03's six provider stream fixtures, so the same turn can be driven end-to-end or replayed as events alone.
 
 ### Task 2 · AG-UI encoder
 
 Files: `orrery-agui/src/*`
 
-- [ ] **Failing test first.** `agui::maps_every_frame` — a table over every `Event` variant asserting the AG-UI event(s) it produces; fails until each mapping lands.
-- [ ] `agui::state_delta_is_json_patch_shaped` — a `SurfacePatch::Set` encodes as an RFC 6902 `replace` op with the right path.
-- [ ] `agui::consent_is_custom` — round-trips through `Custom` with name and payload intact.
-- [ ] Implement the vendored event enum and the encoder.
-- [ ] `cargo xtask agui-drift` — fetch upstream's schema, diff variant names, fail on unknown additions. Networked, so CI-only and skippable offline.
+- [x] **Failing test first.** `agui::maps_every_frame` — a table over every `Event` variant asserting the AG-UI event(s) it produces; fails until each mapping lands.
+- [x] `agui::state_delta_is_json_patch_shaped` — a `SurfacePatch::Set` encodes as an RFC 6902 `replace` op with the right path.
+- [x] `agui::consent_is_custom` — round-trips through `Custom` with name and payload intact.
+- [x] Implement the vendored event enum and the encoder.
+- [x] `cargo xtask agui-drift` — fetch upstream's schema, diff variant names, fail on unknown additions. Networked, so CI-only and skippable offline.
 
 ### Task 3 · `seq`, replay, coalescing
 
 Files: `orrery-transport/src/{seq,replay,coalesce}.rs`
 
-- [ ] **Failing test first.** `seq::is_assigned_once` — two connected clients see identical `seq` values for the same event.
-- [ ] `coalesce::merges_appends` — 100 single-character appends in one tick become one append.
-- [ ] `coalesce::collapses_to_last_replace`.
-- [ ] `coalesce::per_client` — a slow client and a fast client on one session; the fast one gets fine-grained frames, the slow one gets merged ones, **and both end at the same final state**. This is the test that matters.
-- [ ] `replay::attach_since_is_contiguous` — attach with `since = 5`, get 6..n with no gaps.
-- [ ] Implement.
+- [x] **Failing test first.** `seq::is_assigned_once` — two connected clients see identical `seq` values for the same event.
+- [x] `coalesce::merges_appends` — 100 single-character appends in one tick become one append.
+- [x] `coalesce::collapses_to_last_replace`.
+- [x] `coalesce::per_client` — a slow client and a fast client on one session; the fast one gets fine-grained frames, the slow one gets merged ones, **and both end at the same final state**. This is the test that matters.
+- [x] `replay::attach_since_is_contiguous` — attach with `since = 5`, get 6..n with no gaps.
+- [x] Implement.
 
 ### Task 4 · In-process listener
 
 Files: `orrery-transport/src/listener/inproc.rs`
 
-- [ ] **Failing test first.** `inproc::same_types_no_serialisation` — a round trip that never touches serde (assert via a type-level marker or a counter in a custom serializer that must stay at zero).
-- [ ] Implement over `tokio::sync::mpsc`.
+- [x] **Failing test first.** `inproc::same_types_no_serialisation` — a round trip that never touches serde (assert via a type-level marker or a counter in a custom serializer that must stay at zero).
+- [x] Implement over `tokio::sync::mpsc`.
 
 ### Task 5 · Pipe / UDS listener
 
 Files: `orrery-transport/src/listener/pipe.rs`
 
-- [ ] **Failing test first.** `pipe::two_clients_one_session` — two connections attach to one session, both receive the same turn, each with its own coalescer.
-- [ ] `pipe::disconnect_does_not_end_the_session` — drop a client mid-turn; the turn completes; re-attach and replay shows it.
-- [ ] Implement over `interprocess` with length-prefixed framing, JSON or CBOR by negotiation.
+- [x] **Failing test first.** `pipe::two_clients_one_session` — two connections attach to one session, both receive the same turn, each with its own coalescer.
+- [x] `pipe::disconnect_does_not_end_the_session` — drop a client mid-turn; the turn completes; re-attach and replay shows it.
+- [x] Implement over `interprocess` with length-prefixed framing, JSON or CBOR by negotiation.
 
 ### Task 6 · HTTP + SSE listener
 
 Files: `orrery-transport/src/listener/http.rs`
 
-- [ ] **Failing test first.** `http::run_returns_sse` — `POST /run` with a `RunAgentInput` body returns `text/event-stream` and the expected event sequence.
-- [ ] `http::control_endpoints` — attach, cancel, consent answer, intent, query.
-- [ ] `http::slow_consumer_does_not_stall_the_kernel` — a client that never reads; assert the turn still completes.
-- [ ] Implement with `axum`. Bind to loopback by default; a bearer token from the endpoint string. **No auth story beyond loopback + token in phase 1** — record that as a limitation.
+- [x] **Failing test first.** `http::run_returns_sse` — `POST /run` with a `RunAgentInput` body returns `text/event-stream` and the expected event sequence.
+- [x] `http::control_endpoints` — attach, cancel, consent answer, intent, query.
+- [x] `http::slow_consumer_does_not_stall_the_kernel` — a client that never reads; assert the turn still completes.
+- [x] Implement with `axum`. Bind to loopback by default; a bearer token from the endpoint string. **No auth story beyond loopback + token in phase 1** — record that as a limitation.
 
 ### Task 7 · Rust client SDK
 
 Files: `clients/sdk-rs/*`
 
-- [ ] **Failing test first.** `conformance::all_scenarios` — run every fixture through `SurfaceStore`, assert the expected state at each checkpoint.
-- [ ] `store::text_deltas_become_markdown` — deltas accumulate into one markdown surface with `complete: false`, flipped `true` at message end.
-- [ ] `store::gap_is_detected`.
-- [ ] Implement `AguiSession`, `SurfaceStore`, `Endpoint` parsing (`inproc:`, `pipe:<name>`, `http://…`).
+- [x] **Failing test first.** `conformance::all_scenarios` — run every fixture through `SurfaceStore`, assert the expected state at each checkpoint.
+- [x] `store::text_deltas_become_markdown` — deltas accumulate into one markdown surface with `complete: false`, flipped `true` at message end.
+- [x] `store::gap_is_detected`.
+- [x] Implement `AguiSession`, `SurfaceStore`, `Endpoint` parsing (`inproc:`, `pipe:<name>`, `http://…`).
 
 ### Task 8 · TypeScript client SDK
 
 Files: `clients/sdk-ts/*`
 
-- [ ] **Failing test first.** `conformance.test.ts` — the **same fixture files**, the same assertions, under vitest.
-- [ ] Implement on `@ag-ui/client`'s `HttpAgent` for subscribe, plus a small fetch client for `/control`.
-- [ ] Consume `@orrery/protocol` types; no hand-written frame types.
+- [x] **Failing test first.** `conformance.test.ts` — the **same fixture files**, the same assertions, under vitest.
+- [x] Implement on `@ag-ui/client`'s `HttpAgent` for subscribe, plus a small fetch client for `/control`.
+- [x] Consume `@orrery/protocol` types; no hand-written frame types.
 
 ### Task 9 · The json renderer
 
 Files: `clients/json/src/lib.rs`
 
-- [ ] **Failing test first.** `json::emits_fallback_beside_payload` — a `custom` surface emits both the payload and its fallback, so a lazy fallback shows up in CI (§6.2).
-- [ ] `json::ignores_placement` — view bindings' `placement` is a human-client concern; the json renderer emits everything.
-- [ ] Implement: line-delimited AG-UI events on stdout.
+- [x] **Failing test first.** `json::emits_fallback_beside_payload` — a `custom` surface emits both the payload and its fallback, so a lazy fallback shows up in CI (§6.2).
+- [x] `json::ignores_placement` — view bindings' `placement` is a human-client concern; the json renderer emits everything.
+- [x] Implement: line-delimited AG-UI events on stdout.
 
 ### Task 10 · Consent deadlines
 
 Files: `orrery-transport/src/lib.rs`
 
-- [ ] **Failing test first.** `consent::expired_prompt_is_not_replayed_live` — issue a prompt with a 50 ms deadline, let it lapse, attach with `since` before it; assert it replays as resolved-by-fallback, not as a live prompt.
-- [ ] Implement the monotonic clock and the replay rule.
+- [x] **Failing test first.** `consent::expired_prompt_is_not_replayed_live` — issue a prompt with a 50 ms deadline, let it lapse, attach with `since` before it; assert it replays as resolved-by-fallback, not as a live prompt.
+- [x] Implement the monotonic clock and the replay rule.
 
 ---
 
@@ -224,6 +224,34 @@ Files: `orrery-transport/src/lib.rs`
 ## Open questions
 
 1. **Auth on the HTTP listener.** Loopback plus a bearer token is enough for a developer machine and not enough for §5.1's "remote execution host". Phase 4 needs a real answer (mTLS is in `ProviderAuth`'s vocabulary already). Decide before TLS lands.
+
+   **Still open, deliberately.** Phase 1 ships loopback + a bearer token in the endpoint's authority (`http://<token>@host:port`, never a query parameter — a query string ends up in logs, shell history and `ps`). Recorded as a limitation in `listener/http.rs`: no per-session authorisation, no audience check, no replay protection. This is the question phase 4 answers together with TLS, not now.
+
 2. **CBOR negotiation.** Header, query parameter, or a control frame? Pick one and write it down; it is the kind of thing that gets decided twice.
+
+   **Decided: a control frame, and it is always JSON.** On a byte-stream connection (pipe, UDS, later TCP) the first frame is a `Hello` naming the format, and everything after it is in that format. Not a header — a named pipe has none — and not a query parameter, which would put the answer in a URL only one of the three listeners has. The frame that names the format cannot itself be in the format it names, so `Hello` and `HelloAck` are JSON unconditionally. HTTP is the exception that proves the rule: there it is the `Accept` header, because that is what an off-the-shelf AG-UI client already sends. See `orrery-transport/src/frame.rs`.
+
 3. **Does `events_since` live on `SessionStore` or a separate `EventLog`?** Cross-reference plan 02's open question 1 — this plan is the caller, so decide here.
+
+   **Decided: on `SessionStore`, where plan 02 already put it, and the transport keeps a ring in front of it.** Two things follow, and they matter more than the placement:
+
+   - **One numbering space.** `seq` is assigned by `SeqAuthority` at the **encoder's** output — downstream of the differ, upstream of every connection — so the unit it counts is an AG-UI frame, not a kernel event. One kernel event can expand to two frames (`tool.settled` is `TOOL_CALL_END` and `TOOL_CALL_RESULT`) and each gets its own number, because otherwise contiguity would not be arithmetic.
+   - **Cold replay re-encodes.** `ReplayRing` serves the common case and returns `ReplayError::TooOld` rather than a silent hole when it cannot; the caller then reads `SessionStore::events_since(session, None)` and runs it through a fresh `Encoder`, which is deterministic and reproduces the same numbering. A separate `EventLog` would have been a second numbering space, which is exactly the drift this plan is trying not to create.
+
 4. **`RunAgentInput` mapping.** AG-UI's run invocation carries messages and state; ours carries a `UserInput` against an existing session. Confirm the adapter is lossless enough that a stock AG-UI client works without special-casing.
+
+   **Confirmed, with one deliberate loss.** The adapter takes `threadId` as the session, the **last `user` message** as the input, and ignores the rest of the message list and the `state` blob. A stock client works unmodified; what it loses is the ability to rewrite history on the way in, which it was never allowed to do — the kernel's transcript is the authority, and a client that replayed its idea of the history would be writing state. `http::run_agent_input_maps_to_user_input` pins it.
+
+## State
+
+**Landed 2026-09-18.** All ten tasks. 34 Rust tests across four crates plus 18 under vitest, all green, none of them touching the network or a paid API.
+
+- `orrery-agui` — vendored AG-UI event enum (15 variants, diffed against the real `@ag-ui/core`), `Encoder`, `Frame` with `seq` and `merged_from`. `PatchOp::Append` is ours and documented as such: JSON Patch cannot express string concatenation, and re-sending a markdown body per token would undo the point of `SurfacePatch::Append`.
+- `orrery-transport` — `SeqAuthority`, `ReplayRing`, per-client `Coalescer`, `Hub`, `MonoClock` + `ConsentLedger` (translation #12), and all three listeners: in-process (generic, no serde bound anywhere), pipe/UDS over `interprocess` with length-prefixed framing, and HTTP+SSE on `axum`.
+- `clients/sdk-rs` (`orrery-client`) — `AguiSession` over all three transports, `SurfaceStore`, `Endpoint` parsing, and the fixture runner the other Rust clients will reuse.
+- `clients/sdk-ts` (`@orrery/client`) — the same store on stock `@ag-ui/client`, the same ten fixtures, under vitest.
+- `clients/json` (`orrery-client-json`) — line-delimited AG-UI, with each custom surface's rendered fallback beside its payload.
+- `clients/conformance` — ten scenarios, each derivable from one of plan 03's six provider streams. `README.md` fixes the format.
+- `cargo xtask agui-drift` — implemented, offline by default; `--fetch` is CI-only. Running it against the installed `@ag-ui/core` corrected the pinned list: upstream calls them `REASONING_*`, not `THINKING_*`, and the protocol version is 1.0.
+
+**Not done here.** The kernel (plan 05) does not exist yet, so every listener is driven by a hand-written event script or a `ControlHandler` stand-in; `orrery serve --provider fixture:…` is plan 17's line to write. `sdk-rs` is `publish = false` while it depends on the unpublished `orrery-transport` — splitting the store (pure data, publishable) from the session is the phase-2 move, and there is no third-party consumer yet to need it.
