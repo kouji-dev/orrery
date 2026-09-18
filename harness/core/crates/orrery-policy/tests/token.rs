@@ -114,3 +114,24 @@ fn a_token_names_its_rule_and_its_call() {
         Some("tool(*)".to_owned())
     );
 }
+
+/// Revocation outlives the moment it happens.
+///
+/// A token is minted per broker call and redeemed immediately, so a tool whose
+/// call has been cancelled would simply mint another one — and "cancelling a
+/// call takes its capabilities back" would hold for a few microseconds and then
+/// stop. A call that has been revoked mints nothing redeemable.
+#[test]
+fn a_revoked_call_cannot_mint_its_way_back() {
+    let ws = Workspace::new();
+    let engine = allowing(&ws, Duration::from_secs(60));
+    let call = CallId::new();
+    engine.ledger().revoke_call(call);
+
+    let after = token_for(&engine, &PendingCall::tool("git.status").in_call(call));
+    assert_eq!(
+        engine.ledger().redeem(after.nonce()),
+        Err(TokenError::Revoked),
+        "a token minted for a call that was already revoked is born revoked"
+    );
+}

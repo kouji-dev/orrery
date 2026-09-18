@@ -29,8 +29,8 @@ use parking_lot::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::broker::{
-    BrokerError, BrokerFacade, BrokerResult, NetRequest, NetResponse, ReadChunk, ReadRequest,
-    SpawnOutput, SpawnRequest, WriteRequest,
+    BrokerError, BrokerFacade, BrokerResult, ListEntry, ListRequest, Listing, NetRequest,
+    NetResponse, ReadChunk, ReadRequest, SpawnOutput, SpawnRequest, WriteRequest,
 };
 use crate::ctx::{CallCtx, SurfaceLog, SurfaceSink, ToolBudget};
 use crate::manifest::{ExtensionManifest, ManifestError, scope_matches};
@@ -49,6 +49,15 @@ pub enum BrokerCall {
         path: PathBuf,
         /// How much was asked for.
         limit: u64,
+        /// Whether the grants covered it.
+        allowed: bool,
+    },
+    /// A directory listing.
+    List {
+        /// Where it looked.
+        path: PathBuf,
+        /// Whether it descended.
+        recursive: bool,
         /// Whether the grants covered it.
         allowed: bool,
     },
@@ -197,6 +206,42 @@ impl BrokerFacade for MockBroker {
             eof: end == contents.len(),
             total: Some(contents.len() as u64),
         })
+    }
+
+    async fn list(&self, req: ListRequest) -> BrokerResult<Listing> {
+        let what = req.path.display().to_string();
+        let allowed = self.allows(Aspect::Read, &what);
+        self.record(BrokerCall::List {
+            path: req.path.clone(),
+            recursive: req.recursive,
+            allowed,
+        });
+
+        // The files the test declared, filtered to the ones this call may both
+        // see and read. A mock that named a file the grants do not cover would
+        // teach an author the opposite of what a real session does.
+        let files = self.files.lock();
+        let mut entries: Vec<ListEntry> = Vec::new();
+        for (path, contents) in files.iter() {
+            let Ok(rest) = path.strip_prefix(&req.path) else {
+                continue;
+            };
+            if !req.recursive && rest.components().count() > 1 {
+                continue;
+            }
+            if !self.allows(Aspect::Read, &path.display().to_string()) {
+                continue;
+            }
+            entries.push(ListEntry {
+                path: path.clone(),
+                is_dir: false,
+                size: Some(contents.len() as u64),
+            });
+        }
+        let limit = usize::try_from(req.limit).unwrap_or(usize::MAX);
+        let truncated = entries.len() > limit;
+        entries.truncate(limit);
+        Ok(Listing { entries, truncated })
     }
 
     async fn write(&self, req: WriteRequest) -> BrokerResult<()> {

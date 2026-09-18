@@ -7,8 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use orrery_ext_api::{
-    BrokerFacade, CallCtx, DeniesEverything, ExtensionManifest, Generation, HostError,
-    InstanceState, Ledger, SingletonSlot, SurfaceSink, ToolDef,
+    BrokerFacade, BrokerSource, CallCtx, DeniesEverything, ExtensionManifest, Generation,
+    HostError, InstanceState, Ledger, SharedBroker, SingletonSlot, SurfaceSink, ToolDef,
 };
 use orrery_proto::{
     Contribution, ExtId, Grant, Layer, LoadOutcome, LoadStage, Outcome, RuleId, ToolRef,
@@ -154,7 +154,7 @@ pub struct ExtensionTable {
     singletons: RwLock<BTreeMap<SingletonSlot, (ExtId, Layer)>>,
     ledger: Ledger,
     next_generation: AtomicU64,
-    broker: Arc<dyn BrokerFacade>,
+    brokers: Arc<dyn BrokerSource>,
     ui: RwLock<SurfaceSink>,
 }
 
@@ -177,15 +177,31 @@ impl ExtensionTable {
         Self::with_broker(Arc::new(DeniesEverything))
     }
 
-    /// An empty table over a broker.
+    /// An empty table over one facade, handed to every call unchanged.
+    ///
+    /// Right for a broker with no per-call state — a mock, or
+    /// [`DeniesEverything`]. A broker that mints capabilities wants
+    /// [`with_broker_source`](Self::with_broker_source) instead, so that what
+    /// it mints can be taken back when the call is cancelled.
     #[must_use]
     pub fn with_broker(broker: Arc<dyn BrokerFacade>) -> Arc<Self> {
+        Self::with_broker_source(SharedBroker::new(broker))
+    }
+
+    /// An empty table that asks for a facade **per call**.
+    ///
+    /// This is the production wiring. `PolicyBroker::for_call` ties the tokens
+    /// a tool's broker calls mint to the dispatch's own `CallId` and to the
+    /// token that stops it, which is what makes `TokenLedger::revoke_call`
+    /// reach a call that is still running.
+    #[must_use]
+    pub fn with_broker_source(brokers: Arc<dyn BrokerSource>) -> Arc<Self> {
         Arc::new(Self {
             instances: RwLock::new(IndexMap::new()),
             singletons: RwLock::new(BTreeMap::new()),
             ledger: Ledger::new(),
             next_generation: AtomicU64::new(1),
-            broker,
+            brokers,
             ui: RwLock::new(SurfaceSink::discarding()),
         })
     }
@@ -445,13 +461,18 @@ impl ExtensionTable {
         }
 
         let _guard = instance.enter();
+        // One facade per call, not one per session: the broker behind it mints
+        // capability tokens against this call's id, so cancelling this call
+        // takes them back.
+        let cancel = call_token(instance.cancel_token());
+        let broker = self.brokers.for_call(ctx.call, cancel.clone());
         let call_ctx = CallCtx::new(
             ctx.call,
             r#ref.ext.clone(),
             r#ref.name.clone(),
             ceiling_of(ctx.budget()),
-            call_token(instance.cancel_token()),
-            self.broker.clone(),
+            cancel,
+            broker,
         )
         .with_ui(self.ui.read().clone());
 

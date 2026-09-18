@@ -41,8 +41,9 @@ pub mod tool;
 pub mod view;
 
 pub use broker::{
-    BrokerError, BrokerFacade, BrokerResult, DeniesEverything, NetRequest, NetResponse, ReadChunk,
-    ReadRequest, SpawnOutput, SpawnRequest, WriteRequest,
+    BrokerError, BrokerFacade, BrokerResult, BrokerSource, DeniesEverything, ListEntry,
+    ListRequest, Listing, NetRequest, NetResponse, ReadChunk, ReadRequest, SharedBroker,
+    SpawnOutput, SpawnRequest, WriteRequest,
 };
 pub use ctx::{CallCtx, SurfaceEmit, SurfaceLog, SurfaceSink, ToolBudget};
 pub use error::HostError;

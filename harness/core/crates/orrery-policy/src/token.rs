@@ -197,6 +197,13 @@ static NEXT_NONCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::
 pub struct TokenLedger {
     live: DashMap<u64, Live>,
     revoked: DashSet<u64>,
+    /// Calls that have been taken back.
+    ///
+    /// Revocation has to outlive the moment it happens. A token is minted per
+    /// broker call and redeemed immediately, so revoking only what is live
+    /// would be a race the tool nearly always wins: it would simply mint
+    /// another. A call named here mints nothing that can be redeemed.
+    revoked_calls: DashSet<CallId>,
     /// The first and last nonce this ledger issued, so a nonce it has already
     /// taken back can be told from one it never had, without keeping every
     /// nonce it ever issued.
@@ -218,7 +225,14 @@ impl TokenLedger {
         let nonce = NEXT_NONCE.fetch_add(1, SeqCst);
         let _ = self.first.compare_exchange(0, nonce, SeqCst, SeqCst);
         self.last.store(nonce, SeqCst);
-        self.live.insert(nonce, Live { call, deadline });
+        if self.revoked_calls.contains(&call) {
+            // Born revoked. The mint still happens, so the caller's code path
+            // is the ordinary one and the refusal lands where every other
+            // refusal lands: at redemption.
+            self.revoked.insert(nonce);
+        } else {
+            self.live.insert(nonce, Live { call, deadline });
+        }
         nonce
     }
 
@@ -251,9 +265,15 @@ impl TokenLedger {
         Ok(())
     }
 
-    /// Cancelling a call drops its nonces, so anything still in flight fails
-    /// [`TokenError::Revoked`] on its next broker call.
+    /// Cancelling a call drops its nonces **and remembers the call**, so
+    /// anything still in flight fails [`TokenError::Revoked`] on its next
+    /// broker call rather than on the one it happened to be holding.
+    ///
+    /// The memory is what makes this reach a tool call that is still running:
+    /// tokens are minted per broker call, so a revocation that only emptied
+    /// `live` would be undone by the tool's very next `read`.
     pub fn revoke_call(&self, call: CallId) {
+        self.revoked_calls.insert(call);
         let doomed: Vec<u64> = self
             .live
             .iter()

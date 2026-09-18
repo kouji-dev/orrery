@@ -252,7 +252,7 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
     );
 
     // 5 · The extension table, and the native bundle.
-    let table = orrery_host::table::ExtensionTable::with_broker(facade);
+    let table = orrery_host::table::ExtensionTable::with_broker_source(facade);
     let mut native = NativeRegistry::new();
     crate::features::register_native(&mut native);
     let host = Arc::new(NativeHost::new(native));

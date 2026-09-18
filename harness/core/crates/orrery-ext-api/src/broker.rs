@@ -10,9 +10,11 @@
 //! against it without depending on the harness.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use orrery_proto::{Aspect, CancelReason, Outcome, RuleId};
+use orrery_proto::{Aspect, CallId, CancelReason, Outcome, RuleId};
+use tokio_util::sync::CancellationToken;
 
 /// A refusal, a cancellation, or the harness breaking.
 ///
@@ -264,6 +266,65 @@ pub struct NetResponse {
     pub body: Vec<u8>,
 }
 
+/// List what is under a directory.
+///
+/// Discovery is a capability like any other. Without this, a tool that walks a
+/// tree has to reach for `std::fs::read_dir` **around** the broker, and then a
+/// path the policy would refuse to read can still be named in the answer — the
+/// gap plan 06's wave 3 wrote down rather than hid.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ListRequest {
+    /// Where to look.
+    pub path: PathBuf,
+    /// Whether to descend into subdirectories.
+    pub recursive: bool,
+    /// How many entries, at most. Not optional, for the same reason
+    /// [`ReadRequest::limit`] is not: a walk with no ceiling is bounded only by
+    /// patience.
+    pub limit: u64,
+}
+
+impl ListRequest {
+    /// The entries directly under `path`, at most `limit` of them.
+    #[must_use]
+    pub fn new(path: impl Into<PathBuf>, limit: u64) -> Self {
+        Self {
+            path: path.into(),
+            recursive: false,
+            limit,
+        }
+    }
+
+    /// Descend.
+    #[must_use]
+    pub const fn recursive(mut self) -> Self {
+        self.recursive = true;
+        self
+    }
+}
+
+/// One thing a listing found.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ListEntry {
+    /// Where it is. Absolute, as the broker resolved it.
+    pub path: PathBuf,
+    /// Whether it is a directory.
+    pub is_dir: bool,
+    /// Its size in bytes, when the broker knows it.
+    pub size: Option<u64>,
+}
+
+/// What a listing found, and whether there was more.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Listing {
+    /// What the call may see. A broker **omits** what the policy would refuse
+    /// to read rather than naming it and refusing later: a name is information
+    /// too.
+    pub entries: Vec<ListEntry>,
+    /// Whether the ceiling cut the walk short.
+    pub truncated: bool,
+}
+
 /// Everything an extension may reach, and nothing else.
 ///
 /// Every method defaults to [`BrokerError::Unsupported`], so a broker that
@@ -275,6 +336,18 @@ pub trait BrokerFacade: Send + Sync {
     async fn read(&self, req: ReadRequest) -> BrokerResult<ReadChunk> {
         let _ = req;
         Err(BrokerError::Unsupported { what: "fs reads" })
+    }
+
+    /// List what is under a directory, omitting what this call may not read.
+    ///
+    /// Added under `orrery-ext/1`: a new method with a default body is not a
+    /// breaking change (plan 06, open question 3), and a broker that does not
+    /// offer discovery says so rather than being walked around.
+    async fn list(&self, req: ListRequest) -> BrokerResult<Listing> {
+        let _ = req;
+        Err(BrokerError::Unsupported {
+            what: "listing a directory",
+        })
     }
 
     /// Write a file, atomically when asked.
@@ -320,6 +393,10 @@ impl BrokerFacade for DeniesEverything {
         Err(BrokerError::denied_aspect(Aspect::Read, req.path.display()))
     }
 
+    async fn list(&self, req: ListRequest) -> BrokerResult<Listing> {
+        Err(BrokerError::denied_aspect(Aspect::Read, req.path.display()))
+    }
+
     async fn write(&self, req: WriteRequest) -> BrokerResult<()> {
         Err(BrokerError::denied_aspect(
             Aspect::Write,
@@ -337,5 +414,50 @@ impl BrokerFacade for DeniesEverything {
 
     async fn credential(&self, name: &str) -> BrokerResult<String> {
         Err(BrokerError::denied_aspect(Aspect::Creds, name))
+    }
+}
+
+/// Where a call's broker comes from.
+///
+/// A [`BrokerFacade`] is held by one tool call, not by a session: the policy
+/// engine mints capability tokens against a [`CallId`], and a facade that does
+/// not know which call it is serving mints them against an id nobody can name
+/// afterwards — so cancelling the call cannot take them back. Anything that
+/// dispatches a call therefore asks for a facade **per call**, handing over the
+/// id and the token that stops it.
+///
+/// A broker with nothing per-call to say implements it by cloning itself; see
+/// [`SharedBroker`], which is what wraps a plain facade.
+pub trait BrokerSource: Send + Sync {
+    /// The facade for one call.
+    fn for_call(&self, call: CallId, cancel: CancellationToken) -> Arc<dyn BrokerFacade>;
+}
+
+/// One facade, handed to every call unchanged.
+///
+/// The honest name for what a session-wide broker is. It is still the right
+/// thing for a broker that has no per-call state — a mock in a test, or
+/// [`DeniesEverything`] — and the wrong thing for one that mints capabilities,
+/// which is why the distinction is a type rather than a comment.
+#[derive(Clone)]
+pub struct SharedBroker(Arc<dyn BrokerFacade>);
+
+impl std::fmt::Debug for SharedBroker {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SharedBroker")
+    }
+}
+
+impl SharedBroker {
+    /// Hand this facade to every call.
+    #[must_use]
+    pub fn new(broker: Arc<dyn BrokerFacade>) -> Arc<Self> {
+        Arc::new(Self(broker))
+    }
+}
+
+impl BrokerSource for SharedBroker {
+    fn for_call(&self, _call: CallId, _cancel: CancellationToken) -> Arc<dyn BrokerFacade> {
+        self.0.clone()
     }
 }

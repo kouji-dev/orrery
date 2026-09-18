@@ -12,17 +12,21 @@
 //! pattern in the manifest: the broker redeems a token minted for one aspect
 //! over one resolved target, and a mismatch is a refusal.
 //!
-//! # Two things this cannot do yet, said plainly
+//! # Two things it does, that it once could not
 //!
-//! - **It does not know which call it is serving.** `ExtensionTable` holds one
-//!   `Arc<dyn BrokerFacade>` for every call, while `CallId` and the cancel token
-//!   live on the per-call `CallCtx`. So a token minted here is tied to a fresh
-//!   call id rather than to the tool call that prompted it, and
-//!   `TokenLedger::revoke_call` cannot reach it. [`PolicyBroker::for_call`]
-//!   builds a facade that *does* know, for a caller able to hand it over — which
-//!   is what the extension host should eventually do.
-//! - **It does not list directories,** because the facade has no method for it.
-//!   See `orrery-ext-tools-builtin`'s module docs.
+//! - **It knows which call it is serving.** `ExtensionTable` asks this type,
+//!   as a [`BrokerSource`], for a facade per dispatch, so
+//!   [`PolicyBroker::for_call`] ties every token it mints to that call's id and
+//!   to the token that stops it. `TokenLedger::revoke_call` therefore reaches a
+//!   tool call that is still running, which is the whole point of revocation.
+//! - **It lists directories.** [`BrokerFacade::list`] is how a tool discovers
+//!   names, so a walk no longer has to reach around the broker with
+//!   `std::fs::read_dir` — and a path this call may not read is not named in
+//!   the answer.
+//!
+//! A listing mints no token. It hands back no bytes and no handle: what it
+//! answers is which names this call would be allowed to read, and the read
+//! itself is checked and redeemed when it happens.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -31,11 +35,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use async_trait::async_trait;
 use orrery_broker::{Broker, LocalBroker, SpawnSpec};
 use orrery_ext_api::{
-    BrokerError, BrokerFacade, BrokerResult, NetRequest, NetResponse, ReadChunk, ReadRequest,
-    SpawnOutput, SpawnRequest, WriteRequest,
+    BrokerError, BrokerFacade, BrokerResult, BrokerSource, ListEntry, ListRequest, Listing,
+    NetRequest, NetResponse, ReadChunk, ReadRequest, SpawnOutput, SpawnRequest, WriteRequest,
 };
 use orrery_kernel::CallRevoker;
-use orrery_policy::{CapabilityToken, Decision, PendingCall, PolicyEngine, TokenLedger};
+use orrery_policy::{
+    CapabilityToken, Decision, PendingCall, PolicyEngine, TokenLedger, Verdict,
+};
 use orrery_proto::{AgentScope, CallId, CancelReason, Subject};
 use orrery_tools::ToolBudget;
 use tokio_util::sync::CancellationToken;
@@ -155,6 +161,16 @@ impl PolicyBroker {
         }
     }
 
+    /// Whether this call would be allowed to read this path.
+    ///
+    /// [`PolicyEngine::explain`] rather than [`PolicyEngine::check`] on
+    /// purpose: a listing is a question, not an action, and `check` would mint
+    /// a capability token per directory entry that nothing would ever redeem.
+    fn may_read(&self, path: &Path) -> bool {
+        let call = PendingCall::read(path.display().to_string());
+        self.engine.explain(&call, &self.subject).verdict == Verdict::Allow
+    }
+
     fn cancelled(&self) -> bool {
         self.cancel
             .as_ref()
@@ -188,6 +204,46 @@ impl BrokerFacade for PolicyBroker {
             eof: !truncated,
             total,
         })
+    }
+
+    async fn list(&self, req: ListRequest) -> BrokerResult<Listing> {
+        let root = self.resolve(&req.path);
+        let limit = usize::try_from(req.limit).unwrap_or(usize::MAX).max(1);
+        let mut entries: Vec<ListEntry> = Vec::new();
+        let mut truncated = false;
+        let mut queue = vec![root];
+
+        'walk: while let Some(dir) = queue.pop() {
+            // A directory that cannot be listed is one this call cannot see,
+            // which is the same answer a denied read gives.
+            let Ok(read) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in read.flatten() {
+                let path = entry.path();
+                if !self.may_read(&path) {
+                    // Omitted, not refused: a name is information too.
+                    continue;
+                }
+                let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+                if is_dir && req.recursive {
+                    queue.push(path.clone());
+                }
+                let size = if is_dir {
+                    None
+                } else {
+                    entry.metadata().ok().map(|m| m.len())
+                };
+                entries.push(ListEntry { path, is_dir, size });
+                if entries.len() >= limit {
+                    truncated = true;
+                    break 'walk;
+                }
+            }
+        }
+
+        entries.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(Listing { entries, truncated })
     }
 
     async fn write(&self, req: WriteRequest) -> BrokerResult<()> {
@@ -275,6 +331,12 @@ impl BrokerFacade for PolicyBroker {
         Err(BrokerError::Unsupported {
             what: "reading a credential value: the broker uses one, it never returns one",
         })
+    }
+}
+
+impl BrokerSource for PolicyBroker {
+    fn for_call(&self, call: CallId, cancel: CancellationToken) -> Arc<dyn BrokerFacade> {
+        PolicyBroker::for_call(self, call, cancel)
     }
 }
 
