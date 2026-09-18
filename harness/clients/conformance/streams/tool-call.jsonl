@@ -1,0 +1,8 @@
+{"t":"started","id":"msg_fixture_tool"}
+{"delay_ms":5,"t":"text-delta","text":"Let me look at the manifest."}
+{"t":"tool-use-start","call":"0192f3a0-0000-7000-8000-000000000001","name":"builtin.read"}
+{"t":"tool-use-delta","call":"0192f3a0-0000-7000-8000-000000000001","json_fragment":"{\"pa"}
+{"t":"tool-use-delta","call":"0192f3a0-0000-7000-8000-000000000001","json_fragment":"th\":\"Cargo.toml\"}"}
+{"t":"tool-use-end","call":"0192f3a0-0000-7000-8000-000000000001"}
+{"t":"usage","usage":{"input_tokens":934,"output_tokens":42,"cache_hits":0}}
+{"t":"done","stop":"tool-use"}

@@ -1,0 +1,5 @@
+{"t":"started","id":"msg_fixture_text"}
+{"delay_ms":5,"t":"text-delta","text":"The workspace has "}
+{"delay_ms":5,"t":"text-delta","text":"three crates: proto, provider and kernel."}
+{"t":"usage","usage":{"input_tokens":812,"output_tokens":11,"cache_hits":0}}
+{"t":"done","stop":"end-turn"}

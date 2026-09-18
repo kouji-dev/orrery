@@ -13,3 +13,17 @@ publish = false
 # nothing else changes. See harness/extensions/README.md.
 [dependencies]
 orrery-provider = { version = "0.1", path = "../../../core/crates/orrery-provider" }
+async-trait = { workspace = true }
+futures-core = { workspace = true }
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+
+[dev-dependencies]
+orrery-proto = { version = "0.1", path = "../../../core/crates/orrery-proto" }
+tokio = { workspace = true }
+futures-util = { workspace = true }
+tempfile = { workspace = true }

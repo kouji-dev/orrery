@@ -1,0 +1,8 @@
+{"t":"started","id":"msg_fixture_consent"}
+{"delay_ms":5,"t":"text-delta","text":"I will remove the build directory."}
+{"t":"tool-use-start","call":"0192f3a0-0000-7000-8000-000000000002","name":"builtin.shell"}
+{"t":"tool-use-delta","call":"0192f3a0-0000-7000-8000-000000000002","json_fragment":"{\"command\":\"rm -rf "}
+{"t":"tool-use-delta","call":"0192f3a0-0000-7000-8000-000000000002","json_fragment":"target\",\"cwd\":\".\"}"}
+{"t":"tool-use-end","call":"0192f3a0-0000-7000-8000-000000000002"}
+{"t":"usage","usage":{"input_tokens":1004,"output_tokens":51,"cache_hits":256}}
+{"t":"done","stop":"tool-use"}

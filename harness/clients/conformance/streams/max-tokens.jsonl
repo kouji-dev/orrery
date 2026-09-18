@@ -1,0 +1,6 @@
+{"t":"started","id":"msg_fixture_truncated"}
+{"delay_ms":5,"t":"text-delta","text":"1. First, the kernel assembles the context. "}
+{"delay_ms":5,"t":"text-delta","text":"2. Then it asks the provider for a completion. "}
+{"delay_ms":5,"t":"text-delta","text":"3. Then it dispat"}
+{"t":"usage","usage":{"input_tokens":640,"output_tokens":64,"cache_hits":0}}
+{"t":"done","stop":"max-tokens"}

@@ -1,0 +1,3 @@
+{"t":"started","id":"msg_fixture_429"}
+{"delay_ms":5,"t":"text-delta","text":"Checking the "}
+{"delay_ms":5,"error":{"code":"rate_limited","retry_after_ms":1200}}

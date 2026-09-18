@@ -1,0 +1,4 @@
+{"t":"started","id":"msg_fixture_hang"}
+{"delay_ms":5,"t":"text-delta","text":"Thinking about it"}
+{"delay_ms":3600000,"t":"text-delta","text":"(this line is never reached in a passing test)"}
+{"t":"done","stop":"end-turn"}
