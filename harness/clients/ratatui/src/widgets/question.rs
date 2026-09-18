@@ -146,39 +146,45 @@ pub fn consent_bar(
     theme: &Theme,
 ) {
     let width = area.width as usize;
+    // One boxed row: the borders are part of the chrome, so the body is elided
+    // to what is left between them rather than over the top of them.
+    let inner = width.saturating_sub(4);
+    let row = |text: &str| {
+        let body = super::elide(text, inner);
+        let pad = inner.saturating_sub(body.chars().count());
+        format!("│ {body}{} │", " ".repeat(pad))
+    };
     let rule = "─".repeat(width.saturating_sub(11).max(1));
     super::put(buf, area, 0, &format!("┌ consent {rule}┐"), theme.chrome());
     super::put(
         buf,
         area,
         1,
-        &super::elide(&format!("│ rule     {}", prompt.reason), width),
+        &row(&format!("rule     {}", prompt.reason)),
         theme.text(None),
     );
     super::put(
         buf,
         area,
         2,
-        &super::elide("│ asked by the policy engine, not an extension", width),
+        &row("asked by the policy engine, not an extension"),
         theme.muted(),
     );
     let expired = remaining_ms == 0 || prompt.resolved.is_some();
     let keys = if expired {
         match &prompt.resolved {
-            Some(resolution) => format!(
-                "│ closed: {:?} by {}",
-                resolution.answer, resolution.by
-            ),
-            None => "│ the deadline passed; the kernel used the fallback".to_owned(),
+            Some(resolution) => format!("closed: {:?} by {}", resolution.answer, resolution.by),
+            None => "the deadline passed; the kernel used the fallback".to_owned(),
         }
     } else {
-        format!(
-            "│ [a] allow once  [s] always  [d] deny{:>width$}",
-            format!("{}s ", remaining_ms.div_ceil(1000)),
-            width = width.saturating_sub(38).max(1),
-        )
+        const KEYS: &str = "[a] allow once  [s] always  [d] deny";
+        let clock = format!("{}s", remaining_ms.div_ceil(1000));
+        let pad = inner
+            .saturating_sub(KEYS.chars().count() + clock.chars().count())
+            .max(1);
+        format!("{KEYS}{}{clock}", " ".repeat(pad))
     };
-    super::put(buf, area, 3, &super::elide(&keys, width), theme.text(None));
+    super::put(buf, area, 3, &row(&keys), theme.text(None));
     super::put(
         buf,
         area,

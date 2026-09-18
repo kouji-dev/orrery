@@ -1,0 +1,8 @@
+---
+source: harness/clients/ratatui/tests/stream.rs
+expression: mid
+---
+Here is the fix:
+
+```rust
+fn main() {

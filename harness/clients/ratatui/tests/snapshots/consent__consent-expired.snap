@@ -1,0 +1,20 @@
+---
+source: harness/clients/ratatui/tests/consent.rs
+expression: expired
+---
+I will remove the build directory.
+▾ ▸ builtin.shell
+{"command":"rm -rf target","cwd":"."}
+
+
+
+
+
+
+┌ consent ─────────────────────────────────────────────────┐
+│ rule     rm -rf target                                   │
+│ asked by the policy engine, not an extension             │
+│ the deadline passed; the kernel used the fallback        │
+└──────────────────────────────────────────────────────────┘
+>
+tokens — · — · execute · ^C cancel

@@ -1,0 +1,11 @@
+---
+source: harness/clients/ratatui/tests/stream.rs
+expression: done
+---
+Here is the fix:
+
+────────────
+  fn main() {
+      println!("hi");
+  }
+────────────

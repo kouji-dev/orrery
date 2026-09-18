@@ -1,0 +1,20 @@
+---
+source: harness/clients/ratatui/tests/consent.rs
+expression: consent
+---
+I will remove the build directory.
+▾ ▸ builtin.shell
+{"command":"rm -rf target","cwd":"."}
+
+
+
+
+
+
+┌ consent ─────────────────────────────────────────────────┐
+│ rule     rm -rf target                                   │
+│ asked by the policy engine, not an extension             │
+│ [a] allow once  [s] always  [d] deny                 30s │
+└──────────────────────────────────────────────────────────┘
+>
+tokens — · — · execute · ^C cancel
