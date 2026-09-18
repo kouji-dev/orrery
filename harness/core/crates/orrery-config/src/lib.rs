@@ -44,7 +44,7 @@ pub use discover::{
 pub use error::ConfigError;
 pub use layer::{CONFIG_DIR, CONFIG_FILE, ConfigPaths, LayerFile};
 pub use merge::{IgnoredClaim, MergeReport, Relaxation};
-pub use profile::Profile;
+pub use profile::{AgentDef, Assembled, Profile, Shorthand};
 pub use provenance::{Fold, Origin, Provenanced, Slot};
 pub use trust::{TrustDecision, TrustSource, TrustState, TrustStore};
 pub use validate::Validation;
@@ -164,10 +164,21 @@ pub struct ResolvedConfig {
     pub rules: ResolvedRules,
     /// What validation had to say.
     pub validation: Validation,
+    /// The workspace root everything resolved against.
+    pub root: PathBuf,
     steps: Vec<Step>,
 }
 
 impl ResolvedConfig {
+    /// Build the kernel's inputs from the profile in force.
+    ///
+    /// # Errors
+    ///
+    /// When a rule does not parse or a pattern does not compile.
+    pub fn assemble(&self) -> Result<Assembled, ConfigError> {
+        profile::assemble(&self.profile, &self.root, &self.layers)
+    }
+
     /// The startup steps, in the order they ran.
     #[must_use]
     pub fn steps(&self) -> &[Step] {
@@ -255,6 +266,7 @@ pub fn resolve(ctx: &StartupCtx) -> Result<ResolvedConfig, ConfigError> {
         relaxations: merged.relaxations,
         rules,
         validation,
+        root: ctx.paths.workspace_root.clone(),
         steps,
     })
 }
