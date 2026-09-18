@@ -74,7 +74,7 @@ pub enum FixtureError {
 ///
 /// Adding a scenario means bumping this by one in the same commit, which is the
 /// point: the set is a contract, not a directory listing.
-pub const SCENARIO_COUNT: usize = 16;
+pub const SCENARIO_COUNT: usize = 17;
 
 /// Where the fixtures live, relative to this crate.
 #[must_use]

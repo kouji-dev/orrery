@@ -96,7 +96,7 @@ export function load(path: string): Scenario {
  * not AG-UI scenarios for a renderer, and `loadAll` is deliberately not
  * recursive.
  */
-export const SCENARIO_COUNT = 16;
+export const SCENARIO_COUNT = 17;
 
 /** Load every `*.jsonl` scenario in a directory, sorted by name. */
 export function loadAll(dir: string = fixturesDir()): Scenario[] {

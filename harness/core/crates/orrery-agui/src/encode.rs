@@ -14,15 +14,25 @@ use crate::map;
 /// assigned. Two clients therefore see the same events under the same numbers,
 /// and a re-encode of the session store from the start reproduces them exactly.
 ///
-/// The state is a set of surface ids that are currently open as AG-UI text
-/// messages. It exists because AG-UI splits what our protocol unifies: a
+/// The state is two sets of ids.
+///
+/// **Open messages** exist because AG-UI splits what our protocol unifies: a
 /// markdown surface being streamed is `TextMessageStart` / `Content` / `End`
 /// to an AG-UI client and one patched surface to us, and only the encoder knows
 /// which of the two a given `Append` belongs to.
+///
+/// **Open calls** exist because our frames have no "tool arguments" event and
+/// AG-UI does. A call streams into the surface that shows it, whose id **is**
+/// the call's id, so a `delta` on that id while the call is open is that call's
+/// arguments — `TOOL_CALL_ARGS` — and the same delta after it settles is an
+/// ordinary `StateDelta` on an ordinary surface. Without this a client sees
+/// `TOOL_CALL_START` then `TOOL_CALL_END` and never learns what the tool was
+/// asked to do.
 #[derive(Clone, Debug)]
 pub struct Encoder {
     thread_id: String,
     open_messages: HashSet<SurfaceId>,
+    open_calls: HashSet<SurfaceId>,
 }
 
 impl Encoder {
@@ -32,6 +42,7 @@ impl Encoder {
         Self {
             thread_id: thread_id.into(),
             open_messages: HashSet::new(),
+            open_calls: HashSet::new(),
         }
     }
 
@@ -70,12 +81,17 @@ impl Encoder {
                 out
             }
             Event::Delta { patch, .. } => self.encode_patch(patch),
-            Event::ToolStarted { call, r#ref, .. } => vec![AguiEvent::ToolCallStart {
-                tool_call_id: call.to_string(),
-                tool_call_name: r#ref.to_string(),
-                parent_message_id: None,
-            }],
-            Event::ToolSettled { call, outcome, .. } => vec![
+            Event::ToolStarted { call, r#ref, .. } => {
+                self.open_calls.insert(call_surface(*call));
+                vec![AguiEvent::ToolCallStart {
+                    tool_call_id: call.to_string(),
+                    tool_call_name: r#ref.to_string(),
+                    parent_message_id: None,
+                }]
+            }
+            Event::ToolSettled { call, outcome, .. } => {
+                self.open_calls.remove(&call_surface(*call));
+                vec![
                 AguiEvent::ToolCallEnd {
                     tool_call_id: call.to_string(),
                 },
@@ -85,7 +101,8 @@ impl Encoder {
                     content: outcome_text(outcome),
                     outcome: serde_json::to_value(outcome).ok(),
                 },
-            ],
+            ]
+            }
             Event::ConsentRequest {
                 prompt,
                 deadline_ms,
@@ -133,6 +150,17 @@ impl Encoder {
     fn encode_patch(&mut self, patch: &SurfacePatch) -> Vec<AguiEvent> {
         match patch {
             SurfacePatch::Replace { id, value } => {
+                // A call whose arguments arrive in one piece rather than as
+                // fragments: a non-streaming provider, or a replay that has the
+                // parsed input already.
+                if self.open_calls.contains(id)
+                    && let Some(text) = code_body(value)
+                {
+                    return vec![AguiEvent::ToolCallArgs {
+                        tool_call_id: id.to_string(),
+                        delta: text.to_owned(),
+                    }];
+                }
                 if is_message(value) && !self.open_messages.contains(id) {
                     self.open_messages.insert(*id);
                     let mut out = vec![AguiEvent::TextMessageStart {
@@ -160,6 +188,12 @@ impl Encoder {
                         value: serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
                     })]
                 }
+            }
+            SurfacePatch::Append { id, text } if self.open_calls.contains(id) => {
+                vec![AguiEvent::ToolCallArgs {
+                    tool_call_id: id.to_string(),
+                    delta: text.clone(),
+                }]
             }
             SurfacePatch::Append { id, text } => {
                 if self.open_messages.contains(id) {
@@ -214,6 +248,23 @@ impl Encoder {
 
 fn state_delta(op: PatchOp) -> AguiEvent {
     AguiEvent::StateDelta { delta: vec![op] }
+}
+
+/// A call id, as the id of the surface that shows the call.
+///
+/// The two are the same uuid on purpose: it is what lets a `delta` name a call
+/// without a second frame variant. See the note on [`Encoder`].
+fn call_surface(call: orrery_proto::CallId) -> SurfaceId {
+    SurfaceId::from_uuid(*call.as_uuid())
+}
+
+/// The text of a surface that carries a call's arguments verbatim.
+fn code_body(s: &Surface) -> Option<&str> {
+    match &s.kind {
+        SurfaceKind::Text { value, .. } => Some(value),
+        SurfaceKind::Markdown { value, .. } => Some(value),
+        _ => None,
+    }
 }
 
 /// Whether a surface is the kind AG-UI calls a text message.

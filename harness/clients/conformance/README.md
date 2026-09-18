@@ -71,7 +71,7 @@ client detects a lost frame by arithmetic.
 
 Every client asserts the **same** count, from one named constant per language —
 `orrery_client::conformance::SCENARIO_COUNT` and `@orrery/client`'s
-`conformance.SCENARIO_COUNT`, both currently **16**. It is an equality, not a floor.
+`conformance.SCENARIO_COUNT`, both currently **17**. It is an equality, not a floor.
 Floors were how this drifted: ratatui asked for at least 16 and Ink for at least 10, so
 deleting six fixtures would have turned one suite red and left the other quiet. Adding a
 scenario means adding a row below and bumping both constants in the same commit; the set is
@@ -83,7 +83,7 @@ six files under [`streams/`](streams/README.md) are `ModelEvent` scripts crossin
 end-to-end. The files here are AG-UI event scripts crossing the *client* boundary, replayed
 against a `SurfaceStore`. Different format, different boundary, different assertions — a
 renderer has nothing to do with a `ModelEvent`. `load_all` / `loadAll` therefore read this
-directory only and never recurse, which is why the count above is 16 and not 22.
+directory only and never recurse, which is why the count above is 17 and not 23.
 
 The two sets stay related in the way that matters: every scenario below names the stream it
 is derivable from, so the same turn can be driven through the fixture provider or replayed
@@ -99,6 +99,7 @@ events alone.
 |---|---|---|
 | `text-only` | `text-turn` | The baseline: a turn that is one assistant message. |
 | `tool-call` | `tool-call` | Arguments split mid-token become one code child; the result a second. |
+| `tool-args-interleaved` | `tool-call` | Two calls open at once: each input rebuilds from its own `toolCallId`. |
 | `streaming-markdown` | `text-turn` | A half-open code fence stays `complete: false`. Also the unknown-event rule. |
 | `consent-prompt` | `tool-call-consent` | Consent rides `Custom`, and the answer comes back the same way. |
 | `question-surface` | `text-turn` | A `replace` at `/surfaces/<id>` creates as well as swaps. |

@@ -1,0 +1,28 @@
+---
+source: harness/clients/ratatui/tests/conformance.rs
+expression: screen
+---
+── scrollback ──
+▾ ✓ builtin.read
+{"path":"Cargo.toml"}
+name = "orrery"
+
+▾ ✓ builtin.grep
+{"pattern":"TODO"}
+src/lib.rs:1: TODO
+
+── live ──
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

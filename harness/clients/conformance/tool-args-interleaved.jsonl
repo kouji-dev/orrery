@@ -1,0 +1,19 @@
+# tool-args-interleaved - two calls open at once, their argument fragments
+# interleaved. A client reconstructs each call's input from the stream alone,
+# keyed by toolCallId and nothing else: a store that concatenated by arrival
+# order would produce two inputs that parse and are both wrong.
+# Derived from streams/tool-call.jsonl, the same call repeated beside a second.
+{"ev":{"seq":1,"type":"RUN_STARTED","threadId":"sess-1","runId":"turn-4"}}
+{"ev":{"seq":2,"type":"TOOL_CALL_START","toolCallId":"call-a","toolCallName":"builtin.read"}}
+{"ev":{"seq":3,"type":"TOOL_CALL_START","toolCallId":"call-b","toolCallName":"builtin.grep"}}
+{"ev":{"seq":4,"type":"TOOL_CALL_ARGS","toolCallId":"call-a","delta":"{\"path\":"}}
+{"ev":{"seq":5,"type":"TOOL_CALL_ARGS","toolCallId":"call-b","delta":"{\"pattern\":"}}
+{"ev":{"seq":6,"type":"TOOL_CALL_ARGS","toolCallId":"call-a","delta":"\"Cargo.toml\"}"}}
+{"ev":{"seq":7,"type":"TOOL_CALL_ARGS","toolCallId":"call-b","delta":"\"TODO\"}"}}
+{"ev":{"seq":8,"type":"TOOL_CALL_END","toolCallId":"call-a"}}
+{"ev":{"seq":9,"type":"TOOL_CALL_END","toolCallId":"call-b"}}
+{"expect":{"last_seq":9,"live":"turn-4","gaps":[],"turns":[{"id":"turn-4","settled":false,"cancelled":false,"error":null,"surfaces":[{"id":"call-a","status":"running","kind":{"t":"stack","dir":"column","title":"builtin.read","collapsed":false,"children":[{"kind":{"t":"text","value":"{\"path\":\"Cargo.toml\"}","style":"code"}}]}},{"id":"call-b","status":"running","kind":{"t":"stack","dir":"column","title":"builtin.grep","collapsed":false,"children":[{"kind":{"t":"text","value":"{\"pattern\":\"TODO\"}","style":"code"}}]}}],"prompts":[]}]}}
+{"ev":{"seq":10,"type":"TOOL_CALL_RESULT","messageId":"call-a:result","toolCallId":"call-a","content":"name = \"orrery\"\n","outcome":{"t":"ok","surface":{"status":"done","kind":{"t":"text","value":"name = \"orrery\"\n"}}}}}
+{"ev":{"seq":11,"type":"TOOL_CALL_RESULT","messageId":"call-b:result","toolCallId":"call-b","content":"src/lib.rs:1: TODO\n","outcome":{"t":"ok","surface":{"status":"done","kind":{"t":"text","value":"src/lib.rs:1: TODO\n"}}}}}
+{"ev":{"seq":12,"type":"RUN_FINISHED","threadId":"sess-1","runId":"turn-4","result":{"input_tokens":934,"output_tokens":42,"cache_hits":0}}}
+{"expect":{"last_seq":12,"live":null,"gaps":[],"turns":[{"id":"turn-4","settled":true,"cancelled":false,"error":null,"surfaces":[{"id":"call-a","status":"done","kind":{"t":"stack","dir":"column","title":"builtin.read","collapsed":false,"children":[{"kind":{"t":"text","value":"{\"path\":\"Cargo.toml\"}","style":"code"}},{"kind":{"t":"text","value":"name = \"orrery\"\n"},"status":"done"}]}},{"id":"call-b","status":"done","kind":{"t":"stack","dir":"column","title":"builtin.grep","collapsed":false,"children":[{"kind":{"t":"text","value":"{\"pattern\":\"TODO\"}","style":"code"}},{"kind":{"t":"text","value":"src/lib.rs:1: TODO\n"},"status":"done"}]}}],"prompts":[]}]}}

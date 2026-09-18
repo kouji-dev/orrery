@@ -197,3 +197,128 @@ fn consent_is_custom() {
         serde_json::to_value(&prompt).expect("prompt serialises")
     );
 }
+
+/// A tool call's arguments reach the client, and a client can rebuild the input
+/// from the event stream alone.
+///
+/// Our frame vocabulary has no "tool arguments" event and AG-UI does. The
+/// bridge is the surface a call streams into: a `delta` on the surface whose id
+/// **is** the call's id, while that call is open, is that call's arguments.
+#[test]
+fn tool_args_are_emitted() {
+    let call = orrery_proto::CallId::from_uuid(uuid::Uuid::from_u128(11));
+    let as_surface = SurfaceId::from_uuid(*call.as_uuid());
+    let mut encoder = enc();
+
+    let started = encoder.encode(&Event::ToolStarted {
+        seq: orrery_proto::Seq(1),
+        call,
+        r#ref: "builtin.read".parse::<ToolRef>().unwrap(),
+    });
+    assert_eq!(
+        started.iter().map(AguiEvent::type_name).collect::<Vec<_>>(),
+        vec!["TOOL_CALL_START"]
+    );
+
+    // The fragments a streaming provider emits, split mid-token.
+    let mut rebuilt = String::new();
+    for fragment in ["{\"pa", "th\":\"Cargo.toml\"}"] {
+        let out = encoder.encode(&Event::Delta {
+            seq: orrery_proto::Seq(2),
+            surface: as_surface,
+            patch: SurfacePatch::Append {
+                id: as_surface,
+                text: fragment.to_owned(),
+            },
+        });
+        match out.as_slice() {
+            [AguiEvent::ToolCallArgs {
+                tool_call_id,
+                delta,
+            }] => {
+                assert_eq!(tool_call_id, &call.to_string(), "argued under its own call");
+                rebuilt.push_str(delta);
+            }
+            other => panic!("a delta on an open call is its arguments, not {other:?}"),
+        }
+    }
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&rebuilt).expect("valid JSON"),
+        serde_json::json!({ "path": "Cargo.toml" }),
+        "the input is reconstructible from the stream alone"
+    );
+
+    let settled = encoder.encode(&Event::ToolSettled {
+        seq: orrery_proto::Seq(4),
+        call,
+        outcome: Outcome::ok(),
+    });
+    assert_eq!(
+        settled.iter().map(AguiEvent::type_name).collect::<Vec<_>>(),
+        vec!["TOOL_CALL_END", "TOOL_CALL_RESULT"]
+    );
+
+    // With the call settled, the same surface is an ordinary surface again.
+    let after = encoder.encode(&Event::Delta {
+        seq: orrery_proto::Seq(5),
+        surface: as_surface,
+        patch: SurfacePatch::Append {
+            id: as_surface,
+            text: "late".into(),
+        },
+    });
+    assert_eq!(
+        after.iter().map(AguiEvent::type_name).collect::<Vec<_>>(),
+        vec!["STATE_DELTA"],
+        "arguments are a thing an open call has, not a property of the id"
+    );
+}
+
+/// Two calls open at once keep their arguments apart.
+#[test]
+fn interleaved_calls_keep_their_arguments() {
+    let one = orrery_proto::CallId::from_uuid(uuid::Uuid::from_u128(21));
+    let two = orrery_proto::CallId::from_uuid(uuid::Uuid::from_u128(22));
+    let mut encoder = enc();
+    for call in [one, two] {
+        encoder.encode(&Event::ToolStarted {
+            seq: orrery_proto::Seq(1),
+            call,
+            r#ref: "builtin.read".parse::<ToolRef>().unwrap(),
+        });
+    }
+
+    let mut rebuilt = std::collections::BTreeMap::<String, String>::new();
+    for (call, fragment) in [
+        (one, "{\"path\":"),
+        (two, "{\"pattern\":"),
+        (one, "\"a.txt\"}"),
+        (two, "\"TODO\"}"),
+    ] {
+        let id = SurfaceId::from_uuid(*call.as_uuid());
+        let out = encoder.encode(&Event::Delta {
+            seq: orrery_proto::Seq(2),
+            surface: id,
+            patch: SurfacePatch::Append {
+                id,
+                text: fragment.to_owned(),
+            },
+        });
+        let [
+            AguiEvent::ToolCallArgs {
+                tool_call_id,
+                delta,
+            },
+        ] = out.as_slice()
+        else {
+            panic!("arguments, not {out:?}");
+        };
+        rebuilt
+            .entry(tool_call_id.clone())
+            .or_default()
+            .push_str(delta);
+    }
+
+    assert_eq!(rebuilt[&one.to_string()], "{\"path\":\"a.txt\"}");
+    assert_eq!(rebuilt[&two.to_string()], "{\"pattern\":\"TODO\"}");
+}

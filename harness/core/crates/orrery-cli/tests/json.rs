@@ -133,3 +133,45 @@ fn defaults_to_json_without_a_tty() {
         "…and finishes the run: {types:?}"
     );
 }
+
+/// The tool's **input** is on the wire, not only its result.
+///
+/// A json renderer used to see `TOOL_CALL_START` and then `TOOL_CALL_END` with
+/// nothing between them: the fixture's `tool-use-delta` fragments were parsed
+/// into the call's input and dropped. A client could show that a tool ran and
+/// never what it was asked to do.
+#[test]
+fn the_tool_input_is_reconstructible() {
+    let dir = common::workspace();
+    let base = base(dir.path(), &["tool-call.jsonl", "text-turn.jsonl"]);
+    let out = orrery(&args(&base, &["run", "-p", "read it", "--json"]));
+
+    let frames = jsonl(&out.stdout);
+    let start = frames
+        .iter()
+        .find(|f| f.get("type").and_then(serde_json::Value::as_str) == Some("TOOL_CALL_START"))
+        .expect("the call started");
+    let call = start
+        .get("toolCallId")
+        .and_then(serde_json::Value::as_str)
+        .expect("the call has an id");
+
+    let rebuilt: String = frames
+        .iter()
+        .filter(|f| f.get("type").and_then(serde_json::Value::as_str) == Some("TOOL_CALL_ARGS"))
+        .filter(|f| f.get("toolCallId").and_then(serde_json::Value::as_str) == Some(call))
+        .filter_map(|f| f.get("delta").and_then(serde_json::Value::as_str))
+        .collect();
+    assert!(
+        !rebuilt.is_empty(),
+        "the arguments are on the wire: {:?}",
+        event_types(&out.stdout)
+    );
+    let input: serde_json::Value =
+        serde_json::from_str(&rebuilt).expect("the fragments rebuild into the input");
+    assert_eq!(
+        input.get("path").and_then(serde_json::Value::as_str),
+        Some(TARGET),
+        "and the input is the one the tool ran with: {input}"
+    );
+}
