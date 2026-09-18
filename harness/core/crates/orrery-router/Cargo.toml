@@ -8,4 +8,20 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+# **No kernel, and no orchestrator.** `Router::decide` is a sync `fn` that
+# returns data, and this dependency list is what keeps that honest: there is
+# nothing here to run a turn with, so a decision cannot quietly become an
+# action. That cut is what makes the kernel/orchestrator graph acyclic.
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-policy = { workspace = true }
+orrery-audit = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = { workspace = true }
+dunce = { workspace = true }
