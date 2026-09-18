@@ -83,6 +83,15 @@ pub enum WriteOp {
         /// Where to answer.
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    /// Drop a whole session: its events, its turns, its compactions and its
+    /// branches, in one transaction. Whole sessions only — see
+    /// [`SessionStore::delete`](orrery_session::SessionStore::delete).
+    DeleteSession {
+        /// Which session.
+        session: SessionId,
+        /// Where to answer.
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     /// Write a summary turn and the watermark that points at it, together.
     Compact {
         /// Which session's event log to extend.
@@ -195,6 +204,9 @@ fn run(mut conn: Connection, mut rx: mpsc::UnboundedReceiver<WriteOp>) {
             } => {
                 let _ = reply.send(close_branch(&mut conn, branch, &state));
             }
+            WriteOp::DeleteSession { session, reply } => {
+                let _ = reply.send(delete_session(&mut conn, session));
+            }
             WriteOp::Compact {
                 session,
                 branch,
@@ -237,6 +249,45 @@ fn create_session(
         params![convert::id_str(&root), convert::id_str(&session)],
     )
     .map_err(map_err)?;
+    tx.commit().map_err(map_err)
+}
+
+/// Drop a session and everything hanging off it, in one transaction.
+///
+/// The order is children first, so a transaction that is rolled back half way
+/// never leaves a branch pointing at a session that is gone. `turns` and
+/// `compactions` are keyed by branch rather than by session, hence the
+/// subselects; there is no foreign key in the schema to cascade for us, and
+/// adding one would rewrite every existing database.
+fn delete_session(conn: &mut Connection, session: SessionId) -> Result<(), SessionError> {
+    let id = convert::id_str(&session);
+    let tx = conn.transaction().map_err(map_err)?;
+    let exists: i64 = tx
+        .query_row(
+            "SELECT count(*) FROM sessions WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .map_err(map_err)?;
+    if exists == 0 {
+        return Err(SessionError::NoSuchSession { session });
+    }
+    tx.execute(
+        "DELETE FROM compactions WHERE branch IN (SELECT id FROM branches WHERE session = ?1)",
+        params![id],
+    )
+    .map_err(map_err)?;
+    tx.execute(
+        "DELETE FROM turns WHERE branch IN (SELECT id FROM branches WHERE session = ?1)",
+        params![id],
+    )
+    .map_err(map_err)?;
+    tx.execute("DELETE FROM events WHERE session = ?1", params![id])
+        .map_err(map_err)?;
+    tx.execute("DELETE FROM branches WHERE session = ?1", params![id])
+        .map_err(map_err)?;
+    tx.execute("DELETE FROM sessions WHERE id = ?1", params![id])
+        .map_err(map_err)?;
     tx.commit().map_err(map_err)
 }
 

@@ -127,3 +127,65 @@ fn a_listed_session_is_the_one_the_turn_wrote() {
     let listed = orrery(&args(&base(dir.path(), &[]), &["--json", "session", "list"]));
     assert_eq!(jsonl(&listed.stdout).len(), 1);
 }
+
+/// Plan 02 open question 2, answered in the tree: `session rm` really deletes.
+///
+/// Two sessions go in, one comes out, and the survivor still shows its
+/// transcript — a delete that took its neighbour with it would pass a weaker
+/// test than this one.
+#[test]
+fn rm_deletes_one_session_and_leaves_the_other() {
+    let dir = workspace();
+    one_turn(dir.path(), "text-turn.jsonl");
+    one_turn(dir.path(), "text-turn.jsonl");
+
+    let listed = orrery(&args(&base(dir.path(), &[]), &["--json", "session", "list"]));
+    let rows = jsonl(&listed.stdout);
+    assert_eq!(rows.len(), 2);
+    let doomed = rows[0]["session"].as_str().expect("an id").to_owned();
+    let keeper = rows[1]["session"].as_str().expect("an id").to_owned();
+
+    let out = orrery(&args(
+        &base(dir.path(), &[]),
+        &["session", "rm", &doomed, "--yes"],
+    ));
+    assert!(
+        out.status.success(),
+        "rm succeeds: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let listed = orrery(&args(&base(dir.path(), &[]), &["--json", "session", "list"]));
+    let rows = jsonl(&listed.stdout);
+    assert_eq!(rows.len(), 1, "one session is gone");
+    assert_eq!(rows[0]["session"], keeper.as_str());
+
+    let shown = orrery(&args(
+        &base(dir.path(), &[]),
+        &["session", "show", &doomed],
+    ));
+    assert_eq!(shown.status.code(), Some(2), "and it cannot be shown");
+
+    let shown = orrery(&args(&base(dir.path(), &[]), &["session", "show", &keeper]));
+    assert!(shown.status.success());
+    assert!(String::from_utf8_lossy(&shown.stdout).contains(FINAL_TEXT));
+}
+
+/// A session id that is not there is the person's mistake, and says so once.
+#[test]
+fn rm_of_an_unknown_session_is_usage() {
+    let dir = workspace();
+    one_turn(dir.path(), "text-turn.jsonl");
+
+    let out = orrery(&args(
+        &base(dir.path(), &[]),
+        &[
+            "session",
+            "rm",
+            "00000000-0000-0000-0000-000000000000",
+            "--yes",
+        ],
+    ));
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty(), "stdout is data, and there is none");
+}

@@ -56,6 +56,30 @@ pub trait SessionStore: Send + Sync + 'static {
         })
     }
 
+    /// Delete a whole session: its events, its turns and its branches.
+    ///
+    /// **Whole sessions only.** Plan 02 open question 2 asked how retention
+    /// should work and answered itself with a constraint — a retention pass may
+    /// drop a session, never trim turns inside one, because a half-session is a
+    /// transcript that lies. There is therefore no `delete_turn`, and there
+    /// never will be: `compact` is how a branch gets shorter, and it writes
+    /// rather than mutates.
+    ///
+    /// Deleting is idempotent up to existence: a session that is not there is
+    /// [`SessionError::NoSuchSession`], so a caller can tell "gone now" from
+    /// "was never here".
+    ///
+    /// The default refuses, and refusing is not conformant: the suite's
+    /// [`a_session_can_be_deleted`](crate::conformance::a_session_can_be_deleted)
+    /// fails against it. It exists only so an in-test fake in a crate this wave
+    /// does not own keeps compiling.
+    async fn delete(&self, session: SessionId) -> Result<(), SessionError> {
+        let _ = session;
+        Err(SessionError::Backend {
+            detail: "this backend does not delete sessions".to_owned(),
+        })
+    }
+
     /// Acquire the right to append.
     ///
     /// `try_lock`, never `lock`: a busy branch is refused rather than queued,

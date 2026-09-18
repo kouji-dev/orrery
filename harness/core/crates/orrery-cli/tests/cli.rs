@@ -159,17 +159,19 @@ fn not_implemented_does_not_pollute_stdout() {
 }
 
 
-/// `session rm` is in the tree, takes `--yes`, and refuses for a reason that is
-/// about the store rather than about this plan: there is no delete on
-/// `SessionStore`, and plan 02 parked retention. It says so.
+/// `session rm` is in the tree, takes `--yes`, and needs it: a delete that
+/// cannot be undone must not happen because a script forgot a flag.
+///
+/// The interesting half — that it really removes the session — is in
+/// `tests/session.rs`, where there is history on disk to remove.
 #[test]
-fn session_rm_names_the_missing_piece() {
-    let out = orrery(&["session", "rm", "s1", "--yes"]);
+fn session_rm_without_yes_refuses() {
+    let out = orrery(&["session", "rm", "00000000-0000-0000-0000-000000000000"]);
     assert_eq!(out.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("02-session-store.md"), "{stderr}");
+    assert!(stderr.contains("--yes"), "it says which flag: {stderr}");
     assert!(
-        stderr.contains("retention"),
-        "and why, not just which file: {stderr}"
+        stderr.contains("cannot be reconstructed") || stderr.contains("cannot be undone"),
+        "and why: {stderr}"
     );
 }

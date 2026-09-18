@@ -180,6 +180,29 @@ impl SessionStore for SqliteSessionStore {
         self.leases.lease(branch)
     }
 
+    /// Drop the session's rows, then drop the in-memory bookkeeping that
+    /// pointed at them.
+    ///
+    /// Order matters and is deliberate: the branches are read **before** the
+    /// delete, because afterwards there is no row left to ask. The writer actor
+    /// for this session is dropped too — keeping it would leave a thread and an
+    /// open connection belonging to a session that no longer exists.
+    async fn delete(&self, session: SessionId) -> Result<(), SessionError> {
+        let branches = self.reader.session(session).await?.branches;
+
+        let (reply, rx) = oneshot::channel();
+        self.writer_for(session)?
+            .send(writer::WriteOp::DeleteSession { session, reply })?;
+        wait(rx).await?;
+
+        for branch in branches {
+            self.leases.forget(branch);
+            self.branch_session.remove(&branch);
+        }
+        self.writers.remove(&session);
+        Ok(())
+    }
+
     async fn append(&self, lease: &BranchLease, turn: NewTurn) -> Result<TurnId, SessionError> {
         lease.ensure_open()?;
         let branch = lease.branch();

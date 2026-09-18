@@ -40,6 +40,7 @@ pub async fn run_conformance(store: Arc<dyn SessionStore>) {
     tool_results_round_trip(&*store).await;
     sessions_can_be_enumerated(&*store).await;
     child_close_does_not_deadlock_the_parent(&*store).await;
+    a_session_can_be_deleted(&*store).await;
 }
 
 fn user(text: &str) -> NewTurn {
@@ -524,5 +525,73 @@ pub async fn sessions_can_be_enumerated(store: &dyn SessionStore) {
     assert!(
         positions(newer) <= positions(older),
         "the newer session sorts first"
+    );
+}
+
+/// `delete` drops a whole session, and only that session.
+///
+/// Plan 02 open question 2, answered: retention drops **sessions**, never turns
+/// inside one. So this asserts three things — the session is gone from `open`,
+/// gone from `list_sessions`, and its events are gone with it — and one more
+/// that matters just as much: the *other* session is untouched, because a
+/// delete that took a neighbour with it would be worse than no delete at all.
+pub async fn a_session_can_be_deleted(store: &dyn SessionStore) {
+    let doomed = store.create("/ws/doomed", "default").await.expect("create");
+    let keeper = store.create("/ws/keeper", "default").await.expect("create");
+
+    let lease = store
+        .lease(store.open(doomed).await.expect("open").root)
+        .await
+        .expect("lease");
+    store.append(&lease, user("one")).await.expect("append");
+    store.append(&lease, assistant("two")).await.expect("append");
+    drop(lease);
+
+    let lease = store
+        .lease(store.open(keeper).await.expect("open").root)
+        .await
+        .expect("lease");
+    store.append(&lease, user("kept")).await.expect("append");
+    drop(lease);
+
+    store.delete(doomed).await.expect("a backend deletes sessions");
+
+    assert!(
+        matches!(
+            store.open(doomed).await,
+            Err(SessionError::NoSuchSession { .. })
+        ),
+        "a deleted session is not there any more"
+    );
+    assert!(
+        matches!(
+            store.events_since(doomed, None).await,
+            Err(SessionError::NoSuchSession { .. })
+        ),
+        "its events went with it"
+    );
+    assert!(
+        matches!(
+            store.delete(doomed).await,
+            Err(SessionError::NoSuchSession { .. })
+        ),
+        "deleting it twice says so rather than pretending"
+    );
+
+    let listed = store.list_sessions().await.expect("enumerate");
+    assert!(
+        !listed.iter().any(|s| s.session == doomed),
+        "and it is out of the listing"
+    );
+
+    let survivor = store.open(keeper).await.expect("the neighbour is untouched");
+    let view = store
+        .materialise(survivor.root, unbounded(), &CharsOverFour)
+        .await
+        .expect("materialise");
+    assert_eq!(
+        view.messages.len(),
+        1,
+        "deleting one session leaves the other one's turns alone"
     );
 }

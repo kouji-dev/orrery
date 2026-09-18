@@ -254,9 +254,14 @@ fake in `orrery-orchestrator` — a crate that wave did not own — kept
 compiling. It is not a conformant implementation and cannot be one; delete the
 default once that fake implements the method.
 
-**Deleting is still not here.** `session rm` needs a delete, and open question 2
+~~**Deleting is still not here.** `session rm` needs a delete, and open question 2
 parks retention for the config phase; enumeration is a read and does not
-prejudge it.
+prejudge it.~~ **Amended 2026-09-19: deleting is here.** `SessionStore::delete`
+drops a **whole session** — its events, its turns, its compactions and its
+branches, in one transaction — and the conformance suite's
+`a_session_can_be_deleted` makes every backend provide it, including the part
+that matters most: the *neighbouring* session is untouched. There is no
+`delete_turn` and there will not be one; see open question 2 below.
 
 ---
 
@@ -275,7 +280,11 @@ prejudge it.
 
 2. **Retention.** §4.2 says nothing about deleting sessions. The ADE's `history/mod.rs` has a retention policy worth copying. Out of scope for phase 1; note it for phase 5 (config).
 
-   **Confirmed out of scope.** Nothing in this plan deletes a row. Note for phase 5: retention has to be expressed as *dropping whole sessions*, never as trimming turns inside one, because `materialise` walks ancestry and a branch whose parent's prefix was trimmed cannot be replayed.
+   ~~**Confirmed out of scope.** Nothing in this plan deletes a row.~~ **Answered 2026-09-19, and implemented: the unit of deletion is the whole session.** The constraint the earlier note recorded turned out to *be* the answer — `materialise` walks ancestry, so a branch whose parent's prefix was trimmed cannot be replayed — and the cheapest way to make that unrepresentable is to give the trait one method that can only take a session. `SessionStore::delete(session)` is that method; there is no `delete_turn`, no `trim`, and no `--before` flag on `orrery session rm`, because a transcript with a hole in it still reads as a complete record and is not one. `compact` remains the only way a branch gets shorter, and it writes rather than mutates.
+
+   Three consequences, all tested. The default implementation on the trait *refuses*, so a backend that has not thought about deletion fails `conformance::a_session_can_be_deleted` rather than silently dropping nothing. Deleting a session that is not there is `NoSuchSession`, not a quiet success, so a caller can tell "gone now" from "was never here". And the sqlite backend drops the in-memory lease registry entries and the per-session writer actor with the rows, because leaving a writer thread open on a session that no longer exists is a leak with a plausible-looking name.
+
+   What is still **not** here is a retention *policy* — an age, a count, a size that decides which sessions go. That is still phase 5's, and it is now a loop over `list_sessions` and `delete` rather than a missing capability.
 
 3. **`Materialised.elided`** — is exposing what was cut useful to the caller, or does it invite the kernel to second-guess the store? Keep it for now because plan 05's compaction trigger wants it.
 

@@ -9,7 +9,11 @@
 //!
 //! `list` is [`SessionStore::list_sessions`], which landed with this command —
 //! before it the trait could only answer about a session you could already
-//! name. `show` is one `materialise` on the root branch.
+//! name. `show` is one `materialise` on the root branch. `rm` is
+//! [`SessionStore::delete`], which landed the same way: plan 02 open question 2
+//! asked whether retention should trim turns or drop sessions, and the answer
+//! is **whole sessions only** — so the trait grew `delete(session)` and nothing
+//! that could take a turn out of the middle of one.
 //!
 //! Implementation plan: `harness/docs/plans/02-session-store.md` (the store) and
 //! `harness/docs/plans/17-cli.md` task 7 (the command).
@@ -30,12 +34,7 @@ pub fn dispatch(cli: &Cli, command: &SessionCommand) -> ! {
     match command {
         SessionCommand::List => list(cli),
         SessionCommand::Show { id } => show(cli, id),
-        SessionCommand::Rm { .. } => fail(
-            Exit::Usage,
-            "`session rm` is not implemented in this build: `SessionStore` has no delete, \
-             and plan 02 open question 2 parks retention for the config phase. \
-             See harness/docs/plans/02-session-store.md",
-        ),
+        SessionCommand::Rm { id, yes } => rm(cli, id, *yes),
     }
 }
 
@@ -187,4 +186,40 @@ fn block_word(block: &ContentBlock) -> &'static str {
         ContentBlock::ToolResult { .. } => "result",
         _ => "block",
     }
+}
+
+/// Delete one session, for good.
+///
+/// Two things guard it, and they guard different mistakes. `--yes` is required
+/// because history is the one thing the harness cannot reconstruct and a script
+/// that meant to type `show` should not lose a transcript to a typo. And the
+/// unit is the **whole session**: there is no flag here that trims turns,
+/// because a session with a hole in it reads as a complete record and is not
+/// one.
+fn rm(cli: &Cli, id: &str, yes: bool) -> ! {
+    let session: SessionId = id
+        .parse()
+        .unwrap_or_else(|e| fail(Exit::Usage, format!("`{id}` is not a session id: {e}")));
+    if !yes {
+        fail(
+            Exit::Usage,
+            format!("refusing to delete {session} without `--yes`: history cannot be reconstructed"),
+        );
+    }
+    let Some(store) = store(cli) else {
+        fail(
+            Exit::Usage,
+            format!("no sessions in {}", state_dir(cli).display()),
+        );
+    };
+    runtime()
+        .block_on(store.delete(session))
+        .unwrap_or_else(|e| fail(Exit::Usage, e));
+
+    if layers::wants_json(cli) {
+        println!("{}", serde_json::json!({ "deleted": session.to_string() }));
+    } else {
+        eprintln!("orrery: deleted {session}");
+    }
+    Exit::Ok.exit()
 }

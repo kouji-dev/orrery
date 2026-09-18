@@ -339,6 +339,10 @@ impl SessionStore for Recording {
         self.inner.lease(branch).await
     }
 
+    async fn delete(&self, session: SessionId) -> Result<(), SessionError> {
+        self.inner.delete(session).await
+    }
+
     async fn append(&self, lease: &BranchLease, turn: NewTurn) -> Result<TurnId, SessionError> {
         if let TurnKind::ToolResult { call, outcome, .. } = &turn.kind {
             self.publisher.tool_settled(*call, outcome.clone());
