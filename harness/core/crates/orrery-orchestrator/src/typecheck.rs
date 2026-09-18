@@ -32,7 +32,9 @@ pub struct Workflow {
 }
 
 impl Workflow {
-    /// Read one from TOML. This does **not** typecheck it; call [`check`].
+    /// Read one from TOML. This does **not** typecheck it, and the result is
+    /// therefore not something the runner accepts: promote it with
+    /// [`Checked::new`], or use [`load`](Workflow::load).
     ///
     /// # Errors
     ///
@@ -53,10 +55,78 @@ impl Workflow {
     /// # Errors
     ///
     /// Anything [`from_toml_str`](Workflow::from_toml_str) or [`check`] returns.
-    pub fn load(text: &str, file: &str, catalogue: &Catalogue) -> Result<Workflow, LoadError> {
-        let wf = Workflow::from_toml_str(text, file)?;
-        check(&wf, catalogue)?;
-        Ok(wf)
+    pub fn load(text: &str, file: &str, catalogue: &Catalogue) -> Result<Checked, LoadError> {
+        Checked::new(Workflow::from_toml_str(text, file)?, catalogue)
+    }
+}
+
+/// A [`Workflow`] that has been through [`check`] — the only thing
+/// [`Runner::run`](crate::workflow::Runner::run) accepts.
+///
+/// This is translation #5 made into a type. The guarantee "an invalid workflow
+/// fails at load" was previously API discipline: `Workflow` has public fields
+/// and [`Workflow::from_toml_str`] does not typecheck, so an unchecked one
+/// could reach the runner and fail mid-run after paying for three model calls.
+/// The field here is private and the only constructor runs the checker, so the
+/// compiler enforces it instead.
+///
+/// Handing the runner an unchecked [`Workflow`] does not compile:
+///
+/// ```compile_fail
+/// use orrery_orchestrator::{Runner, Workflow};
+/// use orrery_orchestrator::workflow::StepExecutor;
+///
+/// fn nope(exec: &dyn StepExecutor, unchecked: &Workflow) {
+///     // expected `&Checked`, found `&Workflow`
+///     let _ = Runner::new(exec).run(unchecked, None);
+/// }
+/// ```
+///
+/// Going through the typechecker does:
+///
+/// ```
+/// use orrery_orchestrator::{Catalogue, Runner, Workflow};
+/// use orrery_orchestrator::workflow::StepExecutor;
+///
+/// fn yes(exec: &dyn StepExecutor) {
+///     let checked = Workflow::load("name = \"empty\"", "empty.toml", &Catalogue::empty())
+///         .expect("it loads");
+///     let _ = Runner::new(exec).run(&checked, None);
+/// }
+/// ```
+#[derive(Clone, Debug, PartialEq)]
+pub struct Checked(Workflow);
+
+impl Checked {
+    /// Typecheck a workflow, and on success hand back the proof.
+    ///
+    /// # Errors
+    ///
+    /// Anything [`check`] returns. Nothing has run, and nothing has been paid
+    /// for.
+    pub fn new(workflow: Workflow, catalogue: &Catalogue) -> Result<Checked, LoadError> {
+        check(&workflow, catalogue)?;
+        Ok(Checked(workflow))
+    }
+
+    /// The workflow it proves checked.
+    #[must_use]
+    pub fn as_workflow(&self) -> &Workflow {
+        &self.0
+    }
+
+    /// Give the workflow back, dropping the proof with it.
+    #[must_use]
+    pub fn into_inner(self) -> Workflow {
+        self.0
+    }
+}
+
+impl std::ops::Deref for Checked {
+    type Target = Workflow;
+
+    fn deref(&self) -> &Workflow {
+        &self.0
     }
 }
 

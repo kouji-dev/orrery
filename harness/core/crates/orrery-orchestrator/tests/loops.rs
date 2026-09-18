@@ -6,7 +6,7 @@
 mod common;
 
 use common::Fake;
-use orrery_orchestrator::typecheck::Workflow;
+use orrery_orchestrator::typecheck::{Checked, Workflow};
 use orrery_orchestrator::workflow::{Outcome, Runner};
 use orrery_orchestrator::{Catalogue, LoadError};
 
@@ -148,14 +148,15 @@ async fn the_loop_body_charges_the_whole_workflow_ceiling() {
     let exec = Fake::new()
         .answering("cargo.test", serde_json::json!({ "failures": 3 }))
         .costing(250);
-    let mut workflow =
-        Workflow::load(VERIFY, "verify.toml", &Catalogue::empty()).expect("it loads");
-    workflow.budget = orrery_proto::Budget {
+    let mut unchecked = Workflow::from_toml_str(VERIFY, "verify.toml").expect("it parses");
+    unchecked.budget = orrery_proto::Budget {
         max_turns: 100,
         max_tokens: 600,
         wall_clock_ms: 600_000,
         max_micro_usd: None,
     };
+    // Editing a workflow means typechecking it again before the runner sees it.
+    let workflow = Checked::new(unchecked, &Catalogue::empty()).expect("it typechecks");
 
     let run = Runner::new(&exec).run(&workflow, None).await;
     assert!(

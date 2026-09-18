@@ -29,7 +29,7 @@ use crate::budget::WorkflowBudget;
 use crate::expr::{self, Env};
 use crate::join::Join;
 use crate::step::{NamedStep, OnFail, Step};
-use crate::typecheck::Workflow;
+use crate::typecheck::Checked;
 
 /// What one step produced.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -223,7 +223,10 @@ impl<'a> Runner<'a> {
     /// The budget is the workflow's own when it declares one, and `override_`
     /// otherwise — a caller that has already sliced a parent's ceiling passes
     /// it here.
-    pub async fn run(&self, workflow: &Workflow, budget: Option<Budget>) -> WorkflowRun {
+    /// It takes a [`Checked`] and not a [`Workflow`](crate::typecheck::Workflow)
+    /// on purpose: translation #5 says an invalid workflow fails at load, and
+    /// this signature is what makes the compiler say it.
+    pub async fn run(&self, workflow: &Checked, budget: Option<Budget>) -> WorkflowRun {
         let limit = budget.unwrap_or(workflow.budget);
         let mut state = State::new(Env::new(), WorkflowBudget::new(limit));
         let flow = self.sequence(&workflow.steps, &mut state, 0).await;

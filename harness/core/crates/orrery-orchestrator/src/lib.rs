@@ -41,7 +41,7 @@ pub use expr::{Env, ExprError, eval, holds};
 pub use join::{Join, Joined};
 pub use step::{AgentDefinition, Catalogue, NamedStep, OnFail, Step, ToolDefinition, TypeShape};
 pub use subagent::{SubAgentError, SubAgentResult, TurnReport, TurnRunner, spawn};
-pub use typecheck::{BadPath, LoadError, Workflow, check};
+pub use typecheck::{BadPath, Checked, LoadError, Workflow, check};
 pub use workflow::{
     CapReached, Outcome, Runner, StepCtx, StepExecutor, StepFailure, StepObserver, StepOutput,
     WorkflowRun,

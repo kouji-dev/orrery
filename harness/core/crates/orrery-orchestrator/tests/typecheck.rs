@@ -3,7 +3,7 @@
 //! A workflow must not fail mid-run after paying for three model calls.
 
 use orrery_orchestrator::step::{AgentDefinition, Catalogue, ToolDefinition, TypeShape};
-use orrery_orchestrator::typecheck::{LoadError, Workflow, check};
+use orrery_orchestrator::typecheck::{Checked, LoadError, Workflow, check};
 use orrery_proto::Budget;
 
 fn budget() -> Budget {
@@ -250,4 +250,57 @@ input = { ref = "left" }
 "#;
     let err = Workflow::load(text, "wide.toml", &catalogue()).expect_err("fails at load");
     assert!(matches!(err, LoadError::ForwardRef { .. }), "{err:?}");
+}
+
+#[test]
+fn only_the_typechecker_can_make_a_checked_workflow() {
+    // Translation #5 says an invalid workflow fails at load. That is a claim
+    // about the *type*, not about API discipline: `Runner::run` takes a
+    // `Checked`, and the only way to hold one is to have run `check`. The
+    // negative half — handing the runner a plain `Workflow` — is a
+    // `compile_fail` doctest on `Checked`, because a test that does not compile
+    // cannot live in a test file.
+    let bad = r#"
+name = "release"
+
+[[step]]
+name = "one"
+kind = "agent"
+subagent = "planner"
+input = { ref = "three" }
+
+[[step]]
+name = "three"
+kind = "agent"
+subagent = "executor"
+input = "go"
+"#;
+    // The unchecked parse is still available, and still says nothing.
+    let unchecked = Workflow::from_toml_str(bad, "release.toml").expect("it parses");
+    assert_eq!(unchecked.steps.len(), 2);
+
+    // Promoting it is the check, and it fails.
+    let err = Checked::new(unchecked, &catalogue()).expect_err("it does not typecheck");
+    assert!(matches!(err, LoadError::ForwardRef { .. }), "{err:?}");
+
+    let good = r#"
+name = "release"
+
+[[step]]
+name = "plan"
+kind = "agent"
+subagent = "planner"
+input = "go"
+
+[[step]]
+name = "do"
+kind = "agent"
+subagent = "executor"
+input = { ref = "plan", path = ["files"] }
+"#;
+    let checked: Checked = Workflow::load(good, "release.toml", &catalogue()).expect("it loads");
+    // It reads as the workflow it wraps, and gives it back unchanged.
+    assert_eq!(checked.name, "release");
+    assert_eq!(checked.as_workflow().steps.len(), 2);
+    assert_eq!(checked.into_inner().name, "release");
 }

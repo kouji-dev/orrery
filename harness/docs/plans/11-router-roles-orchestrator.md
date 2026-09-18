@@ -130,6 +130,8 @@ Deterministic steps between model calls are **where cost comes out**, since they
 
 **Translation #5: the whole dataflow is typechecked at load.** Step *N* may only `ref` steps `< N`, and each ref's path must typecheck against the target's declared `returns`. A workflow must not fail mid-run on a type error after paying for three model calls.
 
+And it is the **compiler** that says so, not API discipline. `Workflow` parses; `Checked` is a newtype whose field is private and whose only constructor runs the typechecker, and `Runner::run` takes `&Checked`. `Workflow::from_toml_str` still exists and still does not check — it simply produces something the runner will not accept, and editing a loaded workflow means checking it again. A `compile_fail` doctest on `Checked` is the proof.
+
 ---
 
 ## File structure
@@ -191,6 +193,7 @@ Files: `orrery-orchestrator/src/{expr,typecheck}.rs`, `tests/typecheck.rs`
 - [x] `typecheck::path_must_match_returns` — a ref to `.count` on a step whose `returns` has no `count` fails at load.
 - [x] `typecheck::valid_workflow_passes`.
 - [x] `expr::cannot_call_out` — a review-level assertion plus a test that the evaluator has no I/O in its signature.
+- [x] `typecheck::only_the_typechecker_can_make_a_checked_workflow` — plus a `compile_fail` doctest on `Checked` proving an unchecked `Workflow` cannot be handed to the runner.
 - [x] Implement.
 
 ### Task 6 · Sub-agents on branches
@@ -230,9 +233,9 @@ Files: `orrery-router/src/lib.rs`, `orrery-ext-agents-default/*`
 
 ## Done when
 
-- `cargo test -p orrery-router -p orrery-orchestrator -p orrery-ext-agents-default` green. **26 + 28 + 7 tests, all passing.**
+- `cargo test -p orrery-router -p orrery-orchestrator -p orrery-ext-agents-default` green. **26 + 29 tests + 2 doctests + 7 tests, all passing.**
 - A verify loop terminates on its own cap, enforced by **the harness rather than the prompt** — specifically by `orrery-orchestrator`'s loop machine, on a counter it owns. *Amended*: the plan said "by the kernel", and it is not the kernel — `orrery-kernel` enforces a **turn** budget, and a step loop belongs to the orchestrator. The substance holds and is asserted in `loops::terminates_on_its_own_cap`: the body ran exactly `max_iterations` times and the model was handed the same input every time, so nothing in a prompt stopped it.
-- An invalid workflow fails at load, not after three model calls.
+- An invalid workflow fails at load, not after three model calls — and unloadably so: `Runner::run` takes `Checked<Workflow>`, a newtype only `typecheck::check` can produce, so reaching the runner with an unchecked workflow is a compile error rather than a convention. Proved by the `compile_fail` doctest on `Checked` and by `typecheck::only_the_typechecker_can_make_a_checked_workflow`.
 - A sub-agent's work is visible as ordinary turn **rows on its own branch** — `User` and `Assistant` turns, inspectable and replayable, never collapsed into one tool result. *Amended*: the plan said "in the transcript", and rendering a transcript is a client's job (plan 09); what this plan makes true is the shape in the tree, asserted in `subagent::runs_on_a_branch`.
 - Every routing decision is audited with its signal values. `Router` holds an `Audit`, not an `Option<Audit>`, so the record is unconditional and a router built without a sink writes to the null one.
 
@@ -256,10 +259,10 @@ Files: `orrery-router/src/lib.rs`, `orrery-ext-agents-default/*`
 
 ## State
 
-**Done**, 2026-09-18, on `feat/harness_claude-0917`. 61 tests across the three crates, all passing, and `cargo run -p xtask -- deps-check` clean.
+**Done**, 2026-09-18, on `feat/harness_claude-0917`. 62 tests and 2 doctests across the three crates, all passing, and `cargo run -p xtask -- deps-check` clean.
 
 - `orrery-router` — `Signals` (`Copy`, so nothing that needs fetching or generating can be added to it), `[[route]]` rules, `decide` with its three-level precedence and its one-rung-at-a-time ladder, the fan-out arithmetic, modes as `mode(...)` capability requests the policy engine answers, and role binding with one winner per role and the losers named.
-- `orrery-orchestrator` — the step types, `Expr`/`Predicate` evaluation, the load-time dataflow typecheck (translation #5), the whole-workflow budget, the join semantics, the workflow machine and sub-agents on branches.
+- `orrery-orchestrator` — the step types, `Expr`/`Predicate` evaluation, the load-time dataflow typecheck (translation #5) behind a `Checked` newtype the runner demands, the whole-workflow budget, the join semantics, the workflow machine and sub-agents on branches.
 - `orrery-ext-agents-default` — the five shipped role agents, loading through the same door a third-party bundle uses.
 
 **Not built here, and why.** Two joins to the rest of the system are declared as traits and left for the facade, because implementing them here would be the kernel dependency this plan exists to avoid: `StepExecutor` (run a sub-agent, call a tool) and `TurnRunner` (run a child's turns under a lease). Wiring them to `orrery-kernel` and `orrery-tools` belongs to `orrery-harness`, the one crate `deps-check` lets link both halves. Until that lands the machine is complete and tested but not yet reachable from a live session, and no test in these three crates touches a provider, a model or a network.

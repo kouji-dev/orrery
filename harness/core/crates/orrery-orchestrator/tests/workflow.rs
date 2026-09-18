@@ -4,11 +4,11 @@ mod common;
 
 use common::Fake;
 use orrery_orchestrator::Catalogue;
-use orrery_orchestrator::typecheck::Workflow;
+use orrery_orchestrator::typecheck::{Checked, Workflow};
 use orrery_orchestrator::workflow::{Outcome, Runner};
 use orrery_proto::Budget;
 
-fn load(text: &str) -> Workflow {
+fn load(text: &str) -> Checked {
     Workflow::load(text, "wf.toml", &Catalogue::empty()).expect("it loads")
 }
 
