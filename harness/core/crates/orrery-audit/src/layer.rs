@@ -14,8 +14,8 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 
 use tracing::field::{Field, Visit};
-use tracing_subscriber::layer::Context;
 use tracing_subscriber::Layer;
+use tracing_subscriber::layer::Context;
 
 /// One of the three streams.
 #[non_exhaustive]

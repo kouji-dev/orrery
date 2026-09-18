@@ -181,7 +181,10 @@ impl FileSink {
     }
 
     fn open_append(path: &Path) -> std::io::Result<std::fs::File> {
-        std::fs::OpenOptions::new().create(true).append(true).open(path)
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
     }
 
     /// Close the live file, shift the rolled ones along, drop what falls past

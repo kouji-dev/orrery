@@ -4,7 +4,7 @@ mod common;
 
 use std::sync::Arc;
 
-use common::{wide_scope, Workspace};
+use common::{Workspace, wide_scope};
 use orrery_policy::{PendingCall, PolicyBuilder, PolicyEngine, Verdict};
 use orrery_proto::{ExtId, Layer, Subject};
 
@@ -30,7 +30,10 @@ fn managed_deny_is_final() {
     let engine = engine_of(
         &ws,
         &[
-            (Layer::Managed, "[permissions]\ndeny = [\"net(domain: *)\"]\n"),
+            (
+                Layer::Managed,
+                "[permissions]\ndeny = [\"net(domain: *)\"]\n",
+            ),
             (
                 Layer::Project,
                 "[permissions]\nallow = [\"net(domain: *.corp.internal)\"]\n",
@@ -38,7 +41,11 @@ fn managed_deny_is_final() {
         ],
     );
     assert_eq!(
-        verdict(&engine, PendingCall::net("build.corp.internal"), &Subject::Agent),
+        verdict(
+            &engine,
+            PendingCall::net("build.corp.internal"),
+            &Subject::Agent
+        ),
         Verdict::Deny,
         "the closest layer wins for a NAME, never for a permission"
     );
@@ -175,7 +182,10 @@ allow = ["tool(c.*)"]
 #[test]
 fn a_reload_swaps_without_rebuilding_the_engine() {
     let ws = Workspace::new();
-    let engine = engine_of(&ws, &[(Layer::Project, "[permissions]\nallow = [\"tool(git.*)\"]\n")]);
+    let engine = engine_of(
+        &ws,
+        &[(Layer::Project, "[permissions]\nallow = [\"tool(git.*)\"]\n")],
+    );
     assert_eq!(
         verdict(&engine, PendingCall::tool("git.status"), &Subject::Agent),
         Verdict::Allow
@@ -204,10 +214,17 @@ fn a_reload_swaps_without_rebuilding_the_engine() {
 fn every_decision_names_its_rule_in_the_audit() {
     let ws = Workspace::new();
     let audit = orrery_audit::memory();
-    let engine = engine_of(&ws, &[(Layer::Managed, "[permissions]\ndeny = [\"creds(*)\"]\n")])
-        .with_audit(Arc::clone(&audit) as orrery_audit::Audit);
+    let engine = engine_of(
+        &ws,
+        &[(Layer::Managed, "[permissions]\ndeny = [\"creds(*)\"]\n")],
+    )
+    .with_audit(Arc::clone(&audit) as orrery_audit::Audit);
 
-    let _ = verdict(&engine, PendingCall::creds("ANTHROPIC_API_KEY"), &Subject::Agent);
+    let _ = verdict(
+        &engine,
+        PendingCall::creds("ANTHROPIC_API_KEY"),
+        &Subject::Agent,
+    );
 
     let record = audit
         .records()

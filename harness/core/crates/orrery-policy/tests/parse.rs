@@ -3,21 +3,29 @@
 mod common;
 
 use common::Workspace;
-use orrery_policy::{parse, PolicyBuilder, Selector};
+use orrery_policy::{PolicyBuilder, Selector, parse};
 use orrery_proto::{Aspect, Layer};
 
 /// The grammar table from the plan, one row at a time.
 #[test]
 fn every_aspect_form() {
     let table: &[(&str, Aspect, Selector)] = &[
-        ("tool(ripgrep.search)", Aspect::Tool, Selector::on("ripgrep.search")),
+        (
+            "tool(ripgrep.search)",
+            Aspect::Tool,
+            Selector::on("ripgrep.search"),
+        ),
         (
             "tool(shell.exec: npm run *)",
             Aspect::Tool,
             Selector::on("shell.exec").with_specifier("npm run *"),
         ),
         ("mcp(github.*)", Aspect::Mcp, Selector::on("github.*")),
-        ("mcp(github.get_*)", Aspect::Mcp, Selector::on("github.get_*")),
+        (
+            "mcp(github.get_*)",
+            Aspect::Mcp,
+            Selector::on("github.get_*"),
+        ),
         ("skill(review-*)", Aspect::Skill, Selector::on("review-*")),
         ("ext(buildgraph)", Aspect::Ext, Selector::on("buildgraph")),
         ("mode(plan)", Aspect::Mode, Selector::on("plan")),
@@ -31,8 +39,16 @@ fn every_aspect_form() {
             Selector::on("*.corp.internal"),
         ),
         ("creds(*)", Aspect::Creds, Selector::on("*")),
-        ("mem.write(global)", Aspect::MemWrite, Selector::on("global")),
-        ("mem.read(session)", Aspect::MemRead, Selector::on("session")),
+        (
+            "mem.write(global)",
+            Aspect::MemWrite,
+            Selector::on("global"),
+        ),
+        (
+            "mem.read(session)",
+            Aspect::MemRead,
+            Selector::on("session"),
+        ),
         // Unqualified: the whole aspect, not nothing.
         ("creds", Aspect::Creds, Selector::any()),
         // `param:value` matches one named input.

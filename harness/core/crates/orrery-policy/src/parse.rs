@@ -94,7 +94,9 @@ pub fn rule(text: &str) -> Result<(Aspect, Selector), ParseError> {
 
     let Some(aspect) = aspect_of(word.trim()) else {
         return Err(ParseError::bare(
-            format!("`{word}` is not an aspect: expected one of tool, mcp, skill, ext, mode, read, write, spawn, net, creds, ui, render, mem.read, mem.write"),
+            format!(
+                "`{word}` is not an aspect: expected one of tool, mcp, skill, ext, mode, read, write, spawn, net, creds, ui, render, mem.read, mem.write"
+            ),
             text,
         ));
     };
@@ -137,11 +139,16 @@ fn terms(aspect: Aspect, inner: &str, whole: &str) -> Result<Selector, ParseErro
             if key.trim().is_empty() {
                 return Err(ParseError::bare("a `param:` term needs a key", whole));
             }
-            selector.params.push((key.trim().to_owned(), value.trim().to_owned()));
+            selector
+                .params
+                .push((key.trim().to_owned(), value.trim().to_owned()));
             continue;
         }
         if aspect == Aspect::Net {
-            if let Some(rest) = term.strip_prefix("domain:").or_else(|| term.strip_prefix("url:")) {
+            if let Some(rest) = term
+                .strip_prefix("domain:")
+                .or_else(|| term.strip_prefix("url:"))
+            {
                 selector.primary = Some(rest.trim().to_owned());
                 continue;
             }
@@ -281,7 +288,15 @@ pub fn load_toml(
         ask: doc.permissions.ask,
         deny: doc.permissions.deny,
     };
-    push_subject(&mut out, text, &file, layer, Subject::Agent, &own, regex_allowed)?;
+    push_subject(
+        &mut out,
+        text,
+        &file,
+        layer,
+        Subject::Agent,
+        &own,
+        regex_allowed,
+    )?;
 
     for (key, lists) in &doc.permissions.subjects {
         let subject: Subject = key.parse().map_err(|_| {
@@ -314,8 +329,8 @@ fn push_subject(
     ] {
         for raw in written {
             let line = line_of(text, raw);
-            let (aspect, selector) = rule(raw)
-                .map_err(|e| ParseError::at(file, line, e.message().to_owned(), raw))?;
+            let (aspect, selector) =
+                rule(raw).map_err(|e| ParseError::at(file, line, e.message().to_owned(), raw))?;
             if selector.regex.is_some() {
                 if !regex_allowed {
                     return Err(ParseError::at(

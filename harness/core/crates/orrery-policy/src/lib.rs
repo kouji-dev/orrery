@@ -53,11 +53,11 @@ pub mod token;
 
 pub use call::PendingCall;
 pub use engine::{
-    no_rule, ConsentAnswer, ConsentMode, Decision, PolicyBuilder, PolicyEngine, ResolvedRules,
-    Verdict,
+    ConsentAnswer, ConsentMode, Decision, PolicyBuilder, PolicyEngine, ResolvedRules, Verdict,
+    no_rule,
 };
 pub use error::{HandlerError, ParseError, PolicyError, TokenError, Warning};
 pub use explain::{Explanation, RuleMatch};
-pub use handler::{review_narrowing, InertMinter, PermissionHandler};
+pub use handler::{InertMinter, PermissionHandler, review_narrowing};
 pub use rule::{Rule, RuleList, Selector, SelectorKind, Source};
-pub use token::{CapabilityToken, ResolvedScope, TokenLedger, TokenMinter, DEFAULT_TTL};
+pub use token::{CapabilityToken, DEFAULT_TTL, ResolvedScope, TokenLedger, TokenMinter};

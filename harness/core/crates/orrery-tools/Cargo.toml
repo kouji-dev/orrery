@@ -1,6 +1,6 @@
 [package]
 name = "orrery-tools"
-version = "0.0.0"
+version = "0.1.0"
 description = "Tool namespacing, resolution, visibility and dispatch: the only path to a tool."
 edition.workspace = true
 rust-version.workspace = true

@@ -91,3 +91,4 @@ orrery-grader = { version = "0.1.0", path = "harness/core/crates/orrery-grader" 
 orrery-audit = { version = "0.1.0", path = "harness/core/crates/orrery-audit" }
 orrery-policy = { version = "0.1.0", path = "harness/core/crates/orrery-policy" }
 orrery-broker = { version = "0.1.0", path = "harness/core/crates/orrery-broker" }
+orrery-tools = { version = "0.1.0", path = "harness/core/crates/orrery-tools" }

@@ -2,14 +2,16 @@
 
 mod common;
 
-use common::{engine, wide_scope, Workspace};
+use common::{Workspace, engine, wide_scope};
 use orrery_policy::{PendingCall, Verdict};
 use orrery_proto::Subject;
 use proptest::prelude::*;
 
 fn verdict(toml: &str, ws: &Workspace, call: PendingCall) -> Verdict {
     let (engine, _) = engine(ws, toml);
-    engine.check(&call, &Subject::Agent, &wide_scope()).verdict()
+    engine
+        .check(&call, &Subject::Agent, &wide_scope())
+        .verdict()
 }
 
 /// An allow can never carve an exception out of a deny.
@@ -42,7 +44,10 @@ allow = ["tool(git.*)", "tool(git.push)"]
     let (engine, _) = engine(&ws, toml);
     let explained = engine.explain(&PendingCall::tool("git.push"), &Subject::Agent);
     let rule = explained.rule.expect("a rule matched");
-    assert_eq!(rule.text, "tool(git.*)", "the first match wins, not the tightest");
+    assert_eq!(
+        rule.text, "tool(git.*)",
+        "the first match wins, not the tightest"
+    );
 
     // And the lists run deny, then ask, then allow, whatever order they were
     // written in: an ask on the same name beats an allow on it.
@@ -72,7 +77,10 @@ allow = ["read(./**)"]
 "#;
 
     let direct = ws.path("secrets/key.txt").display().to_string();
-    assert_eq!(verdict(toml, &ws, PendingCall::read(&direct)), Verdict::Deny);
+    assert_eq!(
+        verdict(toml, &ws, PendingCall::read(&direct)),
+        Verdict::Deny
+    );
 
     // A `..` traversal that lands back inside the denied directory.
     let traversal = ws.path("src/../secrets/key.txt").display().to_string();

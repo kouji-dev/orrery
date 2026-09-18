@@ -12,7 +12,7 @@ mod common;
 use std::sync::Arc;
 use std::time::Duration;
 
-use common::{wide_scope, Workspace};
+use common::{Workspace, wide_scope};
 use orrery_policy::{
     Decision, PendingCall, PolicyBuilder, PolicyEngine, TokenError, TokenLedger, TokenMinter,
 };

@@ -40,7 +40,10 @@ deny = [
     // And the rendered form carries all four, so plan 17 has nothing to invent.
     let rendered = explained.to_string();
     for needle in ["net(example.com)", "managed.toml", "Managed", "deny"] {
-        assert!(rendered.contains(needle), "missing `{needle}` in:\n{rendered}");
+        assert!(
+            rendered.contains(needle),
+            "missing `{needle}` in:\n{rendered}"
+        );
     }
 }
 

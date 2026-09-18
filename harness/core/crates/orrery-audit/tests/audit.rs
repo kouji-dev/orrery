@@ -1,6 +1,6 @@
 //! Task 1 of `harness/docs/plans/07-policy-broker-audit.md`.
 
-use orrery_audit::{AuditEvent, AuditSink, Digest, FileSink, MemorySink, CallOutcome, Stream};
+use orrery_audit::{AuditEvent, AuditSink, CallOutcome, Digest, FileSink, MemorySink, Stream};
 use orrery_proto::CallId;
 
 const SECRET: &str = "sk-ant-not-a-real-key-000000";
@@ -99,6 +99,9 @@ fn every_stream_has_a_target() {
     assert_eq!(Stream::Load.target(), "orrery.load");
     assert_eq!(Stream::Audit.target(), "orrery.audit");
     assert_eq!(Stream::Telemetry.target(), "orrery.telemetry");
-    assert_eq!(Stream::of_target("orrery.audit.policy"), Some(Stream::Audit));
+    assert_eq!(
+        Stream::of_target("orrery.audit.policy"),
+        Some(Stream::Audit)
+    );
     assert_eq!(Stream::of_target("tokio::task"), None);
 }

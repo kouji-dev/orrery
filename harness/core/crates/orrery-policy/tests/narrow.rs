@@ -5,10 +5,10 @@ mod common;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use common::{wide_scope, Workspace};
+use common::{Workspace, wide_scope};
 use orrery_policy::{
-    review_narrowing, Decision, HandlerError, InertMinter, PendingCall, PermissionHandler,
-    PolicyBuilder, PolicyEngine, Verdict,
+    Decision, HandlerError, InertMinter, PendingCall, PermissionHandler, PolicyBuilder,
+    PolicyEngine, Verdict, review_narrowing,
 };
 use orrery_proto::{Layer, Subject};
 use proptest::prelude::*;

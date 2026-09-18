@@ -96,9 +96,9 @@ impl Decision {
     #[must_use]
     pub fn rule(&self) -> RuleId {
         match self {
-            Decision::Allow { rule, .. } | Decision::Ask { rule, .. } | Decision::Deny { rule, .. } => {
-                *rule
-            }
+            Decision::Allow { rule, .. }
+            | Decision::Ask { rule, .. }
+            | Decision::Deny { rule, .. } => *rule,
         }
     }
 
@@ -222,6 +222,18 @@ impl ResolvedRules {
             .find(|c| c.rule.subject == *subject && c.matches(call))
     }
 
+    /// Whether this subject has any rules written about it at all.
+    ///
+    /// A subject with **no rule file of its own inherits its parent's set**; a
+    /// subject with one narrows it. "A rule file narrows a sub-agent, it never
+    /// widens one" is about what a file does, not about the absence of one —
+    /// and a sub-agent nobody wrote rules for should be able to do what the
+    /// agent that spawned it can do, not nothing.
+    #[must_use]
+    pub fn mentions(&self, subject: &Subject) -> bool {
+        self.rules.iter().any(|c| c.rule.subject == *subject)
+    }
+
     /// Every rule that was looked at for this subject, matched or not.
     fn considered(&self, call: &PendingCall, subject: &Subject) -> Vec<RuleMatch> {
         self.rules
@@ -252,7 +264,8 @@ impl PolicyBuilder {
     /// target resolve against the same real directory.
     #[must_use]
     pub fn new(root: impl AsRef<Path>) -> Self {
-        let root = dunce::canonicalize(root.as_ref()).unwrap_or_else(|_| root.as_ref().to_path_buf());
+        let root =
+            dunce::canonicalize(root.as_ref()).unwrap_or_else(|_| root.as_ref().to_path_buf());
         Self {
             root,
             loaded: Vec::new(),
@@ -423,13 +436,21 @@ impl PolicyEngine {
     #[must_use]
     pub fn check(&self, call: &PendingCall, subject: &Subject, scope: &AgentScope) -> Decision {
         let rules = self.rules.load();
-        let mut decision = self.decide_for(&rules, call, subject);
-
-        // Intersect with the parent's answer: a child is narrowed, never widened.
-        if let Some(parent) = parent_of(subject) {
-            let theirs = self.decide_for(&rules, call, &parent);
-            decision = decision.min(theirs);
-        }
+        let parent = parent_of(subject);
+        let mut decision = match (&parent, rules.mentions(subject)) {
+            // Nothing was written about this subject: it inherits, rather than
+            // being silently denied everything.
+            (Some(parent), false) => self.decide_for(&rules, call, parent),
+            _ => {
+                let mine = self.decide_for(&rules, call, subject);
+                match &parent {
+                    // Intersect with the parent's answer: a child is narrowed,
+                    // never widened.
+                    Some(parent) => mine.min(self.decide_for(&rules, call, parent)),
+                    None => mine,
+                }
+            }
+        };
 
         // And with the scope's own grant, which is the sub-agent's declared
         // ceiling. A capability the scope does not carry is not available to it
@@ -514,12 +535,9 @@ impl PolicyEngine {
                 reason: format!("`{}` denies `{}`", matched.rule.text, call.match_text()),
             },
             RuleList::Allow => Decision::Allow {
-                token: self.minter.mint(
-                    call.call,
-                    call.aspect,
-                    resolved_scope(call, rules),
-                    rule,
-                ),
+                token: self
+                    .minter
+                    .mint(call.call, call.aspect, resolved_scope(call, rules), rule),
                 rule,
             },
             RuleList::Ask => Decision::Ask {
@@ -617,4 +635,3 @@ fn scope_permits(scope: &AgentScope, call: &PendingCall) -> bool {
                 || c.scope.iter().any(|s| s == &call.target || s == "*")
         })
 }
-
