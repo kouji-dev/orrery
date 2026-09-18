@@ -24,7 +24,7 @@ describe("angular.json production build", () => {
       }
     >;
   };
-  const build = cfg.projects["orrery"].architect.build;
+  const build = cfg.projects["orrery-ade"].architect.build;
 
   it("does not enable source maps in the production configuration", () => {
     expect(build.configurations.production?.sourceMap ?? false).toBe(false);

@@ -213,3 +213,31 @@ Nothing breaks at rest — they share `.git`, and no worktree path moves (the wo
 ## Afterwards
 
 - [ ] Update the memory files that point at `docs/superpowers/...` to `ade/docs/superpowers/...`.
+
+---
+
+## Decisions taken during implementation
+
+- **`mainBinaryName` is now pinned** (`"mainBinaryName": "Orrery"` in
+  `tauri.conf.json`, added next to `productName`). Not in the original plan.
+  Tauri only *defaults* it to `productName`; with the crate renamed to
+  `orrery-ade` the installed exe's name stopped being provable from the config
+  alone, and `--no-bundle` cannot verify it (that path emits the cargo target
+  name, `target/release/orrery-ade.exe`). Pinning it makes `Orrery.exe`
+  explicit. `identifier`, `productName`, window `title` and `upgradeCode` are
+  untouched.
+- **Root `package.json` carries no `version` field.** `bump.mjs` stamps
+  `ade/package.json` only, so a version at the root would silently drift. The
+  root package is private, so the field is optional.
+- **`ade/src-tauri/.gitignore:5` (`/target/`) is left in place.** Dead but
+  harmless; the rest of that file (`/gen/schemas`, `/binaries/`) is still live,
+  and the root `.gitignore` now carries `target/`.
+- **`stamp-version.mjs` is run from `ade/`, not from the repo root.** Task 9's
+  listing shows `node ade/scripts/release/stamp-version.mjs`, which contradicts
+  task 5's own `'../Cargo.lock'` fix — the script resolves `package.json` and
+  `src-tauri/tauri.conf.json` from cwd. CI gets `working-directory: ade` for the
+  bump/version steps, and `bump.mjs` already invokes it in-process from `ade/`.
+- **Clippy is not run with `-D warnings`.** The ADE lib has 17 pre-existing
+  warnings (dead-code on `pub` items in a `staticlib`/`cdylib` crate,
+  `type_complexity`), none introduced here. `cargo clippy -p orrery-ade
+  --all-targets` is clean of errors and picks up the root `clippy.toml`.

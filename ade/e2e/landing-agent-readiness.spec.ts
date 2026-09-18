@@ -17,7 +17,7 @@ import { extname, join } from "node:path";
  * landing/ without running scripts/landing/gen-sitemap.mjs and this fails.
  */
 
-const LANDING = join(process.cwd(), "landing");
+const LANDING = join(process.cwd(), "..", "landing");
 const ORIGIN = "https://orrery.kouji.dev";
 
 const MIME: Record<string, string> = {

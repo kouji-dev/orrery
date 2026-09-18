@@ -1,3 +1,6 @@
+packages:
+  - ade
+
 # pnpm blocks dependency build/postinstall scripts by default (supply-chain
 # safety). These trusted native deps are explicitly allowed to run their install
 # scripts. Maintained by `pnpm approve-builds` (run it if a new native dep needs

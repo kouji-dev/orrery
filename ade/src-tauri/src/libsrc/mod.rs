@@ -1758,7 +1758,7 @@ mod tests {
         }
         let root = std::env::var_os("ORRERY_LIBSRC_SMOKE_ROOT")
             .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf());
+            .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf());
         let projects: Projects = Arc::new(Mutex::new(vec![LibProject {
             id: "smoke".into(),
             name: root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),

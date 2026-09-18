@@ -26,7 +26,7 @@ fn hook_cli_posts_request_and_prints_the_decision() {
         req // hand the captured request back to the test
     });
 
-    let exe = env!("CARGO_BIN_EXE_orrery");
+    let exe = env!("CARGO_BIN_EXE_orrery-ade");
     let mut child = Command::new(exe)
         .args([
             "hook",

@@ -36,7 +36,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const current = JSON.parse(readFileSync('package.json', 'utf8')).version;
   const next = nextVersion(current, kind);
   execFileSync('node', ['scripts/release/stamp-version.mjs', next], { stdio: 'inherit' });
-  git('add', 'package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', 'src-tauri/Cargo.lock');
+  git('add', 'package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml', '../Cargo.lock');
   git('commit', '-m', `release: v${next}`);
   // Annotated tag carrying the auto notes (commits since the previous release,
   // merges skipped) — CI regenerates the same list for the release body.

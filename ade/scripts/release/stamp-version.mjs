@@ -37,6 +37,6 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     writeFileSync(f, setJsonVersion(readFileSync(f, 'utf8'), version));
   }
   writeFileSync('src-tauri/Cargo.toml', setCargoVersion(readFileSync('src-tauri/Cargo.toml', 'utf8'), version));
-  writeFileSync('src-tauri/Cargo.lock', setLockVersion(readFileSync('src-tauri/Cargo.lock', 'utf8'), 'orrery', version));
+  writeFileSync('../Cargo.lock', setLockVersion(readFileSync('../Cargo.lock', 'utf8'), 'orrery-ade', version));
   console.log(`stamped version ${version}`);
 }

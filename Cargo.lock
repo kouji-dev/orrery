@@ -4244,7 +4244,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "orrery"
+name = "orrery-ade"
 version = "0.24.7"
 dependencies = [
  "base64 0.22.1",

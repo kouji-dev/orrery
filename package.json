@@ -1,0 +1,20 @@
+{
+  "name": "orrery-root",
+  "private": true,
+  "description": "Orrery monorepo root: the ADE desktop app (ade/) and the harness runtime (harness/).",
+  "scripts": {
+    "test": "pnpm -C ade test",
+    "dev": "pnpm -C ade dev",
+    "build": "pnpm -C ade build",
+    "start": "pnpm -C ade start",
+    "e2e": "pnpm -C ade e2e",
+    "tauri": "pnpm -C ade tauri",
+    "release": "pnpm -C ade release",
+    "release:patch": "pnpm -C ade release:patch",
+    "ext:build": "pnpm -C ade ext:build",
+    "ext:build:runtimes": "pnpm -C ade ext:build:runtimes",
+    "ext:build:servers": "pnpm -C ade ext:build:servers",
+    "ext:index": "pnpm -C ade ext:index",
+    "ext:build:all": "pnpm -C ade ext:build:all"
+  }
+}

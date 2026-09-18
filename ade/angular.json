@@ -6,7 +6,7 @@
     "analytics": false
   },
   "projects": {
-    "orrery": {
+    "orrery-ade": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -20,6 +20,7 @@
         "build": {
           "builder": "@angular/build:application",
           "options": {
+            "outputPath": "dist/orrery-ade",
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "css",
@@ -84,10 +85,10 @@
           },
           "configurations": {
             "production": {
-              "buildTarget": "orrery:build:production"
+              "buildTarget": "orrery-ade:build:production"
             },
             "development": {
-              "buildTarget": "orrery:build:development"
+              "buildTarget": "orrery-ade:build:development"
             }
           },
           "defaultConfiguration": "development"

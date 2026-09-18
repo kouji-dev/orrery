@@ -73,7 +73,7 @@ jobs:
         if: steps.langs.outputs.langs != ''
         with:
           name: ext-packs-${{ matrix.target }}
-          path: dist-ext/*.zip
+          path: ade/dist-ext/*.zip
           if-no-files-found: error
 
   # Runtime packs (runtime.node, runtime.java): the pinned Node 22 LTS / Temurin
@@ -122,7 +122,7 @@ jobs:
         if: steps.runtimes.outputs.only != ''
         with:
           name: ext-packs-runtimes-${{ matrix.target }}
-          path: dist-ext/*.zip
+          path: ade/dist-ext/*.zip
           if-no-files-found: error
 
   # Server packs. Node and Go on the runner are BUILD tools only: npm installs
@@ -180,7 +180,7 @@ jobs:
         if: steps.servers.outputs.only != ''
         with:
           name: ext-packs-servers-${{ matrix.target }}
-          path: dist-ext/*.zip
+          path: ade/dist-ext/*.zip
           if-no-files-found: ignore
 
   publish:
@@ -206,7 +206,7 @@ jobs:
             || echo "no published index yet — starting fresh"
       - name: Build index.json (merged with the published one)
         run: >
-          node scripts/extensions/make-index.mjs
+          node ade/scripts/extensions/make-index.mjs
           --dir artifacts
           --out artifacts/index.json
           --repo "$RELEASES_REPO"

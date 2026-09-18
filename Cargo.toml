@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["ade/src-tauri", "ade/src-tauri/updater-stub"]
+default-members = ["ade/src-tauri"]
+
+# Shared version pins. Every member takes these with `{ workspace = true }` so
+# the ADE and the harness crates link ONE copy of each, not two.
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2.0.18"
+rusqlite = { version = "0.40.0", features = ["bundled"] }
+uuid = { version = "1.23.2", features = ["v4", "serde"] }
+blake3 = "1"
+regex = "1"
+semver = "1"
+clap = { version = "4.5", features = ["derive"] }
+toml_edit = "0.22"
+sha2 = "0.10"
+# reqwest mirrors tauri-plugin-updater's TLS setup exactly (rustls + ring, no
+# provider from reqwest itself) so no second crypto stack lands in the tree.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+tempfile = "3.27.0"

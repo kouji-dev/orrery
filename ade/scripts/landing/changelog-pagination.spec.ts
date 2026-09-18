@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const HTML = readFileSync(resolve(HERE, '../../landing/changelog.html'), 'utf8');
+const HTML = readFileSync(resolve(HERE, '../../../landing/changelog.html'), 'utf8');
 
 // The page fetches the single-source changelog.json (hosted in orrery-releases)
 // at runtime. jsdom has no fetch, so stub it with an inline fixture (5 entries >

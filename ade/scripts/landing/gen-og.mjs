@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT = resolve(HERE, "../../landing/og.png");
+const OUT = resolve(HERE, "../../../landing/og.png");
 const W = 1200;
 const H = 630;
 

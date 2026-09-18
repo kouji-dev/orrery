@@ -52,12 +52,14 @@ jobs:
           node-version: 22
       - name: Bump version (dispatch only — same script as `pnpm release`)
         if: github.event_name == 'workflow_dispatch'
+        working-directory: ade
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           node scripts/release/bump.mjs ${{ inputs.bump }}
       - name: Resolve version (auto-detected from package.json)
         id: ver
+        working-directory: ade
         run: |
           v=$(node -p "require('./package.json').version")
           if [ "${{ github.event_name }}" = "push" ]; then
@@ -72,7 +74,7 @@ jobs:
         run: |
           {
             echo "notes<<NOTES_EOF"
-            node scripts/release/notes.mjs
+            node ade/scripts/release/notes.mjs
             echo "NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
       - name: Resolve build SHA (post-bump HEAD)
@@ -106,32 +108,33 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
       - run: pnpm install --frozen-lockfile
       - name: Build Tauri app with signed updater artifacts
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        working-directory: ade
         run: pnpm tauri build
       - name: Stage release files (flat, windows)
         if: matrix.slug == 'windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist-release | Out-Null
-          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe dist-release/
-          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe.sig dist-release/
-          Copy-Item src-tauri/target/release/bundle/msi/*.msi dist-release/
+          Copy-Item target/release/bundle/nsis/*-setup.exe dist-release/
+          Copy-Item target/release/bundle/nsis/*-setup.exe.sig dist-release/
+          Copy-Item target/release/bundle/msi/*.msi dist-release/
           # MSI updater signature (per-machine installs update via the MSI). Tolerant:
           # if it's absent, make-latest-json just omits the MSI updater entry.
-          Copy-Item src-tauri/target/release/bundle/msi/*.msi.sig dist-release/ -ErrorAction SilentlyContinue
+          Copy-Item target/release/bundle/msi/*.msi.sig dist-release/ -ErrorAction SilentlyContinue
       - name: Stage release files (flat, mac)
         if: matrix.slug == 'mac'
         run: |
           mkdir -p dist-release
-          cp src-tauri/target/release/bundle/dmg/*.dmg dist-release/
+          cp target/release/bundle/dmg/*.dmg dist-release/
           # Updater payload + minisign signature — what latest.json's darwin entry points at.
-          cp src-tauri/target/release/bundle/macos/*.app.tar.gz dist-release/
-          cp src-tauri/target/release/bundle/macos/*.app.tar.gz.sig dist-release/
+          cp target/release/bundle/macos/*.app.tar.gz dist-release/
+          cp target/release/bundle/macos/*.app.tar.gz.sig dist-release/
       - uses: actions/upload-artifact@v7
         with:
           name: release-files-${{ matrix.slug }}
@@ -163,7 +166,7 @@ jobs:
           printf '%s\n' "$NOTES" > notes.md
       - name: Build latest.json
         run: >
-          node scripts/release/make-latest-json.mjs
+          node ade/scripts/release/make-latest-json.mjs
           --version ${{ needs.prepare.outputs.version }}
           --dir artifacts
           --out artifacts/latest.json
@@ -209,9 +212,9 @@ jobs:
           if [ -f releases-repo/changelog.json ]; then
             args=(append --tag "$TAG" --channel beta --out releases-repo/changelog.json)
             if [ -n "${SUMMARY:-}" ]; then args+=(--summary "$SUMMARY"); fi
-            node scripts/release/changelog-json.mjs "${args[@]}"
+            node ade/scripts/release/changelog-json.mjs "${args[@]}"
           else
-            node scripts/release/changelog-json.mjs migrate --channel beta --out releases-repo/changelog.json
+            node ade/scripts/release/changelog-json.mjs migrate --channel beta --out releases-repo/changelog.json
           fi
           cd releases-repo
           if git diff --quiet -- changelog.json; then

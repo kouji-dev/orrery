@@ -1,13 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Orrery",
+  "mainBinaryName": "Orrery",
   "version": "0.24.7",
   "identifier": "com.kouji.orrery",
   "build": {
     "beforeDevCommand": "node scripts/stage-updater-stub.mjs && pnpm start",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build && node scripts/stage-updater-stub.mjs",
-    "frontendDist": "../dist/orrery/browser"
+    "frontendDist": "../dist/orrery-ade/browser"
   },
   "app": {
     "windows": [

@@ -23,7 +23,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const LANDING = resolve(HERE, "../../landing");
+const LANDING = resolve(HERE, "../../../landing");
 const ORIGIN = "https://orrery.kouji.dev";
 
 /** Error pages are not URLs a crawler should index. */
@@ -36,7 +36,7 @@ const pathFor = (file) => (file === "index.html" ? "/" : `/${file}`);
 const order = (a, b) =>
   a === "index.html" ? -1 : b === "index.html" ? 1 : a.localeCompare(b);
 
-const ROOT = resolve(HERE, "../..");
+const ROOT = resolve(HERE, "../../..");
 const git = (...args) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
 const mtime = (file) => statSync(join(LANDING, file)).mtime.toISOString().slice(0, 10);
 

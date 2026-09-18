@@ -16,7 +16,7 @@ import { extname, join } from "node:path";
  * depends on the machine running the suite.
  */
 
-const LANDING = join(process.cwd(), "landing");
+const LANDING = join(process.cwd(), "..", "landing");
 const API = "https://api.github.com/repos/kouji-dev/orrery-releases/releases/latest";
 const DL = "https://github.com/kouji-dev/orrery-releases/releases/download/v9.9.9";
 const EXE = `${DL}/Orrery_9.9.9_x64-setup.exe`;

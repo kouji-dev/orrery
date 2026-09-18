@@ -136,3 +136,31 @@ rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
 
 Overall average: **60-90% token reduction** on common development operations.
 <!-- /rtk-instructions -->
+
+---
+
+## Repo layout (two roots, one workspace)
+
+- `ade/` — the Tauri 2 + Angular desktop app. Crate `orrery-ade`
+  (lib `orrery_ade_lib`), npm package `orrery-ade`. It still ships as
+  `Orrery.exe` with identifier `com.kouji.orrery` — **never change those.**
+- `harness/` — the Orrery Harness runtime (the `orrery` CLI and its crates).
+- `landing/`, `render.yaml`, `.github/` stay at the repo root.
+
+**Cargo runs from the repo root.** The root `Cargo.toml` is a virtual
+workspace (`resolver = "2"`); `target/` is shared and lives at the root, not
+under `ade/src-tauri/`. `default-members = ["ade/src-tauri"]`, so a bare
+`cargo build` builds only the ADE — name the harness crates explicitly with
+`-p`. Shared version pins live in root `[workspace.dependencies]`; add new
+shared deps there, not per-crate. `clippy.toml` is at the root and applies to
+both trees.
+
+```bash
+cargo test -p orrery-ade          # never --workspace
+cargo clippy -p orrery-ade -- -D warnings
+```
+
+**Frontend work runs through `pnpm -C ade`.** The root `package.json` is a
+private passthrough (`pnpm build` → `pnpm -C ade build`), and the pnpm
+workspace lists `ade` as a package. Scripts inside `ade/package.json` are
+relative to `ade/`, so they need no prefix.

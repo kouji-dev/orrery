@@ -24,9 +24,9 @@ describe('setCargoVersion', () => {
 describe('setLockVersion', () => {
   it("updates only the app's own lockfile entry (CRLF tolerated)", () => {
     const lock =
-      '[[package]]\r\nname = "other"\r\nversion = "1.2.3"\r\n\r\n[[package]]\r\nname = "orrery"\r\nversion = "0.1.0"\r\n';
-    const out = setLockVersion(lock, 'orrery', '0.2.0');
-    expect(out).toContain('name = "orrery"\r\nversion = "0.2.0"');
+      '[[package]]\r\nname = "other"\r\nversion = "1.2.3"\r\n\r\n[[package]]\r\nname = "orrery-ade"\r\nversion = "0.1.0"\r\n';
+    const out = setLockVersion(lock, 'orrery-ade', '0.2.0');
+    expect(out).toContain('name = "orrery-ade"\r\nversion = "0.2.0"');
     expect(out).toContain('name = "other"\r\nversion = "1.2.3"'); // untouched
   });
 });

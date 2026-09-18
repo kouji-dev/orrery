@@ -81,7 +81,7 @@ describe("orrery themes (moved out of @kouji-ui/themes)", () => {
     const cfg = JSON.parse(raw) as {
       projects: Record<string, { architect: { build: { options: { styles: unknown[] } } } }>;
     };
-    const styles = cfg.projects["orrery"].architect.build.options.styles
+    const styles = cfg.projects["orrery-ade"].architect.build.options.styles
       .map((s) => (typeof s === "string" ? s : (s as { input: string }).input));
 
     const base = styles.indexOf("node_modules/@kouji-ui/themes/src/base.css");

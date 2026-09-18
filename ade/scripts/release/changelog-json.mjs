@@ -24,7 +24,7 @@ import {
 // The data shaping is pure + unit-tested; main() does the git/file IO.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_OUT = resolve(HERE, "../../changelog.json");
+const DEFAULT_OUT = resolve(HERE, "../../../changelog.json");
 const UNIT_SEP = String.fromCharCode(31); // ASCII US — separates sha from subject
 
 // ── pure helpers (unit-tested) ───────────────────────────────────────────────

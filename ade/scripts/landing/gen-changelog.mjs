@@ -173,7 +173,7 @@ async function main() {
     commits,
   });
 
-  const file = resolve(dirname(fileURLToPath(import.meta.url)), '../../landing/changelog.html');
+  const file = resolve(dirname(fileURLToPath(import.meta.url)), '../../../landing/changelog.html');
   const html = readFileSync(file, 'utf8');
   const next = injectRelease(html, entry);
 
