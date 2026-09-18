@@ -9,3 +9,10 @@ repository.workspace = true
 publish = true
 
 [dependencies]
+orrery-proto = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
