@@ -660,6 +660,48 @@
           "enum": [
             "view"
           ]
+        },
+        {
+          "description": "A sub-agent definition.",
+          "type": "string",
+          "enum": [
+            "agent"
+          ]
+        },
+        {
+          "description": "A multi-step workflow.",
+          "type": "string",
+          "enum": [
+            "workflow"
+          ]
+        },
+        {
+          "description": "An interceptor on one of the kernel's phases (plan 05).\n\nThe name is the phase it is registered for, so a ledger line reads `interceptor: tool.before` — which is the question a person asks when a call was rewritten and they want to know by whom.",
+          "type": "string",
+          "enum": [
+            "interceptor"
+          ]
+        },
+        {
+          "description": "A lifecycle handler (plan 05).\n\nThe name is the lifecycle point it fires at, spelled as it is written in a manifest: `turn.end`.",
+          "type": "string",
+          "enum": [
+            "lifecycle"
+          ]
+        },
+        {
+          "description": "A permission handler.",
+          "type": "string",
+          "enum": [
+            "permissions"
+          ]
+        },
+        {
+          "description": "An MCP server, reached as the extension `mcp.<name>`.",
+          "type": "string",
+          "enum": [
+            "mcp"
+          ]
         }
       ]
     },

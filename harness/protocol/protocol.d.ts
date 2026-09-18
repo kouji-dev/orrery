@@ -586,7 +586,13 @@ export type ContributionKind =
   | "router"
   | "session-store"
   | "mode"
-  | "view";
+  | "view"
+  | "agent"
+  | "workflow"
+  | "interceptor"
+  | "lifecycle"
+  | "permissions"
+  | "mcp";
 /**
  * Why an extension was not loaded at all.
  *
