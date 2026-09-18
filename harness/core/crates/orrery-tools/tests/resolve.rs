@@ -5,6 +5,7 @@ mod common;
 use common::{ext, register, wide_scope};
 use orrery_proto::{Layer, ToolRef};
 use orrery_tools::{LedgerEntry, Registry, Resolution};
+use std::sync::Arc;
 
 fn r(s: &str) -> ToolRef {
     s.parse().expect("valid tool ref")
@@ -138,4 +139,46 @@ fn user_alias_resolves() {
         reg.resolve("rg", &wide_scope()),
         Resolution::Ok { r#ref } if r#ref == r("ripgrep.search")
     ));
+}
+
+/// Plan 04, task 5, completed once `orrery-audit` existed: the in-crate ledger
+/// is the fast path, and the same decision also reaches the audit stream, where
+/// "which rule allowed this" is answered from one place.
+#[test]
+fn ambiguity_reaches_the_audit() {
+    let audit = orrery_audit::memory();
+    let mut reg = Registry::new().with_audit(Arc::clone(&audit) as orrery_audit::Audit);
+    register(&mut reg, "ripgrep", "search", Layer::User);
+    register(&mut reg, "semantic", "search", Layer::Project);
+
+    let _ = reg.resolve("search", &wide_scope());
+
+    let recorded = audit
+        .records()
+        .into_iter()
+        .find_map(|rec| match rec.event {
+            orrery_audit::AuditEvent::ToolName {
+                name,
+                candidates,
+                chose,
+            } if name == "search" => Some((candidates, chose)),
+            _ => None,
+        })
+        .expect("the ambiguity is in the audit stream");
+
+    assert_eq!(recorded.1, "semantic.search");
+    assert!(recorded.0.iter().any(|c| c == "ripgrep.search"));
+    assert!(recorded.0.iter().any(|c| c == "semantic.search"));
+}
+
+#[test]
+fn a_registry_without_an_audit_still_records_to_its_ledger() {
+    let mut reg = Registry::new();
+    register(&mut reg, "ripgrep", "search", Layer::User);
+    register(&mut reg, "semantic", "search", Layer::Project);
+    let _ = reg.resolve("search", &wide_scope());
+    assert!(reg
+        .ledger()
+        .iter()
+        .any(|e| matches!(e, LedgerEntry::Ambiguous { .. })));
 }

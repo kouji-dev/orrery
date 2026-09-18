@@ -17,6 +17,7 @@ schema-validation = ["dep:jsonschema"]
 
 [dependencies]
 orrery-proto = { workspace = true }
+orrery-audit = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -29,3 +30,4 @@ jsonschema = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+serde_json = { workspace = true }

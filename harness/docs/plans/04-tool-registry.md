@@ -170,9 +170,12 @@ rather than reshaping this crate:
   steps 1, 3 and 6 run the (empty) chain.
 - `ExtState` — TODO(plan-06). The registry keeps its own copy so `visible` can
   hide a draining extension without a call across crates.
-- The ledger is in-crate (`Registry::ledger`), not `orrery-audit`: that crate is
-  an empty stub and is not in the workspace's dependency table, which this plan
-  may not edit. Step 7 emits a `tracing` event in the meantime.
+- ~~The ledger is in-crate (`Registry::ledger`), not `orrery-audit`~~ —
+  **done in plan 07's wave.** `orrery-audit` is now in the workspace dependency
+  table and `Registry::with_audit` sends every ledger decision to it as a
+  `tool.name` event; `resolve::ambiguity_reaches_the_audit` is the test. The
+  in-crate ledger stays as the cheap synchronous read, and a registry without an
+  audit still fills it.
 
 ## Done when
 

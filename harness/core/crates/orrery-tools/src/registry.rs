@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use indexmap::IndexMap;
+use orrery_audit::{Audit, AuditEvent};
 use orrery_proto::{Contribution, ContributionKind, ExtId, Layer, ToolRef};
 use parking_lot::Mutex;
 
@@ -141,6 +142,11 @@ pub struct Registry {
     /// User-declared short-name aliases (section 7; plan 10 writes here).
     pub(crate) aliases: IndexMap<String, ToolRef>,
     pub(crate) ledger: Mutex<Vec<LedgerEntry>>,
+    /// The same decisions, in the one stream that answers "why did this
+    /// happen". The in-crate ledger stays: it is the cheap, synchronous read
+    /// that `resolve` and the CLI use. The audit is where a decision goes to be
+    /// kept.
+    pub(crate) audit: Audit,
     /// The host. Private, and no public method returns it: `dispatch` is the
     /// only way to reach a tool, which is what makes the policy check
     /// unavoidable.
@@ -184,11 +190,22 @@ impl Registry {
             shorts: IndexMap::new(),
             aliases: IndexMap::new(),
             ledger: Mutex::new(Vec::new()),
+            audit: orrery_audit::null(),
             host,
             policy: Arc::new(AllowAll),
             interceptors: Vec::new(),
             next_order: 0,
         }
+    }
+
+    /// Send every ledger decision to an audit stream as well.
+    ///
+    /// Without one, decisions are still recorded in the in-crate ledger and
+    /// emitted as `tracing` events; they are simply not kept.
+    #[must_use]
+    pub fn with_audit(mut self, audit: Audit) -> Self {
+        self.audit = audit;
+        self
     }
 
     /// Replace the policy check every dispatch runs through.
@@ -308,12 +325,43 @@ impl Registry {
     }
 
     pub(crate) fn record(&self, entry: LedgerEntry) {
-        tracing::debug!(target: "orrery.tools.ledger", ?entry, "tool name decided");
+        tracing::debug!(target: "orrery.load.tools", ?entry, "tool name decided");
+        self.audit.append(audit_event(&entry));
         self.ledger.lock().push(entry);
     }
 
     /// The host, for `dispatch` and for nothing else.
     pub(crate) fn host(&self) -> &Arc<dyn ToolHost> {
         &self.host
+    }
+}
+
+/// A ledger entry as the audit stream sees it.
+///
+/// Both shapes are the same question — a name meant more than one thing and one
+/// of them won — so they share one event and differ in their candidate list.
+fn audit_event(entry: &LedgerEntry) -> AuditEvent {
+    match entry {
+        LedgerEntry::Ambiguous {
+            name,
+            candidates,
+            chose,
+        } => AuditEvent::ToolName {
+            name: name.clone(),
+            candidates: candidates.iter().map(ToString::to_string).collect(),
+            chose: chose.to_string(),
+        },
+        LedgerEntry::Shadowed {
+            r#ref,
+            winner,
+            loser,
+        } => AuditEvent::ToolName {
+            name: r#ref.to_string(),
+            candidates: vec![
+                format!("{ref}@{winner:?}", r#ref = r#ref),
+                format!("{ref}@{loser:?}", r#ref = r#ref),
+            ],
+            chose: format!("{ref}@{winner:?}", r#ref = r#ref),
+        },
     }
 }
