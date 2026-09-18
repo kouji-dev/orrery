@@ -1,5 +1,6 @@
 //! Task 5: consent is the client's chrome; a question is the extension's.
 
+use crossterm::event::{KeyCode, KeyEvent};
 use orrery_agui::Frame;
 use orrery_client::conformance::{fixtures_dir, load};
 use orrery_client_ratatui::app::App;
@@ -8,7 +9,6 @@ use orrery_client_ratatui::scrollback::lines_of;
 use orrery_client_ratatui::testing::{as_surface, frames_of};
 use orrery_client_ratatui::theme::Theme;
 use orrery_client_ratatui::widgets;
-use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
@@ -152,23 +152,21 @@ fn a_consent_bar_swallows_the_composers_keys() {
 
 #[test]
 fn a_question_widget_is_not_a_consent_bar() {
-    let surface = as_surface(
-        &orrery_client::SurfaceView {
-            id: "q-1".into(),
-            status: Some(orrery_proto::Status::Running),
-            kind: orrery_proto::SurfaceKind::Question {
-                prompt: "Which crate?".into(),
-                choices: vec![orrery_proto::Choice {
-                    value: "proto".into(),
-                    label: "orrery-proto".into(),
-                }],
-                multi: false,
-                free: false,
-                default: None,
-                deadline_ms: None,
-            },
+    let surface = as_surface(&orrery_client::SurfaceView {
+        id: "q-1".into(),
+        status: Some(orrery_proto::Status::Running),
+        kind: orrery_proto::SurfaceKind::Question {
+            prompt: "Which crate?".into(),
+            choices: vec![orrery_proto::Choice {
+                value: "proto".into(),
+                label: "orrery-proto".into(),
+            }],
+            multi: false,
+            free: false,
+            default: None,
+            deadline_ms: None,
         },
-    );
+    });
     let mut buf = Buffer::empty(Rect::new(0, 0, 60, 4));
     widgets::render(&surface, buf.area, &mut buf, &Theme::colour());
     let drawn = lines_of(&buf).join("\n");

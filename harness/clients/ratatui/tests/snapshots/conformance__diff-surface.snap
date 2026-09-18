@@ -1,0 +1,28 @@
+---
+source: harness/clients/ratatui/tests/conformance.rs
+expression: screen
+---
+── scrollback ──
+── src/lib.rs
+@@ -1,2 +1,3 @@
+ fn main() {
++    println!("hi");
+ }
+@@ -40,1 +41,1 @@
+-let x = 1;
++let x = 2;
+── live ──
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

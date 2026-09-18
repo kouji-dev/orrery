@@ -1,0 +1,24 @@
+---
+source: harness/clients/ratatui/tests/conformance.rs
+expression: screen
+---
+── scrollback ──
+I will remove the build directory.
+▾ ✓ builtin.shell
+{"command":"rm -rf target","cwd":"."}
+ok
+── live ──
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

@@ -1,0 +1,28 @@
+---
+source: harness/clients/ratatui/tests/conformance.rs
+expression: screen
+---
+── scrollback ──
+Here is the fix:
+
+────────────
+  fn main() {
+      println!("hi");
+  }
+────────────
+
+── live ──
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

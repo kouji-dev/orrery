@@ -49,9 +49,15 @@ fn lines(value: &str, complete: bool, width: u16, theme: &Theme) -> Vec<(String,
             continue;
         }
         let (body, style) = if let Some(rest) = raw.trim_start().strip_prefix("# ") {
-            (rest.to_owned(), Style::default().add_modifier(Modifier::BOLD))
+            (
+                rest.to_owned(),
+                Style::default().add_modifier(Modifier::BOLD),
+            )
         } else if let Some(rest) = raw.trim_start().strip_prefix("## ") {
-            (rest.to_owned(), Style::default().add_modifier(Modifier::BOLD))
+            (
+                rest.to_owned(),
+                Style::default().add_modifier(Modifier::BOLD),
+            )
         } else if let Some(rest) = raw.trim_start().strip_prefix("- ") {
             (format!("• {rest}"), theme.text(None))
         } else {

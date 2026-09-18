@@ -1,0 +1,24 @@
+---
+source: harness/clients/ratatui/tests/conformance.rs
+expression: screen
+---
+── scrollback ──
+? asked by q-1
+Which crate?
+> orrery-proto
+  orrery-kernel (default)
+── live ──
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

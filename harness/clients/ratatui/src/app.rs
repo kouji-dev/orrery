@@ -395,10 +395,7 @@ impl App {
             }
             crossterm::event::KeyCode::Enter => {
                 let value = widgets::question::answer(&surface, &self.live.selection)?;
-                Some(vec![Outgoing::Intent {
-                    surface: id,
-                    value,
-                }])
+                Some(vec![Outgoing::Intent { surface: id, value }])
             }
             _ => None,
         }
@@ -428,25 +425,64 @@ impl App {
                 Err(ClientError::Gap { .. }) => continue,
                 Err(err) => return Err(err),
             }
-            self.flush_scrollback(sink)
-                .map_err(ClientError::Io)?;
+            self.flush_scrollback(sink).map_err(ClientError::Io)?;
         }
         self.running = false;
-        self.flush_scrollback(sink)
-            .map_err(ClientError::Io)?;
+        self.flush_scrollback(sink).map_err(ClientError::Io)?;
         Ok(())
     }
 
     /// How many rows a settled turn needs in scrollback.
     #[must_use]
     pub fn turn_height(turn: &TurnView, width: u16) -> u16 {
-        LiveRegion::measure(Some(turn), width).max(1)
+        LiveRegion::measure(Some(turn), width)
+            .saturating_add(u16::from(outcome_line(turn).is_some()))
+            .max(1)
     }
 
     /// Draw a settled turn into a scrollback block.
+    ///
+    /// A cancelled turn and a finished one must not read the same: what is in
+    /// scrollback is the transcript, and half an answer that looks whole is the
+    /// worst thing a transcript can contain. So the outcome is spelled out
+    /// underneath when there is one.
     pub fn draw_turn(turn: &TurnView, buf: &mut Buffer, theme: &Theme) {
-        LiveRegion::default().render(Some(turn), buf.area, buf, theme);
+        let area = buf.area;
+        let tail = u16::from(outcome_line(turn).is_some());
+        LiveRegion::default().render(
+            Some(turn),
+            Rect {
+                height: area.height.saturating_sub(tail),
+                ..area
+            },
+            buf,
+            theme,
+        );
+        if let Some((text, style)) = outcome_line(turn) {
+            widgets::put(
+                buf,
+                area,
+                area.height.saturating_sub(1),
+                &text,
+                theme.text(Some(style)),
+            );
+        }
     }
+}
+
+/// The line a turn ends on, when it ended badly.
+fn outcome_line(turn: &TurnView) -> Option<(String, orrery_proto::TextStyle)> {
+    if let Some(error) = &turn.error {
+        let code = error.code.as_deref().unwrap_or("error");
+        return Some((
+            format!("✗ {code}: {}", error.message),
+            orrery_proto::TextStyle::Error,
+        ));
+    }
+    if turn.cancelled {
+        return Some(("⨯ cancelled".to_owned(), orrery_proto::TextStyle::Warning));
+    }
+    None
 }
 
 /// The consent bar's keys. Deliberately not the composer's.

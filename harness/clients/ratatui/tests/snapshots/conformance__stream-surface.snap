@@ -1,0 +1,21 @@
+---
+source: harness/clients/ratatui/tests/conformance.rs
+expression: screen
+---
+── scrollback ──
+✓ stream stderr
+── live ──
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

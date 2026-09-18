@@ -45,18 +45,8 @@ pub mod tree;
 /// The tags, not the variants, because the schema is what a test can compare
 /// against. Kept in declaration order so a diff reads like the enum.
 pub const HANDLED: &[&str] = &[
-    "text",
-    "table",
-    "tree",
-    "diff",
-    "progress",
-    "stream",
-    "task",
-    "question",
-    "form",
-    "stack",
-    "markdown",
-    "custom",
+    "text", "table", "tree", "diff", "progress", "stream", "task", "question", "form", "stack",
+    "markdown", "custom",
 ];
 
 /// Draw a surface.
@@ -131,13 +121,7 @@ pub(crate) fn put(buf: &mut Buffer, area: Rect, row: u16, text: &str, style: Sty
     if row >= area.height {
         return;
     }
-    buf.set_stringn(
-        area.x,
-        area.y + row,
-        text,
-        area.width as usize,
-        style,
-    );
+    buf.set_stringn(area.x, area.y + row, text, area.width as usize, style);
 }
 
 /// Break text into lines no wider than `width`, honouring existing newlines.

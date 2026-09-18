@@ -33,7 +33,10 @@ fn plain_until_complete() {
         store.apply(&frame(value));
     }
     let mid = draw(
-        store.turn("t").and_then(|t| t.surface("m")).expect("the message"),
+        store
+            .turn("t")
+            .and_then(|t| t.surface("m"))
+            .expect("the message"),
         60,
     );
     assert!(
@@ -48,7 +51,10 @@ fn plain_until_complete() {
         store.apply(&frame(value));
     }
     let done = draw(
-        store.turn("t").and_then(|t| t.surface("m")).expect("the message"),
+        store
+            .turn("t")
+            .and_then(|t| t.surface("m"))
+            .expect("the message"),
         60,
     );
     assert!(

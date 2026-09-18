@@ -80,7 +80,10 @@ pub fn render_at(surface: &Surface, at: usize, area: Rect, buf: &mut Buffer, the
             buf,
             area,
             2,
-            &super::elide(&format!("enter: next, last field submits `{submit}`"), width),
+            &super::elide(
+                &format!("enter: next, last field submits `{submit}`"),
+                width,
+            ),
             theme.muted(),
         );
         return;

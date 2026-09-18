@@ -1,0 +1,23 @@
+---
+source: harness/clients/ratatui/tests/conformance.rs
+expression: screen
+---
+── scrollback ──
+field 1 of 5
+* Branch       main
+enter: next, last field submits `Create branch`
+── live ──
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

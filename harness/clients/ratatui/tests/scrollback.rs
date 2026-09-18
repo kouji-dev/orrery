@@ -93,7 +93,11 @@ fn live_turn_redraws() {
 fn resize_does_not_reflow_history() {
     let mut app = App::new(40);
     let mut sink = Recording::new(40);
-    for frame in text_turn(1, "turn-a", "a settled answer that is long enough to wrap somewhere") {
+    for frame in text_turn(
+        1,
+        "turn-a",
+        "a settled answer that is long enough to wrap somewhere",
+    ) {
         app.apply(&frame);
     }
     app.flush_scrollback(&mut sink).expect("prints");
@@ -110,9 +114,16 @@ fn resize_does_not_reflow_history() {
 
     // The live region is what re-wraps. Draw the in-flight turn at two widths
     // and assert only that it is drawn to the width it was asked for.
-    for frame in text_turn(6, "turn-b", "a live answer long enough to need two lines at twenty") {
+    for frame in text_turn(
+        6,
+        "turn-b",
+        "a live answer long enough to need two lines at twenty",
+    ) {
         app.apply(&frame);
-        if matches!(frame.event, orrery_agui::AguiEvent::TextMessageContent { .. }) {
+        if matches!(
+            frame.event,
+            orrery_agui::AguiEvent::TextMessageContent { .. }
+        ) {
             break;
         }
     }

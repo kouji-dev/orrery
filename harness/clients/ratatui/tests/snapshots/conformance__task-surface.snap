@@ -1,0 +1,24 @@
+---
+source: harness/clients/ratatui/tests/conformance.rs
+expression: screen
+---
+── scrollback ──
+✓ read the plan
+✓ write the differ
+· run the tests
+· tick the plan
+── live ──
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

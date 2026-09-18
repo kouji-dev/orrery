@@ -53,7 +53,9 @@ pub fn render(surface: &Surface, area: Rect, buf: &mut Buffer, theme: &Theme) {
 /// How many lines it wants: one per visible node.
 #[must_use]
 pub fn measure(surface: &Surface, _width: u16) -> u16 {
-    let Some(nodes) = parts(surface) else { return 0 };
+    let Some(nodes) = parts(surface) else {
+        return 0;
+    };
     let mut lines = Vec::new();
     flatten(nodes, 0, &mut lines);
     u16::try_from(lines.len()).unwrap_or(u16::MAX)

@@ -75,7 +75,12 @@ fn table_snapshot() {
 fn table_elides_middle_columns_when_narrow() {
     // The documented degradation: drop from the middle, never wrap a cell.
     let surface = Surface::new(orrery_proto::SurfaceKind::Table {
-        columns: vec!["crate".into(), "lines".into(), "owner".into(), "status".into()],
+        columns: vec![
+            "crate".into(),
+            "lines".into(),
+            "owner".into(),
+            "status".into(),
+        ],
         rows: vec![vec![
             orrery_proto::Cell {
                 text: "orrery-proto".into(),
@@ -126,8 +131,10 @@ fn diff_marks_every_line_without_colour() {
         .filter(|l| !l.starts_with("──") && !l.starts_with("@@"))
         .collect();
     assert!(
-        body.iter()
-            .all(|l| l.starts_with('+') || l.starts_with('-') || l.starts_with(' ') || l.is_empty()),
+        body.iter().all(|l| l.starts_with('+')
+            || l.starts_with('-')
+            || l.starts_with(' ')
+            || l.is_empty()),
         "every line carries its marker with no colour to lean on: {body:?}"
     );
 }

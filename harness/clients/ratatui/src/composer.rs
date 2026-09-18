@@ -153,7 +153,9 @@ impl Composer {
     /// How many rows it needs.
     #[must_use]
     pub fn height(&self) -> u16 {
-        u16::try_from(self.text.split('\n').count()).unwrap_or(1).max(1)
+        u16::try_from(self.text.split('\n').count())
+            .unwrap_or(1)
+            .max(1)
     }
 
     /// Draw it.
@@ -164,13 +166,7 @@ impl Composer {
                 break;
             }
             let prefix = if row == 0 { "> " } else { "  " };
-            crate::widgets::put(
-                buf,
-                area,
-                row,
-                &format!("{prefix}{line}"),
-                theme.text(None),
-            );
+            crate::widgets::put(buf, area, row, &format!("{prefix}{line}"), theme.text(None));
         }
     }
 }

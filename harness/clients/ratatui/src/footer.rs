@@ -54,11 +54,7 @@ impl Footer {
             Some(m) => format!("${}.{:02}", m / 1000, (m % 1000) / 10),
             None => "—".to_owned(),
         };
-        let stop = if self.in_turn {
-            "^C cancel"
-        } else {
-            "^D exit"
-        };
+        let stop = if self.in_turn { "^C cancel" } else { "^D exit" };
         format!(
             "tokens {tokens} · {cost} · {} · {stop}",
             if self.mode.is_empty() {

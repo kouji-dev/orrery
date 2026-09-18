@@ -1,0 +1,25 @@
+---
+source: harness/clients/ratatui/tests/conformance.rs
+expression: screen
+---
+── scrollback ──
+Let me look at the manifest.
+▾ ✓ builtin.read
+{"path":"Cargo.toml"}
+name = "orrery"
+
+── live ──
+
+
+
+
+
+
+
+
+
+
+
+
+>
+tokens — · — · execute · ^D exit

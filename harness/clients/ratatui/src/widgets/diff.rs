@@ -37,7 +37,13 @@ pub fn render(surface: &Surface, area: Rect, buf: &mut Buffer, theme: &Theme) {
     let mut row = 0u16;
     let mut put = |row: &mut u16, text: &str, style| {
         if *row < area.height {
-            super::put(buf, area, *row, &super::elide(text, area.width as usize), style);
+            super::put(
+                buf,
+                area,
+                *row,
+                &super::elide(text, area.width as usize),
+                style,
+            );
         }
         *row += 1;
     };

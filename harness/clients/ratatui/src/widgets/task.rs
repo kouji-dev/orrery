@@ -27,9 +27,7 @@ fn window(items: &[TaskItem], height: usize) -> usize {
         .iter()
         .position(|i| i.status == Status::Running)
         .unwrap_or(0);
-    active
-        .saturating_sub(height / 2)
-        .min(items.len() - height)
+    active.saturating_sub(height / 2).min(items.len() - height)
 }
 
 fn style(theme: &Theme, status: Status) -> ratatui::style::Style {
@@ -54,10 +52,7 @@ pub fn render(surface: &Surface, area: Rect, buf: &mut Buffer, theme: &Theme) {
             buf,
             area,
             row,
-            &super::elide(
-                &format!("{glyph} {}", item.label),
-                area.width as usize,
-            ),
+            &super::elide(&format!("{glyph} {}", item.label), area.width as usize),
             style(theme, item.status),
         );
     }
@@ -66,6 +61,8 @@ pub fn render(surface: &Surface, area: Rect, buf: &mut Buffer, theme: &Theme) {
 /// One line per item.
 #[must_use]
 pub fn measure(surface: &Surface, _width: u16) -> u16 {
-    let Some(items) = parts(surface) else { return 0 };
+    let Some(items) = parts(surface) else {
+        return 0;
+    };
     u16::try_from(items.len()).unwrap_or(u16::MAX)
 }
