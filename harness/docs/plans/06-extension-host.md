@@ -208,33 +208,42 @@ export default defineExtension({
 
 Files: `orrery-ext-api/src/manifest.rs`, `tests/manifest.rs`
 
-- [ ] **Failing test first.** `manifest::unknown_major_is_refused` — `api = "orrery-ext/2"` fails at load with `LoadStage::Manifest`.
-- [ ] `manifest::provides_round_trips` — every field of `Provides` parses from TOML.
-- [ ] `manifest::requires_becomes_capabilities` — `read = ["$WORKSPACE/**"]` becomes `Capability { aspect: Read, scope: [...] }`.
-- [ ] `manifest::process_required_for_process_runtime` — `runtime = "process"` without `[process]` is an error naming the file.
-- [ ] Implement `ExtensionManifest`, `Provides`, `RuntimeKind`, `ProcessSpec`, `ApiVersion`.
-- [ ] Derive macro for `Contribution::kind` from `Provides` fields.
+- [x] **Failing test first.** `manifest::unknown_major_is_refused` — `api = "orrery-ext/2"` fails at load with `LoadStage::Manifest`.
+- [x] `manifest::provides_round_trips` — every field of `Provides` parses from TOML.
+- [x] `manifest::requires_becomes_capabilities` — `read = ["$WORKSPACE/**"]` becomes `Capability { aspect: Read, scope: [...] }`.
+- [x] `manifest::process_required_for_process_runtime` — `runtime = "process"` without `[process]` is an error naming the file.
+- [x] Implement `ExtensionManifest`, `Provides`, `RuntimeKind`, `ProcessSpec`, `ApiVersion`.
+- [x] Derive macro for `Contribution::kind` from `Provides` fields.
 
 ### Task 2 · Instance table and state machine
 
 Files: `orrery-host/src/{table,state}.rs`, `tests/lifecycle.rs`
 
-- [ ] **Failing test first.** `lifecycle::degraded_keeps_the_rest` — an extension whose `spawn` grant is denied loads `Degraded`, the tool needing spawn is disabled, its other tools still dispatch.
-- [ ] `lifecycle::singleton_conflict_resolves_by_layer` — two extensions claiming `router`; the closer layer wins, the loser is in the ledger.
-- [ ] `lifecycle::collection_member_failure_disables_only_itself`.
-- [ ] Implement `ExtensionInstance`, `Generation`, `InstanceState`, the table.
+- [x] **Failing test first.** `lifecycle::degraded_keeps_the_rest` — an extension whose `spawn` grant is denied loads `Degraded`, the tool needing spawn is disabled, its other tools still dispatch.
+- [x] `lifecycle::singleton_conflict_resolves_by_layer` — two extensions claiming `router`; the closer layer wins, the loser is in the ledger.
+- [x] `lifecycle::collection_member_failure_disables_only_itself`.
+- [x] Implement `ExtensionInstance`, `Generation`, `InstanceState`, the table.
 
 ### Task 3 · The `native` runtime
 
 Files: `orrery-host/src/native.rs`
 
-- [ ] **Failing test first.** `native::goes_through_dispatch` — a native extension's tool call is observable in the audit as a normal dispatch, with a policy check, not a direct function call.
-- [ ] `native::manifest_is_the_same_shape` — the builtin bundle's `orrery.toml` parses with the same parser a third-party one does.
-- [ ] Implement registration (a `NativeRegistry` the facade fills behind cargo features).
+- [x] **Failing test first.** `native::goes_through_dispatch` — a native extension's tool call is observable in the audit as a normal dispatch, with a policy check, not a direct function call.
+- [x] `native::manifest_is_the_same_shape` — the builtin bundle's `orrery.toml` parses with the same parser a third-party one does.
+- [x] Implement registration (a `NativeRegistry` the facade fills behind cargo features).
 
-### Task 4 · The builtin tool bundle
+### Task 4 · The builtin tool bundle — **DEFERRED to the next wave**
 
 Files: `orrery-ext-tools-builtin/src/*`
+
+> Every test in this task is a test *of the broker*: an output ceiling that
+> bounds peak memory, a write that reverts on cancel, a child whose grandchild
+> dies with it. `orrery-broker` (plan 07) is being written concurrently, and
+> against a stubbed broker these four assertions would be assertions about the
+> stub. The crate's scaffolded `orrery.toml` and `src/lib.rs` are left in place;
+> `orrery-host`'s `native::manifest_is_the_same_shape` already parses that
+> manifest, so the bundle's contract is under test even though its code is not
+> written.
 
 - [ ] **Failing test first.** `builtin::read_respects_the_output_ceiling` — a 10 MB file with a 4 KB ceiling returns `Outcome::Truncated`, and (the important half) **peak memory stays bounded** — assert via a counting reader that no more than the ceiling plus a small buffer was ever read.
 - [ ] `builtin::write_is_atomic` — cancel mid-write; the original file is intact and no temp file remains.
@@ -246,41 +255,47 @@ Files: `orrery-ext-tools-builtin/src/*`
 
 Files: `orrery-jsonrpc/src/*`
 
-- [ ] Copy `transport.rs` in; keep its tests; add `LineDelimited` and a test that a newline-delimited stream parses.
-- [ ] **Failing test first.** `client::concurrent_calls_demux` — three in-flight requests reply out of order; each caller gets its own reply.
-- [ ] `client::cancel_reaches_one_call` — cancel call 2; calls 1 and 3 complete; a `$/cancel` notification was sent for 2 only.
-- [ ] `client::server_initiated_request` — the guest calls back into the broker and gets a reply.
-- [ ] `client::stderr_is_ringed` — a chatty child does not grow memory without bound.
-- [ ] Implement the async client and server halves.
+- [x] Copy `transport.rs` in; keep its tests; add `LineDelimited` and a test that a newline-delimited stream parses.
+- [x] **Failing test first.** `client::concurrent_calls_demux` — three in-flight requests reply out of order; each caller gets its own reply.
+- [x] `client::cancel_reaches_one_call` — cancel call 2; calls 1 and 3 complete; a `$/cancel` notification was sent for 2 only.
+- [x] `client::server_initiated_request` — the guest calls back into the broker and gets a reply.
+- [x] `client::stderr_is_ringed` — a chatty child does not grow memory without bound.
+- [x] Implement the async client and server halves.
 
 ### Task 6 · The RPC host (node)
 
 Files: `orrery-host-rpc/src/*`
 
-- [ ] **Failing test first.** `rpc::child_dies_with_us` — spawn a node extension, kill the harness process, assert the child is gone.
-- [ ] `rpc::crash_degrades_not_kills` — the child exits mid-call; the call settles `Failed`, the extension is `Degraded`, the session lives.
-- [ ] Implement spawn, containment (reuse `ade/src-tauri/src/runtime/jobobj.rs`), the manifest `[process]` path.
+- [x] **Failing test first.** `rpc::child_dies_with_us` — spawn a node extension, kill the harness process, assert the child is gone.
+- [x] `rpc::crash_degrades_not_kills` — the child exits mid-call; the call settles `Failed`, the extension is `Degraded`, the session lives.
+- [x] Implement spawn, containment (reuse `ade/src-tauri/src/runtime/jobobj.rs`), the manifest `[process]` path.
 
 ### Task 7 · Live unload
 
 Files: `orrery-host/src/unload.rs`, `tests/unload.rs`
 
-- [ ] **Failing test first, and it is the phase-2 criterion.** `unload::killing_one_leaves_the_session_alive` — load two extensions both providing `search`; unload one mid-session; assert the other still dispatches, a stale ref to the dead one returns `Outcome::Unloaded`, and no turn failed.
-- [ ] `unload::in_flight_calls_settle_cancelled`.
-- [ ] `unload::grace_then_kill` — a child that ignores the cancel is killed after the grace window.
-- [ ] Implement the `Draining` state machine.
+- [x] **Failing test first, and it is the phase-2 criterion.** `unload::killing_one_leaves_the_session_alive` — load two extensions both providing `search`; unload one mid-session; assert the other still dispatches, a stale ref to the dead one returns `Outcome::Unloaded`, and no turn failed.
+- [x] `unload::in_flight_calls_settle_cancelled`.
+- [x] `unload::grace_then_kill` — a child that ignores the cancel is killed after the grace window.
+- [x] Implement the `Draining` state machine.
 
 ### Task 8 · The mock broker and `ext test`
 
 Files: `orrery-ext-api/src/testing.rs`
 
-- [ ] **Failing test first.** `testing::denial_is_observable` — a test declaring no `spawn` grant; the extension's call returns `Denied` and the mock records it.
-- [ ] Implement `MockBroker`, `load_for_test`, recorded calls, canned responses, surface assertions as data.
+- [x] **Failing test first.** `testing::denial_is_observable` — a test declaring no `spawn` grant; the extension's call returns `Denied` and the mock records it.
+- [x] Implement `MockBroker`, `load_for_test`, recorded calls, canned responses, surface assertions as data.
 - [ ] Wire `orrery ext test` to it (the command lands in plan 17).
 
-### Task 9 · The node SDK
+### Task 9 · The node SDK — **DEFERRED to the next wave**
 
 Files: `extensions/node/ext-sdk/*`
+
+> The host half is done and the wire format is pinned by a hand-written guest
+> (`orrery-host-rpc/tests/fixtures/echo-ext/`) that deliberately shares no code
+> with the SDK — so the protocol is provably implementable from the spec alone,
+> which is the property an SDK cannot establish about itself. The TypeScript
+> package is the next wave's.
 
 - [ ] `defineExtension`, the `ctx` shape (`ctx.proc`, `ctx.fs`, `ctx.net`, `ctx.creds`, `ctx.ui`), the JSON-RPC client half, the loader hook that strips `fs`/`child_process`.
 - [ ] **The README states the threat-model caveat** (translation #13) in its own section. Do not bury it.
@@ -290,7 +305,8 @@ Files: `extensions/node/ext-sdk/*`
 
 ## Done when
 
-- `cargo test -p orrery-ext-api -p orrery-host -p orrery-jsonrpc -p orrery-host-rpc -p orrery-ext-tools-builtin` green.
+- `cargo test -p orrery-ext-api -p orrery-host -p orrery-jsonrpc -p orrery-host-rpc` green
+  (`-p orrery-ext-tools-builtin` waits on the broker; see Task 4).
 - Two extensions claiming `search` coexist as `a.search` and `b.search`; unloading one leaves the session alive.
 - `builtin.read` on a huge file demonstrably does not buffer it.
 - `orrery ext test` runs an extension with no model and no network.
@@ -298,6 +314,47 @@ Files: `extensions/node/ext-sdk/*`
 ## Open questions
 
 1. **Does `renderers` belong on the manifest in phase 2?** §8 decided custom renderers are allowed for `tui` and `web`. The field can exist and be unhandled until plan 09c. Prefer declaring it now so the manifest does not gain a field later — but confirm.
+
+   **Decided: yes, declare it now.** `renderers` is a field of `Provides` and maps to `ContributionKind::Renderer`, so a manifest that declares one parses, appears in the ledger and is reported to `query extensions` today. Nothing consumes it until plan 09c. The reason is the one the question suggests: `api = "orrery-ext/1"` is a promise about the manifest's shape, and adding a field to it later is a change every extension author has to read about. Adding a *handler* for a field that was always there is not.
+
 2. **Grant diff UI at install.** §4.7 shows a terminal prompt. It should be a `Surface` so every client renders it. Which plan owns it — here, or plan 15 (`ext install`)? Suggest here, since `ext test` needs the same shape.
+
+   **Decided: here.** `orrery_host::consent::grant_diff(manifest, granted)` returns `Option<Surface>` — a `Stack` of a `Table` (aspect, scope, already-granted-or-NEW) and a `Question` with allow / allow-once / deny. `None` when the grant already covers the manifest, because a prompt with nothing in it is worse than no prompt. The question carries **no `default` and no `deadline_ms`**: a capability grant is not something to time out into. Plan 15 wires it to `ext install` and plan 07 turns the answer into a stored grant; neither invents a second shape for the same question, which is exactly what would have happened had the shape lived in the installer.
+
 3. **`api = "orrery-ext/1"` compatibility policy.** What is a breaking change to the manifest, concretely? Write the rule down before the first third-party extension exists, or it will be decided by accident.
+
+   **Decided.** The major in `api = "orrery-ext/<major>"` is bumped if and only if a manifest that was valid stops being valid, or keeps parsing and means something different. Concretely:
+
+   **Breaking — needs a new major:**
+   - removing or renaming a field of `[extension]`, `[provides]`, `[requires]` or `[process]`;
+   - narrowing what a field accepts (a new validation rule that refuses input that used to load);
+   - changing what a field *means* — e.g. `requires.read` ceasing to be glob-matched;
+   - removing a `RuntimeKind`, or changing which fields a runtime requires;
+   - removing a variant of `Outcome`, `LoadOutcome` or `ContributionKind` that a guest may send.
+
+   **Not breaking — same major:**
+   - adding a field to `[provides]` or `[requires]` (an old manifest simply does not set it);
+   - adding a `RuntimeKind`, an `Aspect`, a `ContributionKind`, a `SurfaceKind` or an `Outcome` variant — every one of these is `#[non_exhaustive]`, and a guest that does not know a variant never sends it;
+   - adding a method to the guest protocol (an unknown method is `method not found`, which a host must already handle);
+   - relaxing a validation rule.
+
+   Two consequences worth stating. `Provides` is `deny_unknown_fields`, so a *typo* is an error rather than a silent no-op — that is deliberate, and it is why adding a field is safe: an old manifest cannot have accidentally used the new name. And the version carries **no minor**: a minor would be a way for an extension to say which additions it needs, and additions are exactly what the non-exhaustive types make safe without one.
+
 4. **Node SDK `fs` stripping** — is it worth shipping at all, given it is not a guarantee? Argument for: it catches honest mistakes and makes the brokered path the path of least resistance. Argument against: it implies a boundary that is not there. Recommend shipping it *with* the README caveat.
+
+   **Decided: ship it, with the caveat, and say the caveat in three places.** The loader hook goes in when the SDK does (deferred with Task 9), and the caveat is already written into `orrery-host-rpc`'s module docs — the host's own documentation says plainly that a child process bounds file descriptors and the host's memory and **not** the OS's opinion of who the child is. It must also appear in `extensions/node/ext-sdk/README.md` and in the security docs. The deciding argument is that the alternative is worse in the same direction: without the hook, `require('fs')` is not merely possible, it is the *convenient* path, and an ecosystem grows around it that the brokered path then has to compete with.
+
+---
+
+## State
+
+**Landed (2026-09-18, wave 2).** Tasks 1, 2, 3, 5, 6, 7 and 8 are implemented and green; tasks 4 and 9 are deferred with the reasons written above.
+
+- `orrery-ext-api` — the manifest (one parser for both the plan's `[extension]` spelling and the one the eleven scaffolded first-party bundles use, with a test that parses every `orrery.toml` in the tree), `Provides` and its contribution mapping from one macro invocation, the broker facade, `CallCtx`/`SurfaceSink`/`ToolBudget`, `Generation`/`InstanceState`, the `Ledger`, and `testing::load_for_test` with a recording `MockBroker`.
+- `orrery-host` — the instance table keyed by generation, the load/degrade machine (a tool whose aspect is ungranted is *disabled*, a promised-but-absent tool costs only itself, a singleton goes to the closer layer and the loser is demoted in the ledger), the `native` runtime, `consent::grant_diff`, and live unload: `Live → Draining → Dead` with a grace window. It implements `orrery_tools::ToolHost`, so every extension call goes through `Registry::dispatch` and its policy check.
+- `orrery-jsonrpc` — `framing/content_length.rs` moved verbatim from `ade/src-tauri/src/lsp/transport.rs` with its five tests, plus the `LineDelimited` variant and an async pair asserted to agree with the moved-in sync one; a bidirectional `Peer` with a pending map, a `Handler` for the other direction, per-call `$/cancel`, and a bounded stderr ring.
+- `orrery-host-rpc` — `Containment` (a per-child Job Object with `KILL_ON_JOB_CLOSE` on Windows, a process group on unix; the only `unsafe` in the harness), `Guest`, the guest protocol, the `BrokerBridge` for guest→broker calls, and `RpcHost` for node/python/process.
+
+Two rules ended up in the table rather than in a runtime, because they must be the same for all four: `disabled_by_grant` (one answer to "is this granted", so a `native` tool is never offered where a `node` one is hidden) and the transport rule — **a runtime that dies mid-call degrades its extension and settles the call `Failed`; the session lives.**
+
+**Not done here:** the builtin tool bundle (Task 4, waiting on `orrery-broker`), the node SDK and its worked example (Task 9), and wiring `orrery ext test` to a command (plan 17 owns the command; the harness it calls is in `orrery-ext-api::testing` and is under test).
