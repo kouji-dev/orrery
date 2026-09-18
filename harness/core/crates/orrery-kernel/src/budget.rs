@@ -25,11 +25,17 @@ use orrery_proto::{Budget, BudgetKind, Usage};
 
 /// What a model's tokens cost.
 ///
-/// TODO(plan-10): a real table, per model, from profile config. Until then
-/// [`PriceTable::empty`] leaves `micro_usd` as `None`, which makes a `maxUsd`
-/// ceiling **inert** rather than wrong — a budget that silently priced
-/// everything at zero would report "under budget" for a session that spent a
-/// hundred dollars.
+/// A `[prices.<model>]` table in configuration fills this;
+/// `orrery_harness::price_table` is where the keys are read and
+/// `KernelConfig::prices` is where it arrives. The kernel itself still knows
+/// nothing about layers or profiles: it is handed a table, and prices with it.
+///
+/// A model **nobody priced** stays unpriced, and [`PriceTable::empty`] leaves
+/// `micro_usd` as `None`, which makes a `maxUsd` ceiling **inert** rather than
+/// wrong — a budget that silently priced everything at zero would report "under
+/// budget" for a session that spent a hundred dollars. That is a documented
+/// state, not a gap: `orrery-cli`'s `tests/budget.rs` asserts both halves
+/// through the binary.
 #[derive(Clone, Debug, Default)]
 pub struct PriceTable {
     entries: Vec<(String, u64, u64)>,

@@ -71,10 +71,18 @@ impl std::fmt::Display for PassId {
 
 /// What a session resolved to, for an interceptor at `session.start`.
 ///
-/// TODO(plan-10): this is the shape the kernel needs, not the whole of what
-/// plan 10's `ResolvedConfig` will hold. It is here rather than borrowed from
-/// `orrery-ext-api` because the kernel does not depend on the extension API and
-/// should not have to.
+/// This is the shape the kernel needs, not the whole of `orrery-config`'s
+/// `ResolvedConfig`. It is here rather than borrowed from `orrery-ext-api`
+/// because the kernel does not depend on the extension API and should not have
+/// to.
+///
+/// **Deferred, and why:** nothing constructs one yet. The `session.start`
+/// lifecycle point is declared in [`phase`](crate::phase) and typed against
+/// this, but the kernel fires phases per *turn*, and a session-scoped fire site
+/// needs a session-scoped object to hang off — which is `Harness`, in
+/// `orrery-harness`, not `Kernel`. Wiring it is a facade change, not a config
+/// one: the values it wants (profile, workspace, extension ids, model) are all
+/// resolved and reachable today.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ResolvedManifest {
     /// The profile the session was created from.

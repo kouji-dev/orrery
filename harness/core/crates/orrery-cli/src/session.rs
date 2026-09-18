@@ -401,6 +401,12 @@ pub struct Setup {
     /// One `.jsonl` per pass, the last repeating. Empty is an error: phase 1
     /// has no provider that does not need to be named.
     pub fixtures: Vec<PathBuf>,
+    /// What the loop runs under, as the layers on disk resolved it.
+    ///
+    /// Not built here: `cmd::setup` folds the five configuration layers into
+    /// this, because a ceiling a person wrote in a file has to reach the kernel
+    /// or it is decoration. See `orrery_harness::kernel_config`.
+    pub kernel: KernelConfig,
 }
 
 /// A built kernel with a hub in front of it.
@@ -455,10 +461,7 @@ impl Session {
         config.profile = setup.profile.clone();
         config.provider = ProviderChoice::Custom(provider);
         config.store = StoreChoice::Custom(store);
-        config.kernel = KernelConfig {
-            model: "fixture".to_owned(),
-            ..KernelConfig::default()
-        };
+        config.kernel = setup.kernel.clone();
 
         Ok(Self {
             harness: Arc::new(Harness::build(config)?),

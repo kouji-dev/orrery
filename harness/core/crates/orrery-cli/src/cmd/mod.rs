@@ -19,6 +19,8 @@ pub mod session;
 
 use std::path::PathBuf;
 
+use orrery_kernel::KernelConfig;
+
 use crate::args::Cli;
 use crate::exit::{Exit, fail};
 use crate::session::Setup;
@@ -47,11 +49,27 @@ pub fn setup(cli: &Cli) -> Setup {
         .state_dir
         .clone()
         .unwrap_or_else(|| workspace.join(".orrery"));
+    // The layers on disk, folded into the shape the kernel runs on. This is the
+    // one path from a config file to a running turn: without it `maxUsd` is
+    // inert, the retry policy is whatever was compiled in, and `--profile` picks
+    // a name nothing reads. `layers::resolve` exits 2 on a file that will not
+    // parse, which is the right answer for something a person wrote.
+    let resolved = layers::resolve(cli);
+    let kernel = orrery_harness::kernel_config(
+        &resolved.values,
+        &resolved.profile.name,
+        KernelConfig {
+            model: "fixture".to_owned(),
+            ..KernelConfig::default()
+        },
+    );
+
     Setup {
         workspace,
         state_dir,
         profile: cli.profile.clone().unwrap_or_else(|| "default".to_owned()),
         fixtures,
+        kernel,
     }
 }
 

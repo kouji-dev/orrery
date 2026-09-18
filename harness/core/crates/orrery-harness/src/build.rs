@@ -85,9 +85,11 @@ impl std::fmt::Debug for StoreChoice {
 
 /// Everything a harness needs to exist.
 ///
-/// TODO(plan-10): this is `ResolvedConfig`'s kernel-shaped subset. Plan 10 owns
-/// parsing, layering and defaults; this owns what the running system needs once
-/// that is done.
+/// This is the **kernel-shaped subset** of `orrery_config::ResolvedConfig`:
+/// that crate owns parsing, layering, trust and defaults, and this owns what
+/// the running system needs once that is done.
+/// [`from_layers`](Self::from_layers) is the one bridge between the two, and
+/// [`crate::config::kernel_config`] is where each key is read.
 #[derive(Clone, Debug)]
 pub struct ResolvedConfig {
     /// The workspace root. Every relative path a tool names resolves here.
@@ -110,6 +112,42 @@ pub struct ResolvedConfig {
 }
 
 impl ResolvedConfig {
+    /// Build one from the layers `orrery-config` resolved.
+    ///
+    /// Everything a file did not mention keeps the value `base` gave it, so a
+    /// workspace with no `.orrery` at all behaves exactly as it did before this
+    /// existed. The provider and the store are the caller's: resolving config
+    /// cannot decide what to talk to, because the same layers describe a fixture
+    /// replay and a real model.
+    #[must_use]
+    pub fn from_layers(
+        resolved: &orrery_config::ResolvedConfig,
+        provider: ProviderChoice,
+        store: StoreChoice,
+    ) -> Self {
+        let workspace = resolved.root.clone();
+        let profile = resolved.profile.name.clone();
+        let kernel = crate::config::kernel_config(
+            &resolved.values,
+            &profile,
+            orrery_kernel::KernelConfig::default(),
+        );
+        Self {
+            state_dir: workspace.join(".orrery"),
+            workspace,
+            profile: if profile.is_empty() {
+                "default".to_owned()
+            } else {
+                profile
+            },
+            provider,
+            store,
+            policy_toml: None,
+            kernel,
+            audit: orrery_audit::null(),
+        }
+    }
+
     /// A config rooted at a workspace, with a fixture provider and the default
     /// store.
     #[must_use]

@@ -39,6 +39,7 @@ orrery-memory = { workspace = true }
 orrery-ext-api = { workspace = true }
 # By path, not `workspace = true`: these are `publish = false`, so they are not
 # among the version+path pairs the root declares for the published half.
+orrery-config = { path = "../orrery-config" }
 orrery-tools = { path = "../orrery-tools" }
 orrery-host = { path = "../orrery-host" }
 orrery-kernel = { path = "../orrery-kernel" }

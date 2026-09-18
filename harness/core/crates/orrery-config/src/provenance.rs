@@ -170,6 +170,12 @@ impl Provenanced {
         self.winner(key).and_then(|s| s.value.as_bool())
     }
 
+    /// The winning integer for a key.
+    #[must_use]
+    pub fn int(&self, key: &str) -> Option<i64> {
+        self.winner(key).and_then(|s| s.value.as_integer())
+    }
+
     /// The winning array of strings for a key.
     #[must_use]
     pub fn strings(&self, key: &str) -> Vec<String> {

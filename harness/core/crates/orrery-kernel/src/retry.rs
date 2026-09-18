@@ -16,9 +16,16 @@ use orrery_provider::ProviderError;
 
 /// How many times, and how long between.
 ///
-/// TODO(plan-10): these come from profile config, per provider and per profile
-/// — see this plan's open question 1. Hardcoded until then, and hardcoded
-/// *here* rather than in each provider, so that changing them is one edit.
+/// The defaults below are what a configuration that says nothing gets.
+/// `[retry] maxAttempts / baseMs / maxMs / jitter`, under a profile or bare,
+/// overrides them — read by `orrery_harness::kernel_config` and handed over as
+/// `KernelConfig::retry`.
+///
+/// Per **provider** rather than per profile is still open (plan 10's open
+/// question 1): a `RetryPolicy` is one value on the kernel, and a provider that
+/// wants its own would need the kernel to hold a map keyed by provider id.
+/// Nothing asks for that yet, and the single value is enforced in one place,
+/// which was the point of putting it here rather than in each provider.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct RetryPolicy {
     /// How many attempts in total, the first one included. One means no retry.
