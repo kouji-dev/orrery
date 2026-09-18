@@ -117,6 +117,25 @@ Worked examples, one per runtime, all returning the same thing:
 The Go one is the one that matters. A language Orrery ships nothing for binds
 against the world with `wit-bindgen` alone; if that is painful, the WIT is wrong.
 
+### Describing, never drawing: the ported three
+
+Phase 4's acceptance criterion (plan 09, §8) is three ported extensions that
+render in both TUIs and in `--json` **with no drawing code of their own**:
+
+| Example | Emits |
+|---|---|
+| [`examples/workspace-census`](examples/workspace-census) | a section, a markdown summary, a table, styled text |
+| [`examples/patch-review`](examples/patch-review) | a diff and a question, with a `default` an unattended run resolves |
+| [`examples/release-train`](examples/release-train) | a task list, progress, and one `custom` surface with an informative fallback |
+
+All twelve core surfaces are reachable from the published crate: `ctx.ui` is
+[`SurfaceSink`](../core/crates/orrery-ext-api/src/ctx.rs) plus the
+[`SurfaceBuilders`](../core/crates/orrery-ext-api/src/sink.rs) trait. The proof
+that they draw nothing is mechanical rather than rhetorical:
+`clients/ported/tests/ported.rs` scans their source for `std::io`, `print!`, a
+terminal crate or a width and fails on any of them, and
+`clients/ported` replays what they emit through every renderer.
+
 ### 3 · Grant
 
 Installing surfaces the manifest's requests as a diff the user or admin approves.
@@ -338,7 +357,7 @@ contract is still moving, a single repo makes a breaking change to
 |---|---|
 | `crates/` | First-party Rust extensions, `runtime = "native"`, plus `orrery-guest` (the wasm guest SDK). |
 | `node/` | The `@orrery/ext` SDK and first-party JavaScript extensions. |
-| `examples/` | One worked example per runtime. |
+| `examples/` | One worked example per runtime, plus the three **ported** extensions phase 4 renders. |
 
 Implementation plan:
 [`../docs/plans/18-writing-an-extension.md`](../docs/plans/18-writing-an-extension.md).

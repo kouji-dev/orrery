@@ -13,6 +13,7 @@ an external one attaches over a pipe.
 | `ink/` | `@orrery/client-ink` | React/Ink TUI, spawned as a Node process. |
 | `ade/` | pointer | The Angular + kouji-ui renderer is built inside `ade/`. |
 | `conformance/` | fixtures | Event scripts + expected `SurfaceStore` state. Every client runs them. |
+| `ported/` | `orrery-ported` | Phase 4: the three ported example extensions, run through `orrery-host` and turned into frames. Dev-only; the renderers' test suites draw what it produces. |
 
 ## AG-UI state flows outward only
 

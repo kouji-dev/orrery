@@ -210,6 +210,14 @@ Files: `tests/smoke.rs` (ignored by default, run explicitly)
 
 ## State
 
+**2026-09-19 — phase 4.** The three ported extensions (plan 09, task 8) are snapshotted
+here in `tests/ported.rs`, from frames `clients/ported` produces by loading the real
+extensions through `orrery-host`. The exercise found one bug in this renderer: the markdown
+widget printed `**4**` where Ink printed `4`. Weight is free under plan 09's comparability
+rule and the characters are not, so `widgets/markdown.rs` now parses inline emphasis
+(`**`, `*`, `_`, backticks) into styled runs and wraps them span by span. 46 tests, 49
+snapshots.
+
 **2026-09-18 — implemented.** `orrery-client-ratatui` is complete against this plan: tasks 1–7 done, task 8 amended to what is buildable today. 43 tests across `app`, `scrollback`, `widgets`, `stream`, `consent`, `composer`, `conformance`, plus the `#[ignore]`d `smoke`; 46 committed snapshots; `cargo clippy` clean, `cargo fmt` clean, `xtask deps-check` ok.
 
 Carried forward, each already stated where it bites:

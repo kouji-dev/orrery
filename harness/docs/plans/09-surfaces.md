@@ -234,6 +234,64 @@ process's bytes to land. The scenario pins everything else — the channel is na
 surface opens `running`, it can be re-pointed with one op, the turn closes it — and the file
 and the README both say plainly what is missing. Closing it is an `orrery-proto` change.
 
+### Task 8 · Phase 4 — the porting exercise
+
+Files: `harness/extensions/examples/{workspace-census,patch-review,release-train}/*` ·
+`harness/clients/ported/*` · `harness/clients/conformance/ported/*` · the three
+renderers' test suites
+
+§8 calls this "the honest test of the schema": three real extensions, with an
+`orrery.toml`, loaded through `orrery-host`, emitting real surfaces and drawing none of
+them — and *"they needed escape hatches"* is the finding that matters.
+
+- [x] **Failing test first.** `ported::draws_nothing` — a source scan over the three
+  extensions for `std::io`, `Stdout`, `print!`, `crossterm`, `ratatui`, `ansi`, an escape
+  byte, and anything that knows a client's `width`.
+- [x] Three extensions covering different surface kinds: `workspace-census` (section,
+  markdown, table, styled text), `patch-review` (diff, question), `release-train` (task,
+  progress, custom + fallback, emitted twice so the second is a re-emission).
+- [x] `orrery-ported` runs them the real way — `NativeRegistry` → `ExtensionTable::load`
+  under `Grant::nothing()` → `Registry::dispatch` → `ctx.ui` → `SurfaceStore` → differ →
+  `agui::Encoder` — and the `clients/conformance/ported/*.jsonl` fixtures are **written
+  from that run** and asserted against it, which is how Ink snapshots the same frames.
+- [x] ratatui: a snapshot each, plus `the_custom_surface_falls_back`.
+- [x] Ink: a snapshot each, plus the fallback named stage by stage.
+- [x] json: the payload and the mandatory fallback beside it, with every stage the payload
+  carries asserted present in the fallback (§6.2).
+
+**Three findings, in the order they cost something.**
+
+1. **Nine of the twelve builders were unreachable from a publishable extension.**
+   `SurfaceBuilders` lived in `orrery-surface`, which is `publish = false`, so a community
+   extension could describe `text`, `table` and `markdown` and nothing else — while this
+   plan's own "an extension can produce every core surface" was asserted from a crate no
+   extension may depend on. Same diagnosis as the view vocabulary, same fix: the trait is
+   now in `orrery-ext-api`, re-exported here. **This is the escape hatch §8 asked about,
+   and it was ours rather than theirs.**
+2. **`with_id` did not exist.** Open question 4 decided ids are extension-minted and
+   re-emission is the whole API; there was no way to say an id from inside `ctx.ui`, so
+   every re-emission looked like a new surface. Added, beside `with_status`.
+3. **The vocabulary itself needed no escape hatch.** Twelve surfaces covered three
+   unrelated extensions, and the one thing that genuinely was not in it — a timeline — is
+   exactly what `custom` is for. No extension wanted a variant that does not exist.
+
+**And two client bugs the exercise found**, neither of them schema problems:
+
+- `--json` emitted a custom surface's fallback only when the custom surface was the *whole*
+  surface. Extensions compose, so a nested one never reached CI — the one thing §6.2 asks
+  of that renderer. It now walks stacks and fallbacks.
+- The ratatui markdown widget printed `**4**` where Ink printed `4`. Weight is free under
+  open question 1; the characters are not, and that is the incomparability the rule
+  forbids. It now parses inline emphasis into styled runs.
+
+**One cost worth writing down.** A `custom` payload is opaque to the differ — `diff.rs`
+emits the *whole* payload as one `Set` when any part of it changes. In `release-train` that,
+plus a fallback that mirrors the payload, put the patch over the cost guard's 60%, so a
+re-emission that changed one stage sent the whole surface again. That is the guard working
+as designed, and it means a *streaming* custom surface re-sends everything on every tick.
+Fixing it means either a JSON-level differ for payloads or a `SurfacePatch` that can
+address inside one — an `orrery-proto` change, not this plan's, and nothing needs it yet.
+
 ---
 
 ## Done when
@@ -243,11 +301,24 @@ and the README both say plainly what is missing. Closing it is an `orrery-proto`
 - [x] An extension can produce every core surface without importing a drawing library. `sink::describes_never_draws` builds all twelve through `ctx.ui` and then scans this crate's source for anything that could write a byte.
 - [x] A sealed surface's patch is reported to the extension, never sent. `SurfaceStore::emit` into a sealed turn returns `Err(SurfaceError::Sealed)` and produces no patch at all.
 
-**Not claimed.** The plan's goal line says "three ported extensions render in both TUIs with
-no drawing code of their own". The TUIs are plans 09b and 09c and the porting is phase 4;
-this plan built the vocabulary they consume and the fixtures they are checked against.
+- [x] **The goal line, run.** "Three ported extensions render in both TUIs with no drawing
+  code of their own" is no longer a claim about a future phase: `workspace-census`,
+  `patch-review` and `release-train` each load through `orrery-host` from an `orrery.toml`,
+  emit surfaces through `ctx.ui`, and are snapshotted in ratatui, in Ink and in `--json`.
+  The "no drawing code" half is a source scan that fails on `std::io`, `print!`, a terminal
+  crate or a width. See Task 8 for what it found.
 
 ## State
+
+Amended 2026-09-19 (phase 4, the porting exercise): three ported extensions live in
+`harness/extensions/examples/`, `harness/clients/ported` runs them through `orrery-host`
+for real, and all three renderers snapshot what they emit. `SurfaceBuilders` moved to
+`orrery-ext-api` and gained `with_id`; the `json` renderer now walks nested custom
+surfaces; the ratatui markdown widget now renders inline emphasis instead of showing it.
+`cargo test -p orrery-surface -p orrery-ext-api -p workspace-census -p patch-review
+-p release-train -p orrery-ported -p orrery-client-ratatui -p orrery-client-json` is green,
+`pnpm -C harness/clients/ink test` is green, and `cargo run -q -p xtask -- deps-check`
+prints `ok`.
 
 Amended 2026-09-18 (wave-3 audit repair): the view vocabulary moved from
 `orrery-surface` to `orrery-ext-api`, and `orrery-ext-views-default` now depends
@@ -332,9 +403,19 @@ won for a stated reason. Open questions 1–4 are decided below.
 
    It is a warning and not an error for one reason worth writing down: a bad fallback makes
    a transcript worse, while refusing to load makes the extension useless. The nudge belongs
-   on the cheaper side of that trade. Revisit after phase 4's porting exercise, with real
-   fallbacks to look at — and if the phrase list is still crude then, the answer is a lint in
-   `orrery ext test`, not a load-time refusal.
+   on the cheaper side of that trade.
+
+   **Revisited after phase 4, with a real fallback to look at. The warning stays, and it
+   never fired.** `release-train`'s fallback is a `stack` — a headline plus a table — so
+   `validate` did not judge it at all: only `text` fallbacks are. That is the honest result,
+   and it says the load-time check is not where this is enforced. What actually held the
+   fallback to account was a *test*: `the_fallback_is_informative` asserts that every stage
+   the payload names appears in the rendered fallback, which is a rule about **this**
+   extension that only its author could write. So the answer to "the phrase list is crude"
+   is not a better list; it is that an extension proves its own fallback in its own tests,
+   and `--json` printing the fallback beside the payload is what makes a missing proof
+   visible to a reviewer. If a lint is ever added to `orrery ext test`, this is the shape:
+   compare the fallback's text against the payload's own strings, not against a deny-list.
 
 4. **Surface ids.** Who mints them — the extension or the kernel? Extension-minted is simpler for re-emission; kernel-minted prevents collisions across extensions. Suggest extension-minted, namespaced by ext id at the kernel.
 

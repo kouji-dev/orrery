@@ -152,3 +152,26 @@ quietly stop describing the harness.
 
 Drawing snapshots (ratatui `TestBackend` + `insta`, Ink `lastFrame()`) live with each client
 and are a second layer on top of this one.
+
+## `ported/` is generated, and is not part of the set either
+
+[`ported/`](ported) holds one file per **ported example extension** — phase 4's acceptance
+criterion (plan 09, §8): three real extensions with an `orrery.toml`, loaded through
+`orrery-host`, emitting real surfaces and drawing none of them.
+
+The difference from everything above: **nobody wrote these files.** They are produced by
+`cargo test -p orrery-ported`, which loads each extension, dispatches its tool, diffs what
+it described and encodes the result — and which fails if the checked-in file has drifted
+from what the extension now produces. `ORRERY_BLESS=1` rewrites them.
+
+They live in a subdirectory for the same reason `streams/` does: `load_all` / `loadAll`
+read this directory only, the count above is a contract, and a generated file has no place
+in it. The Ink suite reads them by path
+([`clients/ink/test/ported.test.tsx`](../ink/test/ported.test.tsx)), which is how a client
+that cannot link Rust snapshots the same frames the Rust clients snapshot.
+
+| File | The extension | What it exercises |
+|---|---|---|
+| `ported-workspace-census.jsonl` | `extensions/examples/workspace-census` | `stack` (section), `markdown`, `table`, styled `text`. |
+| `ported-patch-review.jsonl` | `extensions/examples/patch-review` | `diff` and `question`, with a `default` an unattended run resolves. |
+| `ported-release-train.jsonl` | `extensions/examples/release-train` | `task`, `progress`, and one `custom` surface — emitted twice, so the second is a re-emission. |

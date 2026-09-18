@@ -384,7 +384,7 @@ Also flagged, not yet decided:
 | 1 | 01, 02, 03, 05, 06 (builtin only), 08, 09/09b/09c (minimal), 17 | `orrery run -p "list files here"` completes one real turn with a tool call in a terminal. **And** `orrery serve --provider fixture:turn.jsonl` with ratatui and Ink attached to the same session both render the fixture turn; the `SurfaceStore` conformance tests pass in Rust and TS. |
 | 2 | 04, 06 (rpc + node), 14, 18 | Two extensions claiming `search` both work; killing one leaves the session alive. |
 | 3 | 07 | An extension denied `spawn` degrades instead of failing; every decision is logged. |
-| 4 | 08 (pipes/TLS), 09, 09b, 09c | Three ported extensions render in **both** TUIs with no drawing code of their own; both pass the conformance suite. |
+| 4 | 08 (pipes/TLS), 09, 09b, 09c | Three ported extensions render in **both** TUIs with no drawing code of their own; both pass the conformance suite. **The porting is done** (plan 09, task 8): `workspace-census`, `patch-review` and `release-train` in `extensions/examples/`, run through `orrery-host` by `clients/ported` and snapshotted in ratatui, Ink and `--json`. The escape hatch it found was ours: nine of the twelve surface builders were in a `publish = false` crate. |
 | 5 | 10 | Two profiles produce measurably different agents from one binary. |
 | 6 | 11, 12 | A verify loop terminates on its own cap, budget enforced by the kernel. |
 | 7 | 13 | An existing `SKILL.md` and an existing MCP server both work unmodified. |
@@ -392,7 +392,7 @@ Also flagged, not yet decided:
 | 9 | 16 | One suite runs against two profiles and one competing harness, same graders, reproducible cost numbers. |
 | 10 | 06 (python/process) | An existing internal service works as an extension with no rewrite. |
 
-**Phase 2 is the real milestone** — where the thesis is proven or falsified, and small enough to reach quickly. **Phase 4 is the honest test of the surface vocabulary**: port two or three existing extensions, and if they need escape hatches the schema is wrong.
+**Phase 2 is the real milestone** — where the thesis is proven or falsified, and small enough to reach quickly. **Phase 4 is the honest test of the surface vocabulary**: port two or three existing extensions, and if they need escape hatches the schema is wrong. *Run.* Three ported extensions needed no variant the vocabulary does not have — the one thing that was genuinely missing, a timeline, is what `custom` is for. The escape hatches were on our side of the line: the builders for nine of the twelve surfaces were unpublished, and there was no way for an extension to mint the id it re-emits under. Both are fixed; plan 09's task 8 carries the full list, including two client bugs the exercise found.
 
 ## Conventions
 

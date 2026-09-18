@@ -1,0 +1,49 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the ported extensions > ported-patch-review: the store agrees, then it draws 1`] = `
+"── 01937ce5-0000-7000-8000-0000000000ff
+  harness/core/crates/orrery-ext-api/src/sink.rs +1 -1
+  @@ -28,3 +28,3 @@
+   use orrery_proto::Surface;
+  -use orrery_ext_api::SurfaceSink;
+  +use crate::ctx::SurfaceSink;
+  Apply 2 changed lines to sink.rs?
+    Apply
+  ❯ Skip
+    Explain the change
+  ↑↓ enter · default skip
+"
+`;
+
+exports[`the ported extensions > ported-release-train: the store agrees, then it draws 1`] = `
+"── 01937ce5-0000-7000-8000-0000000000ff
+  3/5 done
+  ✓ surface schema
+  ✓ kernel differ
+  ✓ ratatui client
+  · ink client
+  · ade client
+  ████████████░░░░░░░░ 3/5 v0.25.0
+  example-release-train.timeline (no renderer)
+  v0.25.0: 3 of 5 stages shipped, in order —
+  stage          state
+  surface schema shipped
+  kernel differ  shipped
+  ratatui client shipped
+  ink client     waiting
+  ade client     waiting
+"
+`;
+
+exports[`the ported extensions > ported-workspace-census: the store agrees, then it draws 1`] = `
+"── 01937ce5-0000-7000-8000-0000000000ff
+  workspace census
+  4 crates, 2 of them published.
+  crate          area      publish
+  orrery-proto   core      published
+  orrery-ext-api core      published
+  orrery-surface core      private
+  patch-review   extension private
+  publish = false is a crate a community extension cannot depend on.
+"
+`;

@@ -194,6 +194,13 @@ All four are decided. The decision is written under the question.
 
 ## State
 
+**2026-09-19 — phase 4.** The three ported extensions (plan 09, task 8) are snapshotted
+here in `test/ported.test.tsx`, read from `clients/conformance/ported/*.jsonl` — which
+`cargo test -p orrery-ported` generates by loading the real extensions through
+`orrery-host`, so this suite and the ratatui one draw the same frames rather than two
+hand-written imitations of them. Nothing in this package changed: it drew all three,
+including the custom surface's fallback, as it stood.
+
 **Done** — 2026-09-18, all nine tasks, on `feat/harness_claude-0917`.
 
 - `harness/clients/ink` is a real package: `@orrery/client-ink`, 9 test files, 67 tests, 42 snapshots, `tsc --noEmit` clean, `cargo run -p xtask -- deps-check` clean.
