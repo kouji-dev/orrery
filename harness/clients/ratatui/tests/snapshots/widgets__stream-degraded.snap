@@ -1,0 +1,5 @@
+---
+source: harness/clients/ratatui/tests/widgets.rs
+expression: "draw(surface, 24, Theme::monochrome())"
+---
+✓ stream stderr

@@ -1,0 +1,11 @@
+---
+source: harness/clients/ratatui/tests/widgets.rs
+expression: "draw(surface, 24, Theme::monochrome())"
+---
+Here is the fix:
+
+────────────
+  fn main() {
+      println!("hi");
+  }
+────────────

@@ -1,0 +1,6 @@
+---
+source: harness/clients/ratatui/tests/widgets.rs
+expression: narrow
+---
+crate         … status
+orrery-proto  … green

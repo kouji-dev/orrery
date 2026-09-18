@@ -1,0 +1,6 @@
+---
+source: harness/clients/ratatui/tests/widgets.rs
+expression: "draw(surface, 24, Theme::monochrome())"
+---
+<buildgraph.dag>
+proto -> agui -> kernel

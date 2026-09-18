@@ -1,0 +1,7 @@
+---
+source: harness/clients/ratatui/tests/widgets.rs
+expression: "draw(surface, 24, Theme::monochrome())"
+---
+crate         lines
+orrery-agui   612
+orrery-proto  2358

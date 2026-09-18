@@ -13,6 +13,9 @@ use orrery_proto::{Surface, SurfaceKind, TextStyle};
 
 use crate::theme::Theme;
 
+/// How wide the rule that stands in for a code fence is drawn.
+const FENCE_RULE: u16 = 12;
+
 fn parts(surface: &Surface) -> Option<(&String, bool)> {
     match &surface.kind {
         SurfaceKind::Markdown { value, complete } => Some((value, *complete)),
@@ -33,10 +36,10 @@ fn lines(value: &str, complete: bool, width: u16, theme: &Theme) -> Vec<(String,
     for raw in value.split('\n') {
         if raw.trim_start().starts_with("```") {
             in_fence = !in_fence;
-            out.push((
-                "─".repeat(width.min(u16::try_from(raw.len().max(3)).unwrap_or(3)) as usize),
-                theme.muted(),
-            ));
+            // A rule of a constant width: a fence whose rule is as long as
+            // its info string makes an opening fence and a closing one look
+            // like different things.
+            out.push(("─".repeat(width.min(FENCE_RULE) as usize), theme.muted()));
             continue;
         }
         if in_fence {

@@ -78,7 +78,7 @@ fn fit(columns: &[String], rows: &[Vec<Cell>], width: u16) -> Fitted {
 fn span(natural: &[usize], keep: &[usize], elided: bool) -> usize {
     let cells: usize = keep.iter().map(|i| natural[*i]).sum();
     let gaps = keep.len().saturating_sub(1) * GAP.len();
-    cells + gaps + usize::from(elided)
+    cells + gaps + if elided { 2 } else { 0 }
 }
 
 fn line(values: &[&str], fitted: &Fitted) -> String {
@@ -87,7 +87,7 @@ fn line(values: &[&str], fitted: &Fitted) -> String {
         if n > 0 {
             out.push_str(GAP);
             if fitted.elided && n == fitted.widths.len() / 2 {
-                out.push('…');
+                out.push_str("… ");
             }
         }
         let cut = super::elide(value, *width);

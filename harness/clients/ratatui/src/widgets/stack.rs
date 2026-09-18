@@ -29,7 +29,7 @@ pub fn render(surface: &Surface, area: Rect, buf: &mut Buffer, theme: &Theme) {
     let mut top = area.y;
     if let Some(title) = title {
         let glyph = Theme::status_glyph(surface.status);
-        let fold = if collapsed { "+" } else { "-" };
+        let fold = if collapsed { "▸" } else { "▾" };
         super::put(
             buf,
             area,

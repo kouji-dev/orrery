@@ -1,0 +1,8 @@
+---
+source: harness/clients/ratatui/tests/widgets.rs
+expression: "draw(surface, 60, Theme::colour())"
+---
+✓ read the plan
+✓ write the differ
+· run the tests
+· tick the plan

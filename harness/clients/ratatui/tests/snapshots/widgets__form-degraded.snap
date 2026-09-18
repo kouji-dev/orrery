@@ -1,0 +1,7 @@
+---
+source: harness/clients/ratatui/tests/widgets.rs
+expression: "draw(surface, 24, Theme::monochrome())"
+---
+field 1 of 5
+* Branch       main
+enter: next, last field…
