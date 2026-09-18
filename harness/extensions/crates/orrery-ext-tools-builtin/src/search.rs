@@ -1,17 +1,17 @@
 //! `grep` and `glob` — the two that walk a tree.
 //!
-//! # The honest part
+//! # Everything goes through the broker, names included
 //!
-//! Discovery is `std::fs::read_dir`. The broker facade has five methods and
-//! none of them lists a directory, so a walk cannot go through it; see the
-//! crate docs. Every **byte** still does: `grep` reads each candidate through
+//! Discovery is [`BrokerFacade::list`](orrery_ext_api::BrokerFacade::list) and
+//! not `std::fs::read_dir`: a path this call may not read is not **named** in a
+//! result either, which is what walking around the broker used to cost. Every
+//! byte goes the same way — `grep` reads each candidate through
 //! [`BrokerFacade::read`](orrery_ext_api::BrokerFacade::read) under the call's
-//! ceiling, so a 10 MB file costs the ceiling and not 10 MB, and a `read` the
-//! policy refuses is refused here too.
+//! ceiling, so a 10 MB file costs the ceiling and not 10 MB.
 
 use std::path::{Path, PathBuf};
 
-use orrery_ext_api::{CallCtx, ReadRequest};
+use orrery_ext_api::{CallCtx, ListRequest, ReadRequest};
 use orrery_proto::Outcome;
 use serde_json::Value;
 
@@ -34,31 +34,26 @@ fn root(input: &Value) -> PathBuf {
         .map_or_else(|| PathBuf::from("."), PathBuf::from)
 }
 
-/// Every file under `root`, breadth-first, capped.
+/// Every file under `root`, through the broker, capped.
 ///
-/// Errors are skipped rather than raised: a directory that cannot be listed is
-/// one this call cannot see, which is the same answer a `read` deny gives.
-fn walk(root: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    let mut queue = vec![root.to_path_buf()];
-    while let Some(dir) = queue.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            match entry.file_type() {
-                Ok(t) if t.is_dir() => queue.push(path),
-                Ok(t) if t.is_file() => out.push(path),
-                _ => {}
-            }
-            if out.len() >= MAX_ENTRIES {
-                return out;
-            }
-        }
-    }
+/// The `Err` half is the broker's own refusal, already in the shape a client
+/// renders: a broker that does not offer discovery, or a root this call may not
+/// see, is reported rather than quietly walked around.
+#[allow(clippy::result_large_err)]
+async fn walk(root: &Path, ctx: &CallCtx) -> Result<Vec<PathBuf>, Outcome> {
+    let listing = ctx
+        .broker
+        .list(ListRequest::new(root, MAX_ENTRIES as u64).recursive())
+        .await
+        .map_err(orrery_ext_api::BrokerError::into_outcome)?;
+    let mut out: Vec<PathBuf> = listing
+        .entries
+        .into_iter()
+        .filter(|e| !e.is_dir)
+        .map(|e| e.path)
+        .collect();
     out.sort();
-    out
+    Ok(out)
 }
 
 /// Search a tree, bounded per file.
@@ -72,7 +67,7 @@ pub(crate) async fn grep(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome
 
     let mut lines: Vec<String> = Vec::new();
     let mut truncated_files: Vec<String> = Vec::new();
-    for file in walk(&root) {
+    for file in walk(&root, ctx).await? {
         if lines.len() >= max {
             break;
         }
@@ -128,7 +123,8 @@ pub(crate) async fn glob(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome
         .map_err(|e| bad_input(format!("`{pattern}` is not a glob: {e}")))?
         .compile_matcher();
 
-    let mut hits: Vec<String> = walk(&root)
+    let mut hits: Vec<String> = walk(&root, ctx)
+        .await?
         .into_iter()
         .map(|p| display(&p, &root))
         .filter(|rel| matcher.is_match(rel))

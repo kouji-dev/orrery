@@ -2,7 +2,7 @@
 //! exercise it: no model, no network, no kernel.
 
 use orrery_ext_api::testing::{BrokerCall, load_for_test};
-use orrery_ext_api::{BrokerError, SpawnRequest};
+use orrery_ext_api::{BrokerError, ListRequest, SpawnRequest};
 
 const MANIFEST: &str = r#"
 [extension]
@@ -117,4 +117,38 @@ async fn a_manifest_the_host_would_refuse_is_refused_here_too() {
     let src = MANIFEST.replace("orrery-ext/1", "orrery-ext/2");
     let err = load_for_test(&src, &[]).unwrap_err();
     assert_eq!(err.stage(), orrery_proto::LoadStage::Manifest);
+}
+
+/// Discovery is a broker call like any other, and the mock answers it the way a
+/// real broker does: what the grants do not cover is not **named**.
+#[tokio::test]
+async fn a_listing_omits_what_the_grants_do_not_cover() {
+    let harness = load_for_test(MANIFEST, &["read:$WORKSPACE/src/**"]).unwrap();
+    let ctx = harness.ctx("impacted");
+    harness.broker.add_file("$WORKSPACE/src/a.rs", "fn main() {}");
+    harness.broker.add_file("$WORKSPACE/secret.txt", "shh");
+
+    let listing = ctx
+        .broker
+        .list(ListRequest::new("$WORKSPACE", 100).recursive())
+        .await
+        .expect("listing is offered");
+
+    let names: Vec<String> = listing
+        .entries
+        .iter()
+        .map(|e| e.path.display().to_string().replace('\\', "/"))
+        .collect();
+    assert!(
+        names.iter().any(|n| n.ends_with("src/a.rs")),
+        "the granted file is there: {names:?}"
+    );
+    assert!(
+        !names.iter().any(|n| n.ends_with("secret.txt")),
+        "the ungranted one is not named at all: {names:?}"
+    );
+    assert!(matches!(
+        harness.recorded().last(),
+        Some(BrokerCall::List { recursive: true, .. })
+    ));
 }

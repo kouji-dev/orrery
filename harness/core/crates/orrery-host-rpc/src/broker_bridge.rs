@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use orrery_ext_api::{
-    BrokerError, BrokerFacade, NetRequest, ReadRequest, SpawnRequest, WriteRequest,
+    BrokerError, BrokerFacade, ListRequest, NetRequest, ReadRequest, SpawnRequest, WriteRequest,
 };
 use orrery_jsonrpc::{Handler, RpcError};
 use orrery_proto::ExtId;
@@ -66,6 +66,25 @@ fn bad_params(e: serde_json::Error) -> RpcError {
 impl Handler for BrokerBridge {
     async fn request(&self, method: &str, params: Value) -> Result<Value, RpcError> {
         match method {
+            protocol::BROKER_LIST => {
+                let p: protocol::ListParams = serde_json::from_value(params).map_err(bad_params)?;
+                let mut request = ListRequest::new(&p.path, p.limit);
+                request.recursive = p.recursive;
+                let listing = self.broker.list(request).await.map_err(to_rpc)?;
+                Ok(serde_json::to_value(protocol::ListReply {
+                    entries: listing
+                        .entries
+                        .into_iter()
+                        .map(|e| protocol::ListEntryWire {
+                            path: e.path.display().to_string(),
+                            is_dir: e.is_dir,
+                            size: e.size,
+                        })
+                        .collect(),
+                    truncated: listing.truncated,
+                })
+                .expect("a listing always serialises"))
+            }
             protocol::BROKER_READ => {
                 let p: protocol::ReadParams = serde_json::from_value(params).map_err(bad_params)?;
                 let chunk = self

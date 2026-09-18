@@ -38,9 +38,14 @@ struct Rig {
 
 impl Rig {
     fn open(budget: ToolBudget) -> Self {
+        Self::with_rules(budget, DEFAULT_RULES)
+    }
+
+    /// The same, with rules narrower than the default set.
+    fn with_rules(budget: ToolBudget, rules: &str) -> Self {
         let dir = tempfile::tempdir().expect("a temporary workspace");
         let rules = PolicyBuilder::new(dir.path())
-            .layer_toml(DEFAULT_RULES, "orrery.toml", Layer::Project, true)
+            .layer_toml(rules, "orrery.toml", Layer::Project, true)
             .expect("the default rules parse")
             .build()
             .expect("the default rules compile");
@@ -356,5 +361,74 @@ async fn outside_the_workspace_is_denied() {
     assert!(
         matches!(outcome, Outcome::Denied { .. }),
         "the default rules cover the workspace and nothing else: {outcome:?}"
+    );
+}
+
+/// The gap wave 3 wrote down: discovery used to be `std::fs::read_dir`, around
+/// the broker, so a path the policy refuses to read could still be **named** in
+/// a glob result. Discovery now goes through `BrokerFacade::list`, which omits
+/// what this call may not read — a name is information too.
+#[tokio::test]
+async fn glob_never_names_what_the_policy_hides() {
+    let rig = Rig::with_rules(
+        ToolBudget::new(30_000, CEILING),
+        "[permissions]
+allow = [\"tool(*)\", \"read(./src/**)\"]
+",
+    );
+    std::fs::create_dir_all(rig.path("src")).unwrap();
+    std::fs::write(rig.path("src/a.rs"), "").unwrap();
+    std::fs::write(rig.path("secret.txt"), "shh").unwrap();
+
+    let outcome = BuiltinTools::new()
+        .call(
+            "glob",
+            serde_json::json!({
+                "pattern": "**/*",
+                "path": rig.dir.path().display().to_string(),
+            }),
+            &rig.ctx("glob"),
+        )
+        .await
+        .expect("the harness carried the call");
+    let text = text_of(&outcome);
+    assert!(text.contains("a.rs"), "`src/a.rs` is readable: {text}");
+    assert!(
+        !text.contains("secret.txt"),
+        "a file this call may not read must not be named either: {text}"
+    );
+}
+
+/// The same for `grep`, which reads bytes as well as names.
+#[tokio::test]
+async fn grep_never_names_what_the_policy_hides() {
+    let rig = Rig::with_rules(
+        ToolBudget::new(30_000, CEILING),
+        "[permissions]
+allow = [\"tool(*)\", \"read(./src/**)\"]
+",
+    );
+    std::fs::create_dir_all(rig.path("src")).unwrap();
+    std::fs::write(rig.path("src/a.rs"), "needle here
+").unwrap();
+    std::fs::write(rig.path("secret.txt"), "needle here too
+").unwrap();
+
+    let outcome = BuiltinTools::new()
+        .call(
+            "grep",
+            serde_json::json!({
+                "pattern": "needle",
+                "path": rig.dir.path().display().to_string(),
+            }),
+            &rig.ctx("grep"),
+        )
+        .await
+        .expect("the harness carried the call");
+    let text = text_of(&outcome);
+    assert!(text.contains("a.rs"), "the readable match is reported: {text}");
+    assert!(
+        !text.contains("secret.txt"),
+        "the unreadable one is not, by name or by line: {text}"
     );
 }

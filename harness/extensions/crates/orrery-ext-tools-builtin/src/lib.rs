@@ -17,16 +17,16 @@
 //! and `bash`'s output is pumped by the broker with a closed pipe at the
 //! ceiling.
 //!
-//! # What the broker does not offer, and what that costs
+//! # Nothing goes around the broker, names included
 //!
-//! [`BrokerFacade`](orrery_ext_api::BrokerFacade) has five methods — read,
-//! write, spawn, fetch, credential — and **no directory listing**. `grep` and
-//! `glob` therefore discover *names* with `std::fs::read_dir`, and read every
-//! *byte* through the broker under the call's ceiling. That is a real gap, and
-//! it is written down rather than hidden: a `list` method on the facade (a
-//! non-breaking addition under `orrery-ext/1`, see plan 06's open question 3)
-//! would close it, and until it exists a `read` deny does not stop a path from
-//! being named in a glob result.
+//! [`BrokerFacade`](orrery_ext_api::BrokerFacade) has six methods — list, read,
+//! write, spawn, fetch, credential. `list` closed the gap wave 3 wrote down
+//! here: `grep` and `glob` used to discover *names* with `std::fs::read_dir`,
+//! around the broker, so a path a `read` would refuse could still be named in a
+//! glob result. They now discover through the facade like everything else, and
+//! a broker that offers no discovery is *reported* rather than walked around.
+//! Adding the method was a non-breaking addition under `orrery-ext/1` (plan
+//! 06, open question 3).
 //!
 //! Implementation plan: `harness/docs/plans/06-extension-host.md` (Task 4)
 

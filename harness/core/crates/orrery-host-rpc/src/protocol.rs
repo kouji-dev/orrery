@@ -16,6 +16,8 @@ pub const CALL: &str = "tool/call";
 /// Host → guest: "you are going away".
 pub const SHUTDOWN: &str = "ext/shutdown";
 
+/// Guest → host: list what is under a directory.
+pub const BROKER_LIST: &str = "broker/list";
 /// Guest → host: read a bounded slice of a file.
 pub const BROKER_READ: &str = "broker/read";
 /// Guest → host: write a file.
@@ -154,6 +156,40 @@ pub struct ReadReply {
     /// The whole file's size, when known.
     #[serde(default)]
     pub total: Option<u64>,
+}
+
+/// What `broker/list` is given.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListParams {
+    /// Where to look.
+    pub path: String,
+    /// Whether to descend.
+    #[serde(default)]
+    pub recursive: bool,
+    /// How many entries at most. Not optional: a walk has a ceiling like
+    /// everything else.
+    pub limit: u64,
+}
+
+/// One thing a listing found.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListEntryWire {
+    /// Where it is.
+    pub path: String,
+    /// Whether it is a directory.
+    pub is_dir: bool,
+    /// Its size, when known.
+    #[serde(default)]
+    pub size: Option<u64>,
+}
+
+/// What `broker/list` answers.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListReply {
+    /// What this call may see. What it may not read is not named.
+    pub entries: Vec<ListEntryWire>,
+    /// Whether the ceiling cut the walk short.
+    pub truncated: bool,
 }
 
 /// What `broker/write` is given.

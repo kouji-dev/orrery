@@ -171,6 +171,15 @@ impl PolicyBroker {
         self.engine.explain(&call, &self.subject).verdict == Verdict::Allow
     }
 
+    /// Whether anything inside this directory could be read.
+    ///
+    /// A directory is named in a listing when the rules reach *into* it, which
+    /// `read(./src/**)` does for `src` and does not for a sibling nobody
+    /// mentioned.
+    fn may_read_under(&self, dir: &Path) -> bool {
+        self.may_read(&dir.join("*"))
+    }
+
     fn cancelled(&self) -> bool {
         self.cancel
             .as_ref()
@@ -209,6 +218,12 @@ impl BrokerFacade for PolicyBroker {
     async fn list(&self, req: ListRequest) -> BrokerResult<Listing> {
         let root = self.resolve(&req.path);
         let limit = usize::try_from(req.limit).unwrap_or(usize::MAX).max(1);
+        // A walk has to *look* at what it will not report — a readable file can
+        // sit under a directory that is not itself readable — so looking has a
+        // ceiling of its own. Without it, a glob over a drive is bounded only
+        // by patience.
+        let examined_cap = limit.saturating_mul(4);
+        let mut examined = 0usize;
         let mut entries: Vec<ListEntry> = Vec::new();
         let mut truncated = false;
         let mut queue = vec![root];
@@ -220,14 +235,26 @@ impl BrokerFacade for PolicyBroker {
                 continue;
             };
             for entry in read.flatten() {
+                examined += 1;
+                if examined > examined_cap {
+                    truncated = true;
+                    break 'walk;
+                }
                 let path = entry.path();
-                if !self.may_read(&path) {
+                let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+                if is_dir {
+                    if req.recursive {
+                        // Descended into whatever the rules allow *inside* it:
+                        // a readable file under an unreadable parent is still a
+                        // readable file.
+                        queue.push(path.clone());
+                    }
+                    if !self.may_read_under(&path) {
+                        continue;
+                    }
+                } else if !self.may_read(&path) {
                     // Omitted, not refused: a name is information too.
                     continue;
-                }
-                let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
-                if is_dir && req.recursive {
-                    queue.push(path.clone());
                 }
                 let size = if is_dir {
                     None
