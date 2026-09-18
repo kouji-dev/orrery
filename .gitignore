@@ -67,3 +67,6 @@ playwright-report/
 # extension packs (registry build pipeline)
 dist-ext/
 .ext-build/
+
+# Orrery Harness runtime state (sessions.db, trust answers, installed extensions)
+.orrery/

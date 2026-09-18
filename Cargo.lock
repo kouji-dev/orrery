@@ -4826,7 +4826,31 @@ dependencies = [
 name = "orrery-cli"
 version = "0.0.0"
 dependencies = [
+ "async-trait",
  "clap",
+ "crossterm",
+ "futures-util",
+ "interprocess",
+ "orrery-agui",
+ "orrery-client",
+ "orrery-client-json",
+ "orrery-client-ratatui",
+ "orrery-ext-api",
+ "orrery-harness",
+ "orrery-host",
+ "orrery-kernel",
+ "orrery-proto",
+ "orrery-provider",
+ "orrery-session",
+ "orrery-transport",
+ "ratatui",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4949,7 +4973,13 @@ dependencies = [
 name = "orrery-ext-memory-file"
 version = "0.0.0"
 dependencies = [
+ "async-trait",
  "orrery-memory",
+ "orrery-proto",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -5144,11 +5174,42 @@ dependencies = [
 
 [[package]]
 name = "orrery-mcp"
-version = "0.0.0"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "orrery-audit",
+ "orrery-broker",
+ "orrery-jsonrpc",
+ "orrery-policy",
+ "orrery-proto",
+ "orrery-tools",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
 
 [[package]]
 name = "orrery-memory"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "orrery-audit",
+ "orrery-kernel",
+ "orrery-policy",
+ "orrery-proto",
+ "orrery-session",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "orrery-orchestrator"
@@ -5257,7 +5318,23 @@ dependencies = [
 
 [[package]]
 name = "orrery-skills"
-version = "0.0.0"
+version = "0.1.0"
+dependencies = [
+ "dunce",
+ "orrery-audit",
+ "orrery-broker",
+ "orrery-config",
+ "orrery-policy",
+ "orrery-proto",
+ "orrery-tools",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "orrery-surface"
@@ -6592,6 +6669,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "serde_yaml_ng"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
+dependencies = [
+ "indexmap 2.14.0",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
 ]
 
 [[package]]
@@ -8139,6 +8229,12 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"

@@ -23,6 +23,40 @@ From [`00-overview.md`](00-overview.md):
 
 ## Architecture
 
+### The install command — decided with the user, 2026-09-18
+
+**Spelling: `orrery install <source>`, a bare top-level verb, Pi-style.** `orrery remove <name>` likewise. The fuller `orrery ext list` / `ext test` forms stay for the things that are not everyday actions. Plan 17's command tree is amended to match.
+
+**Default target: `~/.orrery/extensions/<id>/`** — the user layer, so an install is personal and available in every project, exactly as Pi behaves. `--workspace` installs into `<workspace>/.orrery/extensions/<id>/` for an extension the repo itself needs and should commit. `--user` is accepted for symmetry. Discovery already scans `<layer-root>/extensions/` at every layer (plan 10, landed), so nothing new is needed on the read side.
+
+**Sources, Pi-style.** One positional argument, disambiguated by prefix:
+
+| Form | Resolves to |
+|---|---|
+| `orrery install buildgraph` | the signed **registry** index (the default, and the only verified path) |
+| `orrery install buildgraph@1.2.0` | the same, pinned to a version |
+| `orrery install github:owner/repo` · `…#tag` · `…#sha` | a git host; `sha` is the only form that is reproducible |
+| `orrery install https://…/repo.git` | any git URL |
+| `orrery install crate:orrery-ext-buildgraph` | crates.io |
+| `orrery install npm:@scope/orrery-ext-x` | npm |
+| `orrery install ./path` · `file:../path` | a local directory |
+| `orrery install ./path --link` | symlink instead of copy — the development loop, never for real use |
+
+`remove` finds the extension across layers and, if it is installed at more than one, names them and asks which rather than guessing.
+
+### The security consequence, stated rather than discovered later
+
+The registry exists because a pin list is what makes a supply chain auditable. **Five of the seven source forms above bypass it.** That is a deliberate ergonomic choice, and it is only safe because the boundary is explicit:
+
+- **A registry install is verified**: index signature → pinned `sha256` → manifest `requires` mirrored against the index → grant diff. Nothing executes before the signature check.
+- **Every other source is UNPINNED.** It still gets the grant diff and the sandbox, but there is no signature and no hash to check it against, so it is recorded `Loaded { pinned: false }` in the ledger and the audit stream — visibly, not quietly.
+- **Managed `unpinned = "refuse"` blocks all five outright**, which is the single line an enterprise sets. `unpinned = "warn"` installs with a loud ledger entry. `unpinned = "allow"` is the developer default.
+- `--link` is always unpinned and additionally marked `Development` in the ledger, because a symlinked extension can change under the harness between runs.
+
+So the rule to write in the docs: **the registry is how you trust an extension; the other sources are how you try one.** A managed deployment turns the others off.
+
+Also worth saying plainly in `extensions/README.md`: a git or local install pulls a **transitive dependency tree we do not review**. The wasm runtime closes that hole; `native`, `node`, `python` and `process` do not. Cross-reference open question 4.
+
 ### What the registry is
 
 An index document, signed, fetched from a URL an organisation controls:
@@ -156,12 +190,46 @@ Files: `src/pin.rs`, `tests/pin.rs`
 - [ ] `pin::version_set_is_exact` — a pinned 1.2.0 refuses 1.2.1.
 - [ ] Implement.
 
-### Task 7 · `ext install`
+### Task 7 · `orrery install`
 
-Files: `src/lib.rs` (the CLI surface is plan 17)
+Files: `src/{lib,source,install}.rs` (the CLI surface is plan 17)
 
 - [ ] **Failing test first.** `install::end_to_end` — against a local fixture registry: resolve, fetch, verify, show the diff, approve, load, and see it in the ledger.
 - [ ] `install::offline_uses_the_cache` — a previously verified package installs without network.
+- [ ] Implement.
+
+### Task 8 · Source resolution
+
+Files: `src/source.rs`
+
+Every test here must run **offline**: a local bare git repo in a tempdir stands in for GitHub, and a local directory for crates.io/npm tarballs. No test fetches from a real host.
+
+- [ ] **Failing test first.** `source::parses_every_form` — a table over the seven forms in the Architecture table above, each producing the right `Source` variant. Ambiguity rules pinned: a bare word is the registry, a leading `./` or `../` is a path, everything else needs its prefix.
+- [ ] `source::bare_name_is_the_registry` — `orrery install buildgraph` never silently falls through to crates.io. If it is not in the index, that is an error naming the index URL, not a guess at another host.
+- [ ] `source::version_pin` — `name@1.2.0` resolves to exactly that version; a missing version is an error, not the latest.
+- [ ] `source::git_sha_is_reproducible_tag_is_not` — installing `github:o/r#v1.2` records the resolved commit sha in the ledger, so the install is auditable even though the ref is mutable.
+- [ ] Implement the resolvers. Git via the broker's `spawn` of the system git (the ADE already decided gitoxide has no network features — reuse that reasoning); crates.io and npm via the broker's `net`; local via the broker's `read`.
+
+### Task 9 · Install target and layers
+
+Files: `src/install.rs`
+
+- [ ] **Failing test first.** `install::defaults_to_the_user_layer` — `orrery install x` with no flag lands in `~/.orrery/extensions/x/` and is discovered from a different workspace.
+- [ ] `install::workspace_flag` — `--workspace` lands in `<workspace>/.orrery/extensions/x/`.
+- [ ] `install::link_is_a_symlink_and_marked_development` — `--link ./x` creates a link, and the ledger entry says `Development`, because the code can change under the harness between runs.
+- [ ] `remove::ambiguous_across_layers_asks` — installed at user *and* workspace, `orrery remove x` names both and refuses to guess.
+- [ ] Implement.
+
+### Task 10 · Unpinned sources are visibly unpinned
+
+Files: `src/install.rs`, `src/pin.rs`
+
+This is the task that keeps the ergonomics honest.
+
+- [ ] **Failing test first.** `pin::non_registry_source_is_recorded_unpinned` — a git install loads with `pinned: false` in the ledger and an audit entry naming the source; a registry install records `pinned: true` with the rule that verified it.
+- [ ] `pin::managed_refuse_blocks_every_non_registry_source` — with `unpinned = "refuse"`, all five non-registry forms are refused, the message names the managed file, and **a user-layer setting cannot override it**.
+- [ ] `pin::warn_mode_installs_loudly`.
+- [ ] `pin::link_is_always_unpinned` — `--link` cannot be pinned even under `allow`.
 - [ ] Implement.
 
 ---
@@ -172,6 +240,8 @@ Files: `src/lib.rs` (the CLI surface is plan 17)
 - An admin pins a version set; unpinned extensions refuse to load and say why.
 - A capability added in an upgrade is surfaced distinctly and defaults to deny.
 - No package code executes before its signature is verified.
+- All seven source forms install, offline, in tests; the five non-registry ones are recorded `pinned: false` and are refused under managed `unpinned = "refuse"`.
+- `orrery install x` with no flag lands in `~/.orrery/extensions/x/`.
 
 ## Open questions
 
