@@ -93,8 +93,9 @@ Distinct codes for 3, 4 and 5 because a CI script's response to each is differen
 hub and the two wrappers that turn a running turn into events), `src/control.rs`
 (the kernel's side of the control RPC, one implementation for all three
 listeners), `src/render.rs` (the drain loop both in-binary renderers share) and
-`src/cmd/interactive.rs` (bare `orrery`). `tests/{serve,ext}.rs` and
-`tests/common/mod.rs` alongside the three the plan named.
+`src/cmd/interactive.rs` (bare `orrery`). `src/cmd/layers.rs` (the five config layers, for the commands that answer from
+files rather than from a kernel). `tests/{serve,ext,explain,init,session}.rs`
+and `tests/common/mod.rs` alongside the three the plan named.
 
 ---
 
@@ -175,9 +176,14 @@ on how many times the model tried.
 
 Files: `src/cmd/{permissions,config}.rs`
 
-- [ ] **Failing test first.** `explain::permissions_names_rule_layer_file` — output contains the rule id, layer, file and line (plan 07 task 10). **Not landed: plan 07 task 10 has not.** There is no `explain` on `PolicyEngine` to call, and inventing one here would put the answer in the CLI instead of in the engine every client asks. The command is in the tree and exits 2 naming `07-policy-broker-audit.md`.
-- [ ] `explain::config_names_the_winning_layer` (plan 10 task 7). **Not landed: plan 10 has not.** There is no layered config yet — `ResolvedConfig` is assembled from flags — so there is no winning layer to name. Exits 2 naming `10-config-layers.md`.
-- [ ] Implement; both support `--json`.
+- [x] **Failing test first.** `explain::permissions_names_rule_layer_file` — output contains the rule, the layer, the file and the line. ~~**Not landed: plan 07 task 10 has not.**~~ **It had, and the note was stale.** `PolicyEngine::explain` shipped with plan 07; what actually kept this unbuilt was duller — `orrery-cli` did not depend on `orrery-policy` at all. The command reads the call in the **rule grammar** (`read(./src/main.rs)`, `net(domain: docs.rs)`), which is the spelling `PendingCall::match_text` prints, so what a person types to ask is what they read back in the audit.
+- [x] `explain::config_names_the_winning_layer` (plan 10 task 7). ~~**Not landed: plan 10 has not.**~~ **Stale as well: plan 10 landed 2026-09-18.** The command resolves the five layers with `orrery_config::resolve` and prints `ResolvedConfig::explain` — the winner **and** what it shadowed, because naming only the winner is how somebody spends an afternoon editing a file that is not in force.
+- [x] Implement; both support `--json`. *(One JSON object on one line each. Neither command builds a kernel, a store or a provider: explaining a rule has to work in a checkout with no key in sight, and `tests/explain.rs` runs exactly that — sandboxed `HOME`, no `--provider`.)*
+
+**Decided while implementing: an untrusted workspace says so, on stderr.** A
+person running either command in a workspace whose own `.orrery/config.toml` is
+not in force gets one stderr line saying why; an answer that silently ignores
+the file in front of them is worse than no answer. stdout is untouched.
 
 ### Task 7 · `ext` and `session`
 
@@ -185,21 +191,23 @@ Files: `src/cmd/{ext,session}.rs`
 
 - [x] **Failing test first.** `ext::test_runs_without_a_model` — `orrery ext test` on a fixture extension passes with no network and no provider (plan 06 task 8). *(Plus `ext::a_broken_manifest_is_usage`: exit 2 naming the file, never a panic.)*
 - [x] `ext::list_shows_the_ledger` — ~~including `degraded` and `skipped` entries with reasons.~~ **Amended: `ok` and `degraded` with reasons; `skipped` is not producible here.** `ext list` reports every first-party extension this build compiled in, run through `orrery_ext_api::testing::missing` — the same function the real host calls — so a degraded line says the words a session would. `Skipped` is a *loader* state (a deny rule, a disabled extension), and reaching it needs the policy engine, which means a session, which means a model. When `ext list` can take a live session's ledger (plan 07's `query extensions`), `skipped` comes with it.
-- [ ] `session::list_and_show`. **Blocked, and not on this plan:** `SessionStore` has `open(id)` and no way to enumerate sessions, so `session list` has nothing to call. Plan 02 owns adding it; `session show` is a `materialise` away once it exists.
+- [x] `session::list_and_show`. ~~**Blocked, and not on this plan:**~~ **True, and unblocked by building it.** `SessionStore` really did have no enumeration, so `list_sessions` landed on the trait with this command — id, workspace, profile, `created_at` and turn count, newest first — implemented in `orrery-ext-session-sqlite` as one correlated subquery, with `conformance::sessions_can_be_enumerated` making every backend provide it. `session show` is the `materialise` it was always going to be. `tests/session.rs` runs both against history the binary itself wrote from a fixture stream.
+- [ ] `session rm`. **Blocked, and not on this plan:** there is no delete on `SessionStore`, and plan 02 open question 2 parks retention for the config phase — with the rule that it must drop whole sessions rather than trim turns inside one. The flag and the `--yes` rule are in the tree and in the committed help; the command exits 2 naming that file and that reason, which `cli::session_rm_names_the_missing_piece` asserts.
 - [x] Implement.
 
 ### Task 8 · `replay`, `ledger`, `telemetry`
 
 Files: `src/cmd/{replay,ledger}.rs`
 
-- [ ] **Failing test first.** `replay::renders_a_past_session` — replay into the json renderer and diff against the original event stream. **Not landed, and it needs plan 02 first.** `SessionStore::events_since` exists, but the sqlite backend writes exactly one event per turn (`turn.settled`); the rich stream a client sees is produced by the encoder at the hub and is not persisted. Replaying it would mean re-encoding the turn rows, which is plan 08 open question 3's "cold replay re-encodes" — decided there, unbuilt. Exits 2 naming this file.
-- [ ] Implement; `ledger` and `telemetry` are `query` frames rendered as tables. **Not landed: the `query` frame has no handler** (`KernelControl` refuses it by name), and the audit stream plan 07 writes has no reader. Both exit 2 naming `07-policy-broker-audit.md`.
+- [ ] **Failing test first.** `replay::renders_a_past_session` — replay into the json renderer and diff against the original event stream. **Not landed, and re-checked this wave: still true, but the owner was misnamed.** It does not need plan 02 — plan 02 has landed and `SessionStore::events_since` is there. What is missing is that the sqlite backend writes exactly one event per turn (`turn.settled`), while the rich stream a client sees is produced by the encoder at the hub and is not persisted. Replaying it would mean re-encoding the turn rows, which is plan 08 open question 3's "cold replay re-encodes" — decided there, unbuilt. Exits 2 naming this file.
+- [ ] Implement; `ledger` and `telemetry` are `query` frames rendered as tables. **Not landed, re-checked: the `query` frame still has no handler** (`KernelControl` refuses it by name), and the audit stream plan 07 writes has no reader. Both exit 2 naming `07-policy-broker-audit.md`.
 
 ### Task 9 · `init`, `import`, `eval`
 
 Files: `src/cmd/{init,import,eval}.rs`
 
-- [ ] Thin wrappers over plans 10 and 16. Each with one smoke test. **Not landed: there is nothing to wrap.** Plan 10 (config layers, `init`, `import`) and plan 16 (the eval runner) are both unlanded, and a wrapper over nothing is a command that lies. All four are in the tree and exit 2 naming their plan, which `cli::unimplemented_subcommands_name_their_plan` asserts.
+- [x] Thin wrappers over plan 10. ~~**Not landed: there is nothing to wrap.**~~ **Stale for `init` and `import`: plan 10 landed.** `orrery init` writes `<workspace>/.orrery/config.toml` from `orrery_config::import::init`, shorthands expanded so the file says what it does, and **refuses to overwrite** one that is already there. `orrery import --from claude-code|codex` finds the foreign file (workspace first, then the home directory), maps it, and prints the config on **stdout** with every unmapped note on **stderr** — so `orrery import --from codex > .orrery/config.toml` writes a file that parses and nothing is dropped in silence. `tests/init.rs` covers all four paths.
+- [ ] `orrery eval`. **Blocked, and re-checked rather than inherited: `orrery-eval` is still a stub.** In the tree, exits 2 naming `16-eval-runner.md`.
 
 ### Task 10 · Terminal hygiene
 
@@ -213,9 +221,9 @@ Files: `src/term.rs`
 
 ## Done when
 
-- `cargo test -p orrery-cli` green; `--help` snapshots committed. *(33 tests: 10
-  unit, and `cli`, `json`, `exit_codes`, `serve`, `ext` as integration suites.
-  26 snapshots under `tests/snapshots/`.)*
+- `cargo test -p orrery-cli` green; `--help` snapshots committed. *(13 unit
+  tests, and `cli`, `json`, `exit_codes`, `serve`, `ext`, `explain`, `init` and
+  `session` as integration suites. 26 snapshots under `tests/snapshots/`.)*
 - `orrery run -p "…"` completes a real turn with a real tool call.
   *(`json::completes_a_turn_with_a_tool_call`, the phase-1 acceptance criterion,
   and `json::the_tool_call_really_happened`, which checks the bytes in
@@ -249,8 +257,9 @@ Files: `src/term.rs`
 
 ## State
 
-**Tasks 1–5, 7 (`ext`) and 10 are done; 6, 8, 9 and `session list|show` are
-not, and each says against itself which unlanded plan it is waiting for.** The
+**Tasks 1–7, task 9's `init` and `import`, and task 10 are done; task 8,
+`orrery eval` and `session rm` are not, and each says against itself what it is
+waiting for and why.** The
 harness is runnable: `orrery run -p "…"` completes a turn end to end against the
 fixture provider with a real tool call, `--json` emits AG-UI frames on a clean
 stdout, `orrery serve` prints endpoints that `attach` and `ORRERY_ENDPOINT` both
@@ -271,11 +280,18 @@ Two things worth knowing beyond the tasks:
   the run id in `RUN_STARTED` is the CLI's, because `Kernel::run_turn` mints a
   `TurnId` it never hands out.
 
-Known limits, each with its owner: no
-session enumeration on `SessionStore` (plan 02); no `explain` on the policy
-engine (plan 07); no layered config, so no selectable provider other than the
-fixture and no `NeedsLogin` from a flag (plan 10); no persisted rich event
-stream, so no `replay` (plans 02/08); no eval runner (plan 16).
+Known limits, each with its owner: no passive subscribe over HTTP (plan 08); no
+**delete** on `SessionStore`, so no `session rm` (plan 02, open question 2); no
+persisted rich event stream and no `query` handler, so no `replay` and no
+`ledger`/`telemetry` (plans 02/07/08); no eval runner (plan 16); and no
+selectable provider other than the fixture, so no `NeedsLogin` from a flag.
+
+**Three limits listed here were no longer true, which is the point of writing
+them down.** The policy engine had grown `explain`, the layered config had
+landed, and `SessionStore` could be taught to enumerate. What actually kept
+tasks 6, 7 and 9 unbuilt was narrower and duller than the plans they blamed:
+`orrery-cli` did not depend on `orrery-config` or `orrery-policy` at all. A
+blocker is worth re-reading before it is quoted.
 
 ## Open questions
 

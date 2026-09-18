@@ -231,6 +231,35 @@ Files: `orrery-ext-session-sqlite/orrery.toml`
 
 ---
 
+### Task 10 · Enumeration
+
+Files: `orrery-session/src/{trait,turn,conformance}.rs`,
+`orrery-ext-session-sqlite/src/{lib,read}.rs`
+
+**Added 2026-09-18, by plan 17.** `SessionStore` had `open(id)` and no way to
+ask *which* sessions exist, so `orrery session list` had nothing to call. This
+plan owns the trait, so the method landed here rather than in the CLI.
+
+- [x] **Failing test first.** `conformance::sessions_can_be_enumerated` — every
+  field a listing prints is asserted: id, workspace, profile, `created_at` and
+  the turn count across every branch, newest first. It failed against both
+  backends before either implemented it.
+- [x] `list_sessions` on the trait, returning `SessionSummary`.
+- [x] Implement it in `orrery-ext-session-sqlite`: one statement, with the turn
+  count as a correlated subquery rather than a second round trip.
+
+**The default implementation refuses, and refusing fails conformance.** The
+method has a default that returns `SessionError::Backend` purely so an in-test
+fake in `orrery-orchestrator` — a crate that wave did not own — kept
+compiling. It is not a conformant implementation and cannot be one; delete the
+default once that fake implements the method.
+
+**Deleting is still not here.** `session rm` needs a delete, and open question 2
+parks retention for the config phase; enumeration is a read and does not
+prejudge it.
+
+---
+
 ## Done when
 
 - `cargo test -p orrery-session` and `cargo test -p orrery-ext-session-sqlite` are green.

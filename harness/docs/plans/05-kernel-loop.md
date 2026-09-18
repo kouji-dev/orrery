@@ -325,10 +325,14 @@ Files: `src/turn.rs`
   behavioural suites run under `-p orrery-harness`, for the dependency reason
   under **File structure**.
 - ~~`orrery run -p "list the files here"` (plan 17) completes a real turn with a
-  real tool call against a real provider.~~ **Amended: not true, and not
-  reachable from here.** Plan 17 owns the `orrery run` command and has not
-  landed, and "a real provider" means an API key and a network request, which
-  this phase is not allowed to make. What is true, and is what
+  real tool call against a real provider.~~ **Amended twice. (1) Not reachable from
+  here; (2) the half that said `orrery run` does not exist is now stale.**
+  Plan 17 owns the `orrery run` command and it has **landed**:
+  `orrery run -p "…"` completes a real turn with a real tool call today, and
+  `orrery-cli`'s `json::completes_a_turn_with_a_tool_call` asserts it. What
+  stays true is the other half — "a real provider" means an API key and a
+  network request, which this phase is not allowed to make, so the turn runs
+  against the fixture provider. What is true, and is what
   `end_to_end::one_turn_with_a_tool_call` asserts: a `Harness` built from a
   config - fixture provider, sqlite store, builtin tool bundle - completes one
   turn whose transcript reads user -> assistant(tool_use) -> tool_result ->

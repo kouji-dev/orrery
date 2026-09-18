@@ -181,7 +181,7 @@ Files: `src/profile.rs`, `tests/profile.rs`
 Files: `src/explain.rs`
 
 - [x] **Failing test first.** `explain::prints_value_layer_and_file` — for a key set in two layers, the explanation names the winner and the shadowed one.
-- [x] Implement. The CLI surface is plan 17.
+- [x] Implement. The CLI surface is plan 17, and it **landed**: `orrery config explain <key>` prints the winner and the shadowed values, with `--json`.
 
 ### Task 8 · `init` and `import`
 
@@ -202,8 +202,11 @@ Files: `src/import.rs`, `tests/import.rs`
 - ~~`orrery config explain <key>` names the layer and the file.~~ **Amended:**
   `orrery_config::explain` names the layer, the file, the line *and* the
   shadowed value, and `ResolvedConfig::explain` answers for a resolved session.
-  There is no `orrery config` **command**: the CLI surface is plan 17's and
-  `orrery-cli` is still a stub, so nothing here can type that line at a shell.
+  ~~There is no `orrery config` **command**: the CLI surface is plan 17's and
+  `orrery-cli` is still a stub, so nothing here can type that line at a shell.~~
+  **Stale, corrected 2026-09-18: `orrery config explain <key>` exists**, prints
+  the winning layer, the file, the line and what it shadowed, and takes
+  `--json`. `orrery init` and `orrery import` are wired to task 8 as well.
 - ~~Two profiles produce measurably different agents from one binary.~~
   **Amended:** `review` and `ci` produce measurably different *assembled
   agents* — different model, different visible tool set, `review` denied a
@@ -212,9 +215,13 @@ Files: `src/import.rs`, `tests/import.rs`
   kernel. **The caveat holds; its reason was wrong and is corrected here:**
   `orrery-kernel` is **plan 05**'s, not plan 03's, and it is not an empty stub —
   it landed in wave 3 with a working loop. Nothing here feeds a profile to it,
-  because wiring config to the kernel is the CLI's job and `orrery-cli` is still
-  a stub (plan 17). `Assembled` is exactly the set of inputs a kernel takes, and
-  that is still all this plan claims.
+  because wiring config to the kernel is the CLI's job. **Half of that is now
+  stale: `orrery-cli` is not a stub** — it runs turns, serves and attaches, and
+  it resolves these layers for `config explain`, `permissions explain` and
+  `init`. What it does *not* yet do is build the kernel from a profile: it still
+  assembles one from flags, so the provider is the fixture one. `Assembled` is
+  exactly the set of inputs a kernel takes, and that is still all this plan
+  claims.
 - A Claude Code settings file imports into working rules. **True** —
   `import::claude_code_permissions` round-trips a real-shaped fixture through a
   real `PolicyEngine` and checks the verdicts.
