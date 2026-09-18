@@ -13,3 +13,27 @@ publish = false
 # nothing else changes. See harness/extensions/README.md.
 [dependencies]
 orrery-ext-api = { version = "0.1", path = "../../../core/crates/orrery-ext-api" }
+orrery-proto = { workspace = true }
+async-trait = { workspace = true }
+globset = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+# The four named tests are tests *of the broker* — a ceiling that bounds peak
+# memory, a write that reverts on cancel, a child whose grandchild dies with it.
+# Against a stub they would be assertions about the stub, so the real one is a
+# dev-dependency and the rig in `tests/common` wires it to the real policy
+# engine.
+[dev-dependencies]
+orrery-broker = { path = "../../../core/crates/orrery-broker" }
+orrery-policy = { workspace = true }
+orrery-tools = { path = "../../../core/crates/orrery-tools" }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+tokio-util = { workspace = true }
+
+# `bash_is_contained` needs a real process tree to kill. `cargo test` builds
+# examples, so the test finds this beside its own binary.
+[[example]]
+name = "contain_probe"

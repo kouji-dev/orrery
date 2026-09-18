@@ -232,24 +232,23 @@ Files: `orrery-host/src/native.rs`
 - [x] `native::manifest_is_the_same_shape` — the builtin bundle's `orrery.toml` parses with the same parser a third-party one does.
 - [x] Implement registration (a `NativeRegistry` the facade fills behind cargo features).
 
-### Task 4 · The builtin tool bundle — **DEFERRED to the next wave**
+### Task 4 · The builtin tool bundle
 
 Files: `orrery-ext-tools-builtin/src/*`
 
-> Every test in this task is a test *of the broker*: an output ceiling that
-> bounds peak memory, a write that reverts on cancel, a child whose grandchild
-> dies with it. `orrery-broker` (plan 07) is being written concurrently, and
-> against a stubbed broker these four assertions would be assertions about the
-> stub. The crate's scaffolded `orrery.toml` and `src/lib.rs` are left in place;
-> `orrery-host`'s `native::manifest_is_the_same_shape` already parses that
-> manifest, so the bundle's contract is under test even though its code is not
-> written.
+> Deferred out of wave 2 and **landed in wave 3**, for the reason it was
+> deferred: every test in this task is a test *of the broker* — an output
+> ceiling that bounds peak memory, a write that reverts on cancel, a child
+> whose grandchild dies with it — and against a stubbed broker those four
+> assertions would have been assertions about the stub. `orrery-broker` landed
+> first, so the rig in `tests/common/mod.rs` wires the real policy engine to
+> the real `LocalBroker` and the assertions mean what they say.
 
-- [ ] **Failing test first.** `builtin::read_respects_the_output_ceiling` — a 10 MB file with a 4 KB ceiling returns `Outcome::Truncated`, and (the important half) **peak memory stays bounded** — assert via a counting reader that no more than the ceiling plus a small buffer was ever read.
-- [ ] `builtin::write_is_atomic` — cancel mid-write; the original file is intact and no temp file remains.
-- [ ] `builtin::bash_is_contained` — a child that spawns a grandchild; kill the call; assert both are gone (Job Object on Windows, process group on unix).
-- [ ] `builtin::grep_streams` — a large tree, a ceiling, bounded memory.
-- [ ] Implement all six tools, each declaring its `ToolDef` schema and `atomic` flag.
+- [x] **Failing test first.** `builtin::read_respects_the_output_ceiling` — a 10 MB file with a 4 KB ceiling returns `Outcome::Truncated`, and (the important half) **peak memory stays bounded** — assert via a counting reader that no more than the ceiling plus a small buffer was ever read.
+- [x] `builtin::write_is_atomic` — cancel mid-write; the original file is intact and no temp file remains.
+- [x] `builtin::bash_is_contained` — a child that spawns a grandchild; kill the call; assert both are gone (Job Object on Windows, process group on unix).
+- [x] `builtin::grep_streams` — a large tree, a ceiling, bounded memory.
+- [x] Implement all six tools, each declaring its `ToolDef` schema and `atomic` flag.
 
 ### Task 5 · JSON-RPC
 
@@ -305,10 +304,12 @@ Files: `extensions/node/ext-sdk/*`
 
 ## Done when
 
-- `cargo test -p orrery-ext-api -p orrery-host -p orrery-jsonrpc -p orrery-host-rpc` green
-  (`-p orrery-ext-tools-builtin` waits on the broker; see Task 4).
+- `cargo test -p orrery-ext-api -p orrery-host -p orrery-jsonrpc -p orrery-host-rpc -p orrery-ext-tools-builtin` green.
 - Two extensions claiming `search` coexist as `a.search` and `b.search`; unloading one leaves the session alive.
-- `builtin.read` on a huge file demonstrably does not buffer it.
+- `builtin.read` on a huge file demonstrably does not buffer it —
+  `builtin::read_respects_the_output_ceiling` reads 10 MB under a 4 KB ceiling
+  and asserts, through `LimitedReader`'s own pull counter, that no more than the
+  ceiling plus one 8 KB buffer was ever pulled from the file.
 - `orrery ext test` runs an extension with no model and no network.
 
 ## Open questions
@@ -357,4 +358,26 @@ Files: `extensions/node/ext-sdk/*`
 
 Two rules ended up in the table rather than in a runtime, because they must be the same for all four: `disabled_by_grant` (one answer to "is this granted", so a `native` tool is never offered where a `node` one is hidden) and the transport rule — **a runtime that dies mid-call degrades its extension and settles the call `Failed`; the session lives.**
 
-**Not done here:** the builtin tool bundle (Task 4, waiting on `orrery-broker`), the node SDK and its worked example (Task 9), and wiring `orrery ext test` to a command (plan 17 owns the command; the harness it calls is in `orrery-ext-api::testing` and is under test).
+**Not done here:** the node SDK and its worked example (Task 9), and wiring `orrery ext test` to a command (plan 17 owns the command; the harness it calls is in `orrery-ext-api::testing` and is under test).
+
+**Landed (2026-09-18, wave 3).** Task 4. `orrery-ext-tools-builtin` implements
+all six tools against `BrokerFacade` and nothing else — no `File`, no `Command`,
+no `read_to_end` — and its six tests run them over the real `LocalBroker` behind
+a real `PolicyEngine`. `bash_is_contained` starts a child that starts a
+grandchild and asserts the beacon the grandchild was appending to stops growing
+once the call's wall clock runs out, which is the job object doing what a
+`Child::kill` could not.
+
+Two things the task revealed and did not fix, both written into the crate's
+module docs rather than left to be rediscovered:
+
+- **`BrokerFacade` has no directory listing.** `grep` and `glob` therefore
+  discover *names* with `std::fs::read_dir` and read every *byte* through the
+  broker. A `list` method would close it and is a non-breaking addition under
+  `orrery-ext/1` (open question 3 above).
+- **The facade is table-wide, not per-call.** `ExtensionTable` holds one
+  `Arc<dyn BrokerFacade>` for every call it serves, so a broker cannot see the
+  `CallId` or the cancel token of the call reaching it — which is why
+  `write_is_atomic` builds a facade per call. Production wiring wants the same
+  thing: a `for_call(call, cancel)` factory, or a `CallCtx` that carries its own
+  broker.
