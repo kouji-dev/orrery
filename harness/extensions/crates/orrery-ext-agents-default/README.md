@@ -32,3 +32,24 @@ Implementation plan:
 [`harness/docs/plans/11-router-roles-orchestrator.md`](../../../docs/plans/11-router-roles-orchestrator.md).
 
 See [`orrery.toml`](orrery.toml) for what it provides and what it requires.
+
+## What it asks for, and why
+
+**Nothing.** `[requires]` is empty. Agents are declarations — a model class, a
+prompt, a budget, a tool allow-list — and a declaration reads no file and runs no
+program. Every effect happens later, in the tools a step is allowed, under that
+step's own grant.
+
+That emptiness is worth noticing: it is what lets this bundle load under a grant
+that denies everything, and it is why replacing the planner cannot widen anyone's
+access.
+
+## Tests
+
+```
+cargo test -p orrery-ext-agents-default
+```
+
+The suite runs against the mock broker in `orrery-ext-api::testing` — the same
+harness `orrery ext test` gives a community author, and the same one a third
+party would use on their own agent bundle.

@@ -33,3 +33,25 @@ Implementation plan:
 [`harness/docs/plans/16-eval-runner.md`](../../../docs/plans/16-eval-runner.md).
 
 See [`orrery.toml`](orrery.toml) for what it provides and what it requires.
+
+## What it asks for, and why
+
+| Capability | Why |
+|---|---|
+| `spawn = ["*"]` | A command grader runs whatever the eval names — `pytest`, `cargo test`, a shell script. The set cannot be known here, so it is asked for wide and **narrowed by the suite's own policy**, which does know. |
+| `read = ["$WORKSPACE/**"]` | An assertion grader reads the artefacts it is grading: the files the run produced. |
+
+`spawn = ["*"]` is the widest request in this tree and it is asked for openly
+rather than smuggled: an eval that does not want it denies it, the command grader
+is disabled, and the assertion and model graders keep working. That is what
+per-tool `requires` is for.
+
+## Tests
+
+```
+cargo test -p orrery-ext-graders
+```
+
+Through the mock broker: a command's exit code becomes a verdict, an assertion
+reads what the run wrote, and the model grader **replays a committed fixture**.
+No model is called and no network is touched.

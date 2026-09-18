@@ -35,3 +35,24 @@ Turning it on is an embedder's decision: `orrery-harness` would carry a
 
 See [`orrery.toml`](orrery.toml) for what it provides and what it requires, and
 [`harness/docs/plans/12-memory.md`](../../../docs/plans/12-memory.md) for the design.
+
+## What it asks for, and why
+
+| Capability | Why |
+|---|---|
+| `read = ["$STATE/memory/**"]` | It reads the notes it wrote. |
+| `write = ["$STATE/memory/**"]` | It writes them. |
+
+Both are scoped to **one directory inside the harness's own state**, not to the
+workspace. A memory extension that could read `$WORKSPACE/**` would be a way to
+exfiltrate a repository one note at a time; this one cannot see your code at
+all.
+
+## Tests
+
+```
+cargo test -p orrery-ext-memory-file
+```
+
+Write, recall and eviction order, all through the mock broker — so a path it
+would be refused in a real session is refused in the test too.

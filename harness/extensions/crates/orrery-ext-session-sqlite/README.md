@@ -39,3 +39,13 @@ cargo test -p orrery-ext-session-sqlite
 | `tests/crash.rs` | A real child process (`examples/crash_child.rs`) is killed mid-run — `TerminateProcess` on Windows — and the reopened database has every acknowledged turn, at most one unacknowledged one missing, and still materialises. |
 
 Implementation plan: [`harness/docs/plans/02-session-store.md`](../../../docs/plans/02-session-store.md).
+
+## What it asks for, and why
+
+| Capability | Why |
+|---|---|
+| `read = ["$STATE/**"]` | The database, its WAL and its shared-memory file live there. |
+| `write = ["$STATE/**"]` | Appending a turn writes all three. |
+
+Scoped to the harness's own state directory, not the workspace: a session store
+that could read your repository would be storing it.

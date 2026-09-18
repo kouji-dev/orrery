@@ -41,3 +41,25 @@ a third-party one cannot. The smallest worked example is
 
 See [`orrery.toml`](orrery.toml) for what it provides and what it requires.
 Implementation plan: [`harness/docs/plans/03-provider-layer.md`](../../../docs/plans/03-provider-layer.md).
+
+## What it asks for, and why
+
+| Capability | Why |
+|---|---|
+| `net = ["https://api.anthropic.com/**"]` | One host. A provider that asked for `net = true` could be pointed anywhere by a config change; this one cannot. |
+| `creds = ["anthropic"]` | The key arrives from the broker by name at the moment of the call. It is never read from disk, from config or from this crate's own memory, and it never reaches the transcript. |
+
+**This crate is off by default.** `orrery-harness`'s `anthropic` feature is not in
+the default set: it pulls a TLS stack in, and nothing in this repository's tests
+may reach the network.
+
+## Tests
+
+```
+cargo test -p orrery-ext-provider-anthropic
+```
+
+Six files, and **not one of them makes a request**. The SSE parser is fed
+committed byte streams, the request builder is asserted against committed JSON,
+and rate limits and cancellation are driven through a stub. There is no API key in
+this repository and no test needs one.

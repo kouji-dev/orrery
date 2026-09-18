@@ -71,3 +71,25 @@ cargo build --release --target wasm32-wasip2
 ```
 
 WASI **p2**. p3 is a later migration; see plan 14.
+
+## What it asks for, and why
+
+**Nothing.** This crate ships no `orrery.toml`: it is the guest-side SDK an
+extension is *written with*, not an extension itself. What the guest may do is
+whatever the manifest of the component built on top of it asks for, and the host
+answers every import against that grant.
+
+## Tests
+
+```
+cargo test -p orrery-guest
+```
+
+The arena builder is tested here, on the host, with no wasm involved
+(`tests/ui.rs`): the author never touches an index, a child always points
+forward from its parent however deep the nesting, a `custom` node carries
+exactly one fallback, and strings are escaped. That the result is a
+component the real host accepts is proved elsewhere, by
+`cargo test -p orrery-host-wasm --test examples` and
+`cargo test -p orrery-harness --test parity`, both of which build
+`extensions/examples/wasm-hello-rs` and run it.

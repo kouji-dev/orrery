@@ -41,3 +41,17 @@ A profile moves or silences any of them without touching this crate:
 
 Implementation plan:
 [`harness/docs/plans/09-surfaces.md`](../../../docs/plans/09-surfaces.md).
+
+## What it asks for, and why
+
+**Nothing.** `[requires]` is empty. A view binds a loop event to a surface
+*description*; it reads no file, runs no program and reaches no host. Some client
+elsewhere decides how to draw it.
+
+## Tests
+
+```
+cargo test -p orrery-ext-views-default
+```
+
+Through the mock broker, like every other extension here.

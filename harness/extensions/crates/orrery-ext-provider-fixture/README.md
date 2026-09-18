@@ -28,3 +28,23 @@ change the five functions, and the harness cannot tell the difference.
 
 See [`orrery.toml`](orrery.toml) for what it provides and what it requires.
 Implementation plan: [`harness/docs/plans/03-provider-layer.md`](../../../docs/plans/03-provider-layer.md).
+
+## What it asks for, and why
+
+| Capability | Why |
+|---|---|
+| `read = ["$WORKSPACE/**"]` | The recorded transcript it replays is a file. |
+
+Nothing else, and in particular **no `net`**. That is what makes this crate the
+one every other test in the repository uses for model work: a fixture provider
+that could reach the network would eventually be pointed at a real model by
+accident, and the bill would arrive before the test did.
+
+## Tests
+
+```
+cargo test -p orrery-ext-provider-fixture
+```
+
+A recorded transcript replays turn for turn, a missing fixture is a clear error
+rather than a silent empty answer, and the stream can be cancelled mid-reply.
