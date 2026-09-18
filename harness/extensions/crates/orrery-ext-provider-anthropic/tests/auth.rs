@@ -54,17 +54,17 @@ async fn missing_key_is_needs_login() {
 #[tokio::test]
 async fn a_present_key_is_ready() {
     let store: Arc<dyn CredStore> = Arc::new(MemoryCredStore::default());
-    store.put("anthropic", "sk-ant-test").expect("stored");
+    store.put("anthropic", "sk-ant-test").await.expect("stored");
     let auth = ApiKeyAuth::new("anthropic", store);
     assert!(matches!(
         auth.state().await.expect("state"),
         AuthState::Ready { .. }
     ));
     assert!(auth.methods().contains(&AuthMethod::ApiKey));
-    assert!(
-        auth.methods().contains(&AuthMethod::OAuth),
-        "the variant exists even though the flow does not"
-    );
+    // OAuth is `oauth::DeviceCodeAuth`, a `ProviderAuth` of its own, and
+    // `tests/oauth.rs` is where it is exercised. This half offers one method
+    // and says so, rather than advertising a flow it does not run.
+    assert!(!auth.methods().contains(&AuthMethod::OAuth));
 }
 
 #[tokio::test]
@@ -77,7 +77,7 @@ async fn login_asks_for_the_key_and_stores_it() {
         .expect("login");
     assert!(matches!(state, AuthState::Ready { .. }));
     assert_eq!(
-        store.get("anthropic").expect("read").as_deref(),
+        store.get("anthropic").await.expect("read").as_deref(),
         Some("sk-ant-typed")
     );
 }
@@ -103,7 +103,7 @@ async fn an_empty_answer_is_rejected() {
 #[tokio::test]
 async fn refresh_is_idempotent_and_logout_forgets() {
     let store: Arc<dyn CredStore> = Arc::new(MemoryCredStore::default());
-    store.put("anthropic", "sk-ant-test").expect("stored");
+    store.put("anthropic", "sk-ant-test").await.expect("stored");
     let auth = ApiKeyAuth::new("anthropic", Arc::clone(&store));
 
     let (a, b) = tokio::join!(auth.refresh(), auth.refresh());

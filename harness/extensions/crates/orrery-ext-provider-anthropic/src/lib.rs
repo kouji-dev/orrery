@@ -21,6 +21,7 @@
 
 pub mod auth;
 pub mod map;
+pub mod oauth;
 pub mod request;
 pub mod sse;
 
@@ -42,7 +43,11 @@ use crate::sse::SseParser;
 /// The API version header this client speaks.
 const API_VERSION: &str = "2023-06-01";
 /// The grant this provider asks the broker for.
-const GRANT: &str = "anthropic";
+pub const GRANT: &str = "anthropic";
+
+/// The manifest this extension ships, parsed by the same parser a third
+/// party's is.
+pub const MANIFEST: &str = include_str!("../orrery.toml");
 
 /// Anthropic's Messages API.
 #[derive(Clone)]
@@ -126,11 +131,6 @@ impl Provider for AnthropicProvider {
             Ok(b) => b,
             Err(e) => return Box::pin(futures_util::stream::once(async move { Err(e) })),
         };
-        let key = match self.auth.key() {
-            Ok(k) => k,
-            Err(e) => return Box::pin(futures_util::stream::once(async move { Err(e) })),
-        };
-
         let (tx, rx) = mpsc::channel(32);
         // A *child* token, so that dropping the stream cancels the request even
         // when the caller's own token is still live. The guard below is what
@@ -140,7 +140,18 @@ impl Provider for AnthropicProvider {
         let client = self.client.clone();
         let url = format!("{}/v1/messages", self.base_url);
 
+        // The key is fetched **inside** the task, not before it: reading a
+        // credential is a broker call, so it is async, and doing it here would
+        // make `stream` async and stop the kernel holding `Arc<dyn Provider>`.
+        let auth = Arc::clone(&self.auth);
         tokio::spawn(async move {
+            let key = match auth.key().await {
+                Ok(k) => k,
+                Err(e) => {
+                    let _ = tx.send(Err(e)).await;
+                    return;
+                }
+            };
             pump(client, url, key, body, child, tx).await;
         });
 

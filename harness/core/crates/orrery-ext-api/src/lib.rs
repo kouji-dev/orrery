@@ -18,6 +18,7 @@
 //! - [`sink`] — the other nine core-surface builders on `ctx.ui`, so every
 //!   surface in the vocabulary is reachable from the published crate.
 //! - [`broker`] — the only door out of an extension. Implemented in plan 07.
+//! - [`creds`] — the `creds` grant as a store, shared by every provider.
 //! - [`ledger`] — what loaded, degraded, failed or was skipped.
 //! - [`testing`] — the harness `orrery ext test` runs.
 //! - [`view`] — binding loop events to surfaces: what an extension contributes
@@ -33,6 +34,7 @@
 #![forbid(unsafe_code)]
 
 pub mod broker;
+pub mod creds;
 pub mod ctx;
 pub mod error;
 pub mod instance;
@@ -48,6 +50,7 @@ pub use broker::{
     ListRequest, Listing, NetRequest, NetResponse, ReadChunk, ReadRequest, SharedBroker,
     SpawnOutput, SpawnRequest, WriteRequest,
 };
+pub use creds::{BrokerCredStore, CredStore, EnvCredStore, MemoryCredStore};
 pub use ctx::{CallCtx, SurfaceEmit, SurfaceLog, SurfaceSink, ToolBudget};
 pub use error::HostError;
 pub use instance::{Generation, InstanceState};

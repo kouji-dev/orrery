@@ -97,6 +97,20 @@ pub enum BrokerCall {
         /// Whether the grants covered it.
         allowed: bool,
     },
+    /// A credential write — what a login flow does when it has a token.
+    StoreCredential {
+        /// Which credential.
+        name: String,
+        /// Whether the grants covered it.
+        allowed: bool,
+    },
+    /// A credential being forgotten — what `logout` does.
+    ForgetCredential {
+        /// Which credential.
+        name: String,
+        /// Whether the grants covered it.
+        allowed: bool,
+    },
 }
 
 /// A broker that grants exactly what a test says and records everything.
@@ -310,6 +324,36 @@ impl BrokerFacade for MockBroker {
                 message: format!("the test declared no credential `{name}`"),
             })
     }
+
+    async fn store_credential(&self, name: &str, secret: &str) -> BrokerResult<()> {
+        let allowed = self.allows(Aspect::Creds, name);
+        self.record(BrokerCall::StoreCredential {
+            name: name.to_owned(),
+            allowed,
+        });
+        self.check(Aspect::Creds, name)?;
+        self.creds.lock().insert(name.to_owned(), secret.to_owned());
+        Ok(())
+    }
+
+    async fn forget_credential(&self, name: &str) -> BrokerResult<()> {
+        let allowed = self.allows(Aspect::Creds, name);
+        self.record(BrokerCall::ForgetCredential {
+            name: name.to_owned(),
+            allowed,
+        });
+        self.check(Aspect::Creds, name)?;
+        self.creds.lock().remove(name);
+        Ok(())
+    }
+
+    async fn has_credential(&self, name: &str) -> BrokerResult<bool> {
+        // Deliberately **not** recorded: asking whether a name exists is what
+        // `state()` does on every turn, and a ledger full of it would bury the
+        // reads that matter.
+        self.check(Aspect::Creds, name)?;
+        Ok(self.creds.lock().contains_key(name))
+    }
 }
 
 /// One extension, loaded the way a test session loads it.
@@ -418,6 +462,18 @@ impl TestHarness {
 /// refusal, at the same [`LoadStage`](orrery_proto::LoadStage), the host gives.
 pub fn load_for_test(manifest: &str, grants: &[&str]) -> Result<TestHarness, ManifestError> {
     let manifest = ExtensionManifest::from_toml_str(manifest, "orrery.toml")?;
+    Ok(load_parsed_for_test(manifest, grants))
+}
+
+/// The same, for a manifest that is already parsed.
+///
+/// A **compiled-in** bundle has no `orrery.toml` anywhere on disk: its manifest
+/// is a value its own Rust code returns. Without this, `orrery ext test builtin`
+/// has nothing to hand [`load_for_test`] and the one runtime that ships in every
+/// build is the one runtime the test harness cannot reach — which would make
+/// `native` a back door after all.
+#[must_use]
+pub fn load_parsed_for_test(manifest: ExtensionManifest, grants: &[&str]) -> TestHarness {
     let grants: Vec<Capability> = grants.iter().copied().map(parse_grant).collect();
 
     let problems = missing(&manifest, &grants);
@@ -437,12 +493,12 @@ pub fn load_for_test(manifest: &str, grants: &[&str]) -> Result<TestHarness, Man
         }
     };
 
-    Ok(TestHarness {
+    TestHarness {
         manifest: Arc::new(manifest),
         broker: Arc::new(MockBroker::new(grants)),
         surfaces: SurfaceLog::default(),
         outcome,
-    })
+    }
 }
 
 /// Load an extension's manifest from disk against a set of grants.

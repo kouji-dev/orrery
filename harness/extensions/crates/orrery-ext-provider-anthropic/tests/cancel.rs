@@ -76,9 +76,9 @@ fn request() -> ModelRequest {
     )
 }
 
-fn provider(base_url: String) -> AnthropicProvider {
+async fn provider(base_url: String) -> AnthropicProvider {
     let store: Arc<dyn CredStore> = Arc::new(MemoryCredStore::default());
-    store.put("anthropic", "sk-ant-test").expect("stored");
+    store.put("anthropic", "sk-ant-test").await.expect("stored");
     AnthropicProvider::new(store).with_base_url(base_url)
 }
 
@@ -86,7 +86,7 @@ fn provider(base_url: String) -> AnthropicProvider {
 async fn drops_the_body() {
     let (base_url, closed) = never_ending_server().await;
     let cancel = CancellationToken::new();
-    let mut stream = provider(base_url).stream(request(), cancel.clone());
+    let mut stream = provider(base_url).await.stream(request(), cancel.clone());
 
     // The response opened: we are past the headers and into a body that will
     // never finish on its own.
@@ -126,7 +126,7 @@ async fn drops_the_body() {
 #[tokio::test]
 async fn dropping_the_stream_also_closes_it() {
     let (base_url, closed) = never_ending_server().await;
-    let mut stream = provider(base_url).stream(request(), CancellationToken::new());
+    let mut stream = provider(base_url).await.stream(request(), CancellationToken::new());
     let _ = tokio::time::timeout(Duration::from_secs(10), stream.next())
         .await
         .expect("the server answered");

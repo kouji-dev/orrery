@@ -371,7 +371,47 @@ pub trait BrokerFacade: Send + Sync {
     }
 
     /// Read a named credential. The value never reaches the transcript.
+    ///
+    /// A broker that holds no such name answers [`BrokerError::Io`], which
+    /// `CredStore::get` turns into `Ok(None)`: "there is none" and "you may not
+    /// have this" are different answers and stay different.
     async fn credential(&self, name: &str) -> BrokerResult<String> {
+        let _ = name;
+        Err(BrokerError::Unsupported {
+            what: "credentials",
+        })
+    }
+
+    /// Write a named credential, creating or replacing it.
+    ///
+    /// Added under `orrery-ext/1` with a default body, which is not a breaking
+    /// change (plan 06, open question 3). It is what a login flow persists a
+    /// token with: without it an extension would have to pick its own file,
+    /// outside the `creds` grant and outside the ledger.
+    async fn store_credential(&self, name: &str, secret: &str) -> BrokerResult<()> {
+        let _ = (name, secret);
+        Err(BrokerError::Unsupported {
+            what: "storing a credential",
+        })
+    }
+
+    /// Forget a named credential. What `logout` does.
+    async fn forget_credential(&self, name: &str) -> BrokerResult<()> {
+        let _ = name;
+        Err(BrokerError::Unsupported {
+            what: "forgetting a credential",
+        })
+    }
+
+    /// Whether a name is known. **Not** whether its value is anything in
+    /// particular.
+    ///
+    /// This is how a provider answers "am I signed in?" without reading a
+    /// secret it does not need. A broker whose store cannot be read at all
+    /// still answers this one, which is what keeps
+    /// [`AuthState`](orrery_provider::AuthState) honest on a keychain that
+    /// hands nothing back.
+    async fn has_credential(&self, name: &str) -> BrokerResult<bool> {
         let _ = name;
         Err(BrokerError::Unsupported {
             what: "credentials",
@@ -413,6 +453,18 @@ impl BrokerFacade for DeniesEverything {
     }
 
     async fn credential(&self, name: &str) -> BrokerResult<String> {
+        Err(BrokerError::denied_aspect(Aspect::Creds, name))
+    }
+
+    async fn store_credential(&self, name: &str, _secret: &str) -> BrokerResult<()> {
+        Err(BrokerError::denied_aspect(Aspect::Creds, name))
+    }
+
+    async fn forget_credential(&self, name: &str) -> BrokerResult<()> {
+        Err(BrokerError::denied_aspect(Aspect::Creds, name))
+    }
+
+    async fn has_credential(&self, name: &str) -> BrokerResult<bool> {
         Err(BrokerError::denied_aspect(Aspect::Creds, name))
     }
 }

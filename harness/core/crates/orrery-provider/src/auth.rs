@@ -15,7 +15,8 @@ use crate::error::ProviderError;
 pub enum AuthMethod {
     /// A long-lived key held in the credential broker under a named grant.
     ApiKey,
-    /// A device-code or browser flow. Phase 5.
+    /// A device-code flow: the person types a short code on a page the
+    /// provider names, and the flow polls until they have.
     OAuth,
 }
 
@@ -44,6 +45,30 @@ pub enum AuthState {
     },
     /// There was a credential and it has run out.
     Expired,
+    /// A device-code login is running and is waiting on the person.
+    ///
+    /// The variant carries everything a client needs to draw the wait, because
+    /// the alternative is each client inventing its own: the code to type, the
+    /// page to type it on, when it stops being valid, and how often the flow is
+    /// polling. `login` returns this only when it is handed back before the
+    /// person finished — a flow that runs to completion returns
+    /// [`AuthState::Ready`].
+    Pending {
+        /// What the person types at [`verification_uri`](Self::Pending::verification_uri).
+        user_code: String,
+        /// Where they type it.
+        verification_uri: String,
+        /// The same page with the code already filled in, when the provider
+        /// offers one. A client shows this as the link and keeps `user_code`
+        /// visible anyway, because the two can be opened on different devices.
+        verification_uri_complete: Option<String>,
+        /// Unix seconds at which the code stops working.
+        expires_at: u64,
+        /// How long the flow waits between polls, as the **server** stated it.
+        /// A client that draws a countdown draws this one, so what it shows and
+        /// what the flow does cannot drift.
+        interval_secs: u64,
+    },
 }
 
 /// The client's side of a login: one question, one answer.
