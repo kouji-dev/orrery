@@ -33,6 +33,7 @@ pub mod load;
 pub mod message;
 pub mod scope;
 pub mod surface;
+pub mod tool;
 pub mod verdict;
 
 pub use budget::{Budget, BudgetKind, TokenBudget, Usage};
@@ -53,4 +54,5 @@ pub use surface::{
     Cell, Choice, DiffLine, DiffLineKind, Field, FieldKind, Hunk, StackDir, Status, Surface,
     SurfaceError, SurfaceKind, SurfacePatch, TaskItem, TextStyle, TreeNode,
 };
+pub use tool::ToolDescriptor;
 pub use verdict::Verdict;

@@ -21,6 +21,7 @@ fn tool() -> ToolDescriptor {
         name: "builtin.read".to_owned(),
         description: "Read a file".to_owned(),
         input_schema: serde_json::json!({ "type": "object" }),
+        atomic: false,
     }
 }
 

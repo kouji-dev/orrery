@@ -12,6 +12,7 @@
     "request",
     "surface",
     "surface_patch",
+    "tool_descriptor",
     "usage"
   ],
   "properties": {
@@ -38,6 +39,9 @@
     },
     "surface_patch": {
       "$ref": "#/definitions/SurfacePatch"
+    },
+    "tool_descriptor": {
+      "$ref": "#/definitions/ToolDescriptor"
     },
     "usage": {
       "$ref": "#/definitions/Usage"
@@ -2876,6 +2880,33 @@
           ]
         }
       ]
+    },
+    "ToolDescriptor": {
+      "description": "One tool, as it appears in a model request.\n\nA wire type, and therefore this crate's: the registry produces it from [`AgentScope`](crate::AgentScope), a provider serialises it into the prompt, and the model is shown it. Both sides naming the same struct is what stops the two halves drifting — there used to be a copy in `orrery-provider` and a second in `orrery-tools`, with no conversion between them.\n\nIt is produced only by `Registry::visible`, so the list the model sees is a real subset of what exists rather than a promise in a prompt.",
+      "type": "object",
+      "required": [
+        "atomic",
+        "description",
+        "input_schema",
+        "name"
+      ],
+      "properties": {
+        "atomic": {
+          "description": "Whether the tool's effect is all-or-nothing.",
+          "type": "boolean"
+        },
+        "description": {
+          "description": "What it does, in the model's context window.",
+          "type": "string"
+        },
+        "input_schema": {
+          "description": "JSON Schema for the input. Validated at the dispatch boundary, never by the provider."
+        },
+        "name": {
+          "description": "The form the model should emit: the short name where it is unambiguous within this scope, the full `ext.name` where it is not.",
+          "type": "string"
+        }
+      }
     },
     "ToolRef": {
       "type": "string",

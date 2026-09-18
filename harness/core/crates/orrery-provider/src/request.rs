@@ -2,24 +2,7 @@
 
 use std::sync::Arc;
 
-use orrery_proto::Message;
-use serde::{Deserialize, Serialize};
-
-/// A tool as the *model* sees it.
-///
-/// The same shape plan 04's registry produces from `visible(scope)`. It is
-/// declared here rather than in `orrery-tools` so that a provider crate — which
-/// has no business knowing about dispatch, budgets or policy — can be built
-/// against the provider crate alone. `orrery-tools` converts into it.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ToolDescriptor {
-    /// The form the model should emit, `<ext>.<name>`.
-    pub name: String,
-    /// What it does, in the model's context window.
-    pub description: String,
-    /// JSON Schema. Validated at the dispatch boundary, not here.
-    pub input_schema: serde_json::Value,
-}
+use orrery_proto::{Message, ToolDescriptor};
 
 /// One model call.
 ///

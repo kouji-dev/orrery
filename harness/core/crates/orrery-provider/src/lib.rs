@@ -34,4 +34,5 @@ pub use counter::{HeuristicCounter, TokenCounter};
 pub use error::ProviderError;
 pub use event::{ModelEvent, StopReason};
 pub use provider::{Capabilities, Provider};
-pub use request::{ModelRequest, ToolDescriptor};
+pub use orrery_proto::ToolDescriptor;
+pub use request::ModelRequest;

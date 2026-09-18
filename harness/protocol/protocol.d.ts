@@ -863,6 +863,7 @@ export interface Protocol {
   request: Request;
   surface: Surface;
   surface_patch: SurfacePatch;
+  tool_descriptor: ToolDescriptor;
   usage: Usage;
   [k: string]: unknown;
 }
@@ -1192,5 +1193,33 @@ export interface UserInput {
    * What they typed.
    */
   text: string;
+  [k: string]: unknown;
+}
+/**
+ * One tool, as it appears in a model request.
+ *
+ * A wire type, and therefore this crate's: the registry produces it from [`AgentScope`](crate::AgentScope), a provider serialises it into the prompt, and the model is shown it. Both sides naming the same struct is what stops the two halves drifting — there used to be a copy in `orrery-provider` and a second in `orrery-tools`, with no conversion between them.
+ *
+ * It is produced only by `Registry::visible`, so the list the model sees is a real subset of what exists rather than a promise in a prompt.
+ */
+export interface ToolDescriptor {
+  /**
+   * Whether the tool's effect is all-or-nothing.
+   */
+  atomic: boolean;
+  /**
+   * What it does, in the model's context window.
+   */
+  description: string;
+  /**
+   * JSON Schema for the input. Validated at the dispatch boundary, never by the provider.
+   */
+  input_schema: {
+    [k: string]: unknown;
+  };
+  /**
+   * The form the model should emit: the short name where it is unambiguous within this scope, the full `ext.name` where it is not.
+   */
+  name: string;
   [k: string]: unknown;
 }

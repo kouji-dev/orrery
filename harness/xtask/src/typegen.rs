@@ -13,7 +13,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use orrery_proto::{
-    Budget, Event, Grant, LoadOutcome, Message, Request, Surface, SurfacePatch, Usage,
+    Budget, Event, Grant, LoadOutcome, Message, Request, Surface, SurfacePatch, ToolDescriptor,
+    Usage,
 };
 
 /// The version of the TypeScript emitter, pinned.
@@ -45,6 +46,7 @@ struct Protocol {
     usage: Usage,
     message: Message,
     load_outcome: LoadOutcome,
+    tool_descriptor: ToolDescriptor,
 }
 
 /// The file names written into `harness/protocol`.

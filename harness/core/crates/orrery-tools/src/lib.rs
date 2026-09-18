@@ -22,7 +22,6 @@
 #![forbid(unsafe_code)]
 
 pub mod budget;
-pub mod descriptor;
 pub mod dispatch;
 pub mod error;
 pub mod registry;
@@ -30,7 +29,7 @@ pub mod resolve;
 pub mod visible;
 
 pub use budget::ToolBudget;
-pub use descriptor::ToolDescriptor;
+pub use orrery_proto::ToolDescriptor;
 pub use dispatch::{
     AllowAll, CallCtx, PolicyCheck, PolicyDecision, ToolHost, ToolInterceptor, UnavailableHost,
 };

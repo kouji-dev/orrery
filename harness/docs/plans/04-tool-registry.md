@@ -67,6 +67,8 @@ This is what makes a sub-agent's tool list real. It intersects:
 and returns them in a **stable order** — registration order within a layer, layers in precedence order. Never a `HashMap` iteration.
 
 ```rust
+// Defined in orrery-proto (see plan 01, task 11); re-exported here and from
+// orrery-provider, so both halves name the same struct.
 pub struct ToolDescriptor {
     pub name: String,              // the form the model should emit
     pub description: String,

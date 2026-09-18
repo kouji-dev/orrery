@@ -329,9 +329,13 @@ Three shapes departed from the sketch above, each for a reason worth keeping:
 - **`ToolCallAccumulator::feed` returns `Option<Result<CompletedToolCall, _>>`.** The
   plan asks for `Option<CompletedToolCall>` and, two lines later, for malformed JSON to
   be an error rather than a panic. There is nowhere else for that error to go.
-- **`ToolDescriptor` lives in `orrery-provider`**, not in plan 04's `orrery-tools`. A
-  provider crate has no business depending on dispatch, policy and budgets to name the
-  three fields a model is shown. The registry converts into it.
+- **`ToolDescriptor` lives in `orrery-proto`.** It was first declared here, in
+  `orrery-provider`, on the reasoning that a provider crate has no business depending
+  on dispatch, policy and budgets to name the fields a model is shown — but plan 04
+  then declared its own copy, with no conversion between the two. Both are gone:
+  proto owns the one definition, `orrery-provider` and `orrery-tools` re-export it,
+  and the registry constructs it directly. It is a wire type — the model is shown it
+  — so it lands in `protocol.d.ts` with the rest.
 
 ## Done when
 
