@@ -719,6 +719,13 @@ app-menu-panel {
   top: 0;
   width: 0;
   height: 0;
+  /* THE HOST CARRIES THE ELEVATION, not just the panel inside it. A fixed box
+     is its own stacking context, so .menu-panel's z-index is resolved INSIDE
+     this host and cannot lift the menu over a z-indexed sibling elsewhere in
+     the pane — the diff's action bar (z-index: 3) swallowed the clicks of a
+     menu opened near the bottom of the file list. Same 80 as the panel, so the
+     two agree wherever a menu is nested. */
+  z-index: 80;
 }
 /* .menu-panel = .popover + the menu's own layout. The surface declarations are
    repeated in the selector list above rather than required at the call site,
@@ -914,6 +921,103 @@ kj-button.menu-item,
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+}
+
+/* Resizable master-detail split: side column | handle | body. The width is
+   set inline by the host (it persists the preference); this recipe only fixes
+   the shape, so every diff surface — working tree, commit, compare — resizes
+   the same way. */
+.diff-grid {
+  flex: 1;
+  display: grid;
+  min-height: 0;
+}
+
+/* ----- the drag handle (app-pane-resizer) ----- */
+.pane-resizer {
+  position: relative;
+  cursor: col-resize;
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+  border-right: 1px solid var(--hair);
+  touch-action: none;
+}
+.pane-resizer .grip {
+  width: 1px;
+  height: var(--ctl-h);
+  border-radius: 1px;
+  background: var(--hair-2);
+  transition: background 0.13s ease, box-shadow 0.13s ease;
+}
+.pane-resizer:hover .grip,
+.pane-resizer:focus-visible .grip,
+.pane-resizer.dragging .grip {
+  background: var(--ui-fill);
+  box-shadow: 0 0 0 1px var(--ui-sel);
+}
+.pane-resizer:focus-visible {
+  outline: none;
+}
+/* While a handle is dragged, the whole window is in the gesture: no text
+   selection, no I-beam when the pointer outruns the column. */
+body.col-resizing,
+body.col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* ----- changed-file rows (app-diff-file-list, Tree and Flat) -----
+   ONE row recipe for both view modes — same height (density-scaled via
+   --row-h), so Tree and Flat read as the same list, compact to comfy.
+   Margin / radius / cursor / hover / selected all come from .list-row. */
+.diff-file,
+.diff-dir {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--row-h);
+  cursor: pointer;
+}
+.diff-file {
+  padding: 0 var(--sp-5);
+}
+.diff-dir {
+  padding: 0 var(--sp-4);
+}
+.diff-file .fname {
+  flex: 0 1 auto;
+}
+.diff-file .fdir {
+  flex: 1 1 auto;
+  font-size: var(--fs-meta);
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diff-dir .dname {
+  flex: 0 1 auto;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A fully-deleted folder reads like its files: dim + struck through, never red
+   (locked rule). */
+.diff-dir.gone .dname {
+  color: var(--ink-4);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.diff-file .counts-chip,
+.diff-dir .counts-chip {
+  flex: none;
+  margin-left: auto;
+}
+.diff-dir .counts-chip {
+  opacity: 0.75;
 }
 
 /* The accent SELECTED skin — a tinted ground plus the accent ink and ring.

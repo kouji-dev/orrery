@@ -63,7 +63,7 @@ test("right-clicking a file row opens the same 4 actions as the file tree", asyn
 
 test("the menu is file-scoped — right-clicking the header opens nothing", async ({ page }) => {
   await openCommitDiffWithFile(page);
-  await page.locator("app-diff-file-list").getByText("Files in commit", { exact: false }).click({ button: "right" });
+  await page.locator("app-diff-file-list .pane-head").click({ button: "right" });
   await expect(page.locator(".menu-panel")).toHaveCount(0);
 });
 

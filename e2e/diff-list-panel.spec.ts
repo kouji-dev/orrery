@@ -95,6 +95,6 @@ test("the list width defaults to 300 and a resize persists across a relaunch", a
   expect(await columns()).toMatch(/^432px /);
 
   // double-click on the separator resets to the default
-  await page.locator(".diff-resizer").dblclick();
+  await page.locator("app-pane-resizer").first().dblclick();
   expect(await columns()).toMatch(/^300px /);
 });

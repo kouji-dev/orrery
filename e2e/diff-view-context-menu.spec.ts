@@ -175,9 +175,12 @@ test("Delete confirms first, then removes the file", async ({ page }) => {
   await openDiff(page, "flat");
   await row(page, "report.html").click({ button: "right" });
   await menu(page).getByRole("button", { name: "Delete" }).click();
-  await expect(menu(page)).toContainText("Delete report.html?");
-  // the confirm step, not the trigger — the menu swapped its body
-  await menu(page).getByRole("button", { name: "Delete", exact: true }).click();
+
+  // the confirm step is kouji's <kj-confirm-popup>, portalled OUT of the menu.
+  // Its content host is display:contents (no box), so assert on the message and
+  // press the action slot's button.
+  await expect(page.locator("kj-confirm-popup-message:visible")).toContainText("report.html");
+  await page.locator("kj-confirm-popup-action button:visible").click();
 
   await expect(menu(page)).toHaveCount(0);
   expect(await calls(page)).toContainEqual({
@@ -190,8 +193,10 @@ test("deleting a folder says so — it takes the contents with it", async ({ pag
   await openDiff(page, "tree");
   await dirRow(page, "src").click({ button: "right" });
   await menu(page).getByRole("button", { name: "Delete" }).click();
-  await expect(menu(page)).toContainText("Delete src and its contents?");
-  await menu(page).getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.locator("kj-confirm-popup-message:visible")).toContainText(
+    "Delete src and its contents?",
+  );
+  await page.locator("kj-confirm-popup-action button:visible").click();
 
   expect(await calls(page)).toContainEqual({
     command: "file_delete",

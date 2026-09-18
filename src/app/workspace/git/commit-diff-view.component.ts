@@ -14,8 +14,7 @@ import { AgentWorkStore } from "../../agents/agent-work.store";
 import { IconComponent } from "../../shared/icon.component";
 import { AuthorAvatarComponent } from "../../shared/git/author-avatar.component";
 import { ShaChipComponent } from "../../shared/git/sha-chip.component";
-import { DiffFileListComponent } from "./diff-file-list.component";
-import { DiffOrBlameComponent } from "./diff-or-blame.component";
+import { DiffSplitComponent } from "./diff-split.component";
 
 /** Unix-seconds → compact "X ago" label. */
 function relTime(when: number): string {
@@ -38,7 +37,7 @@ function relTime(when: number): string {
  *
  * Layout:
  *  - CommitContextHeader: commit message + author avatar/name + sha chip + "committed Xago"
- *  - 232px | 1fr grid: DiffFileList (left) + DiffOrBlame (right, lazy per-file load)
+ *  - `<app-diff-split>`: the shared, resizable file list + per-file diff pane
  *
  * File list is loaded on `agent`/`sha` change. Per-file diff is loaded lazily on selection.
  */
@@ -49,8 +48,7 @@ function relTime(when: number): string {
     IconComponent,
     AuthorAvatarComponent,
     ShaChipComponent,
-    DiffFileListComponent,
-    DiffOrBlameComponent,
+    DiffSplitComponent,
   ],
   template: `
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;background:var(--panel-2)">
@@ -73,41 +71,21 @@ function relTime(when: number): string {
         }
       </div>
 
-      <!-- ---- body: 232px file list | 1fr diff/blame ---- -->
-      <div style="flex:1;display:grid;grid-template-columns:232px 1fr;min-height:0">
+      <!-- ---- body: the shared file list | diff/blame split ---- -->
+      <app-diff-split
+        [agent]="agent()"
+        [files]="commitFiles()"
+        title="Files"
+        [selPath]="selPath()"
+        [diff]="selDiff()"
+        [add]="selFile()?.add ?? null"
+        [del]="selFile()?.del ?? null"
+        [oldRev]="sha() + '^'"
+        [newRev]="sha()"
+        [loading]="filesLoadable().status === 'loading'"
+        (select)="onSelect($event)"
+      />
 
-        <!-- left: changed-files list -->
-        <app-diff-file-list
-          style="min-height:0;border-right:1px solid var(--hair);background:var(--panel)"
-          [agent]="agent()"
-          [files]="commitFiles()"
-          [selPath]="selPath()"
-          title="Files in commit"
-          (select)="onSelect($event)"
-        />
-
-        <!-- right: diff or blame -->
-        @if (selPath(); as path) {
-          <app-diff-or-blame
-            [agent]="agent().id"
-            [path]="path"
-            [diff]="selDiff()"
-            [add]="selFile()?.add ?? null"
-            [del]="selFile()?.del ?? null"
-            [oldRev]="sha() + '^'"
-            [newRev]="sha()"
-          />
-        } @else {
-          <div class="pane-empty" style="background:var(--bg)">
-            @if (filesLoadable().status === 'loading') {
-              loading…
-            } @else {
-              select a file
-            }
-          </div>
-        }
-
-      </div>
     </div>
   `,
 })
