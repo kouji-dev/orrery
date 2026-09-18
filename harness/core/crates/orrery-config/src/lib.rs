@@ -25,6 +25,7 @@
 
 pub mod discover;
 pub mod error;
+pub mod explain;
 pub mod layer;
 pub mod merge;
 pub mod profile;
@@ -42,6 +43,7 @@ pub use discover::{
     Status, Walk,
 };
 pub use error::ConfigError;
+pub use explain::Explanation;
 pub use layer::{CONFIG_DIR, CONFIG_FILE, ConfigPaths, LayerFile};
 pub use merge::{IgnoredClaim, MergeReport, Relaxation};
 pub use profile::{AgentDef, Assembled, Profile, Shorthand};
@@ -177,6 +179,12 @@ impl ResolvedConfig {
     /// When a rule does not parse or a pattern does not compile.
     pub fn assemble(&self) -> Result<Assembled, ConfigError> {
         profile::assemble(&self.profile, &self.root, &self.layers)
+    }
+
+    /// Where one key's value came from, and what it beat.
+    #[must_use]
+    pub fn explain(&self, key: &str) -> Explanation {
+        explain::explain(&self.values, key)
     }
 
     /// The startup steps, in the order they ran.
