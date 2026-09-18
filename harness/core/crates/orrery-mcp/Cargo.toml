@@ -1,6 +1,6 @@
 [package]
 name = "orrery-mcp"
-version = "0.0.0"
+version = "0.1.0"
 description = "The MCP client and server: an MCP server is an extension id like any other."
 edition.workspace = true
 rust-version.workspace = true
@@ -8,4 +8,31 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+# A conformant MCP server over stdio, so `client::real_server_works_unmodified`
+# drives the real protocol. Nothing in the test suite may reach the network, so
+# it is written to the published spec and committed rather than fetched.
+[[bin]]
+name = "orrery-mcp-fixture-server"
+path = "tests/fixtures/server/main.rs"
+test = false
+doc = false
+
 [dependencies]
+orrery-proto = { workspace = true }
+orrery-audit = { workspace = true }
+orrery-policy = { workspace = true }
+orrery-broker = { workspace = true }
+orrery-tools = { workspace = true }
+orrery-jsonrpc = { path = "../orrery-jsonrpc" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+tokio = { workspace = true, features = ["process", "net", "io-util", "sync", "time", "macros"] }
+tokio-util = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "process"] }
+tempfile = { workspace = true }
