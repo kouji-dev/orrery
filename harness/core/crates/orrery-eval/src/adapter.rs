@@ -322,8 +322,21 @@ impl ExternalRunner {
         })
     }
 
-    /// Point the adapter at one particular binary, PATH or no PATH. This is how
-    /// a test drives a fake agent.
+    /// An adapter over a binary that is already located.
+    ///
+    /// No PATH lookup: this is how a pinned install is driven, and how a test
+    /// drives a fake agent without installing one.
+    #[must_use]
+    pub fn at(spec: AdapterSpec, store: Arc<dyn SessionStore>, program: impl Into<PathBuf>) -> Self {
+        Self {
+            spec,
+            store,
+            program: program.into(),
+            timeout_ms: 120_000,
+        }
+    }
+
+    /// Point an existing adapter at a different binary.
     #[must_use]
     pub fn with_program(mut self, program: impl Into<PathBuf>) -> Self {
         self.program = program.into();
