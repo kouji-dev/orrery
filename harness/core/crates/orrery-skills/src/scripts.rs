@@ -39,14 +39,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::error::SkillError;
+use crate::scope::SkillRef;
 use orrery_audit::Audit;
 use orrery_broker::{Broker, SpawnSpec};
 use orrery_policy::{Decision, PendingCall, PolicyEngine};
 use orrery_proto::{AgentScope, CallId, Grant, RuleId, Subject};
 use orrery_tools::ToolBudget;
 use serde::{Deserialize, Serialize};
-use crate::error::SkillError;
-use crate::scope::SkillRef;
 
 /// The subject a skill's scripts act as.
 ///
@@ -251,7 +251,9 @@ impl ScriptRunner {
         let (plain, requested) = split_effects(&String::from_utf8_lossy(&output.stdout));
         let mut effects = Vec::with_capacity(requested.len());
         for effect in requested {
-            let outcome = self.broker_effect(skill, &effect, &subject, &scope, call).await;
+            let outcome = self
+                .broker_effect(skill, &effect, &subject, &scope, call)
+                .await;
             effects.push(EffectRecord { effect, outcome });
         }
 
@@ -286,9 +288,11 @@ impl ScriptRunner {
         call: CallId,
     ) -> EffectOutcome {
         let Effect::Write { path, contents } = effect;
-        let decision = self
-            .engine
-            .check(&PendingCall::write(path.clone()).in_call(call), subject, scope);
+        let decision = self.engine.check(
+            &PendingCall::write(path.clone()).in_call(call),
+            subject,
+            scope,
+        );
         let Decision::Allow { token, .. } = decision else {
             let outcome = EffectOutcome::Denied {
                 rule: decision.rule(),
@@ -371,10 +375,7 @@ fn reason_of(decision: &Decision) -> String {
 /// The directory a skill's scripts live in, for a caller that has only a path.
 #[must_use]
 pub fn scripts_dir(skill_md: &Path) -> PathBuf {
-    skill_md
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join("scripts")
+    skill_md.parent().unwrap_or(Path::new(".")).join("scripts")
 }
 
 #[cfg(test)]

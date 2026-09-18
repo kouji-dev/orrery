@@ -62,10 +62,7 @@ impl SkillSet {
     /// elsewhere is **not in it** — not listed and then refused, simply absent.
     #[must_use]
     pub fn for_agent(&self, agent: &str) -> Vec<&SkillRef> {
-        self.skills
-            .iter()
-            .filter(|s| s.visible_to(agent))
-            .collect()
+        self.skills.iter().filter(|s| s.visible_to(agent)).collect()
     }
 }
 

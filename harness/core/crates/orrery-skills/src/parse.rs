@@ -46,7 +46,7 @@ impl SkillDoc {
     /// A front-matter value by key, whether or not this crate knows it.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&Value> {
-        self.front.get(&Value::from(key))
+        self.front.get(Value::from(key))
     }
 
     /// Render back to `SKILL.md`.
@@ -155,7 +155,7 @@ fn split(text: &str) -> Option<(&str, &str)> {
 /// A string-valued key. YAML scalars that are not strings are rendered rather
 /// than refused: a `name: 2029` is a name somebody wrote, not a parse error.
 fn string(front: &Mapping, key: &str) -> Option<String> {
-    match front.get(&Value::from(key))? {
+    match front.get(Value::from(key))? {
         Value::String(s) => Some(s.clone()),
         Value::Number(n) => Some(n.to_string()),
         Value::Bool(b) => Some(b.to_string()),

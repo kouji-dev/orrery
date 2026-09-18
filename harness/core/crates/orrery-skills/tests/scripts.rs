@@ -51,8 +51,10 @@ fn skill_with_grant(grant: Option<GrantSpec>) -> Skill {
     std::fs::copy(FIXTURE, &script).expect("the fixture binary is built before the test runs");
 
     let doc = orrery_skills::parse::skill_file(dir.join("SKILL.md")).unwrap();
-    let mut settings = SkillSettings::default();
-    settings.grant = grant;
+    let settings = SkillSettings {
+        grant,
+        ..SkillSettings::default()
+    };
     let skill = SkillRef::new(&doc, Layer::Project, &settings);
 
     Skill {
@@ -176,13 +178,7 @@ async fn no_grant_means_no_scripts() {
 
     let err = h
         .runner
-        .run(
-            &fixture.skill,
-            script_name(),
-            &[],
-            &caller(),
-            budget(),
-        )
+        .run(&fixture.skill, script_name(), &[], &caller(), budget())
         .await
         .expect_err("a skill with no grant cannot run scripts at all");
     assert!(matches!(err, SkillError::NoGrant { .. }), "{err}");
@@ -207,7 +203,10 @@ async fn budgeted() {
         .await
         .expect("it started");
 
-    assert!(run.timed_out, "the wall-clock budget must stop it: {run:#?}");
+    assert!(
+        run.timed_out,
+        "the wall-clock budget must stop it: {run:#?}"
+    );
     assert!(run.effects.is_empty());
 }
 

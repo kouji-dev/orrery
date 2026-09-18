@@ -181,9 +181,7 @@ impl McpClient {
         let theirs = raw
             .get("protocolVersion")
             .and_then(Value::as_str)
-            .ok_or_else(|| {
-                McpError::malformed(&self.server, INITIALIZE, "no `protocolVersion`")
-            })?
+            .ok_or_else(|| McpError::malformed(&self.server, INITIALIZE, "no `protocolVersion`"))?
             .to_owned();
         if !SUPPORTED.contains(&theirs.as_str()) {
             return Err(McpError::ProtocolVersion {
@@ -227,9 +225,10 @@ impl McpClient {
     /// [`McpError::Rpc`] or [`McpError::Malformed`].
     pub async fn list_tools(&self) -> Result<Vec<McpTool>, McpError> {
         let raw = self.call(TOOLS_LIST, serde_json::json!({})).await?;
-        let tools = raw.get("tools").cloned().ok_or_else(|| {
-            McpError::malformed(&self.server, TOOLS_LIST, "no `tools` array")
-        })?;
+        let tools = raw
+            .get("tools")
+            .cloned()
+            .ok_or_else(|| McpError::malformed(&self.server, TOOLS_LIST, "no `tools` array"))?;
         serde_json::from_value(tools)
             .map_err(|e| McpError::malformed(&self.server, TOOLS_LIST, e.to_string()))
     }
@@ -253,10 +252,7 @@ impl McpClient {
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default(),
-            is_error: raw
-                .get("isError")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
+            is_error: raw.get("isError").and_then(Value::as_bool).unwrap_or(false),
             raw,
         })
     }

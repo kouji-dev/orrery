@@ -9,8 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
-use orrery_skills::parse::{self, SkillDoc};
 use orrery_skills::SkillError;
+use orrery_skills::parse::{self, SkillDoc};
 
 fn wild(file: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -55,11 +55,7 @@ fn real_skills_from_the_wild() {
             "kouji:analyzer",
             "analyze their LinkedIn profile",
         ),
-        (
-            "docx.SKILL.md",
-            "docx",
-            "manipulate Word documents",
-        ),
+        ("docx.SKILL.md", "docx", "manipulate Word documents"),
     ];
 
     for (file, name, phrase) in table {
@@ -87,18 +83,18 @@ fn unknown_frontmatter_is_preserved() {
 
     assert_eq!(
         doc.front
-            .get(&serde_yaml_ng::Value::from("license"))
+            .get(serde_yaml_ng::Value::from("license"))
             .and_then(serde_yaml_ng::Value::as_str),
         Some("MIT"),
     );
     let metadata = doc
         .front
-        .get(&serde_yaml_ng::Value::from("metadata"))
+        .get(serde_yaml_ng::Value::from("metadata"))
         .and_then(serde_yaml_ng::Value::as_mapping)
         .expect("the nested mapping survived");
     assert_eq!(
         metadata
-            .get(&serde_yaml_ng::Value::from("version"))
+            .get(serde_yaml_ng::Value::from("version"))
             .and_then(serde_yaml_ng::Value::as_str),
         Some("1.0"),
     );
@@ -118,7 +114,7 @@ fn an_unknown_key_alone_is_not_an_error() {
     assert_eq!(doc.name, "x");
     assert!(
         doc.front
-            .contains_key(&serde_yaml_ng::Value::from("something-from-2029")),
+            .contains_key(serde_yaml_ng::Value::from("something-from-2029")),
     );
 }
 

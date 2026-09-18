@@ -36,3 +36,4 @@ tokio-util = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "process"] }
 tempfile = { workspace = true }
+tokio-util = { workspace = true }

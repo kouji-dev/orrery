@@ -179,7 +179,11 @@ pub fn outcome_to_result(outcome: &Outcome) -> Value {
             "content": [text_block(&render(value.as_ref()))],
             "isError": false,
         }),
-        Outcome::Truncated { bytes_emitted, limit, .. } => json!({
+        Outcome::Truncated {
+            bytes_emitted,
+            limit,
+            ..
+        } => json!({
             "content": [text_block(&format!(
                 "the result was cut short at {limit} bytes ({bytes_emitted} produced)"
             ))],

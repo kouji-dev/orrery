@@ -86,16 +86,22 @@ fn main() {
                     "grow" => {
                         grown = true;
                         // Answer first, then tell the client its tool set moved.
-                        send(&mut out, &json!({
-                            "jsonrpc": "2.0",
-                            "id": id,
-                            "result": { "content": [{ "type": "text", "text": "grown" }], "isError": false },
-                        }));
-                        send(&mut out, &json!({
-                            "jsonrpc": "2.0",
-                            "method": "notifications/tools/list_changed",
-                            "params": {},
-                        }));
+                        send(
+                            &mut out,
+                            &json!({
+                                "jsonrpc": "2.0",
+                                "id": id,
+                                "result": { "content": [{ "type": "text", "text": "grown" }], "isError": false },
+                            }),
+                        );
+                        send(
+                            &mut out,
+                            &json!({
+                                "jsonrpc": "2.0",
+                                "method": "notifications/tools/list_changed",
+                                "params": {},
+                            }),
+                        );
                         continue;
                     }
                     "reverse" if grown => {

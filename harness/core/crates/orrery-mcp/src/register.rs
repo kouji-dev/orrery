@@ -17,7 +17,11 @@
 //! grows after the manifest was approved is exactly what the manifest exists to
 //! prevent.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use async_trait::async_trait;
 use orrery_audit::{Audit, AuditEvent};
+use orrery_jsonrpc::Handler;
 use orrery_proto::{ExtId, Layer, Subject, ToolRef};
 use orrery_tools::{PolicyCheck, Registry, ToolSpec};
 
@@ -255,7 +259,9 @@ mod tests {
         let r#ref = tool_ref("jira", "create_issue").unwrap();
         assert_eq!(r#ref.to_string(), "mcp.jira.create_issue");
         assert_eq!(
-            "mcp.jira.create_issue".parse::<orrery_proto::ToolRef>().unwrap(),
+            "mcp.jira.create_issue"
+                .parse::<orrery_proto::ToolRef>()
+                .unwrap(),
             r#ref
         );
     }
@@ -264,5 +270,56 @@ mod tests {
     fn a_name_that_is_not_a_namespace_is_refused_here_not_later() {
         assert!(ext_id("Jira Cloud").is_err());
         assert!(ext_id("a.b").is_err());
+    }
+}
+
+/// Notices `notifications/tools/list_changed` and wakes whoever is watching.
+///
+/// Installed as the connection's [`Handler`] — see
+/// [`Servers::with_handler`](crate::health::Servers::with_handler) — so that a
+/// server announcing a new tool set reaches [`reconcile`] rather than being
+/// discovered the next time somebody happens to list. The notification only
+/// ever *causes* a re-resolution; it never adds a tool by itself.
+#[derive(Debug, Default)]
+pub struct ListChangedWatch {
+    seen: AtomicUsize,
+    notify: tokio::sync::Notify,
+}
+
+impl ListChangedWatch {
+    /// A watch that has seen nothing.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// How many `tools/list_changed` notifications have arrived.
+    #[must_use]
+    pub fn seen(&self) -> usize {
+        self.seen.load(Ordering::SeqCst)
+    }
+
+    /// Wait for the next one.
+    ///
+    /// A notification that arrived before anybody was waiting still wakes the
+    /// next waiter: [`Notify::notify_one`](tokio::sync::Notify::notify_one)
+    /// leaves a permit behind, where `notify_waiters` would have been a race
+    /// nobody could win from the outside.
+    pub async fn changed(&self) {
+        self.notify.notified().await;
+    }
+}
+
+#[async_trait]
+impl Handler for ListChangedWatch {
+    async fn notify(&self, method: &str, _params: serde_json::Value) {
+        if method == crate::client::TOOLS_LIST_CHANGED {
+            self.seen.fetch_add(1, Ordering::SeqCst);
+            tracing::info!(
+                target: "orrery.mcp.register",
+                "an MCP server says its tool set moved; re-resolving against policy"
+            );
+            self.notify.notify_one();
+        }
     }
 }

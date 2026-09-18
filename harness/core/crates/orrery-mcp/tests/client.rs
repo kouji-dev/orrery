@@ -15,9 +15,9 @@
 
 use std::collections::BTreeMap;
 
+use orrery_mcp::McpError;
 use orrery_mcp::client::{McpClient, PROTOCOL_VERSION};
 use orrery_mcp::transport::{self, StdioSpec};
-use orrery_mcp::McpError;
 
 const SERVER: &str = env!("CARGO_BIN_EXE_orrery-mcp-fixture-server");
 
@@ -71,7 +71,10 @@ async fn initialize_handshake() {
     assert!(hello.supports_tool_list_changed);
 
     // And the negotiated version is remembered, so nothing later has to guess.
-    assert_eq!(client.negotiated_version().as_deref(), Some(PROTOCOL_VERSION));
+    assert_eq!(
+        client.negotiated_version().as_deref(),
+        Some(PROTOCOL_VERSION)
+    );
 }
 
 #[tokio::test]
@@ -95,7 +98,10 @@ async fn stdio_is_line_delimited() {
     // reason `orrery-jsonrpc` carries a `LineDelimited` variant at all — so
     // this asserts the constant rather than trusting the connection to have
     // used it.
-    assert_eq!(transport::STDIO_FRAMING, orrery_jsonrpc::Framing::LineDelimited);
+    assert_eq!(
+        transport::STDIO_FRAMING,
+        orrery_jsonrpc::Framing::LineDelimited
+    );
 
     // And it is really what went over the wire: a server that only ever reads
     // whole lines answered us above, and one that had been sent

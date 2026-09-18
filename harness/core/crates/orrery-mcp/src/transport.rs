@@ -201,8 +201,14 @@ pub async fn connect_stdio_with(
 
     let mut child = command.spawn().map_err(|e| fail(e.to_string()))?;
     let stdin = child.stdin.take().ok_or_else(|| fail("no stdin".into()))?;
-    let stdout = child.stdout.take().ok_or_else(|| fail("no stdout".into()))?;
-    let stderr = child.stderr.take().ok_or_else(|| fail("no stderr".into()))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| fail("no stdout".into()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| fail("no stderr".into()))?;
 
     let ring = Arc::new(StderrRing::new(STDERR_TAIL));
     tokio::spawn(orrery_jsonrpc::framing::pump_stderr(stderr, ring.clone()));
@@ -328,7 +334,11 @@ fn parse_body(server: &str, response: &NetResponse) -> Result<Value, McpError> {
             .filter_map(|d| serde_json::from_str::<Value>(d.trim()).ok())
             .next_back();
         return last.ok_or_else(|| {
-            McpError::malformed(server, "POST", "an event stream with no JSON-RPC frame in it")
+            McpError::malformed(
+                server,
+                "POST",
+                "an event stream with no JSON-RPC frame in it",
+            )
         });
     }
 

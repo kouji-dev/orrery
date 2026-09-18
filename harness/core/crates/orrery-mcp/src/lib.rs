@@ -42,5 +42,7 @@ pub use client::{InitializeResult, McpClient, McpTool, PROTOCOL_VERSION, SUPPORT
 pub use error::McpError;
 pub use expose::{McpServerHandle, serve};
 pub use health::{Health, McpHost, ServerSpec, Servers};
-pub use register::{Admission, Reconciliation, ext_id, reconcile, register, tool_ref};
+pub use register::{
+    Admission, ListChangedWatch, Reconciliation, ext_id, reconcile, register, tool_ref,
+};
 pub use transport::{HttpSpec, HttpTransport, StdioSpec, TransportSpec};
