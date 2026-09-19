@@ -79,6 +79,14 @@ impl EventKind {
     pub const TURN_SETTLED: &'static str = "turn.settled";
     /// A surface changed.
     pub const DELTA: &'static str = "delta";
+    /// Where the provider's credentials stand. Part of the floor.
+    ///
+    /// The payload is `orrery_provider::AuthState`'s own serialisation — a
+    /// `state` tag and camelCase fields. This crate does not depend on
+    /// `orrery-provider` and must not: an extension author contributing a view
+    /// sees the JSON, not the enum. The shape is pinned on both sides, here by
+    /// [`floor`]'s binding and there by that crate's own test.
+    pub const AUTH_STATE: &'static str = "auth.state";
 }
 
 impl From<&str> for EventKind {
@@ -433,6 +441,10 @@ pub fn floor() -> Vec<ViewBinding> {
             },
             other => unexpected(other),
         }),
+        ViewBinding::new(EventKind::AUTH_STATE, |event| match event {
+            LoopEvent::Other { payload, .. } => auth_state(payload),
+            other => unexpected(other),
+        }),
         ViewBinding::new(EventKind::ERROR, |event| match event {
             LoopEvent::Frame(frame) => match frame.as_ref() {
                 Event::Error { scope, detail, .. } => error(*scope, detail),
@@ -452,6 +464,7 @@ pub fn floor_kinds() -> Vec<EventKind> {
         EventKind::TOOL_STARTED,
         EventKind::TOOL_SETTLED,
         EventKind::CONSENT_REQUEST,
+        EventKind::AUTH_STATE,
         EventKind::ERROR,
     ]
     .into_iter()
@@ -540,6 +553,91 @@ fn consent(prompt: &ConsentPrompt, deadline_ms: u64) -> Surface {
         default: Some("deny".into()),
         deadline_ms: Some(deadline_ms),
     })
+}
+
+/// A provider's credential state, drawn from the data rather than from prose.
+///
+/// The one that earns this binding is `pending`: a device-code login has a code
+/// to type, a page to type it on, a deadline and a poll interval, and every one
+/// of those is a field. A client that had to scrape them out of a sentence
+/// would get a different answer per client, which is the failure §6.7 exists to
+/// prevent.
+///
+/// An unrecognised `state` still renders — the tag, plainly — because a
+/// renderer that draws nothing for a state it has not been taught is
+/// indistinguishable from a harness that is simply stuck.
+fn auth_state(payload: &serde_json::Value) -> Surface {
+    let str_field = |name: &str| {
+        payload
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    match payload.get("state").and_then(serde_json::Value::as_str) {
+        Some("pending") => {
+            let code = str_field("userCode");
+            let uri = str_field("verificationUri");
+            let complete = payload
+                .get("verificationUriComplete")
+                .and_then(serde_json::Value::as_str);
+            let mut children = vec![
+                styled(format!("Enter the code {code}"), TextStyle::Emphasis),
+                styled(uri, TextStyle::Muted),
+            ];
+            if let Some(complete) = complete {
+                children.push(styled(complete.to_owned(), TextStyle::Muted));
+            }
+            if let Some(interval) = payload.get("intervalSecs").and_then(serde_json::Value::as_u64)
+            {
+                // The interval the *server* stated, so a countdown a client
+                // draws and the polling the flow does cannot drift.
+                children.push(styled(
+                    format!("checking every {interval}s"),
+                    TextStyle::Muted,
+                ));
+            }
+            let mut surface = Surface::new(SurfaceKind::Stack {
+                dir: orrery_proto::StackDir::Column,
+                title: Some("Sign in".to_owned()),
+                collapsed: false,
+                children,
+            });
+            surface.status = Some(Status::Running);
+            surface
+        }
+        Some("needs-login") => {
+            let mut surface = styled(str_field("reason"), TextStyle::Warning);
+            surface.status = Some(Status::Failed);
+            surface
+        }
+        Some("expired") => {
+            let mut surface = styled("the credential has expired", TextStyle::Warning);
+            surface.status = Some(Status::Failed);
+            surface
+        }
+        Some("ready") => {
+            let account = str_field("account");
+            let mut surface = styled(
+                if account.is_empty() {
+                    "signed in".to_owned()
+                } else {
+                    format!("signed in as {account}")
+                },
+                TextStyle::Success,
+            );
+            surface.status = Some(Status::Done);
+            surface
+        }
+        Some("anonymous") => styled("no credential needed", TextStyle::Muted),
+        other => styled(
+            format!(
+                "auth state `{}`: this client has no renderer for it",
+                other.unwrap_or("?")
+            ),
+            TextStyle::Muted,
+        ),
+    }
 }
 
 fn error(scope: ErrorScope, detail: &ErrorDetail) -> Surface {

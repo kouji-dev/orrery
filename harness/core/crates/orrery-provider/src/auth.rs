@@ -21,8 +21,18 @@ pub enum AuthMethod {
 }
 
 /// Where a provider's credentials stand.
+///
+/// # It is serialised, because a client has to draw it
+///
+/// The `auth.state` view binding (`orrery-ext-api`'s §6.7 floor) renders this
+/// from **data**: the tag below is the wire contract between this enum and that
+/// renderer, which is why the shape is pinned by a test in this file rather
+/// than left to whatever serde happened to emit. Before this, the only consumer
+/// was the kernel's refusal string, so a device-code login could only reach a
+/// person as prose somebody had scraped.
 #[non_exhaustive]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "state", rename_all = "kebab-case", rename_all_fields = "camelCase")]
 pub enum AuthState {
     /// No credential is configured, and none is needed.
     Anonymous,
@@ -123,4 +133,43 @@ pub trait ProviderAuth: Send + Sync {
     ///
     /// Only for a broker that could not be reached.
     async fn logout(&self) -> Result<(), ProviderError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AuthState;
+
+    /// The wire shape the `auth.state` view binding reads. A rename here
+    /// without a rename there would leave a client drawing "nothing to show"
+    /// for a login prompt, which is exactly the failure this pins.
+    #[test]
+    fn the_tagged_shape_is_the_contract() {
+        let pending = AuthState::Pending {
+            user_code: "WDJB-MJHT".to_owned(),
+            verification_uri: "https://example.test/device".to_owned(),
+            verification_uri_complete: None,
+            expires_at: 1_800,
+            interval_secs: 5,
+        };
+        let value = serde_json::to_value(&pending).expect("it serialises");
+        assert_eq!(value["state"], "pending");
+        assert_eq!(value["userCode"], "WDJB-MJHT");
+        assert_eq!(value["verificationUri"], "https://example.test/device");
+        assert_eq!(value["intervalSecs"], 5);
+
+        assert_eq!(
+            serde_json::to_value(AuthState::NeedsLogin {
+                reason: "no key".to_owned()
+            })
+            .expect("it serialises")["state"],
+            "needs-login"
+        );
+        assert_eq!(
+            serde_json::to_value(AuthState::Anonymous).expect("it serialises")["state"],
+            "anonymous"
+        );
+
+        let back: AuthState = serde_json::from_value(value).expect("it round-trips");
+        assert_eq!(back, pending);
+    }
 }

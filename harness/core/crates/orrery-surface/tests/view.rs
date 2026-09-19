@@ -96,9 +96,23 @@ fn unbound_is_hidden() {
     );
 }
 
-/// With zero configuration, assistant text, tool started and settled, consent
-/// and errors all render. A client showing nothing until configured is broken
-/// rather than minimal.
+/// A device-code login waiting on the person, as `AuthState` serialises it.
+fn auth_state() -> LoopEvent {
+    LoopEvent::Other {
+        kind: orrery_ext_api::EventKind::AUTH_STATE.into(),
+        payload: serde_json::json!({
+            "state": "pending",
+            "userCode": "WDJB-MJHT",
+            "verificationUri": "https://example.test/device",
+            "expiresAt": 1_800,
+            "intervalSecs": 5,
+        }),
+    }
+}
+
+/// With zero configuration, assistant text, tool started and settled, consent,
+/// the provider's auth state and errors all render. A client showing nothing
+/// until configured is broken rather than minimal.
 #[test]
 fn floor_is_always_bound() {
     let registry = floor_registry();
@@ -111,6 +125,7 @@ fn floor_is_always_bound() {
         tool_started(),
         tool_settled(Outcome::ok()),
         consent_request(),
+        auth_state(),
         error_event(),
     ];
     assert_eq!(

@@ -112,3 +112,28 @@ fn ext_test_runs_a_first_party_manifest_with_no_model_and_no_network() {
     assert!(text.contains("no model, no network"), "{text}");
     assert!(text.contains("git"), "{text}");
 }
+
+/// The floor the binary ships includes a renderer for the provider's auth
+/// state — the one §6.7 event that had a rich typed variant and no binding.
+///
+/// Driven through `ext list` rather than the library, because "the binding
+/// exists" and "the binding is in the product" were different claims for every
+/// other item in this file.
+#[test]
+fn the_shipped_floor_can_draw_a_login_prompt() {
+    let listed = stdout(&["ext", "list"]);
+    let line = listed
+        .lines()
+        .find(|l| l.starts_with("views-default  "))
+        .expect("the floor is a compiled-in bundle");
+    for view in [
+        "assistant.text",
+        "tool.started",
+        "tool.settled",
+        "consent.request",
+        "auth.state",
+        "error",
+    ] {
+        assert!(line.contains(view), "`{view}` missing from: {line}");
+    }
+}
