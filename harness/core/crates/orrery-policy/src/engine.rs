@@ -376,10 +376,14 @@ pub struct PolicyEngine {
 
 impl PolicyEngine {
     /// An engine over a rule set.
+    ///
+    /// Takes a [`ResolvedRules`] or an `Arc` of one, so a composition root that
+    /// resolved the rules once — and hands the *same* set to `permissions
+    /// explain` and to the kernel — does not have to compile them twice.
     #[must_use]
-    pub fn new(rules: ResolvedRules) -> Self {
+    pub fn new(rules: impl Into<Arc<ResolvedRules>>) -> Self {
         Self {
-            rules: ArcSwap::from_pointee(rules),
+            rules: ArcSwap::new(rules.into()),
             minter: TokenMinter::new(Arc::new(TokenLedger::new())),
             audit: orrery_audit::null(),
             consent: ConsentMode::default(),

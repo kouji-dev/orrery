@@ -175,7 +175,24 @@ impl Drop for CaseWorkspace {
     }
 }
 
+/// How many characters of each name survive into the directory name.
+///
+/// The whole name is not needed to recognise a case at a glance, and on Windows
+/// every character here is spent against `MAX_PATH`: the case directory sits
+/// *inside* whatever workspace the run was given, so a long name here is what
+/// decides whether a perfectly ordinary workspace can be graded. See
+/// [`slug`].
+const NAME_CHARS: usize = 20;
+
 /// A directory name that is unique per case and per matrix point, and readable.
+///
+/// **Short on purpose.** This used to spend about 110 characters — the case,
+/// profile and model names in full, plus a 32-hex uuid — and a 143-character
+/// workspace was then enough to put the case's own `Cargo.toml` past
+/// `MAX_PATH`. Names are clipped to [`NAME_CHARS`] and the uuid to its first 8
+/// hex digits, which is still 4 billion to one against a collision between the
+/// handful of directories one run makes, and the case id is still the first
+/// thing the name says.
 fn slug(case: &EvalCase, point: &MatrixPoint) -> String {
     let clean = |s: &str| -> String {
         s.chars()
@@ -186,16 +203,18 @@ fn slug(case: &EvalCase, point: &MatrixPoint) -> String {
                     '-'
                 }
             })
+            .take(NAME_CHARS)
             .collect()
     };
     let seed = point.seed.map_or_else(|| "n".to_owned(), |s| s.to_string());
+    let unique = uuid::Uuid::new_v4().simple().to_string();
     format!(
         "{}-{}-{}-{}-{}",
         clean(&case.id),
         clean(&point.profile),
         clean(&point.model),
         seed,
-        uuid::Uuid::new_v4().simple()
+        &unique[..8]
     )
 }
 

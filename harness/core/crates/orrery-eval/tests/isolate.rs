@@ -68,6 +68,39 @@ fn the_same_case_twice_gets_two_workspaces() {
     assert_ne!(a.path(), b.path(), "a re-run must not reuse a workspace");
 }
 
+/// The case directory's name is the runner's own contribution to path length,
+/// and on Windows every character of it is spent against `MAX_PATH`.
+///
+/// It used to run to about 110 characters — a 32-hex uuid, plus the case,
+/// profile and model names in full — which is what put a 143-character
+/// workspace's `Cargo.toml` over the limit. A name still has to be unique and
+/// still has to be readable; it does not have to be that.
+#[test]
+fn a_case_directory_name_is_short() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let isolator = Isolator::new(tmp.path());
+    let long = case("a-case-with-a-long-and-very-descriptive-identifier-indeed");
+    let ws = isolator
+        .prepare(&long, &point("a-profile-with-a-long-name-of-its-own"))
+        .expect("prep");
+    let name = ws
+        .path()
+        .file_name()
+        .expect("a directory name")
+        .to_string_lossy()
+        .into_owned();
+
+    assert!(
+        name.len() <= 64,
+        "{} characters of case directory: {name}",
+        name.len()
+    );
+    assert!(
+        name.starts_with("a-case-with-a-long-a"),
+        "and it still starts with the case it belongs to: {name}"
+    );
+}
+
 #[test]
 fn worktree_is_cleaned_up_after_a_panic() {
     let tmp = tempfile::tempdir().expect("tempdir");

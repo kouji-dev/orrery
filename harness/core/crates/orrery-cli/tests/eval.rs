@@ -241,3 +241,42 @@ fn a_missing_suite_is_usage() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("nope"), "it quotes the name back: {stderr}");
 }
+
+/// A long workspace path is a filesystem fact, not a permission decision.
+///
+/// A driven run against a 143-character workspace came back `error`, with
+/// "denied: no rule allows `read(<case-workspace>/Cargo.toml)`" on it, while
+/// the same suite in a 19-character workspace scored 1.0. The eval isolator
+/// adds a case directory to whatever root it is given, so the grader's read
+/// crossed Windows' `MAX_PATH`; `canonicalize` handed back the `\?\` form,
+/// nothing matched the compiled rule, and a length came out of the engine
+/// wearing a policy verdict's clothes. This pins both halves: it runs, and it
+/// scores.
+///
+/// 200 rather than the reported 143: the case directory's own length decides
+/// where `MAX_PATH` is crossed, and it depends on the case id and the matrix
+/// point's names. 200 crosses it whatever they are called — at 143 this same
+/// test passes against the unfixed engine by a dozen characters.
+#[test]
+fn a_long_workspace_path_runs_and_is_graded() {
+    let temp = tempfile::tempdir().expect("a temporary root");
+    let mut dir = temp.path().to_path_buf();
+    while dir.display().to_string().len() < 200 {
+        dir.push("a-long-workspace-segment");
+    }
+    std::fs::create_dir_all(&dir).expect("a long workspace directory");
+    assert!(
+        dir.display().to_string().len() >= 200,
+        "the fixture has to be long to be testing anything"
+    );
+    std::fs::write(dir.join(TARGET), CONTENTS).expect("the target file");
+
+    let report = run_suite(&dir);
+    let results = report["results"].as_array().expect("results");
+    assert_eq!(
+        results[0]["outcome"], "pass",
+        "a 143-character workspace grades like any other: {}",
+        results[0]
+    );
+    assert_eq!(results[0]["score"], 1.0);
+}

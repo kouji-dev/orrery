@@ -255,7 +255,8 @@ fn resolve_existing_prefix(path: &Path) -> PathBuf {
     }
 }
 
-/// Collapse `.` and `..` without touching the filesystem.
+/// Collapse `.` and `..` without touching the filesystem, and reduce the
+/// Windows extended-length form so every key has one shape.
 fn lexical(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for component in path.components() {
@@ -269,7 +270,40 @@ fn lexical(path: &Path) -> PathBuf {
             other => out.push(other.as_os_str()),
         }
     }
-    out
+    unverbatim(&out)
+}
+
+/// Reduce `\?\` to the plain form, **for comparison only**.
+///
+/// [`dunce::simplified`] deliberately refuses to do this once the result would
+/// pass `MAX_PATH`, because the plain form could no longer be opened. That
+/// caution is right for a path about to be opened and wrong for a key about to
+/// be matched: it left a long target in verbatim form while every rule compiled
+/// to the plain one, so nothing matched and a *length* came back out of the
+/// engine as "no rule allows read(...)" — a filesystem limit wearing a
+/// permission decision's clothes. Nothing in this module opens anything.
+#[cfg(windows)]
+fn unverbatim(path: &Path) -> PathBuf {
+    use std::path::Prefix;
+
+    let Some(Component::Prefix(prefix)) = path.components().next() else {
+        return path.to_path_buf();
+    };
+    let text = path.as_os_str().to_string_lossy();
+    match prefix.kind() {
+        // `\?\C:\a` -> `C:\a`
+        Prefix::VerbatimDisk(_) => PathBuf::from(text[4..].to_owned()),
+        // `\?\UNC\server\share\a` -> `\server\share\a`
+        Prefix::VerbatimUNC(..) => PathBuf::from(format!(r"\{}", &text[8..])),
+        // `\?\` over something that is not a disk or a share has no plain form
+        // to reduce to; leaving it alone keeps it comparable with itself.
+        _ => path.to_path_buf(),
+    }
+}
+
+#[cfg(not(windows))]
+fn unverbatim(path: &Path) -> PathBuf {
+    path.to_path_buf()
 }
 
 fn to_slash(path: &Path) -> String {

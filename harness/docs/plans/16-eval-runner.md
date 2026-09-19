@@ -172,6 +172,7 @@ Files: `orrery-eval/src/isolate.rs`, `tests/isolate.rs`
 - [x] **Failing test first.** `isolate::cases_never_share_state` — two cases that both write the same path; assert neither sees the other's file.
 - [x] `isolate::worktree_is_cleaned_up` — including after a panic.
 - [x] `isolate::concurrency_is_honoured`.
+- [x] `isolate::a_case_directory_name_is_short` — **added 2026-09-19.** The case directory is the runner's own contribution to path length, and on Windows it is spent against `MAX_PATH`. It ran to about 110 characters (the case, profile and model names in full plus a 32-hex uuid), which is what put a 143-character workspace's `Cargo.toml` over the limit and made the grader's read come back as a policy denial. Names are clipped to 20 characters and the uuid to 8 hex digits; the case id is still the first thing the name says. The misreported denial itself is plan 07's, and fixed there.
 - [x] Implement worktree isolation (git worktree per case). Container isolation is a later task — leave the enum variant and a clear `Unsupported` error.
 
 Cleanup is in `Drop` rather than at the end of the run, which is what makes it survive a

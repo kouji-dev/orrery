@@ -19,7 +19,7 @@ From [`00-overview.md`](00-overview.md):
 - Budgets are enforced where the resource is, not by the string that matched.
 - Denial is a value.
 - A `PermissionHandler` that panics fails **closed**.
-- Paths normalise before they match — symlinks, `..`, case-folding, UNC and drive-relative forms.
+- Paths normalise before they match — symlinks, `..`, case-folding, UNC, drive-relative **and Windows extended-length (`\\?\`) forms**.
 
 This plan owns translation **#3** (`Subject`).
 
@@ -201,6 +201,7 @@ Files: `orrery-policy/src/match.rs`, `tests/match_props.rs`
 - [x] `match::first_match_wins_within_a_list`.
 - [x] `match::paths_normalise` — a symlink out of the workspace, a `..` traversal, a UNC path and a drive-relative path all resolve before matching. This is the test that stops the rule being defeated by a link.
 - [x] `match::case_folding_where_the_fs_is_insensitive` — Windows and macOS only.
+- [x] `long_paths::a_file_past_max_path_is_still_inside_the_workspace` — **added 2026-09-19.** A target past `MAX_PATH` canonicalises to the `\\?\` form and `dunce::simplified` will not reduce it *because* it is long, which is right for a path about to be opened and wrong for a key about to be matched: the rules had one shape and the target another, so nothing matched and a filesystem limit came back out of the engine as "no rule allows `read(...)`". `lexical` now reduces the verbatim prefix itself. A length is not a permission decision.
 - [x] Proptest: `match::never_panics` on arbitrary selectors and inputs.
 - [x] Implement with `globset` and `dunce`.
 
