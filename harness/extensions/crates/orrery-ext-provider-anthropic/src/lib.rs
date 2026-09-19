@@ -106,7 +106,7 @@ impl AnthropicProvider {
 /// somebody has to install one. Doing it here, once, keeps the ADE and the
 /// harness on a single crypto stack — and `install_default` failing means
 /// another crate already did it, which is the outcome we wanted anyway.
-fn install_crypto_provider() {
+pub(crate) fn install_crypto_provider() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();

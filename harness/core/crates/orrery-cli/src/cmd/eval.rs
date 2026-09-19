@@ -111,7 +111,7 @@ fn run(cli: &Cli, suite: &str, profiles: &[String], models: &[String], format: O
     let provider = crate::cmd::setup(cli)
         .provider
         .as_ref()
-        .map(orrery_harness::provider_for)
+        .map(|choice| orrery_harness::provider_for(choice, &crate::cmd::setup(cli).state_dir))
         .transpose()
         .unwrap_or_else(|e| fail(Exit::Usage, e))
         .unwrap_or_else(|| fail(Exit::Usage, crate::session::SetupError::NoProvider));

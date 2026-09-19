@@ -590,7 +590,7 @@ impl Session {
         // One selector, shared with `Harness::build`'s own. The narrator wraps
         // whatever comes back, so every provider the enum names is narrated the
         // same way and none of them is a special case here.
-        let provider = orrery_harness::provider_for(&choice)?;
+        let provider = orrery_harness::provider_for(&choice, &setup.state_dir)?;
         let capabilities = *provider.capabilities();
         let provider: Arc<dyn Provider> = Arc::new(Narrating {
             inner: provider,

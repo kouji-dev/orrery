@@ -40,6 +40,7 @@ orrery install <source> [--to user|workspace] [--user] [--link] [--yes]
 orrery remove <name> [--from user|workspace]
 orrery ext list | test [path]
 orrery registry init | add | sign | verify   # author the pin set phase 8 enforces
+orrery auth login | logout | status [<provider>]  # the device-code flow, phase 5's
 orrery permissions explain <call>
 orrery config explain <key>
 orrery init [--profile <name>]
@@ -181,7 +182,7 @@ the session it attaches to, which is what `ORRERY_SESSION` carries.
 
 Files: `src/exit.rs`, `tests/exit_codes.rs`
 
-- [x] **Failing test first.** ~~One test per code: a fixture that exceeds budget ⇒ 3; a denied call with no fallback ⇒ 4; a provider reporting `NeedsLogin` ⇒ 5.~~ **Amended: 3 and 4 are reached by a run; 5 is not reachable from the command line in this build.** `exit_codes::a_ceiling_is_three` (the last stream repeats, so a fixture that only asks for tools never stops asking and the turn budget ends it) and `exit_codes::a_denial_with_no_fallback_is_four` (a hand-written stream reading outside the workspace, refused by the broker) are real runs. **5 is not:** every provider this build can select is the fixture provider, whose auth never says `NeedsLogin`, and the only way to reach it from a flag would be a "signed out" provider spec that exists for the test and for nothing else. The mapping is decided and tested in `exit::tests::needing_a_login_is_five`; the *command* cannot produce it until a provider that can be signed out is selectable (plan 10).
+- [x] **Failing test first.** ~~One test per code: a fixture that exceeds budget ⇒ 3; a denied call with no fallback ⇒ 4; a provider reporting `NeedsLogin` ⇒ 5.~~ **Amended: 3 and 4 are reached by a run; 5 is not reachable from the command line in this build.** `exit_codes::a_ceiling_is_three` (the last stream repeats, so a fixture that only asks for tools never stops asking and the turn budget ends it) and `exit_codes::a_denial_with_no_fallback_is_four` (a hand-written stream reading outside the workspace, refused by the broker) are real runs. **5 is not:** every provider this build can select is the fixture provider, whose auth never says `NeedsLogin`, and the only way to reach it from a flag would be a "signed out" provider spec that exists for the test and for nothing else. The mapping is decided and tested in `exit::tests::needing_a_login_is_five`; the *command* cannot produce it until a provider that can be signed out is selectable (plan 10). **Amended in place 2026-09-19: 5 is reachable now.** `orrery auth status` exits 5 when this machine is not signed in and 0 when it is, so a script asking "can I run?" gets the same code from the check as from the turn; `auth::login_then_status_then_logout` asserts both, through the binary. A turn with `--features anthropic` and no credential also exits 5, and its message names a command that now exists.
 - [x] Implement the mapping from `TurnOutcome` and `KernelError`.
 
 **Decided: a denial is read off the turn's last tool call.** A denial is not a

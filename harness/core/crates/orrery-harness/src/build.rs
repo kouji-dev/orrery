@@ -693,7 +693,7 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
     //     found are rendered into section 4 of the system prompt here, which is
     //     the only place that can do it: `KernelConfig` is taken by value and
     //     the kernel is built once.
-    let provider = provider_for(&config.provider)?;
+    let provider = provider_for(&config.provider, &config.state_dir)?;
     let registry = Arc::new(registry);
     let mut kernel_config = config.kernel.clone();
     kernel_config
@@ -763,6 +763,11 @@ fn record_load(audit: &orrery_audit::Audit, outcome: &LoadOutcome) {
 
 /// Build the provider a [`ProviderChoice`] names.
 ///
+/// `state_dir` is where the `creds` grant lives: what `orrery auth login`
+/// wrote. It is a parameter rather than a constant because the state directory
+/// is `--state-dir`'s to name, and a provider reading a *different* store from
+/// the one the login wrote to is the shape of defect this whole round is about.
+///
 /// The one place a choice becomes a `Provider`, so a composition root that
 /// assembles its own config — `orrery-cli` does, because it wraps the provider
 /// in a narrator before the kernel sees it — selects from exactly the same
@@ -773,7 +778,10 @@ fn record_load(audit: &orrery_audit::Audit, outcome: &LoadOutcome) {
 ///
 /// [`BuildError::NoProvider`] when the variant's cargo feature is off, and
 /// [`BuildError::Provider`] when it is on and the provider will not load.
-pub fn provider_for(choice: &ProviderChoice) -> Result<Arc<dyn Provider>, BuildError> {
+pub fn provider_for(
+    choice: &ProviderChoice,
+    state_dir: &std::path::Path,
+) -> Result<Arc<dyn Provider>, BuildError> {
     Ok(match choice {
         ProviderChoice::Custom(provider) => provider.clone(),
         ProviderChoice::Fixture { passes } => crate::features::fixture_provider(passes)?,
@@ -781,7 +789,12 @@ pub fn provider_for(choice: &ProviderChoice) -> Result<Arc<dyn Provider>, BuildE
             model,
             credential,
             base_url,
-        } => crate::features::anthropic_provider(model, credential, base_url.as_deref())?,
+        } => crate::features::anthropic_provider(
+            model,
+            credential,
+            base_url.as_deref(),
+            state_dir,
+        )?,
         ProviderChoice::OpenAiCompat {
             model,
             credential,

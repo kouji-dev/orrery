@@ -556,3 +556,136 @@ fn account_of(body: &Value) -> Option<String> {
         .or_else(|| string(&body["account"], "email"))
         .or_else(|| string(body, "email"))
 }
+
+/// The real HTTP side of the flow.
+///
+/// [`OAuthTransport`] existed with one implementation — a fake in the tests —
+/// which is exactly as far as a device-code flow gets you: fourteen green tests
+/// and no way for a person to sign in. This is the other implementation, and
+/// `orrery auth login` is what calls it.
+///
+/// # Why `base_url` is a field
+///
+/// It is the seam a test drives, the same way [`crate::AnthropicProvider`]'s
+/// is: a loopback authorization server in a test process, and nothing leaves
+/// the machine. It is also what lets an organisation point the flow at a
+/// gateway without a rebuild.
+pub struct HttpTransport {
+    client: reqwest::Client,
+    base_url: String,
+}
+
+impl std::fmt::Debug for HttpTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpTransport")
+            .field("base_url", &self.base_url)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Where the first-party device-code endpoints live.
+pub const AUTH_BASE_URL: &str = "https://console.anthropic.com";
+
+impl Default for HttpTransport {
+    fn default() -> Self {
+        Self::new(AUTH_BASE_URL)
+    }
+}
+
+impl HttpTransport {
+    /// Talk to this origin.
+    #[must_use]
+    pub fn new(base_url: impl Into<String>) -> Self {
+        crate::install_crypto_provider();
+        Self {
+            client: reqwest::Client::new(),
+            base_url: base_url.into().trim_end_matches('/').to_owned(),
+        }
+    }
+
+    /// Post a form and read the body back, whatever the status.
+    async fn post(&self, path: &str, form: &[(&str, String)]) -> Result<(u16, Value), ProviderError> {
+        let response = self
+            .client
+            .post(format!("{}{path}", self.base_url))
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("accept", "application/json")
+            .body(urlencode(form))
+            .send()
+            .await
+            .map_err(|e| ProviderError::Auth(format!("the authorization server is unreachable: {e}")))?;
+        let status = response.status().as_u16();
+        let text = response.text().await.unwrap_or_default();
+        // A body that is not JSON is still an answer: report the status and the
+        // first of what it said, rather than "the login failed".
+        let body = serde_json::from_str::<Value>(&text).unwrap_or_else(|_| {
+            Value::String(text.chars().take(200).collect::<String>())
+        });
+        Ok((status, body))
+    }
+}
+
+#[async_trait]
+impl OAuthTransport for HttpTransport {
+    async fn device_code(&self, client_id: &str, scope: &str) -> Result<Value, ProviderError> {
+        let (status, body) = self
+            .post(
+                "/oauth/device/code",
+                &[
+                    ("client_id", client_id.to_owned()),
+                    ("scope", scope.to_owned()),
+                ],
+            )
+            .await?;
+        if !(200..300).contains(&status) {
+            return Err(ProviderError::Auth(format!(
+                "the authorization server would not start a login (http {status}): {}",
+                string(&body, "error_description")
+                    .or_else(|| string(&body, "error"))
+                    .unwrap_or_else(|| "no reason given".to_owned())
+            )));
+        }
+        Ok(body)
+    }
+
+    async fn token(&self, form: TokenForm) -> Result<(u16, Value), ProviderError> {
+        let mut fields = vec![
+            ("grant_type", form.grant_type),
+            ("client_id", form.client_id),
+        ];
+        if let Some(device_code) = form.device_code {
+            fields.push(("device_code", device_code));
+        }
+        if let Some(refresh_token) = form.refresh_token {
+            fields.push(("refresh_token", refresh_token));
+        }
+        self.post("/oauth/token", &fields).await
+    }
+}
+
+/// `a=1&b=2`, percent-encoded.
+///
+/// Written here rather than pulled in: the whole need is four fields of opaque
+/// ASCII, and `reqwest`'s `form` support is a cargo feature this crate does not
+/// otherwise want.
+fn urlencode(fields: &[(&str, String)]) -> String {
+    fields
+        .iter()
+        .map(|(k, v)| format!("{}={}", percent(k), percent(v)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
+/// One value, with everything but the unreserved set escaped.
+fn percent(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    for byte in raw.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(*byte as char);
+            }
+            other => out.push_str(&format!("%{other:02X}")),
+        }
+    }
+    out
+}

@@ -322,6 +322,29 @@ Files: `orrery-ext-provider-anthropic/src/oauth.rs`, `tests/oauth.rs`,
 - [x] `AuthState::Pending { user_code, verification_uri, verification_uri_complete, expires_at, interval_secs }` — a client draws the wait from data rather than scraping a rendered string. `DeviceCodeAuth::begin` returns it for a client that polls on its own schedule; `login` is `begin` + `wait`.
 - [x] Three names under one grant: the access token, `.refresh`, and `.expires` so `state()` can answer `Expired` without a round trip. `logout` clears all three — a refresh token left behind is a credential the person believes they revoked.
 - [x] `refresh` is idempotent under concurrent passes: one lock, and a re-read after it, so the pass that queued returns the token the pass that ran stored instead of spending a rotating refresh token twice.
+- [x] **A way in, added 2026-09-19.** Everything above was true and **unreachable
+  from the product**: there was no `Auth` variant in `orrery-cli`'s command
+  tree, so the binary's own "run `orrery auth login anthropic`" named a
+  command that answered `error: unrecognized subcommand 'auth'`, and the only
+  working path to a real model was an undocumented `ANTHROPIC_API_KEY`.
+  `OAuthTransport` had exactly one implementation, the fake in `tests/oauth.rs`.
+
+  Three things closed it. `oauth::HttpTransport` is the real HTTP side, with
+  `base_url` as the injectable seam (a loopback server in a test, a gateway in
+  an organisation). `orrery_harness::features::anthropic_auth` builds the flow
+  over `FileGrants` — the `creds` grant under the state directory, which is also
+  what `anthropic_provider` now reads, so a login feeds a turn instead of
+  writing where nothing looks. And `orrery auth login|logout|status` is the
+  verb. `orrery-cli/tests/auth.rs` drives the whole of it through the built
+  binary against an authorization server on loopback: the code is printed, an
+  `authorization_pending` is polled through, the token lands in the grant, a
+  **second process** reports `ready`, and `logout` takes all three names back.
+  `orrery-harness/tests/anthropic.rs::a_token_in_the_creds_grant_is_what_signs_the_request`
+  holds the other half — what the login wrote is what signs the request.
+- [x] **And the whole class.** `orrery-cli/tests/messages.rs` greps every `.rs`
+  file under `harness/` for ``run `orrery ...` `` and checks each one against the
+  verbs the **built binary's** `--help` lists. A message telling somebody to run
+  a command nobody wrote now fails a test, whichever crate it is written in.
 
 ### Task 11 · openai-compat (phase 5)
 

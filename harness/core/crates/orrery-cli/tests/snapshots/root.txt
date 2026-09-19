@@ -12,6 +12,7 @@ Commands:
   remove       Remove an installed extension
   registry     Author a signed registry index: the pin set an organisation enforces
   ext          Inspect and manage extensions
+  auth         Sign in to a model provider, sign out, or say where you stand
   permissions  Explain a permission decision
   config       Explain resolved configuration
   trust        Decide whether a workspace's own configuration and code may load

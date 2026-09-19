@@ -146,3 +146,65 @@ fn the_anthropic_variant_runs_a_turn_through_a_stub() {
         "the provider authenticated from the credential store, not from nowhere"
     );
 }
+
+/// **What `orrery auth login` writes is what the provider reads.**
+///
+/// The device-code flow stored its token through a `CredStore` chosen by
+/// whoever called it, and the only caller was a test — while the provider read
+/// `ANTHROPIC_API_KEY` and nothing else. A login, had there been a verb for
+/// one, would have written somewhere nothing opened.
+///
+/// So: put a token where a login puts it — the `creds` grant under the state
+/// directory — and assert the stub server saw *that* value. The environment
+/// variable is deliberately left set to something else by the test above, which
+/// makes this an assertion about precedence as well as about wiring.
+#[test]
+fn a_token_in_the_creds_grant_is_what_signs_the_request() {
+    unsafe {
+        std::env::set_var("ANTHROPIC_API_KEY", "sk-ant-from-the-environment");
+    }
+    let dir = tempfile::tempdir().expect("a temporary workspace");
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .expect("a runtime for the stub");
+    let (base_url, key_seen) = runtime.block_on(stub_server());
+
+    let mut config = ResolvedConfig::fixture(dir.path(), Vec::new());
+    // Exactly what `orrery auth login` does, through the same type.
+    std::fs::create_dir_all(&config.state_dir).expect("the state directory");
+    runtime
+        .block_on(async {
+            use orrery_ext_api::creds::CredStore as _;
+            orrery_harness::FileGrants::in_state_dir(&config.state_dir)
+                .put("anthropic", "at-from-the-login")
+                .await
+        })
+        .expect("the grant is written");
+
+    config.provider = ProviderChoice::Anthropic {
+        model: "claude-sonnet-4-5".to_owned(),
+        credential: "anthropic".to_owned(),
+        base_url: Some(base_url),
+    };
+    config.kernel.model = "claude-sonnet-4-5".to_owned();
+
+    let harness = Harness::build(config).expect("the harness builds");
+    let outcome = harness
+        .block_on(harness.submit("hello", CancellationToken::new()))
+        .expect("the turn ran");
+    assert!(
+        matches!(outcome, TurnOutcome::Completed { .. }),
+        "the turn completed: {outcome:?}"
+    );
+
+    let key = runtime
+        .block_on(async { tokio::time::timeout(std::time::Duration::from_secs(5), key_seen).await })
+        .expect("the stub server saw a request")
+        .expect("the stub server reported the key");
+    assert_eq!(
+        key, "at-from-the-login",
+        "the grant a login wrote wins over the development fallback"
+    );
+}

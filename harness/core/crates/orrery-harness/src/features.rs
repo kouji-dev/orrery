@@ -178,30 +178,82 @@ pub fn anthropic_provider(
     model: &str,
     credential: &str,
     base_url: Option<&str>,
+    state_dir: &Path,
 ) -> Result<Arc<dyn Provider>, BuildError> {
     #[cfg(feature = "anthropic")]
     {
-        use orrery_ext_api::creds::{CredStore, EnvCredStore, LayeredCredStore, MemoryCredStore};
-
-        // The key comes from the environment until a session broker is here to
-        // ask: `AnthropicProvider` takes a `CredStore`, and `EnvCredStore` is
-        // the documented development fallback. A credential the store does not
-        // hold is a `NeedsLogin` turn outcome, not a panic and not a silent
-        // unauthenticated request.
-        let store: Arc<dyn CredStore> = if credential == orrery_ext_provider_anthropic::GRANT {
-            Arc::new(EnvCredStore)
-        } else {
-            Arc::new(LayeredCredStore::new(
-                Arc::new(MemoryCredStore::default()),
-                Arc::new(EnvCredStore),
-            ))
-        };
+        // What `orrery auth login` wrote, with the environment behind it. This
+        // is the line that stopped the login being a ceremony with no effect:
+        // before it, the provider read `ANTHROPIC_API_KEY` and nothing else, so
+        // a stored token was a file nothing opened.
+        let store = grant_store(state_dir);
         let mut provider = orrery_ext_provider_anthropic::AnthropicProvider::new(store);
         if let Some(base_url) = base_url {
             provider = provider.with_base_url(base_url);
         }
         let _ = model;
         Ok(Arc::new(provider))
+    }
+    #[cfg(not(feature = "anthropic"))]
+    {
+        Err(BuildError::NoProvider {
+            which: "anthropic".to_owned(),
+        })
+    }
+}
+
+/// The store a provider and `orrery auth` share: the `creds` grant on disk,
+/// with the documented environment fallback behind it.
+///
+/// One function, because "where does the token live" answered twice is how a
+/// login comes to write somewhere nothing reads — which is exactly what had
+/// happened: the flow's `CredStore` was whatever its caller passed, and its
+/// only caller was a test.
+#[must_use]
+pub fn grant_store(state_dir: &Path) -> Arc<dyn orrery_ext_api::creds::CredStore> {
+    use orrery_ext_api::creds::{EnvCredStore, LayeredCredStore};
+    Arc::new(LayeredCredStore::new(
+        Arc::new(crate::creds::FileGrants::in_state_dir(state_dir)),
+        // Read-only, and deliberately kept: a contributor with a key in their
+        // shell, and a downstream CI that hands secrets in as variables.
+        // `LayeredCredStore` writes to the primary only, so a login can never
+        // land here.
+        Arc::new(EnvCredStore),
+    ))
+}
+
+/// A device-code login for one provider, over a real authorization server.
+///
+/// `base_url` is the seam: `None` is the first-party origin, and a test points
+/// it at a loopback server in its own process. This is what `orrery auth login`
+/// calls, and the only reason the flow in
+/// `orrery_ext_provider_anthropic::oauth` is reachable from the product at all.
+///
+/// # Errors
+///
+/// [`BuildError::NoProvider`] when the `anthropic` feature is off, which is the
+/// honest answer: a build with no Anthropic provider has no Anthropic login.
+#[allow(unused_variables)]
+pub fn anthropic_auth(
+    grant: &str,
+    state_dir: &Path,
+    base_url: Option<&str>,
+) -> Result<Arc<dyn orrery_provider::ProviderAuth>, BuildError> {
+    #[cfg(feature = "anthropic")]
+    {
+        use orrery_ext_provider_anthropic::oauth::{
+            AUTH_BASE_URL, DeviceCodeAuth, HttpTransport, OAuthConfig,
+        };
+        let config = OAuthConfig {
+            grant: grant.to_owned(),
+            ..OAuthConfig::anthropic()
+        };
+        let transport = Arc::new(HttpTransport::new(base_url.unwrap_or(AUTH_BASE_URL)));
+        Ok(Arc::new(DeviceCodeAuth::new(
+            config,
+            grant_store(state_dir),
+            transport,
+        )))
     }
     #[cfg(not(feature = "anthropic"))]
     {

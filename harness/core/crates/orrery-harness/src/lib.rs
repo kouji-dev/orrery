@@ -31,6 +31,7 @@
 pub mod broker;
 pub mod build;
 pub mod config;
+pub mod creds;
 pub mod features;
 #[cfg(feature = "fixture-provider")]
 pub mod fixture;
@@ -56,6 +57,7 @@ pub use build::{
     default_tool_budget, extension_sources, provider_for,
 };
 pub use config::{kernel_config, price_table};
+pub use creds::FileGrants;
 pub use memory::KernelMemory;
 pub use plan::{Skip, skip_for};
 pub use steps::KernelSteps;

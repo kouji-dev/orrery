@@ -2,6 +2,7 @@
 //! its own plan; until then it exits 2 naming that plan.
 
 pub mod attach;
+pub mod auth;
 pub mod config;
 pub mod eval;
 pub mod ext;
