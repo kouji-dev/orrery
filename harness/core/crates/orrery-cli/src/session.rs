@@ -197,7 +197,7 @@ impl Publisher {
     /// point of "turns are the record; frames are a view of it" is that the
     /// view is reproducible.
     pub fn surface(&self, value: Surface) {
-        let id = value.id.unwrap_or_else(SurfaceId::new);
+        let id = value.id.unwrap_or_default();
         self.publish(Event::Delta {
             seq: self.next(),
             surface: id,

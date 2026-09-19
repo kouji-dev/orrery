@@ -18,7 +18,7 @@
 //! `ext test` therefore takes a name as well as a path. A compiled-in bundle has
 //! no `orrery.toml` anywhere on disk - its manifest is a value its Rust returns
 //! - so `orrery ext test builtin` cannot be a path, and used to fail with
-//! `could not read builtin/orrery.toml`.
+//!   `could not read builtin/orrery.toml`.
 //!
 //! Install and remove are **not** here: they are bare top-level verbs,
 //! `orrery install <source>` and `orrery remove <name>`, in `cmd::install`.
