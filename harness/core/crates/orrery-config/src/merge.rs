@@ -11,10 +11,11 @@
 //! - **Deny** is a union: every layer's denies stay in force, and a managed
 //!   deny cannot be relaxed by a closer `allow`.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
-use orrery_policy::{PolicyBuilder, ResolvedRules};
-use orrery_proto::Layer;
+use orrery_policy::{PolicyBuilder, ResolvedRules, Rule, RuleList};
+use orrery_proto::{Aspect, Layer, Subject};
 
 use crate::error::ConfigError;
 use crate::layer::{LayerFile, line_at};
@@ -139,11 +140,7 @@ pub fn merge(files: &[LayerFile]) -> Result<MergeReport, ConfigError> {
 ///
 /// When a rule does not parse or a pattern does not compile.
 pub fn policy(root: impl AsRef<Path>, files: &[LayerFile]) -> Result<ResolvedRules, ConfigError> {
-    let rules = builder(root.as_ref(), files)?.build()?;
-    if rules.is_empty() {
-        return Ok(default_builder(root.as_ref())?.build()?);
-    }
-    Ok(rules)
+    Ok(builder(root.as_ref(), files)?.build()?)
 }
 
 /// What [`DEFAULT_PERMISSIONS`]'s rules name as the file they were written in.
@@ -155,7 +152,8 @@ pub fn policy(root: impl AsRef<Path>, files: &[LayerFile]) -> Result<ResolvedRul
 /// stays true: it is the line within this text.
 pub const DEFAULT_PERMISSIONS_SOURCE: &str = "<built-in default>";
 
-/// The permission rules a workspace has when **no layer declares any**.
+/// The permission **floor**: what the agent may do that no layer has spoken
+/// about.
 ///
 /// Read, write and spawn **inside the workspace**, and every tool that is
 /// registered. Deliberately not "everything": a path outside the root does not
@@ -167,11 +165,51 @@ pub const DEFAULT_PERMISSIONS_SOURCE: &str = "<built-in default>";
 /// dispatches through and the rules `permissions explain` prints are one
 /// answer, and a default only one of them knew about is how they came to
 /// disagree.
+///
+/// # Why a floor and not a fallback — decided 2026-09-19
+///
+/// For several rounds this stood in only when **no layer declared any
+/// permission rule at all**. Declaring one replaced the whole set, so a user
+/// config whose entire content was
+///
+/// ```toml
+/// [permissions]
+/// allow = ["read(./**)"]
+/// ```
+///
+/// left nothing matching `tool(builtin.read)`, the offered tool list came out
+/// **empty**, and the run exited 4 — while `permissions explain
+/// 'read(./Cargo.toml)'` answered Allow. The file `orrery init` itself writes
+/// did exactly this. The user was told their configuration was fine while the
+/// model silently had no tools.
+///
+/// The decision is the one the rest of the system already states — *a rule file
+/// narrows, it never widens* — applied **per aspect**:
+///
+/// - A layer's `allow` or `ask` for an aspect says what is *permitted* for that
+///   aspect, so it **replaces** that aspect's floor entirely. Naming one tool
+///   offers one tool.
+/// - A layer's `deny` says what is *refused*, not what is permitted, so it
+///   narrows the floor and leaves the rest of it standing. Otherwise a managed
+///   `deny = ["tool(shell.*)"]` would be a workspace with no tools at all.
+/// - An aspect no layer allows or asks about keeps its floor.
+///
+/// "Deny them all" stays expressible: `deny = ["tool(*)"]` is walked before any
+/// allow from any layer, floor included.
+///
+/// See `harness/docs/plans/10-config-layers.md` and
+/// `harness/docs/plans/07-policy-broker-audit.md`.
 pub const DEFAULT_PERMISSIONS: &str = "[permissions]
 allow = [\"tool(*)\", \"read(./**)\", \"write(./**)\", \"spawn(*)\"]
 ";
 
-/// A builder loaded with every layer's rules, and nothing else.
+/// A builder loaded with every layer's rules **and the floor under them**.
+///
+/// The one place rules are compiled from layers. [`policy`] is this plus
+/// `build()`, and [`crate::profile::rules`] is this plus the profile's
+/// shorthands — so there is no way to assemble a rule set that is missing the
+/// floor, which is how the defect above kept coming back: a second construction
+/// path knew a different default.
 ///
 /// Separate from [`policy`] because a caller that folds more rules in — a
 /// profile's shorthands — needs the layers *before* they are compiled.
@@ -184,35 +222,77 @@ pub fn builder(root: impl AsRef<Path>, files: &[LayerFile]) -> Result<PolicyBuil
     for file in files {
         builder = builder.layer_toml(&file.text, &file.path, file.layer, false)?;
     }
+    if let Some(text) = floor_for(files)? {
+        builder = builder.layer_toml(&text, DEFAULT_PERMISSIONS_SOURCE, Layer::Project, true)?;
+    }
     Ok(builder)
 }
 
-/// A builder carrying [`DEFAULT_PERMISSIONS`] alone.
+/// The part of [`DEFAULT_PERMISSIONS`] these layers have **not** spoken for, as
+/// a config text of its own, or `None` when they have spoken for all of it.
+///
+/// Written out as TOML rather than built as [`orrery_policy::Rule`] values on
+/// purpose: a rule built in code carries no source, and `permissions explain`
+/// would then attribute the floor to an empty file on line 0. Parsed from text,
+/// every floor rule names [`DEFAULT_PERMISSIONS_SOURCE`] and its own line
+/// within it.
 ///
 /// # Errors
 ///
-/// When the default does not parse, which is a bug in this crate.
-pub fn default_builder(root: impl AsRef<Path>) -> Result<PolicyBuilder, ConfigError> {
-    let root = root.as_ref();
-    Ok(PolicyBuilder::new(root).layer_toml(
+/// When a layer's rules do not parse. The floor itself is this crate's own
+/// text; a failure to parse it is a bug here.
+fn floor_for(files: &[LayerFile]) -> Result<Option<String>, ConfigError> {
+    let permitted = permitted_aspects(files)?;
+    let mut kept = Vec::new();
+    for rule in parse_default()? {
+        if !permitted.contains(&rule.aspect) {
+            kept.push(format!("\"{}\"", rule.text));
+        }
+    }
+    if kept.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "[permissions]\nallow = [{}]\n",
+        kept.join(", ")
+    )))
+}
+
+/// Every aspect some layer has said is **permitted** — written in an `allow` or
+/// an `ask` list, for the agent itself.
+///
+/// `deny` is deliberately not here: see [`DEFAULT_PERMISSIONS`]. Subjects other
+/// than the agent are deliberately not here either — a rule file written about
+/// one sub-agent does not decide what the agent it was spawned from may do.
+fn permitted_aspects(files: &[LayerFile]) -> Result<BTreeSet<Aspect>, ConfigError> {
+    let mut out = BTreeSet::new();
+    for file in files {
+        let loaded = orrery_policy::parse::load_toml(&file.text, &file.path, file.layer, true)
+            .map_err(orrery_policy::PolicyError::from)?;
+        for rule in loaded.rules {
+            if rule.subject == Subject::Agent && rule.list != RuleList::Deny {
+                out.insert(rule.aspect);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// [`DEFAULT_PERMISSIONS`], parsed, so the floor's aspects come from the text
+/// rather than from a second list that could drift from it.
+///
+/// # Errors
+///
+/// Only if this crate's own constant stops parsing, which is a bug here.
+fn parse_default() -> Result<Vec<Rule>, ConfigError> {
+    let loaded = orrery_policy::parse::load_toml(
         DEFAULT_PERMISSIONS,
         DEFAULT_PERMISSIONS_SOURCE,
         Layer::Project,
         true,
-    )?)
-}
-
-/// Whether any layer wrote a permission rule at all.
-///
-/// The question [`policy`] asks before falling back to the default: a workspace
-/// nobody configured gets the default, and a workspace somebody did configure
-/// gets exactly what they wrote.
-///
-/// # Errors
-///
-/// When a rule does not parse or a pattern does not compile.
-pub fn any_rules(root: impl AsRef<Path>, files: &[LayerFile]) -> Result<bool, ConfigError> {
-    Ok(!builder(root.as_ref(), files)?.build()?.is_empty())
+    )
+    .map_err(orrery_policy::PolicyError::from)?;
+    Ok(loaded.rules)
 }
 
 /// How a key folds across layers.

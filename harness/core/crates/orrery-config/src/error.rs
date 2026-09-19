@@ -37,6 +37,21 @@ pub enum ConfigError {
         message: String,
     },
 
+    /// `--profile <name>` named something no layer defines.
+    ///
+    /// Deliberately **not** an [`ConfigError::Invalid`]: for several rounds it
+    /// was, reported against `config.toml:0` — a bare filename that is not a
+    /// path anybody can open and a line number that is not a line. There is no
+    /// file to name here, because the profile is missing from *every* layer, so
+    /// this names none and says what to write instead.
+    #[error("no profile named `{name}` is defined in any layer. {advice}")]
+    NoSuchProfile {
+        /// What was asked for.
+        name: String,
+        /// What to do about it: the profiles there are, or how to define one.
+        advice: String,
+    },
+
     /// A rule did not parse, or a layer would not compile.
     #[error(transparent)]
     Policy(#[from] orrery_policy::PolicyError),
@@ -68,7 +83,7 @@ impl ConfigError {
             | ConfigError::Syntax { file, .. }
             | ConfigError::Invalid { file, .. }
             | ConfigError::TrustStoreInsideProject { path: file } => Some(file),
-            ConfigError::Policy(_) => None,
+            ConfigError::Policy(_) | ConfigError::NoSuchProfile { .. } => None,
         }
     }
 

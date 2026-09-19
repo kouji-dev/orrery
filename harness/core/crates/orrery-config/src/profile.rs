@@ -160,8 +160,10 @@ pub struct Assembled {
 ///
 /// # Errors
 ///
-/// When the named profile is not defined, or a permission shorthand is not one
-/// of the five. Both name the file and the line.
+/// When the named profile is not defined — a
+/// [`ConfigError::NoSuchProfile`], which names no file because there is none
+/// to name — or when a permission shorthand is not one of the five, which does
+/// name the file and the line it was written on.
 pub fn select(values: &Provenanced, name: Option<&str>) -> Result<Profile, ConfigError> {
     let mut profile = Profile {
         agents: agents(values),
@@ -175,10 +177,9 @@ pub fn select(values: &Provenanced, name: Option<&str>) -> Result<Profile, Confi
 
     let prefix = format!("profile.{name}");
     if values.keys_under(&prefix).is_empty() {
-        return Err(ConfigError::Invalid {
-            file: "config.toml".into(),
-            line: 0,
-            message: format!("no profile named `{name}` is defined in any layer"),
+        return Err(ConfigError::NoSuchProfile {
+            name: name.to_owned(),
+            advice: advice_for(values, name),
         });
     }
 
@@ -261,10 +262,11 @@ pub fn assemble(
 /// returns and the kernel dispatches through it, so an explanation cannot
 /// describe a rule set the run does not have.
 ///
-/// When no layer writes a permission rule the built-in default
-/// ([`crate::merge::DEFAULT_PERMISSIONS`]) stands in, and a shorthand is folded
-/// on top of it — a profile that says `read = false` narrows the default rather
-/// than being the only rule in a workspace where nothing else is allowed.
+/// The built-in floor ([`crate::merge::DEFAULT_PERMISSIONS`]) is under both,
+/// because [`crate::merge::builder`] is the only way either of them is built.
+/// A shorthand is folded on top of it — a profile that says `read = false`
+/// narrows the floor rather than being the only rule in a workspace where
+/// nothing else is allowed.
 ///
 /// # Errors
 ///
@@ -274,11 +276,7 @@ pub fn rules(
     root: &Path,
     layers: &[LayerFile],
 ) -> Result<ResolvedRules, ConfigError> {
-    let mut builder = if crate::merge::any_rules(root, layers)? {
-        crate::merge::builder(root, layers)?
-    } else {
-        crate::merge::default_builder(root)?
-    };
+    let mut builder = crate::merge::builder(root, layers)?;
     let shorthands: Vec<Rule> = profile
         .permissions
         .iter()
@@ -290,6 +288,40 @@ pub fn rules(
         builder = builder.layer_rules(Layer::Project, shorthands);
     }
     Ok(builder.build()?)
+}
+
+/// What to tell somebody whose `--profile` names nothing.
+///
+/// The profiles that *are* defined, each with the file and the line that
+/// defines it — a place a person can actually go — or, when no layer defines
+/// any, what to write and where.
+fn advice_for(values: &Provenanced, name: &str) -> String {
+    let mut defined: Vec<String> = Vec::new();
+    for key in values.keys_under("profile") {
+        let Some(rest) = key.strip_prefix("profile.") else {
+            continue;
+        };
+        let Some(profile) = rest.split('.').next().filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        let at = values
+            .winner(key)
+            .map(|slot| format!("{profile} ({})", slot.origin))
+            .unwrap_or_else(|| profile.to_owned());
+        if !defined.iter().any(|d| d.starts_with(&format!("{profile} ")) || d == profile) {
+            defined.push(at);
+        }
+    }
+    if defined.is_empty() {
+        format!(
+            "No layer defines any profile yet. \
+             Write `[profile.{name}]` into a config file — `orrery init` writes one \
+             with a profile to copy — and `orrery config explain profile.{name}` \
+             will then say which layer won."
+        )
+    } else {
+        format!("Defined: {}.", defined.join(", "))
+    }
 }
 
 fn agents(values: &Provenanced) -> BTreeMap<String, AgentDef> {

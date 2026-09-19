@@ -202,3 +202,53 @@ fn import_says_where_it_looked() {
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains(".codex"), "{err}");
 }
+
+/// DEFECT 11: a `--profile` nobody defined was reported against
+/// `config.toml:0` — a bare filename that is not a path and a line number that
+/// is not a line. The shape `10-config-layers.md` says is gone.
+///
+/// There is no file to name: the profile is missing from *every* layer. So the
+/// error names none, and says what to do instead.
+#[test]
+fn an_unknown_profile_is_not_blamed_on_a_file_that_does_not_exist() {
+    let home = home_with("[profile.ci]\nmodel = \"fixture\"\n");
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(
+        home.path(),
+        &args(&quiet(ws.path()), &["--profile", "review", "init"]),
+    );
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2), "{said}");
+    assert!(
+        !said.contains("config.toml:0"),
+        "no bare filename, no line zero: {said}"
+    );
+    assert!(
+        said.contains("no profile named `review`"),
+        "it still says what is wrong: {said}"
+    );
+    assert!(
+        said.contains("ci"),
+        "and it names the profiles there are: {said}"
+    );
+}
+
+/// The same, in a workspace where no layer defines any profile at all.
+#[test]
+fn an_unknown_profile_with_none_defined_says_where_to_define_one() {
+    let home = home_with("");
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(
+        home.path(),
+        &args(&quiet(ws.path()), &["--profile", "review", "init"]),
+    );
+    let said = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(2), "{said}");
+    assert!(!said.contains("config.toml:0"), "{said}");
+    assert!(
+        said.contains("[profile.review]"),
+        "it says what to write: {said}"
+    );
+}
