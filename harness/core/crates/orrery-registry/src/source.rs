@@ -25,6 +25,7 @@
 //! is displayed back as `crates-io:` so one string means one thing everywhere.
 //! And an absolute path is a path: `./x` was accepted and the absolute path it
 //! resolves to was not, which is a distinction nothing downstream makes.
+//!
 //! # Only one of the seven is verified
 //!
 //! Registry installs are signature-checked and hash-pinned. The other six forms
@@ -43,7 +44,13 @@ use crate::error::RegistryError;
 /// [`Source::from_str`] and `EntrySource::from_str` print this same list, so
 /// the two commands cannot describe the same concept differently again. An
 /// index pins three of these; an install acts on the rest as well.
-pub const VOCABULARY: &str = "a bare registry name; a path (`./x`, `../x`, an absolute path, or `file:x`); `github:owner/repo`; `crates-io:<name>`, also spelled `crate:<name>`; `npm:<name>`; `url:<url>`, which only an index pins; or a git URL";
+pub const VOCABULARY: &str = "a bare registry name; \
+     a path (`./x`, `../x`, an absolute path, or `file:x`); \
+     `github:owner/repo`; \
+     `crates-io:<name>`, also spelled `crate:<name>`; \
+     `npm:<name>`; \
+     `url:<url>`, which only an index pins; \
+     or a git URL";
 
 /// What a git reference is, and therefore whether the install is reproducible.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -289,7 +296,9 @@ impl FromStr for Source {
         // fetching one is a `net` call.
         if let Some(rest) = input.strip_prefix("url:") {
             return Err(bad(&format!(
-                "`url:` pins a tarball in a registry index; `orrery install`                  takes a git URL directly — try `{rest}` — or the registry name                  the index lists it under"
+                "`url:` pins a tarball in a registry index; `orrery install` takes \
+                 a git URL directly — try `{rest}` — or the registry name the \
+                 index lists it under"
             )));
         }
 

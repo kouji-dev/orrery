@@ -155,7 +155,9 @@ impl std::str::FromStr for EntrySource {
             },
             other => {
                 return Err(bad(&format!(
-                    "`{other}` is not something an index can pin; an index pins                      `crates-io:<name>`, `npm:<name>` and `url:<url>`. The full                      source vocabulary, which `orrery install` takes, is {vocabulary}",
+                    "`{other}` is not something an index can pin; an index pins \
+                     `crates-io:<name>`, `npm:<name>` and `url:<url>`. The full \
+                     source vocabulary, which `orrery install` takes, is {vocabulary}",
                     vocabulary = crate::source::VOCABULARY
                 )));
             }

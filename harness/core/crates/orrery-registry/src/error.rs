@@ -128,7 +128,10 @@ pub enum RegistryError {
     /// index <url>" for an index that was never opened reads as "I looked and
     /// it is not there", which is the one thing that did not happen.
     #[error(
-        "{id}: this build cannot fetch a remote registry index, so {index} was never consulted —          fetching one is a `net` call, and a `net` call needs a session. Pass          `--index <path>` with a local copy of the index file, or set `registry.index` in the          managed layer to a path on this machine."
+        "{id}: this build cannot fetch a remote registry index, so {index} was never consulted \
+         - fetching one is a `net` call, and a `net` call needs a session. \
+         Pass `--index <path>` with a local copy of the index file, or set `registry.index` \
+         in the managed layer to a path on this machine."
     )]
     RemoteIndex {
         /// What was asked for.
