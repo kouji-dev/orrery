@@ -61,7 +61,8 @@ pub use fetch::{DirFetcher, NoHooks, PackageFetcher, PackageHooks, Verified, tre
 pub use index::{Entry, EntrySource, Index, SCHEMA, Timestamp};
 pub use install::{InstallOptions, InstallRecord, Installer, Layout, Target, remove};
 pub use pin::{
-    ManagedRegistry, PinDecision, SupplyChainLedger, SupplyChainRecord, Unpinned, UnpinnedReason,
+    ManagedRegistry, PinDecision, RECEIPTS_DIR, SupplyChainLedger, SupplyChainRecord, Unpinned,
+    UnpinnedReason, load_refusal, receipt_beside,
 };
 pub use source::{GitRef, GitRunner, Source, SystemGit};
 pub use verify::{Keyring, PublicKey};

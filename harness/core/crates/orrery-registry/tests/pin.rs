@@ -237,3 +237,112 @@ fn a_nonsense_unpinned_value_is_a_syntax_error() {
     .unwrap_err();
     assert!(err.to_string().contains("refuse, warn, allow"), "{err}");
 }
+
+// ── Round 6: the pin is checked at LOAD, not only at install ────────────────
+
+/// A receipt survives a round trip, so what the install decided is what the
+/// load path reads back.
+#[test]
+fn a_receipt_round_trips() {
+    let record = SupplyChainRecord {
+        ext: ExtId::new("buildgraph").unwrap(),
+        source: "./buildgraph".to_owned(),
+        pinned: false,
+        development: true,
+        rule: None,
+        reason: Some(UnpinnedReason::Development),
+        index: None,
+        refused: None,
+    };
+    let back = SupplyChainRecord::from_toml(&record.to_toml(), "receipt.toml").unwrap();
+    assert_eq!(back, record);
+}
+
+/// The phase-8 criterion, at the load end: an extension installed **before** an
+/// admin set the pin does not go on loading afterwards.
+#[test]
+fn an_unpinned_receipt_refuses_to_load_under_managed_refuse() {
+    let m = managed("refuse");
+    let unpinned = SupplyChainRecord {
+        ext: ExtId::new("tool").unwrap(),
+        source: "./tool".to_owned(),
+        pinned: false,
+        development: false,
+        rule: None,
+        reason: Some(UnpinnedReason::NotFromTheRegistry),
+        index: None,
+        refused: None,
+    };
+    let why = orrery_registry::load_refusal(Some(&m), Some(&unpinned))
+        .expect("an unpinned extension refuses to load");
+    assert!(why.contains("managed.toml"), "it names the file: {why}");
+    assert!(why.contains(common::INDEX_URL), "…and the index: {why}");
+
+    // No receipt at all is the same answer, and for a stronger reason: nothing
+    // about it was ever checked.
+    let why = orrery_registry::load_refusal(Some(&m), None).expect("no receipt is not a pass");
+    assert!(why.contains("receipt"), "{why}");
+
+    // A verified install loads.
+    let pinned = SupplyChainRecord {
+        pinned: true,
+        reason: None,
+        rule: Some("key managed in the index".to_owned()),
+        ..unpinned.clone()
+    };
+    assert_eq!(orrery_registry::load_refusal(Some(&m), Some(&pinned)), None);
+
+    // And with no managed layer, or a permissive one, nothing is gated.
+    assert_eq!(orrery_registry::load_refusal(None, None), None);
+    assert_eq!(
+        orrery_registry::load_refusal(Some(&managed("warn")), Some(&unpinned)),
+        None
+    );
+}
+
+/// `--link` is never pinned, so it is refused even with a receipt.
+#[test]
+fn a_linked_install_is_refused_at_load_under_refuse() {
+    let m = managed("refuse");
+    let linked = SupplyChainRecord {
+        ext: ExtId::new("tool").unwrap(),
+        source: "./tool".to_owned(),
+        pinned: true,
+        development: true,
+        rule: None,
+        reason: Some(UnpinnedReason::Development),
+        index: None,
+        refused: None,
+    };
+    assert!(orrery_registry::load_refusal(Some(&m), Some(&linked)).is_some());
+}
+
+/// The receipt lands beside the extension, under the layer root — never inside
+/// the extension directory, so copying one onto a machine carries no pin.
+#[test]
+fn install_writes_a_receipt_the_load_path_can_find() {
+    let mut fixture = common::Fixture::new();
+    let src = common::write_package(&fixture.packages(), "buildgraph", "1.2.0", "");
+    let record = fixture
+        .installer()
+        .install(
+            &Source::Path { path: src.clone() },
+            &InstallOptions::to(Target::User).allowing_everything(),
+        )
+        .expect("the install succeeds");
+
+    let receipt = orrery_registry::receipt_beside(&record.path).expect("a shaped path");
+    assert!(receipt.exists(), "{} was not written", receipt.display());
+    assert_eq!(
+        receipt,
+        fixture.layout.receipt_path(Target::User, "buildgraph"),
+        "the writer and the reader agree on where it is"
+    );
+    let read = SupplyChainRecord::beside(&record.path).expect("it reads back");
+    assert_eq!(read.ext.as_str(), "buildgraph");
+    assert!(!read.pinned, "a path install is not pinned");
+
+    // And it is gone again when the extension is removed.
+    orrery_registry::remove(&fixture.layout, "buildgraph", Some(Target::User)).unwrap();
+    assert!(!receipt.exists(), "the receipt did not outlive the install");
+}

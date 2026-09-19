@@ -121,6 +121,15 @@ impl Layout {
         self.extensions_dir(target).join(id)
     }
 
+    /// `<layer>/registry/receipts/<id>.toml` — the install receipt the load
+    /// path reads back. See [`crate::pin::RECEIPTS_DIR`].
+    #[must_use]
+    pub fn receipt_path(&self, target: Target, id: &str) -> PathBuf {
+        self.layer_root(target)
+            .join(crate::pin::RECEIPTS_DIR)
+            .join(format!("{id}.toml"))
+    }
+
     /// Every layer this id is installed at, user first.
     #[must_use]
     pub fn installed(&self, id: &str) -> Vec<(Target, PathBuf)> {
@@ -408,6 +417,17 @@ impl Installer<'_> {
             refused: None,
         };
 
+        // The load path reads this back: phase 8's criterion is that unpinned
+        // extensions refuse to **load**, and a directory on disk says nothing
+        // about whether a signature was ever checked. A receipt that cannot be
+        // written is not fatal — it fails closed, because a missing receipt is
+        // refused under managed `refuse`.
+        let receipt = self.layout.receipt_path(options.target, ext.as_str());
+        if let Some(parent) = receipt.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| RegistryError::io(parent, &e))?;
+        }
+        std::fs::write(&receipt, record.to_toml()).map_err(|e| RegistryError::io(&receipt, &e))?;
+
         Ok(InstallRecord {
             ext,
             version: manifest.version.clone(),
@@ -604,6 +624,9 @@ pub fn remove(
         }
     };
     remove_path(&chosen.1)?;
+    // The receipt outlives nothing: an id reinstalled by hand must not inherit
+    // the pin decision of the copy that was removed.
+    remove_path(&layout.receipt_path(chosen.0, id))?;
     Ok(chosen.1)
 }
 

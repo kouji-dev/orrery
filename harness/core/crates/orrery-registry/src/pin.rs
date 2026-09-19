@@ -416,6 +416,164 @@ impl SupplyChainRecord {
     }
 }
 
+/// The file name a receipt is written under, inside [`RECEIPTS_DIR`].
+///
+/// # Why a receipt exists at all
+///
+/// Phase 8's criterion is that unpinned extensions refuse to **load**, not
+/// merely to install. The load path has only a directory and a manifest to go
+/// on, and neither says whether anybody ever checked a signature — so the
+/// install writes down what it decided, and the load reads it back. Without
+/// this, an extension installed before an admin set `unpinned = "refuse"` went
+/// on loading forever afterwards, which is the hole this closes.
+///
+/// It lives **beside** the extension rather than inside it, under the layer
+/// root, so that copying an extension directory onto a machine does not carry a
+/// receipt with it.
+pub const RECEIPTS_DIR: &str = "registry/receipts";
+
+/// The receipt for an extension installed at `<layer>/extensions/<id>`.
+///
+/// `None` when the path is not shaped like an installed extension, which is how
+/// an extension listed by a `[[extension]] path = …` entry — never installed,
+/// so never pinned — is told apart from one the installer placed.
+#[must_use]
+pub fn receipt_beside(ext_dir: &Path) -> Option<PathBuf> {
+    let id = ext_dir.file_name()?;
+    let layer_root = ext_dir.parent()?.parent()?;
+    Some(
+        layer_root
+            .join(RECEIPTS_DIR)
+            .join(format!("{}.toml", id.to_string_lossy())),
+    )
+}
+
+impl SupplyChainRecord {
+    /// The receipt, as it is written to disk.
+    ///
+    /// Hand-written rather than derived: three scalars and three optional
+    /// strings do not need a serde surface, and the format has to stay readable
+    /// by a person auditing a machine.
+    #[must_use]
+    pub fn to_toml(&self) -> String {
+        let mut out = String::from("# Written by `orrery install`. Read by the load path.\n");
+        out.push_str(&format!("ext = {}\n", quote(self.ext.as_str())));
+        out.push_str(&format!("source = {}\n", quote(&self.source)));
+        out.push_str(&format!("pinned = {}\n", self.pinned));
+        out.push_str(&format!("development = {}\n", self.development));
+        if let Some(rule) = &self.rule {
+            out.push_str(&format!("rule = {}\n", quote(rule)));
+        }
+        if let Some(reason) = self.reason {
+            out.push_str(&format!("reason = {}\n", quote(reason.as_str())));
+        }
+        if let Some(index) = &self.index {
+            out.push_str(&format!("index = {}\n", quote(index)));
+        }
+        out
+    }
+
+    /// Read one back.
+    ///
+    /// # Errors
+    ///
+    /// [`RegistryError::Syntax`] when the file does not parse or has no `ext`.
+    pub fn from_toml(text: &str, file: impl Into<PathBuf>) -> Result<Self, RegistryError> {
+        let file = file.into();
+        let syntax = |message: String| RegistryError::Syntax {
+            file: file.display().to_string(),
+            message,
+        };
+        let doc: toml::Value =
+            toml::from_str(text).map_err(|e| syntax(e.message().to_owned()))?;
+        let string = |key: &str| {
+            doc.get(key)
+                .and_then(toml::Value::as_str)
+                .map(ToOwned::to_owned)
+        };
+        let ext = string("ext").ok_or_else(|| syntax("no `ext` in the receipt".to_owned()))?;
+        let ext: ExtId = ext
+            .parse()
+            .map_err(|e| syntax(format!("`ext` is not an extension id: {e}")))?;
+        Ok(Self {
+            ext,
+            source: string("source").unwrap_or_default(),
+            pinned: doc
+                .get("pinned")
+                .and_then(toml::Value::as_bool)
+                .unwrap_or(false),
+            development: doc
+                .get("development")
+                .and_then(toml::Value::as_bool)
+                .unwrap_or(false),
+            rule: string("rule"),
+            reason: string("reason").and_then(|r| match r.as_str() {
+                "not-from-the-registry" => Some(UnpinnedReason::NotFromTheRegistry),
+                "development" => Some(UnpinnedReason::Development),
+                "unsigned" => Some(UnpinnedReason::Unsigned),
+                _ => None,
+            }),
+            index: string("index"),
+            refused: None,
+        })
+    }
+
+    /// Read the receipt for an extension installed at `ext_dir`, if there is
+    /// one this build can make sense of.
+    #[must_use]
+    pub fn beside(ext_dir: &Path) -> Option<Self> {
+        let path = receipt_beside(ext_dir)?;
+        let text = std::fs::read_to_string(&path).ok()?;
+        Self::from_toml(&text, path).ok()
+    }
+}
+
+/// A TOML basic string, with the two characters that can appear in a path
+/// escaped.
+fn quote(s: &str) -> String {
+    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
+}
+
+/// Whether the **load** path must refuse this extension, and why.
+///
+/// The install-time gate ([`decide`]) cannot answer this on its own: it runs
+/// once, when the extension arrives, and an admin who sets
+/// `unpinned = "refuse"` afterwards is making a statement about what may run
+/// from now on, not about what was installed last month. So the same managed
+/// setting is consulted again at load, against the receipt the install left.
+///
+/// A missing receipt refuses under `refuse`, deliberately: the only way to have
+/// no receipt is to predate this check or to have been placed by hand, and
+/// neither is a signature.
+#[must_use]
+pub fn load_refusal(
+    managed: Option<&ManagedRegistry>,
+    receipt: Option<&SupplyChainRecord>,
+) -> Option<String> {
+    let managed = managed?;
+    if managed.unpinned != Unpinned::Refuse {
+        return None;
+    }
+    match receipt {
+        Some(r) if r.pinned && !r.development => None,
+        Some(r) => Some(format!(
+            "unpinned ({}) — {} sets `registry.unpinned = \"refuse\"`, so only the signed \
+             index at {} may be loaded from",
+            r.reason.map_or("no signature was checked", UnpinnedReason::as_str),
+            managed.file.display(),
+            managed.index,
+        )),
+        None => Some(format!(
+            "no install receipt, so nothing about it was ever verified — {} sets \
+             `registry.unpinned = \"refuse\"`, so only the signed index at {} may be \
+             loaded from",
+            managed.file.display(),
+            managed.index,
+        )),
+    }
+}
+
 /// Everything installed, and how it was checked.
 #[derive(Clone, Debug, Default)]
 pub struct SupplyChainLedger {
