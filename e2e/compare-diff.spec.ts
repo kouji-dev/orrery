@@ -180,3 +180,28 @@ test("the file column resizes, on the same width as the working-changes list", a
     .evaluate((el) => getComputedStyle(el).gridTemplateColumns);
   expect(working).toMatch(/^39[0-9]px /);
 });
+
+test("collapsing every folder does not shrink the split — the pane keeps its full height", async ({ page }) => {
+  await openCompare(page);
+
+  const grid = page.locator("app-range-diff-view .diff-grid");
+  const before = (await grid.boundingBox())!;
+
+  // collapse the whole tree: nothing left but folder rows
+  await page.locator("app-range-diff-view .diff-dir", { hasText: "src" }).first().click();
+  await expect(page.locator("app-range-diff-view .diff-file", { hasText: "two.ts" })).toHaveCount(0);
+
+  const after = (await grid.boundingBox())!;
+  // regression: <app-diff-split>'s host was an in-flow inline box, so the grid
+  // was sized by its tallest child instead of the pane — collapsing the list
+  // took the diff (and its Monaco) down with it.
+  expect(Math.abs(after.height - before.height)).toBeLessThanOrEqual(1);
+
+  // and the split really does reach the bottom of the pane it lives in
+  const pane = (await page.locator("app-range-diff-view").boundingBox())!;
+  expect(after.y + after.height).toBeGreaterThanOrEqual(pane.y + pane.height - 1);
+
+  // the diff side keeps its height too — the editor is not squeezed to a sliver
+  const diff = (await page.locator("app-range-diff-view app-diff-or-blame").boundingBox())!;
+  expect(diff.height).toBeGreaterThanOrEqual(after.height - 1);
+});
