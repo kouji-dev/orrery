@@ -485,6 +485,9 @@ pub struct Setup {
     /// force named it. `None` is an error at build time: there is no provider
     /// that needs no configuration at all.
     pub provider: Option<ProviderChoice>,
+    /// The workspace's own `orrery.toml`, for its `[[route]]` list. `None` when
+    /// there is no such file, which is an empty rule set rather than a refusal.
+    pub routing_toml: Option<String>,
     /// The extensions discovery found, beyond the compiled-in set.
     pub extensions: Vec<orrery_harness::ExtensionSource>,
     /// What the loop runs under, as the layers on disk resolved it.
@@ -556,6 +559,7 @@ impl Session {
         config.audit = audit;
         config.kernel = setup.kernel.clone();
         config.extensions = setup.extensions.clone();
+        config.routing_toml = setup.routing_toml.clone();
 
         Ok(Self {
             harness: Arc::new(Harness::build(config)?),

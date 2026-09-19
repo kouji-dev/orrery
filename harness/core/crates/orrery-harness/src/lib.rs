@@ -35,6 +35,7 @@ pub mod features;
 #[cfg(feature = "fixture-provider")]
 pub mod fixture;
 pub mod memory;
+pub mod steps;
 
 use std::sync::Arc;
 
@@ -52,11 +53,14 @@ pub use build::{
 };
 pub use config::{kernel_config, price_table};
 pub use memory::KernelMemory;
+pub use steps::KernelSteps;
 
 /// A built harness: a runtime, a kernel, and the session it opened.
 pub struct Harness {
     runtime: tokio::runtime::Runtime,
     kernel: Arc<Kernel>,
+    registry: Arc<orrery_tools::Registry>,
+    router: orrery_router::Router,
     store: Arc<dyn SessionStore>,
     engine: Arc<PolicyEngine>,
     ledger: Ledger,
@@ -91,6 +95,8 @@ impl Harness {
         Ok(Self {
             runtime,
             kernel: assembled.kernel,
+            registry: assembled.registry,
+            router: assembled.router,
             store: assembled.store,
             engine: assembled.engine,
             ledger: assembled.ledger,
@@ -121,6 +127,59 @@ impl Harness {
     #[must_use]
     pub fn store(&self) -> &Arc<dyn SessionStore> {
         &self.store
+    }
+
+    /// The tools a turn can reach, for a caller that dispatches one itself —
+    /// a workflow's `tool` step does, and it makes no model call to do it.
+    #[must_use]
+    pub fn registry(&self) -> Arc<orrery_tools::Registry> {
+        self.registry.clone()
+    }
+
+    /// The router the declared `[[route]]` rules built.
+    #[must_use]
+    pub fn router(&self) -> &orrery_router::Router {
+        &self.router
+    }
+
+    /// Everything a workflow's steps reach the system through.
+    ///
+    /// Separate from [`run_workflow`](Self::run_workflow) so a caller that
+    /// wants to observe the steps can build its own
+    /// [`Runner`](orrery_orchestrator::Runner) over it.
+    #[must_use]
+    pub fn steps(&self, cancel: CancellationToken) -> steps::KernelSteps {
+        steps::KernelSteps::new(
+            self.kernel.clone(),
+            self.store.clone(),
+            self.registry.clone(),
+            self.session,
+            self.branch,
+            self.scope.clone(),
+            self.router.clone(),
+        )
+        .cancelled_by(cancel)
+    }
+
+    /// Run a typechecked workflow to its end.
+    ///
+    /// This is the product's reach into plan 11: `orrery run -p` submits
+    /// exactly one turn and has nowhere to put a workflow, so without this the
+    /// loop machine, its caps and the router were library tests and nothing
+    /// else. A loop that never satisfies its predicate stops at
+    /// `max_iterations` on a counter the orchestrator owns — not on a prompt's
+    /// good behaviour — and the cap is in the answer.
+    pub async fn run_workflow(
+        &self,
+        workflow: &orrery_orchestrator::Checked,
+        budget: Option<orrery_proto::Budget>,
+        cancel: CancellationToken,
+    ) -> orrery_orchestrator::WorkflowRun {
+        let steps = self.steps(cancel.clone());
+        orrery_orchestrator::Runner::new(&steps)
+            .cancelled_by(cancel)
+            .run(workflow, budget)
+            .await
     }
 
     /// The policy engine, for `permissions explain` and for a reload.

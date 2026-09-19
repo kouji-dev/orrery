@@ -1,27 +1,11 @@
-The orrery command tree. Links the ratatui and json clients.
+Check and run declared workflows
 
-Usage: orrery [OPTIONS] [COMMAND]
+Usage: orrery workflow [OPTIONS] <COMMAND>
 
 Commands:
-  run          Run one turn, print the final text, and exit
-  serve        Start a kernel, print its endpoint, and keep running without a client
-  attach       Attach a renderer to a running kernel
-  replay       Re-emit a stored session as events, so any renderer can draw any past session
-  session      Inspect stored sessions
-  install      Install an extension. A bare name is the signed registry
-  remove       Remove an installed extension
-  ext          Inspect and manage extensions
-  permissions  Explain a permission decision
-  config       Explain resolved configuration
-  init         Write a starter configuration into the workspace
-  import       Import configuration from another harness
-  mcp          Inspect the MCP servers this workspace declares
-  skills       Inspect the skills the discovery pass found
-  workflow     Check and run declared workflows
-  eval         Run, compare and replay evaluation suites
-  ledger       Query the decision ledger: what was asked, what was decided, and which rule decided it
-  telemetry    Query the telemetry stream: model requests and routing decisions
-  help         Print this message or the help of the given subcommand(s)
+  check  Typecheck one and print its steps. Starts no kernel
+  run    Run one to its end and report what it came to
+  help   Print this message or the help of the given subcommand(s)
 
 Options:
       --profile <NAME>
@@ -60,6 +44,3 @@ Options:
 
   -h, --help
           Print help (see a summary with '-h')
-
-  -V, --version
-          Print version

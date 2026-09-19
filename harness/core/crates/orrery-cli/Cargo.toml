@@ -16,6 +16,19 @@ publish = false
 name = "orrery"
 path = "src/main.rs"
 
+# The two providers that link a TLS stack. **Off by default, and off in CI**:
+# the default build must reach no network. They are passthroughs rather than
+# absent because without them the binary had no way at all to turn either one
+# on - `--provider anthropic:...` could only ever answer "this build has no
+# `anthropic` provider", naming a feature nothing could set.
+#
+#     cargo build -p orrery-cli --features anthropic
+#     cargo build -p orrery-cli --features openai-compat
+[features]
+default = []
+anthropic = ["orrery-harness/anthropic"]
+openai-compat = ["orrery-harness/openai-compat"]
+
 [dependencies]
 async-trait = { workspace = true }
 clap = { workspace = true }
@@ -34,6 +47,9 @@ orrery-mcp = { path = "../orrery-mcp" }
 orrery-skills = { path = "../orrery-skills" }
 orrery-policy = { workspace = true }
 orrery-kernel = { path = "../orrery-kernel" }
+# `orrery workflow` is the verb plan 11 needed: `run -p` submits one turn and
+# has nowhere to put a workflow file.
+orrery-orchestrator = { path = "../orrery-orchestrator" }
 orrery-harness = { path = "../orrery-harness" }
 orrery-host = { path = "../orrery-host" }
 orrery-transport = { path = "../orrery-transport" }

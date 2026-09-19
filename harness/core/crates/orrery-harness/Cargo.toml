@@ -98,8 +98,16 @@ orrery-config = { path = "../orrery-config" }
 orrery-tools = { path = "../orrery-tools" }
 orrery-host = { path = "../orrery-host" }
 orrery-kernel = { path = "../orrery-kernel" }
+# Plan 11's two crates. This is the crate that may name a kernel *and* an
+# orchestrator, so `TurnRunner` and `StepExecutor` - which nothing implemented -
+# are implemented here in `steps.rs`. Without this the loop machine, its caps
+# and every routing rule were green library tests the binary could not reach.
+orrery-router = { path = "../orrery-router" }
+orrery-orchestrator = { path = "../orrery-orchestrator" }
 async-trait = { workspace = true }
 futures-util = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "fs", "time"] }
 tokio-util = { workspace = true }

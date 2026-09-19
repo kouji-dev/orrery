@@ -80,6 +80,7 @@ fn main() {
         Some(Command::Import { from }) => cmd::import::dispatch(&cli, *from),
         Some(Command::Mcp { command }) => cmd::mcp::dispatch(&cli, command),
         Some(Command::Skills { command }) => cmd::skills::dispatch(&cli, command),
+        Some(Command::Workflow { command }) => cmd::workflow::dispatch(&cli, command),
         Some(Command::Eval { command }) => cmd::eval::dispatch(&cli, command),
         Some(Command::Ledger {
             session,

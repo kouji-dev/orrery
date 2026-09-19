@@ -137,3 +137,37 @@ fn the_shipped_floor_can_draw_a_login_prompt() {
         assert!(line.contains(view), "`{view}` missing from: {line}");
     }
 }
+
+/// The two crates a default build deliberately leaves out have a feature that
+/// puts them in, and the binary is where it can be set.
+///
+/// `orrery-ext-provider-anthropic` and `orrery-ext-provider-openai-compat` are
+/// absent from `cargo tree -p orrery-cli` **on purpose**: each links reqwest
+/// and rustls through its `http` feature, and the default build must pull no
+/// TLS stack and reach no network. That is only a decision, rather than a dead
+/// end, if something can reverse it — and until this crate declared the two
+/// passthroughs, nothing could: `--provider anthropic:…` could only ever answer
+/// "this build has no `anthropic` provider", naming a feature no `cargo build`
+/// of this package could set.
+#[test]
+fn the_providers_left_out_can_be_turned_on() {
+    let manifest = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"))
+        .expect("this crate's own manifest");
+    let features = manifest
+        .split("[features]")
+        .nth(1)
+        .and_then(|rest| rest.split("\n[").next())
+        .expect("a `[features]` table");
+    assert!(
+        features.contains("anthropic = [\"orrery-harness/anthropic\"]"),
+        "{features}"
+    );
+    assert!(
+        features.contains("openai-compat = [\"orrery-harness/openai-compat\"]"),
+        "{features}"
+    );
+    assert!(
+        features.contains("default = []"),
+        "and neither is on by default: {features}"
+    );
+}

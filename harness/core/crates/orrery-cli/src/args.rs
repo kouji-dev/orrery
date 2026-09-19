@@ -194,6 +194,12 @@ pub enum Command {
         #[command(subcommand)]
         command: SkillsCommand,
     },
+    /// Check and run declared workflows.
+    Workflow {
+        /// What to do with one.
+        #[command(subcommand)]
+        command: WorkflowCommand,
+    },
     /// Run, compare and replay evaluation suites.
     Eval {
         /// What to do.
@@ -372,5 +378,31 @@ pub enum SkillsCommand {
         /// The skill name, from its front matter.
         #[arg(value_name = "NAME")]
         name: String,
+    },
+}
+
+/// `orrery workflow ...`
+///
+/// Two verbs, and the split is the same one `mcp` makes: **asking** whether a
+/// file is well-formed must work with no provider in sight, and **running** it
+/// is the thing that costs money. Translation #5 — an invalid workflow fails at
+/// load, not after three model calls — is a property only if the two are
+/// separable.
+#[derive(Debug, Subcommand)]
+pub enum WorkflowCommand {
+    /// Typecheck one and print its steps. Starts no kernel.
+    Check {
+        /// The `.toml` file.
+        #[arg(value_name = "FILE")]
+        file: std::path::PathBuf,
+    },
+    /// Run one to its end and report what it came to.
+    Run {
+        /// The `.toml` file.
+        #[arg(value_name = "FILE")]
+        file: std::path::PathBuf,
+        /// A token ceiling for the whole run, overriding the workflow's own.
+        #[arg(long, value_name = "N")]
+        max_tokens: Option<u64>,
     },
 }

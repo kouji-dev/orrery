@@ -228,6 +228,10 @@ pub struct ResolvedConfig {
     /// The permission rules, as TOML. `None` takes the workspace default:
     /// read, write and spawn inside the workspace, and nothing outside it.
     pub policy_toml: Option<String>,
+    /// The routing rules, as the `[[route]]` list of a configuration layer.
+    /// `None` is an empty set, which is a router that decides on its own
+    /// ladder rather than one that refuses.
+    pub routing_toml: Option<String>,
     /// What the loop runs under.
     pub kernel: KernelConfig,
     /// Where to record what happened.
@@ -272,6 +276,7 @@ impl ResolvedConfig {
             store,
             extensions: extension_sources(resolved),
             policy_toml: None,
+            routing_toml: None,
             kernel,
             audit: orrery_audit::null(),
         }
@@ -290,6 +295,7 @@ impl ResolvedConfig {
             store: StoreChoice::Sqlite,
             extensions: Vec::new(),
             policy_toml: None,
+            routing_toml: None,
             kernel: KernelConfig::default(),
             audit: orrery_audit::null(),
         }
@@ -320,6 +326,10 @@ pub enum BuildError {
     /// No session backend is compiled in.
     #[error("this build has no session store: enable the `sqlite` feature")]
     NoStore,
+    /// A `[[route]]` list that will not parse. A person wrote it, so it names
+    /// the file and the rule.
+    #[error(transparent)]
+    Routing(#[from] orrery_router::RuleError),
     /// The named provider is not compiled in.
     #[error("this build has no `{which}` provider: check the cargo features")]
     NoProvider {
@@ -352,6 +362,8 @@ pub enum BuildError {
 /// What `build` assembled, before it is wrapped in a runtime.
 pub(crate) struct Assembled {
     pub kernel: Arc<Kernel>,
+    pub registry: Arc<Registry>,
+    pub router: orrery_router::Router,
     pub store: Arc<dyn SessionStore>,
     pub engine: Arc<PolicyEngine>,
     pub ledger: orrery_ext_api::Ledger,
@@ -515,12 +527,29 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
         }
     }
 
-    // 6 · The provider, and the kernel over all of it.
+    // 6 · The router. Declared rules, or none at all: an empty set is not a
+    //     router that refuses, it is one that decides on its own ladder, so a
+    //     workspace with no `[[route]]` list behaves exactly as it did before
+    //     the router was in the binary.
+    let router = orrery_router::Router::new(orrery_router::RouterProfile {
+        rules: match &config.routing_toml {
+            Some(text) => orrery_router::RuleSet::parse_toml(
+                text,
+                &config.workspace.join("orrery.toml").display().to_string(),
+            )?,
+            None => orrery_router::RuleSet::empty(),
+        },
+        ..orrery_router::RouterProfile::default()
+    })
+    .with_audit(config.audit.clone());
+
+    // 7 · The provider, and the kernel over all of it.
     let provider = provider_for(&config.provider)?;
+    let registry = Arc::new(registry);
     let kernel = Kernel::new(
         store.clone(),
         provider,
-        Arc::new(registry),
+        registry.clone(),
         config.kernel.clone(),
     )
     .with_audit(config.audit.clone())
@@ -528,6 +557,8 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
 
     Ok(Assembled {
         kernel: Arc::new(kernel),
+        registry,
+        router,
         store,
         engine,
         ledger: table.ledger().clone(),

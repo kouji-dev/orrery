@@ -18,6 +18,7 @@ pub mod run;
 pub mod serve;
 pub mod session;
 pub mod skills;
+pub mod workflow;
 
 use std::path::PathBuf;
 
@@ -150,11 +151,18 @@ pub fn setup(cli: &Cli) -> Setup {
         },
     );
 
+    // The `[[route]]` list lives beside `[permissions]`, in the workspace's own
+    // `orrery.toml`. One file a person already has, rather than a flag: a
+    // routing rule and a permission rule are the same kind of thing and belong
+    // in the same place.
+    let routing_toml = std::fs::read_to_string(workspace.join("orrery.toml")).ok();
+
     Setup {
         workspace,
         state_dir,
         profile: cli.profile.clone().unwrap_or_else(|| "default".to_owned()),
         provider,
+        routing_toml,
         kernel,
         // What `orrery ext list` prints and what a turn can actually call have
         // to be the same set, or installing an extension is theatre.
