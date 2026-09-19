@@ -6,10 +6,25 @@
 //!   nothing else. It never falls through to crates.io: "not in the index" is an
 //!   error naming the index, not a guess at another host. A silent fallback is
 //!   how a typo installs somebody else's package.
-//! - A leading `./` or `../`, or a `file:` prefix, is a **path**.
-//! - Everything else needs its prefix: `github:`, `crate:`, `npm:`, or a URL
-//!   with a scheme.
+//! - A leading `./` or `../`, an **absolute** path, or a `file:` prefix, is a
+//!   **path**.
+//! - Everything else needs its prefix: `github:`, `crates-io:`, `npm:`, or a
+//!   URL with a scheme.
 //!
+//! # One vocabulary, for the index and for the install
+//!
+//! There used to be two, for one concept. `orrery registry add --source` took
+//! `crates-io:<name>`, `npm:<name>` and `url:<url>`; `orrery install` took
+//! `crate:<name>` and would not answer to `crates-io:`, while the index would
+//! not answer to `crate:`. A person who read one command's help and typed it at
+//! the other was told their source did not exist.
+//!
+//! Now there is one list, [`VOCABULARY`], printed by both parsers when either
+//! refuses, and one spelling per concept: **`crates-io:`**, which is what an
+//! index shows. `crate:` is still accepted, because people have typed it, and
+//! is displayed back as `crates-io:` so one string means one thing everywhere.
+//! And an absolute path is a path: `./x` was accepted and the absolute path it
+//! resolves to was not, which is a distinction nothing downstream makes.
 //! # Only one of the seven is verified
 //!
 //! Registry installs are signature-checked and hash-pinned. The other six forms
@@ -22,6 +37,13 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use crate::error::RegistryError;
+
+/// The one vocabulary, in the words both parsers use when they refuse.
+///
+/// [`Source::from_str`] and `EntrySource::from_str` print this same list, so
+/// the two commands cannot describe the same concept differently again. An
+/// index pins three of these; an install acts on the rest as well.
+pub const VOCABULARY: &str = "a bare registry name; a path (`./x`, `../x`, an absolute path, or `file:x`); `github:owner/repo`; `crates-io:<name>`, also spelled `crate:<name>`; `npm:<name>`; `url:<url>`, which only an index pins; or a git URL";
 
 /// What a git reference is, and therefore whether the install is reproducible.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -166,9 +188,12 @@ impl fmt::Display for Source {
                     r => write!(f, "{base}#{r}"),
                 }
             }
+            // `crates-io:`, whichever spelling was typed: this string ends up
+            // in the supply-chain ledger and beside an index entry, and one
+            // concept spelled two ways there is one concept nobody can grep.
             Source::Crate { name, version } => match version {
-                Some(v) => write!(f, "crate:{name}@{v}"),
-                None => write!(f, "crate:{name}"),
+                Some(v) => write!(f, "crates-io:{name}@{v}"),
+                None => write!(f, "crates-io:{name}"),
             },
             Source::Npm { name, version } => match version {
                 Some(v) => write!(f, "npm:{name}@{v}"),
@@ -208,6 +233,19 @@ impl FromStr for Source {
                 path: PathBuf::from(input),
             });
         }
+        // An absolute path is a path. Accepting `./x` and refusing the absolute
+        // path it resolves to is a distinction nothing downstream makes:
+        // `stage` calls `absolute()` on it either way. `has_root` as well as
+        // `is_absolute`, so `/opt/x` on Windows — rooted, drive-relative — is
+        // still read as the path it obviously is.
+        {
+            let path = std::path::Path::new(input);
+            if path.is_absolute() || path.has_root() {
+                return Ok(Source::Path {
+                    path: path.to_path_buf(),
+                });
+            }
+        }
 
         if let Some(rest) = input.strip_prefix("github:") {
             let (repo, reference) = split_ref(rest);
@@ -221,7 +259,13 @@ impl FromStr for Source {
             });
         }
 
-        if let Some(rest) = input.strip_prefix("crate:") {
+        // One concept, two spellings people have typed. `crates-io:` is what
+        // an index shows and is therefore the canonical one; `crate:` is kept
+        // because it is what this command's own help said for two rounds.
+        if let Some(rest) = input
+            .strip_prefix("crates-io:")
+            .or_else(|| input.strip_prefix("crate:"))
+        {
             let (name, version) = split_version(rest);
             if name.is_empty() {
                 return Err(bad("a `crate:` source needs a crate name"));
@@ -237,6 +281,16 @@ impl FromStr for Source {
                 name: name.to_owned(),
                 version,
             });
+        }
+
+        // Named by the shared vocabulary, so it gets a real answer here rather
+        // than "not a source": `url:` is the one entry an **index** pins and an
+        // install cannot act on, because the bytes behind it are a tarball and
+        // fetching one is a `net` call.
+        if let Some(rest) = input.strip_prefix("url:") {
+            return Err(bad(&format!(
+                "`url:` pins a tarball in a registry index; `orrery install`                  takes a git URL directly — try `{rest}` — or the registry name                  the index lists it under"
+            )));
         }
 
         if let Some(rest) = input.strip_prefix("npm:") {
@@ -271,10 +325,10 @@ impl FromStr for Source {
         // A bare word is the registry, and only the registry.
         let (name, version) = split_version(input);
         if !is_bare_name(name) {
-            return Err(bad(
-                "it is neither a bare registry name, a `./` path, nor a prefixed source \
-                 (`github:`, `crate:`, `npm:`, `file:`, or a URL)",
-            ));
+            // The one vocabulary, so somebody who read `orrery registry add
+            // --source`'s help and typed it here is told what this command
+            // takes rather than only that they are wrong.
+            return Err(bad(&format!("it is none of: {VOCABULARY}")));
         }
         let version = match version {
             None => None,

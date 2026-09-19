@@ -124,9 +124,11 @@ impl std::str::FromStr for EntrySource {
     /// The same spelling [`EntrySource`] prints, so `orrery registry add
     /// --source crates-io:x` and what the index shows are one string.
     ///
-    /// Deliberately **not** the `orrery install` source grammar: that one has
-    /// seven forms and five of them bypass the index entirely. What can go
-    /// *into* an index is the three the registry can pin.
+    /// An index pins **three** of [`crate::VOCABULARY`] — the three whose bytes
+    /// the registry can hash. The others are install-only, and saying so is not
+    /// the same as having a second vocabulary: `crate:` means here exactly what
+    /// it means at `orrery install`, and a refusal here prints the same list
+    /// that one does.
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let bad = |message: &str| RegistryError::SourceSyntax {
             input: text.to_owned(),
@@ -139,7 +141,10 @@ impl std::str::FromStr for EntrySource {
             return Err(bad("names nothing after the `:`"));
         }
         Ok(match kind {
-            "crates-io" => EntrySource::CratesIo {
+            // `crate` is the other spelling `orrery install` accepts for the
+            // same concept. It parses to the same variant and is written back
+            // as `crates-io:`, so an index holds one spelling.
+            "crates-io" | "crate" => EntrySource::CratesIo {
                 name: rest.to_owned(),
             },
             "npm" => EntrySource::Npm {
@@ -150,7 +155,8 @@ impl std::str::FromStr for EntrySource {
             },
             other => {
                 return Err(bad(&format!(
-                    "`{other}` is not something an index can pin; the registry indexes crates-io, npm and url"
+                    "`{other}` is not something an index can pin; an index pins                      `crates-io:<name>`, `npm:<name>` and `url:<url>`. The full                      source vocabulary, which `orrery install` takes, is {vocabulary}",
+                    vocabulary = crate::source::VOCABULARY
                 )));
             }
         })

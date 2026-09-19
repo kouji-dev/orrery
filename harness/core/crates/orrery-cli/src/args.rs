@@ -366,8 +366,10 @@ pub enum RegistryCommand {
         /// The exact version. Not a range: a range is not a pin.
         #[arg(long, value_name = "VERSION")]
         version: String,
-        /// Where the bytes come from: `crates-io:<name>`, `npm:<name>` or
-        /// `url:<url>`. The registry indexes; it does not host.
+        /// Where the bytes come from: `crates-io:<name>` (also spelled
+        /// `crate:<name>`, as `orrery install` writes it), `npm:<name>` or
+        /// `url:<url>`. Three of the one source vocabulary — the three whose
+        /// bytes an index can hash. The registry indexes; it does not host.
         #[arg(long, value_name = "SOURCE")]
         source: String,
     },

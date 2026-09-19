@@ -469,14 +469,30 @@ impl Installer<'_> {
 
         match source {
             Source::Registry { .. } => {
-                let index = self.index.ok_or_else(|| RegistryError::NotInIndex {
-                    id: source.label(),
-                    index: if self.index_url.is_empty() {
-                        "<no index configured>".to_owned()
-                    } else {
-                        self.index_url.clone()
-                    },
-                })?;
+                // No index document in hand. **Why** there is none decides
+                // what may be said: an index that was never opened cannot be
+                // reported on. A remote URL is one this build cannot fetch at
+                // all, and saying "not in the registry index <url>" for it
+                // states a fact nobody checked.
+                let index = match self.index {
+                    Some(index) => index,
+                    None if is_remote(&self.index_url) => {
+                        return Err(RegistryError::RemoteIndex {
+                            id: source.label(),
+                            index: self.index_url.clone(),
+                        });
+                    }
+                    None => {
+                        return Err(RegistryError::NotInIndex {
+                            id: source.label(),
+                            index: if self.index_url.is_empty() {
+                                "<no index configured>".to_owned()
+                            } else {
+                                self.index_url.clone()
+                            },
+                        });
+                    }
+                };
                 let entry = resolve_entry(index, source, &self.index_url)?;
 
                 // Offline first: a package this machine has already verified is
@@ -742,4 +758,16 @@ pub fn refusal_record(ext: ExtId, source: &Source, why: &RegistryError) -> Suppl
 #[must_use]
 pub fn default_git_runner() -> impl GitRunner {
     SystemGit
+}
+
+/// Whether an index URL names somewhere this build would have to reach over the
+/// network to read.
+///
+/// The one definition. `orrery-cli` asks the same question when it decides
+/// whether to read an index off disk (`local_index`), and the two answers have
+/// to agree or the installer is handed no document and then told the reason was
+/// something else.
+#[must_use]
+pub fn is_remote(index_url: &str) -> bool {
+    index_url.contains("://")
 }

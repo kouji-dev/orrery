@@ -24,6 +24,26 @@
 //! broker, which means a session. `orrery install <bare name>` with no index
 //! configured says exactly that, and never falls through to another host.
 //!
+//! What it must not say is that it looked. Under a managed layer naming a
+//! remote index it answered `buildgraph: not in the registry index
+//! https://registry.corp.internal/orrery/index.toml` instantly and with no
+//! fetch, which reads as "I looked and it is not there". The index was never
+//! opened, so [`orrery_registry::RegistryError::RemoteIndex`] says that instead
+//! and names `--index <path>`, which is the thing that does work. `local_index`
+//! and the installer decide "is this remote" through one function,
+//! [`orrery_registry::is_remote`], because two readings of one URL is how the
+//! message came to be about a different code path than the one that ran.
+//!
+//! # A refused install is written down
+//!
+//! Section 8 phase 3 is "every decision is logged". A refused **load** reached
+//! `orrery ledger` in round 9; a refused *install* exited 4 with a good message
+//! and left nothing behind — `ledger`, `ledger --stream load` and
+//! `ledger --subject ext:<name>` all answered "nothing recorded". [`install`]
+//! now writes the same `ext.load` / `skipped` event a refused load writes, into
+//! `<state-dir>/audit/install.jsonl`, so one question has one answer wherever
+//! the refusal happened.
+//!
 //! The index itself is made by [`crate::cmd::registry`]: `orrery registry
 //! init|add|sign|verify`. Until round 7 it was made by nothing at all, which
 //! made "an admin pins a version set" a sentence about a file nobody here could
@@ -106,8 +126,15 @@ pub fn install(
 
     let record = match installer.install(&source, &options) {
         Ok(record) => record,
-        Err(e @ RegistryError::Unpinned { .. }) => fail(Exit::Denied, e),
-        Err(e @ RegistryError::RequiresMismatch { .. }) => fail(Exit::Denied, e),
+        // A refusal to install is a **decision**, and section 8 phase 3 is
+        // that every decision is logged. It used to exit 4 with a good message
+        // and leave no trace at all: `ledger`, `ledger --stream load` and
+        // `ledger --subject ext:<name>` all answered "nothing recorded" for an
+        // install the managed layer had just refused.
+        Err(e @ (RegistryError::Unpinned { .. } | RegistryError::RequiresMismatch { .. })) => {
+            record_refusal(&state, &source, &e);
+            fail(Exit::Denied, e)
+        }
         Err(e) => fail(Exit::Usage, e),
     };
 
@@ -137,6 +164,35 @@ pub fn install(
         }
         _ => Exit::Ok.exit(),
     }
+}
+
+/// Write a refused install into the load stream, where `orrery ledger` reads.
+///
+/// The same event a refused **load** writes — `ext.load` with
+/// `status: "skipped"` — because they are the same kind of fact and an operator
+/// asking "what did this harness decide about `buildgraph`" should not have to
+/// know which command was running when it was decided. Best effort: a refusal
+/// that cannot be written down is still a refusal, so nothing here can turn
+/// exit 4 into exit 1.
+fn record_refusal(state: &Path, source: &Source, why: &RegistryError) {
+    let Ok(ext) = source.provisional_id().parse::<orrery_proto::ExtId>() else {
+        return;
+    };
+    let dir = crate::session::audit_dir(state);
+    // Not named after a session, because there is no session: an install is a
+    // command, not a turn. `ledger` scans every `*.jsonl` in this directory.
+    let Ok(sink) = orrery_audit::FileSink::open(dir.join("install.jsonl")) else {
+        return;
+    };
+    orrery_audit::AuditSink::append(
+        &sink,
+        orrery_audit::AuditEvent::ExtensionLoad {
+            ext,
+            status: "skipped".to_owned(),
+            contributions: Vec::new(),
+            problems: vec![why.to_string()],
+        },
+    );
 }
 
 /// `orrery remove <name>`.
@@ -261,8 +317,14 @@ fn keyring(managed: Option<&ManagedRegistry>) -> Keyring {
 }
 
 /// The index URL, when it names a file this build can actually read.
+///
+/// "Remote" is [`orrery_registry::is_remote`] and not a second `contains`:
+/// this function decides whether the installer is handed a document, and the
+/// installer decides what to *say* when it was not. Two readings of the same
+/// URL is how it came to say `not in the registry index <url>` for an index it
+/// had never opened.
 fn local_index(url: &str) -> Option<PathBuf> {
-    if url.is_empty() || url.contains("://") {
+    if url.is_empty() || orrery_registry::is_remote(url) {
         return None;
     }
     Some(PathBuf::from(url))

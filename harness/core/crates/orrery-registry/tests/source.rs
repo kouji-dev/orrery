@@ -99,19 +99,59 @@ fn parses_every_form() {
 #[test]
 fn an_unprefixed_url_like_thing_is_refused() {
     // The ambiguity rule, stated as a refusal: everything that is not a bare
-    // name or a `./` path needs its prefix.
-    for input in [
-        "github.com/owner/repo",
-        "owner/repo",
-        "C:/somewhere/local",
-        "@scope/pkg",
-    ] {
+    // name or a path needs its prefix. `C:/somewhere/local` is **not** in this
+    // list any more — it is an absolute path, and an absolute path is a path;
+    // see `an_absolute_path_is_a_path` below.
+    for input in ["github.com/owner/repo", "owner/repo", "@scope/pkg"] {
         let err = Source::from_str(input).unwrap_err();
         assert!(
             matches!(err, RegistryError::SourceSyntax { .. }),
             "`{input}` parsed as something: {err:?}"
         );
     }
+}
+
+/// `./x` was accepted and the absolute path it resolves to was refused, which
+/// is a distinction nothing downstream makes: `stage` calls `absolute()` on a
+/// path source either way.
+#[test]
+fn an_absolute_path_is_a_path() {
+    let inputs: &[&str] = if cfg!(windows) {
+        &["C:/somewhere/local", "/rooted/here"]
+    } else {
+        &["/somewhere/local"]
+    };
+    for input in inputs {
+        match Source::from_str(input) {
+            Ok(Source::Path { path }) => assert_eq!(path, PathBuf::from(input)),
+            other => panic!("`{input}` is a path: {other:?}"),
+        }
+    }
+}
+
+/// One concept, one spelling out. `crates-io:` is what an index shows, so it is
+/// what a source displays as — whichever of the two a person typed.
+#[test]
+fn crate_and_crates_io_are_one_source() {
+    let short = Source::from_str("crate:orrery-ext-x").expect("`crate:` still parses");
+    let long = Source::from_str("crates-io:orrery-ext-x").expect("`crates-io:` parses too");
+    assert_eq!(short, long, "two spellings, one source");
+    assert_eq!(
+        short.to_string(),
+        "crates-io:orrery-ext-x",
+        "and one spelling in the ledger and beside an index entry"
+    );
+}
+
+/// The refusal names the one vocabulary, so a person who read the other
+/// command's help is told what this one takes rather than only that they are
+/// wrong.
+#[test]
+fn a_refusal_names_the_shared_vocabulary() {
+    let err = Source::from_str("owner/repo").unwrap_err().to_string();
+    assert!(err.contains("crates-io:"), "{err}");
+    assert!(err.contains("npm:"), "{err}");
+    assert!(err.contains("github:owner/repo"), "{err}");
 }
 
 #[test]

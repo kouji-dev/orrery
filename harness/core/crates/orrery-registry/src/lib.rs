@@ -75,10 +75,10 @@ pub use index::{Entry, EntrySource, Index, SCHEMA, Timestamp};
 // Re-exported so a caller can spell a pinned version without taking `semver`
 // itself: an exact version is part of this crate's vocabulary.
 pub use semver::Version;
-pub use install::{InstallOptions, InstallRecord, Installer, Layout, Target, remove};
+pub use install::{InstallOptions, InstallRecord, Installer, Layout, Target, is_remote, remove};
 pub use pin::{
     ManagedRegistry, PinDecision, RECEIPTS_DIR, SupplyChainLedger, SupplyChainRecord, Unpinned,
     UnpinnedReason, load_refusal, receipt_beside,
 };
-pub use source::{GitRef, GitRunner, Source, SystemGit};
+pub use source::{GitRef, GitRunner, Source, SystemGit, VOCABULARY};
 pub use verify::{Keyring, PublicKey};

@@ -313,3 +313,151 @@ fn passing_yes_does_not_then_ask_for_yes() {
         "and nothing was denied by default: {stderr}"
     );
 }
+
+/// A managed layer that names a **remote** index and refuses everything else.
+fn managed_remote(home: &Path) {
+    let dir = home.join("ProgramData").join("Orrery");
+    std::fs::create_dir_all(&dir).expect("the managed directory");
+    std::fs::write(
+        dir.join("managed.toml"),
+        "[registry]\nindex = \"https://registry.corp.internal/orrery/index.toml\"\n\
+         unpinned = \"refuse\"\n",
+    )
+    .expect("managed.toml");
+}
+
+/// DEFECT: a refused install recorded nothing.
+///
+/// A refused **load** is in `orrery ledger` — a round 9 fix. A refused
+/// *install* exited 4 with a good message and left no trace at all: `ledger`,
+/// `ledger --stream load` and `ledger --subject ext:buildgraph` all said
+/// nothing recorded. Section 8 phase 3 is "every decision is logged", and a
+/// refusal to install is a decision.
+#[test]
+fn a_refused_install_is_in_the_ledger() {
+    let home = tempfile::tempdir().unwrap();
+    let work = tempfile::tempdir().unwrap();
+    managed_remote(home.path());
+    package(work.path(), "buildgraph", "1.0.0", "read = [\"./**\"]");
+    let state = work.path().join(".orrery");
+
+    let refused = run(
+        home.path(),
+        work.path(),
+        &[
+            "--workspace".to_owned(),
+            work.path().display().to_string(),
+            "--state-dir".to_owned(),
+            state.display().to_string(),
+            "install".to_owned(),
+            "./buildgraph".to_owned(),
+            "--yes".to_owned(),
+        ],
+    );
+    assert_eq!(
+        refused.status.code(),
+        Some(4),
+        "the refusal itself still works: {}",
+        String::from_utf8_lossy(&refused.stderr)
+    );
+
+    for narrowing in [
+        vec!["ledger"],
+        vec!["ledger", "--stream", "load"],
+        vec!["ledger", "--subject", "ext:buildgraph"],
+    ] {
+        let mut argv = vec![
+            "--workspace".to_owned(),
+            work.path().display().to_string(),
+            "--state-dir".to_owned(),
+            state.display().to_string(),
+        ];
+        argv.extend(narrowing.iter().map(|s| (*s).to_owned()));
+        let out = run(home.path(), work.path(), &argv);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains("buildgraph"),
+            "`orrery {}` must show the refusal: {stdout}{}",
+            narrowing.join(" "),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            stdout.contains("managed.toml") || stdout.contains("skipped"),
+            "…as the refusal it was: {stdout}"
+        );
+    }
+}
+
+/// DEFECT: `orrery install <bare-name>` under a managed **remote** index
+/// answered `not in the registry index <url>` instantly, with no fetch, because
+/// fetching a remote index is not implemented. It stated a fact it had not
+/// checked, and read as "I looked and it is not there".
+#[test]
+fn a_remote_index_says_it_cannot_be_fetched_rather_than_that_it_looked() {
+    let home = tempfile::tempdir().unwrap();
+    let work = tempfile::tempdir().unwrap();
+    managed_remote(home.path());
+
+    let out = run(
+        home.path(),
+        work.path(),
+        &args(&quiet(work.path()), &["install", "buildgraph"]),
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("not in the registry index"),
+        "it did not look, so it must not say it did: {stderr}"
+    );
+    assert!(
+        stderr.contains("cannot fetch"),
+        "it says what is actually true of this build: {stderr}"
+    );
+    assert!(
+        stderr.contains("--index"),
+        "…and names the local path that does work: {stderr}"
+    );
+}
+
+/// DEFECT: `install` took `crate:`, the index took `crates-io:`, and neither
+/// took the other's word for the same concept. One vocabulary.
+#[test]
+fn one_vocabulary_for_a_crates_io_source() {
+    let home = tempfile::tempdir().unwrap();
+    let work = tempfile::tempdir().unwrap();
+
+    for spelling in ["crate:orrery-ext-x", "crates-io:orrery-ext-x"] {
+        let out = run(
+            home.path(),
+            work.path(),
+            &args(&quiet(work.path()), &["install", spelling]),
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stderr.contains("is not an install source"),
+            "`{spelling}` is one of the vocabulary: {stderr}"
+        );
+    }
+}
+
+/// DEFECT: `install` accepted `./path` and refused the absolute path it
+/// resolves to. A path is a path.
+#[test]
+fn an_absolute_path_installs() {
+    let home = tempfile::tempdir().unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let pkg = package(work.path(), "buildgraph", "1.0.0", "read = [\"./**\"]");
+
+    let out = run(
+        home.path(),
+        work.path(),
+        &args(
+            &quiet(work.path()),
+            &["install", &pkg.display().to_string(), "--yes"],
+        ),
+    );
+    assert!(
+        out.status.success(),
+        "an absolute path is a path: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
