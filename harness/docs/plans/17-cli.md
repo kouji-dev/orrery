@@ -337,10 +337,25 @@ caps and every routing rule were green library tests a person could not reach.
   `Failed { stage: Activate }` and the turn answered no-such-tool for both its
   tools — because a listing checks the manifest and `skip_for` and never boots
   anything. The status word is now derived from a `Checked` value saying how far
-  the caller looked: `ext list` can only pass `ManifestOnly`, which prints
-  `ok (manifest only; guest not started)` and names the command that does start
-  it; only a caller holding a real `LoadOutcome` can print an unqualified `ok`.
+  the caller looked: `ext list` can only pass `ManifestOnly`, and only a caller
+  holding a real `LoadOutcome` can print `ok`.
   `ext::list_does_not_claim_a_guest_it_never_started`.
+  **Amended round 10:** `ManifestOnly` printed
+  `ok (manifest only; guest not started)`, and the hedge did not save it — the
+  status *column* is what a person scans, it led with `ok`, and an extension
+  `ext test` had just proved broken rendered identically to a working one. The
+  word is now `unchecked`. `ext::an_unchecked_extension_does_not_scan_as_ok`.
+  **Also round 10:** the command that line tells you to run gave false failures.
+  `ext test <NAME>` meant a *path* whenever a directory of that name happened to
+  sit in the process cwd, and the host then joined the relative root again — from
+  the directory it was installed from, `orrery ext test pyext` answered
+  `Activate: can't open file '…\ws\pyext\pyext\main.py'` while the same
+  extension from anywhere else answered `pyext 0.1.0 ok`. A name and a path are
+  now told apart by how they are **written** (`./x`, `../x`, `sub/x`, an absolute
+  path or a `.toml` file is a path; anything else is a name), and a path leaves
+  `resolve` absolute so nothing downstream can join it twice.
+  `ext::a_name_is_not_shadowed_by_a_directory_of_the_same_name`,
+  `ext::ext_test_answers_the_same_from_any_directory`.
 - **Three things the binary said that were not so, fixed 2026-09-19**, each found
   by driving it rather than by a test: `install --yes` printed "1 capability
   request(s) were denied by default; pass --yes to grant them" **after** `--yes`

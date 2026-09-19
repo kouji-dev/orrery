@@ -110,9 +110,11 @@ pub enum Command {
     },
     /// Install an extension. A bare name is the signed registry.
     ///
-    /// Seven source forms, disambiguated by prefix:
-    /// `name`, `name@1.2.0`, `github:owner/repo#ref`, a git URL,
-    /// `crate:<name>`, `npm:<name>`, `./path`.
+    /// Seven source forms, disambiguated by prefix, in the one vocabulary
+    /// `orrery registry add --source` also speaks: `name`, `name@1.2.0`,
+    /// `github:owner/repo#ref`, a git URL, `crates-io:<name>` (also spelled
+    /// `crate:<name>`), `npm:<name>`, and a path — `./path`, `../path`,
+    /// `file:path` or an absolute one.
     Install {
         /// What to install.
         #[arg(value_name = "SOURCE")]
@@ -166,6 +168,17 @@ pub enum Command {
         /// What to do with them.
         #[command(subcommand)]
         command: ExtCommand,
+    },
+    /// Sign in to a model provider, sign out, or say where you stand.
+    ///
+    /// The device-code flow: this prints a short code and a page to type it
+    /// on, and waits. Nothing is written anywhere a person has to manage — the
+    /// token goes to the `creds` grant under the state directory, which is
+    /// what `orrery auth logout` takes back.
+    Auth {
+        /// What to do.
+        #[command(subcommand)]
+        command: AuthCommand,
     },
     /// Explain a permission decision.
     Permissions {
@@ -390,6 +403,44 @@ pub enum RegistryCommand {
         /// The public key, as hex. Without it, the managed layer's.
         #[arg(long, value_name = "HEX")]
         key: Option<String>,
+    },
+}
+
+/// `orrery auth ...`
+///
+/// Three verbs, and a provider name that defaults rather than being required:
+/// `orrery auth status` with nothing after it is the question a person actually
+/// asks. The name is the **grant** name, which is what every message about a
+/// missing credential already says (`no credential for the `anthropic` grant`),
+/// so the word in the error is the word to type.
+#[derive(Debug, Subcommand)]
+pub enum AuthCommand {
+    /// Sign in. Prints a code and a page, then waits for the person.
+    Login {
+        /// Which provider. Defaults to `anthropic`.
+        #[arg(value_name = "PROVIDER")]
+        provider: Option<String>,
+        /// The authorization server to talk to, for a gateway that fronts it.
+        ///
+        /// Also the seam the tests drive: a loopback server in the test's own
+        /// process, so signing in is exercised end to end with nothing leaving
+        /// the machine.
+        #[arg(long = "auth-url", value_name = "URL")]
+        auth_url: Option<String>,
+    },
+    /// Sign out: forget the token, the refresh token and the expiry.
+    Logout {
+        /// Which provider. Defaults to `anthropic`.
+        #[arg(value_name = "PROVIDER")]
+        provider: Option<String>,
+    },
+    /// Say whether this machine is signed in, and until when.
+    ///
+    /// Exits 0 when it is and 5 when a login is needed, so a script can ask.
+    Status {
+        /// Which provider. Defaults to `anthropic`.
+        #[arg(value_name = "PROVIDER")]
+        provider: Option<String>,
     },
 }
 

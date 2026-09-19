@@ -245,6 +245,25 @@ Files: `orrery-ext-tools-builtin/src/*`, `orrery-harness/tests/builtin.rs`
 > production, rather than a rig written for the tests.
 > `orrery-ext-tools-builtin` has no dev-dependencies at all.
 
+> **Amended round 10: it also had no tests at all.** The sentence above is about
+> where the *broker* tests live, and it was read as licence for the crate to have
+> no suite: `cargo test -p orrery-ext-tools-builtin` said `0 passed`, so nothing
+> would have noticed if `read`, `write`, `edit`, `bash`, `grep` or `glob` had
+> stopped working. Rule 3 forbids dev-depending on an **unpublished** core crate;
+> `orrery-ext-api` is published, and its `testing` module is the mock broker a
+> community author is pointed at. So `tests/tools.rs` drives all six through it,
+> and doubles as the worked example. Writing it turned up two things nothing was
+> watching: **no tool checked `ctx.cancel`** (`PolicyBroker` checks the token on
+> `write` and on nothing else, so a cancelled turn still read files, walked trees
+> and started processes), and **a path went to the broker unnormalised** — a
+> grant is a glob and `**` spans separators, so `read = ["$WORKSPACE/**"]`
+> matches the string `$WORKSPACE/../../etc/passwd` on its face against any
+> facade that does not normalise for itself. Both rules are asserted off
+> `tools()` rather than off a hand-written list, so a seventh tool that forgets
+> either fails the suite the day it is added
+> (`tools::a_cancelled_call_stops_in_every_tool`,
+> `tools::dot_dot_never_escapes_the_grants_in_any_tool`).
+
 > Deferred out of wave 2 and **landed in wave 3**, for the reason it was
 > deferred: every test in this task is a test *of the broker* — an output
 > ceiling that bounds peak memory, a write that reverts on cancel, a child
@@ -258,6 +277,10 @@ Files: `orrery-ext-tools-builtin/src/*`, `orrery-harness/tests/builtin.rs`
 - [x] `builtin::bash_is_contained` — a child that spawns a grandchild; kill the call; assert both are gone (Job Object on Windows, process group on unix).
 - [x] `builtin::grep_streams` — a large tree, a ceiling, bounded memory.
 - [x] Implement all six tools, each declaring its `ToolDef` schema and `atomic` flag.
+- [x] **The crate's own suite, added round 10.** `orrery-ext-tools-builtin/tests/tools.rs`,
+  24 tests against `orrery-ext-api::testing` — per tool: the happy path, the
+  budget ceiling truncating rather than reading to the end, a denial arriving as
+  `Outcome::Denied` rather than an error, cancellation, and the path rules.
 
 ### Task 5 · JSON-RPC
 

@@ -39,9 +39,9 @@ From [`00-overview.md`](00-overview.md):
 | `orrery install buildgraph@1.2.0` | the same, pinned to a version |
 | `orrery install github:owner/repo` · `…#tag` · `…#sha` | a git host; `sha` is the only form that is reproducible |
 | `orrery install https://…/repo.git` | any git URL |
-| `orrery install crate:orrery-ext-buildgraph` | crates.io |
+| `orrery install crates-io:orrery-ext-buildgraph` (`crate:` is the same thing) | crates.io |
 | `orrery install npm:@scope/orrery-ext-x` | npm |
-| `orrery install ./path` · `file:../path` | a local directory |
+| `orrery install ./path` · `file:../path` · `/abs/path` | a local directory |
 | `orrery install ./path --link` | symlink instead of copy — the development loop, never for real use |
 
 `remove` finds the extension across layers and, if it is installed at more than one, names them and asks which rather than guessing.
@@ -304,6 +304,14 @@ This is the task that keeps the ergonomics honest.
   an index it does not have: a managed layer may refuse everything unpinned and
   set no `index`, and the sentence interpolated the empty string and ended "may be
   loaded from  " (`pin::a_refusal_with_no_index_does_not_name_an_empty_one`).
+  **Amended round 10: so is a refusal to INSTALL.** The same sentence was only
+  half true. `orrery install ./buildgraph` under managed `unpinned = "refuse"`
+  exited 4 with a good message and wrote nothing at all, so `ledger`,
+  `ledger --stream load` and `ledger --subject ext:buildgraph` each answered
+  "nothing recorded" about a decision the binary had just made. `cmd::install`
+  now writes the same `ext.load` / `skipped` event into
+  `<state-dir>/audit/install.jsonl`
+  (`install::a_refused_install_is_in_the_ledger`).
 - [x] An admin pins a version set; unpinned extensions refuse to load and say why.
   *(`pin::unpinned_refuses_under_managed`, plus `pin::version_set_is_exact` for
   the pin being a version rather than a range.)*
@@ -337,6 +345,29 @@ This is the task that keeps the ergonomics honest.
   *(`fetch::nothing_executes_before_verification`, with both halves asserted so
   the first is not vacuous.)*
 - [x] All seven source forms install, offline, in tests; the five non-registry ones are recorded `pinned: false` and are refused under managed `unpinned = "refuse"`.
+  **Amended round 10: one vocabulary, and it takes absolute paths.** There were
+  two names for one concept — `registry add --source` took `crates-io:<name>`
+  and `install` took `crate:<name>`, and neither answered to the other's word, so
+  somebody who read one command's help and typed it at the other was told their
+  source did not exist. Both parsers now take both spellings and print
+  `orrery_registry::VOCABULARY` when they refuse, and a `Source` **displays** as
+  `crates-io:` whichever was typed, so one string means one thing in the ledger
+  and beside an index entry. `install` also accepted `./path` and refused the
+  absolute path it resolves to, which is a distinction nothing downstream makes.
+  `source::crate_and_crates_io_are_one_source`,
+  `source::an_absolute_path_is_a_path`,
+  `source::a_refusal_names_the_shared_vocabulary`,
+  `install::one_vocabulary_for_a_crates_io_source`,
+  `install::an_absolute_path_installs`.
+- [x] **A remote index is not reported on, added round 10.** `orrery install
+  <bare-name>` under a managed layer naming a remote index answered
+  `buildgraph: not in the registry index https://registry.corp.internal/…`
+  instantly and with no fetch, because fetching a remote index is not in this
+  build. It stated a fact it had not checked and read as "I looked and it is not
+  there". `RegistryError::RemoteIndex` says what is true of this build and names
+  `--index <path>`, which works. `cmd::install::local_index` and the installer
+  decide "is this remote" through one function, `orrery_registry::is_remote`.
+  (`install::a_remote_index_says_it_cannot_be_fetched_rather_than_that_it_looked`.)
 - [x] `orrery install x` with no flag lands in `~/.orrery/extensions/x/`.
   *(`install::defaults_to_the_user_layer`, which then finds it with
   `orrery_config::discover` from a **different** workspace.)*
