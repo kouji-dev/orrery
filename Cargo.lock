@@ -5621,6 +5621,8 @@ dependencies = [
  "orrery-proto",
  "serde",
  "serde_json",
+ "tokio",
+ "tokio-util",
  "tracing",
 ]
 
