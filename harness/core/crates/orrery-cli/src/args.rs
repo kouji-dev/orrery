@@ -33,8 +33,10 @@ pub struct Cli {
     #[arg(short = 'v', global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
 
-    /// Where the model comes from. Repeat it for one stream per pass, the last
-    /// repeating. This build understands `fixture:<path-to.jsonl>`.
+    /// Where the model comes from, as `<kind>:<what>`: `fixture:<path.jsonl>`,
+    /// `anthropic:<model>[@<url>]`, `openai-compat:<model>@<url>`, or its
+    /// `ollama:` / `vllm:` aliases. Only `fixture:` repeats, one stream per
+    /// pass, the last repeating. Without it, a `[provider]` table decides.
     #[arg(long, global = true, value_name = "SPEC")]
     pub provider: Vec<String>,
 

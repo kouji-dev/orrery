@@ -516,20 +516,7 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
     }
 
     // 6 · The provider, and the kernel over all of it.
-    let provider: Arc<dyn Provider> = match &config.provider {
-        ProviderChoice::Custom(provider) => provider.clone(),
-        ProviderChoice::Fixture { passes } => crate::features::fixture_provider(passes)?,
-        ProviderChoice::Anthropic {
-            model,
-            credential,
-            base_url,
-        } => crate::features::anthropic_provider(model, credential, base_url.as_deref())?,
-        ProviderChoice::OpenAiCompat {
-            model,
-            credential,
-            base_url,
-        } => crate::features::openai_compat_provider(model, credential, base_url)?,
-    };
+    let provider = provider_for(&config.provider)?;
     let kernel = Kernel::new(
         store.clone(),
         provider,
@@ -547,6 +534,35 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
         session,
         branch,
         scope,
+    })
+}
+
+/// Build the provider a [`ProviderChoice`] names.
+///
+/// The one place a choice becomes a `Provider`, so a composition root that
+/// assembles its own config — `orrery-cli` does, because it wraps the provider
+/// in a narrator before the kernel sees it — selects from exactly the same
+/// list [`assemble`] does. Two matches on this enum is how a flag comes to
+/// reach fewer providers than a config file.
+///
+/// # Errors
+///
+/// [`BuildError::NoProvider`] when the variant's cargo feature is off, and
+/// [`BuildError::Provider`] when it is on and the provider will not load.
+pub fn provider_for(choice: &ProviderChoice) -> Result<Arc<dyn Provider>, BuildError> {
+    Ok(match choice {
+        ProviderChoice::Custom(provider) => provider.clone(),
+        ProviderChoice::Fixture { passes } => crate::features::fixture_provider(passes)?,
+        ProviderChoice::Anthropic {
+            model,
+            credential,
+            base_url,
+        } => crate::features::anthropic_provider(model, credential, base_url.as_deref())?,
+        ProviderChoice::OpenAiCompat {
+            model,
+            credential,
+            base_url,
+        } => crate::features::openai_compat_provider(model, credential, base_url)?,
     })
 }
 

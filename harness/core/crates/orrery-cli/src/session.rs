@@ -481,9 +481,10 @@ pub struct Setup {
     pub state_dir: PathBuf,
     /// Which profile this was built from.
     pub profile: String,
-    /// One `.jsonl` per pass, the last repeating. Empty is an error: phase 1
-    /// has no provider that does not need to be named.
-    pub fixtures: Vec<PathBuf>,
+    /// Where the model comes from, as the flag or the `[provider]` table in
+    /// force named it. `None` is an error at build time: there is no provider
+    /// that needs no configuration at all.
+    pub provider: Option<ProviderChoice>,
     /// The extensions discovery found, beyond the compiled-in set.
     pub extensions: Vec<orrery_harness::ExtensionSource>,
     /// What the loop runs under, as the layers on disk resolved it.
@@ -503,10 +504,9 @@ pub struct Session {
 /// A session that could not be built.
 #[derive(Debug, thiserror::Error)]
 pub enum SetupError {
-    /// No provider was named.
+    /// No provider was named, by either route.
     #[error(
-        "no model. Pass `--provider fixture:<path-to.jsonl>`; \
-         this build has no provider that needs no configuration"
+        "no model. Pass `--provider fixture:<path-to.jsonl>`, or put a          `[provider]` table in a config layer; this build has no provider          that needs no configuration"
     )]
     NoProvider,
     /// The harness would not assemble.
@@ -522,12 +522,15 @@ impl Session {
     /// [`SetupError`] when no provider was named or the harness would not
     /// build — a fixture that will not parse, a database that will not open.
     pub fn build(setup: &Setup) -> Result<Self, SetupError> {
-        if setup.fixtures.is_empty() {
+        let Some(choice) = setup.provider.clone() else {
             return Err(SetupError::NoProvider);
-        }
+        };
         let publisher = Arc::new(Publisher::new(Hub::new(&setup.profile)));
 
-        let provider = orrery_harness::features::fixture_provider(&setup.fixtures)?;
+        // One selector, shared with `Harness::build`'s own. The narrator wraps
+        // whatever comes back, so every provider the enum names is narrated the
+        // same way and none of them is a special case here.
+        let provider = orrery_harness::provider_for(&choice)?;
         let capabilities = *provider.capabilities();
         let provider: Arc<dyn Provider> = Arc::new(Narrating {
             inner: provider,
@@ -543,7 +546,7 @@ impl Session {
             audit: audit.clone(),
         });
 
-        let mut config = ResolvedConfig::fixture(&setup.workspace, setup.fixtures.clone());
+        let mut config = ResolvedConfig::fixture(&setup.workspace, Vec::new());
         config.state_dir = setup.state_dir.clone();
         config.profile = setup.profile.clone();
         config.provider = ProviderChoice::Custom(provider);

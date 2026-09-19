@@ -23,9 +23,10 @@ use crate::build::BuildError;
 /// paragraph used to have to explain that `anthropic` compiled in with nothing
 /// able to pick it; that gap is closed.
 ///
-/// `anthropic` is still off by default because it links a TLS stack and wants a
-/// credential. `openai-compat` is on, because a local server wants neither and
-/// nothing dials until something names it.
+/// `anthropic` and `openai-compat` are both off by default, because each links
+/// a TLS stack through its `http` feature and the default build must pull none.
+/// "Needs no key" and "links no TLS" are different properties, and only the
+/// second decides the default set.
 // Each `push` is behind its own `#[cfg]`, so the `vec![]` clippy suggests
 // cannot express it.
 #[allow(clippy::vec_init_then_push)]

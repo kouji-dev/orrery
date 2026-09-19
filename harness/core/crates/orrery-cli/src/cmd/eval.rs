@@ -103,8 +103,15 @@ fn run(cli: &Cli, suite: &str, profiles: &[String], models: &[String], format: O
     let store = harness.store().clone();
     let engine = harness.engine().clone();
 
-    let provider = orrery_harness::features::fixture_provider(&crate::cmd::setup(cli).fixtures)
-        .unwrap_or_else(|e| fail(Exit::Usage, e));
+    // The same selector the session used, so an eval runs against whatever
+    // `--provider` or a `[provider]` table named rather than fixtures alone.
+    let provider = crate::cmd::setup(cli)
+        .provider
+        .as_ref()
+        .map(orrery_harness::provider_for)
+        .transpose()
+        .unwrap_or_else(|e| fail(Exit::Usage, e))
+        .unwrap_or_else(|| fail(Exit::Usage, crate::session::SetupError::NoProvider));
     let broker = PolicyBroker::new(
         engine.clone(),
         Arc::new(LocalBroker::new(engine.ledger().clone())),

@@ -54,14 +54,22 @@ fn serve(dir: &std::path::Path, streams: &[&str]) -> Served {
         http.starts_with("http://"),
         "the second endpoint is HTTP: {http}"
     );
+    // **Scan, do not read one line.** stderr is narration, and `serve` may
+    // narrate other things first — a workspace nobody has answered for is not
+    // trusted, and saying so out loud is the point of that line. A test that
+    // assumed the session was narration line 1 failed the moment anything else
+    // had something to say, which is a test bug rather than a product one.
     let mut session = String::new();
-    err.read_line(&mut session)
-        .expect("serve named its session");
-    let session = session
-        .trim()
-        .strip_prefix("orrery: session ")
-        .unwrap_or_default()
-        .to_owned();
+    let mut line = String::new();
+    while {
+        line.clear();
+        err.read_line(&mut line).expect("serve narrates") > 0
+    } {
+        if let Some(id) = line.trim().strip_prefix("orrery: session ") {
+            session = id.to_owned();
+            break;
+        }
+    }
     assert!(!session.is_empty(), "serve names the session on stderr");
     Served {
         child,

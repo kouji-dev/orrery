@@ -48,7 +48,7 @@ use tokio_util::sync::CancellationToken;
 pub use broker::{LedgerRevoker, PolicyBroker};
 pub use build::{
     BuildError, DEFAULT_RULES, ExtensionSource, ProviderChoice, ResolvedConfig, StoreChoice,
-    default_tool_budget, extension_sources,
+    default_tool_budget, extension_sources, provider_for,
 };
 pub use config::{kernel_config, price_table};
 pub use memory::KernelMemory;

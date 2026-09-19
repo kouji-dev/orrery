@@ -32,7 +32,7 @@ Options:
           Log level on stderr. Never mixed into `--json` stdout. Repeatable
 
       --provider <SPEC>
-          Where the model comes from. Repeat it for one stream per pass, the last repeating. This build understands `fixture:<path-to.jsonl>`
+          Where the model comes from, as `<kind>:<what>`: `fixture:<path.jsonl>`, `anthropic:<model>[@<url>]`, `openai-compat:<model>@<url>`, or its `ollama:` / `vllm:` aliases. Only `fixture:` repeats, one stream per pass, the last repeating. Without it, a `[provider]` table decides
 
       --state-dir <PATH>
           Where the session database lives. Defaults to `<workspace>/.orrery`
