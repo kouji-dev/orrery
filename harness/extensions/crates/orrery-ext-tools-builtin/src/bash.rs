@@ -10,6 +10,7 @@ use orrery_ext_api::{CallCtx, SpawnRequest};
 use orrery_proto::Outcome;
 use serde_json::Value;
 
+use crate::path::normalise;
 use crate::{string_arg, text_outcome};
 
 /// The shell, and the flag that makes it take one string.
@@ -28,7 +29,9 @@ pub(crate) async fn run(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome>
 
     let mut request = SpawnRequest::new(program, [flag.to_owned(), command.clone()]);
     if let Some(cwd) = input.get("cwd").and_then(Value::as_str) {
-        request = request.in_dir(cwd);
+        // Normalised like every other path this bundle hands out: a `cwd` of
+        // `$WORKSPACE/..` is asked about as what it is.
+        request = request.in_dir(normalise(cwd));
     }
     request.timeout_ms = input
         .get("timeout_ms")

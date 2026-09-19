@@ -8,6 +8,7 @@ use orrery_ext_api::{CallCtx, ReadRequest, WriteRequest};
 use orrery_proto::Outcome;
 use serde_json::Value;
 
+use crate::path::normalise;
 use crate::{bad_input, string_arg, text_outcome};
 
 /// What one read is allowed to pull: the call's ceiling, or less if asked.
@@ -21,7 +22,7 @@ fn ceiling(ctx: &CallCtx, input: &Value) -> u64 {
 
 /// Read a file, bounded while reading.
 pub(crate) async fn read(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome> {
-    let path = string_arg(&input, "path")?;
+    let path = normalise(string_arg(&input, "path")?);
     let limit = ceiling(ctx, &input);
     let chunk = ctx
         .broker
@@ -45,19 +46,22 @@ pub(crate) async fn read(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome
 
 /// Replace a file's contents, all-or-nothing.
 pub(crate) async fn write(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome> {
-    let path = string_arg(&input, "path")?;
+    let path = normalise(string_arg(&input, "path")?);
     let content = string_arg(&input, "content")?;
     let bytes = content.len() as u64;
     ctx.broker
         .write(WriteRequest::new(&path, content.into_bytes()))
         .await
         .map_err(orrery_ext_api::BrokerError::into_outcome)?;
-    Ok(text_outcome(ctx, format!("wrote {bytes} bytes to {path}")))
+    Ok(text_outcome(
+        ctx,
+        format!("wrote {bytes} bytes to {path}", path = path.display()),
+    ))
 }
 
 /// Replace one run of text in a file with another.
 pub(crate) async fn edit(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome> {
-    let path = string_arg(&input, "path")?;
+    let path = normalise(string_arg(&input, "path")?);
     let old = string_arg(&input, "old_text")?;
     let new = string_arg(&input, "new_text")?;
     let all = input
@@ -74,20 +78,25 @@ pub(crate) async fn edit(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome
         // Rewriting a file we have only seen the first slice of would delete the
         // rest of it. Refuse, and say why in a way a person can act on.
         return Err(bad_input(format!(
-            "`{path}` is longer than this call's ceiling of {} bytes; \
+            "`{path}` is longer than this call's ceiling of {limit} bytes; \
              editing it would drop the rest",
-            ctx.budget.output_bytes
+            path = path.display(),
+            limit = ctx.budget.output_bytes
         )));
     }
     let before = String::from_utf8_lossy(&chunk.bytes).into_owned();
     let hits = before.matches(&old).count();
     if hits == 0 {
-        return Err(bad_input(format!("`{path}` does not contain that text")));
+        return Err(bad_input(format!(
+            "`{path}` does not contain that text",
+            path = path.display()
+        )));
     }
     if hits > 1 && !all {
         return Err(bad_input(format!(
             "that text appears {hits} times in `{path}`; \
-             pass `replace_all` or give a longer, unique `old_text`"
+             pass `replace_all` or give a longer, unique `old_text`",
+            path = path.display()
         )));
     }
     let after = if all {
@@ -103,8 +112,9 @@ pub(crate) async fn edit(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome
     Ok(text_outcome(
         ctx,
         format!(
-            "replaced {} occurrence(s) in {path}",
-            if all { hits } else { 1 }
+            "replaced {n} occurrence(s) in {path}",
+            n = if all { hits } else { 1 },
+            path = path.display()
         ),
     ))
 }

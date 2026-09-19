@@ -15,7 +15,8 @@ use orrery_ext_api::{CallCtx, ListRequest, ReadRequest};
 use orrery_proto::Outcome;
 use serde_json::Value;
 
-use crate::{bad_input, string_arg, text_outcome};
+use crate::path::normalise;
+use crate::{bad_input, cancelled, string_arg, text_outcome};
 
 /// How many entries a walk will look at before it stops.
 ///
@@ -27,11 +28,15 @@ const MAX_ENTRIES: usize = 20_000;
 const DEFAULT_MAX_MATCHES: usize = 200;
 
 /// Where to start walking: the `path` argument, or the process's directory.
+///
+/// Normalised, so a root of `$WORKSPACE/..` is *asked about* as what it
+/// actually is rather than as a string a `$WORKSPACE/**` grant happens to
+/// match.
 fn root(input: &Value) -> PathBuf {
     input
         .get("path")
         .and_then(Value::as_str)
-        .map_or_else(|| PathBuf::from("."), PathBuf::from)
+        .map_or_else(|| PathBuf::from("."), normalise)
 }
 
 /// Every file under `root`, through the broker, capped.
@@ -70,6 +75,12 @@ pub(crate) async fn grep(input: Value, ctx: &CallCtx) -> Result<Outcome, Outcome
     for file in walk(&root, ctx).await? {
         if lines.len() >= max {
             break;
+        }
+        // The one tool that loops. A cancel that arrives after the walk has to
+        // be noticed between files, or a cancelled turn keeps reading up to
+        // `MAX_ENTRIES` of them.
+        if ctx.is_cancelled() {
+            return Ok(cancelled());
         }
         let Ok(chunk) = ctx
             .broker

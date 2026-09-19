@@ -35,11 +35,12 @@
 
 mod bash;
 mod files;
+mod path;
 mod search;
 
 use async_trait::async_trait;
 use orrery_ext_api::{CallCtx, HostError, NativeExtension, ToolDef};
-use orrery_proto::{Aspect, Outcome};
+use orrery_proto::{Aspect, CancelReason, Outcome};
 use serde_json::Value;
 
 /// The bundle's manifest, parsed by the same parser a third party's goes
@@ -55,6 +56,16 @@ impl BuiltinTools {
     #[must_use]
     pub fn new() -> Self {
         Self
+    }
+}
+
+/// A call that was told to stop before it did the work.
+///
+/// Worded the way the broker words one, so a tool that notices first and a
+/// broker that notices first settle the same.
+pub(crate) fn cancelled() -> Outcome {
+    Outcome::Cancelled {
+        reason: CancelReason::User,
     }
 }
 
@@ -188,6 +199,17 @@ impl NativeExtension for BuiltinTools {
     }
 
     async fn call(&self, tool: &str, input: Value, ctx: &CallCtx) -> Result<Outcome, HostError> {
+        // A cancelled call does no work at all, in **every** tool.
+        //
+        // The ceiling and the denial are the broker's to enforce, but noticing
+        // the token is the tool's own job: `PolicyBroker` checks it on `write`
+        // and on nothing else, so without this a cancelled turn still read
+        // files, still walked a tree and still started a process. Checked once
+        // here rather than six times below, so a seventh tool inherits it —
+        // and `grep`, the one that loops, checks again between files.
+        if ctx.is_cancelled() {
+            return Ok(cancelled());
+        }
         let outcome = match tool {
             "read" => files::read(input, ctx).await,
             "write" => files::write(input, ctx).await,

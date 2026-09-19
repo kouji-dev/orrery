@@ -20,11 +20,15 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 
-# **No dev-dependencies, on purpose.** `cargo xtask deps-check` rule 3: an
-# extension's tests may not reach into an unpublished core crate, so that a
-# community author runs the identical suite. The four named tests of this
-# bundle are tests *of the broker* — a ceiling that bounds peak memory, a write
-# that reverts on cancel, a child whose grandchild dies with it — and a broker
-# is precisely what this crate may not name. They live in
-# `orrery-harness/tests/builtin.rs`, where the real broker is wired, and they
-# exercise the production facade rather than a rig built for them.
+# The suite is `tests/tools.rs`, against the published mock broker in
+# `orrery-ext-api::testing` — the same harness `orrery ext test` runs, so it
+# doubles as the worked example for a community author. `deps-check` rule 3 is
+# satisfied by construction: nothing here names an unpublished core crate.
+#
+# The tests of the *broker* — a ceiling that bounds peak memory, a write that
+# reverts on cancel, a child whose grandchild dies with it — stay in
+# `orrery-harness/tests/builtin.rs`, where the real broker is wired, because a
+# broker is precisely what this crate may not name.
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio-util = { workspace = true }
