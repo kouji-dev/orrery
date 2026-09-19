@@ -93,3 +93,6 @@ dev.log
 
 # Angular's whole cache dir, not just cache/ — it also writes .angular/ at ade/
 .angular/
+
+# Claude Code: personal, machine-specific settings (CARGO_TARGET_DIR etc.)
+.claude/settings.local.json
