@@ -45,16 +45,11 @@ pub trait SessionStore: Send + Sync + 'static {
     /// that answers "which sessions are there", which is what
     /// `orrery session list` asks and what nothing could ask before.
     ///
-    /// The default refuses, and refusing is not conformant: the suite's
+    /// Required, with no default. The suite's
     /// [`sessions_can_be_enumerated`](crate::conformance::sessions_can_be_enumerated)
-    /// fails against it, so a shipped backend has to override it. The default
-    /// exists only so that an in-test fake in a crate this wave does not own
-    /// keeps compiling; delete it once there are none.
-    async fn list_sessions(&self) -> Result<Vec<SessionSummary>, SessionError> {
-        Err(SessionError::Backend {
-            detail: "this backend does not enumerate sessions".to_owned(),
-        })
-    }
+    /// is what a backend owes here; a backend that cannot answer has to say so
+    /// in its own body rather than inherit a refusal it never read.
+    async fn list_sessions(&self) -> Result<Vec<SessionSummary>, SessionError>;
 
     /// Delete a whole session: its events, its turns and its branches.
     ///
@@ -69,16 +64,8 @@ pub trait SessionStore: Send + Sync + 'static {
     /// [`SessionError::NoSuchSession`], so a caller can tell "gone now" from
     /// "was never here".
     ///
-    /// The default refuses, and refusing is not conformant: the suite's
-    /// [`a_session_can_be_deleted`](crate::conformance::a_session_can_be_deleted)
-    /// fails against it. It exists only so an in-test fake in a crate this wave
-    /// does not own keeps compiling.
-    async fn delete(&self, session: SessionId) -> Result<(), SessionError> {
-        let _ = session;
-        Err(SessionError::Backend {
-            detail: "this backend does not delete sessions".to_owned(),
-        })
-    }
+    /// Required, with no default: see the note on [`list_sessions`](Self::list_sessions).
+    async fn delete(&self, session: SessionId) -> Result<(), SessionError>;
 
     /// Acquire the right to append.
     ///
@@ -130,15 +117,8 @@ pub trait SessionStore: Send + Sync + 'static {
     /// rows themselves — which call, which tool, what it cost — so `orrery
     /// replay` reads here and encodes from [`TurnKind`](crate::TurnKind).
     ///
-    /// The default refuses, and refusing is not conformant:
-    /// [`turns_come_back_in_order`](crate::conformance::turns_come_back_in_order)
-    /// fails against it.
-    async fn turns(&self, branch: BranchId) -> Result<Vec<TurnRow>, SessionError> {
-        let _ = branch;
-        Err(SessionError::Backend {
-            detail: "this backend does not read back raw turns".to_owned(),
-        })
-    }
+    /// Required, with no default: see the note on [`list_sessions`](Self::list_sessions).
+    async fn turns(&self, branch: BranchId) -> Result<Vec<TurnRow>, SessionError>;
 
     /// Replay, for `session.attach(since)` and `orrery replay`.
     ///

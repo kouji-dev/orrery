@@ -16,7 +16,7 @@ use orrery_proto::{BranchId, Event, Seq, SessionId, TokenBudget, TurnId};
 use orrery_session::algebra::{self, Materialised, TokenCounter};
 use orrery_session::lease::{BranchLease, BranchStatus, LeaseRegistry};
 use orrery_session::turn::{
-    BranchOutcome, CompactResult, NewTurn, SessionHandle, StoredEvent, TurnRow,
+    BranchOutcome, CompactResult, NewTurn, SessionHandle, SessionSummary, StoredEvent, TurnRow,
 };
 use orrery_session::{SessionError, SessionStore};
 
@@ -34,6 +34,7 @@ pub struct Branch {
 pub struct Session {
     workspace: String,
     profile: String,
+    created_at: i64,
     root: BranchId,
     branches: Vec<BranchId>,
     events: Vec<StoredEvent>,
@@ -107,12 +108,14 @@ impl SessionStore for MemoryStore {
     async fn create(&self, workspace: &str, profile: &str) -> Result<SessionId, SessionError> {
         let session = SessionId::new();
         let root = BranchId::new();
+        let now = self.now();
         let mut inner = self.inner.lock().unwrap();
         inner.sessions.insert(
             session,
             Session {
                 workspace: workspace.to_owned(),
                 profile: profile.to_owned(),
+                created_at: now,
                 root,
                 branches: vec![root],
                 events: Vec::new(),
@@ -146,6 +149,69 @@ impl SessionStore for MemoryStore {
             profile: s.profile.clone(),
             branches: s.branches.clone(),
         })
+    }
+
+    /// Newest first, as `orrery session list` prints them.
+    async fn list_sessions(&self) -> Result<Vec<SessionSummary>, SessionError> {
+        let inner = self.inner.lock().unwrap();
+        let mut out: Vec<SessionSummary> = inner
+            .sessions
+            .iter()
+            .map(|(id, s)| SessionSummary {
+                session: *id,
+                workspace: s.workspace.clone(),
+                profile: s.profile.clone(),
+                created_at: s.created_at,
+                turns: inner
+                    .turns
+                    .iter()
+                    .filter(|r| {
+                        inner
+                            .branches
+                            .get(&r.branch)
+                            .is_some_and(|b| b.session == *id)
+                    })
+                    .count() as u64,
+            })
+            .collect();
+        out.sort_by_key(|s| std::cmp::Reverse(s.created_at));
+        Ok(out)
+    }
+
+    /// Drops a whole session: its branches, its rows and its events.
+    /// Implemented here and not inherited: the trait has no default, so a fake
+    /// that forgot this would not compile.
+    async fn delete(&self, session: SessionId) -> Result<(), SessionError> {
+        let mut inner = self.inner.lock().unwrap();
+        let gone = inner
+            .sessions
+            .remove(&session)
+            .ok_or(SessionError::NoSuchSession { session })?;
+        for branch in &gone.branches {
+            inner.branches.remove(branch);
+        }
+        inner.turns.retain(|r| !gone.branches.contains(&r.branch));
+        inner
+            .compactions
+            .retain(|(b, ..)| !gone.branches.contains(b));
+        Ok(())
+    }
+
+    /// The rows on one branch, in sequence order, kinds intact: the cold-replay
+    /// read, which `materialise` cannot answer.
+    async fn turns(&self, branch: BranchId) -> Result<Vec<TurnRow>, SessionError> {
+        let inner = self.inner.lock().unwrap();
+        if !inner.branches.contains_key(&branch) {
+            return Err(SessionError::NoSuchBranch { branch });
+        }
+        let mut rows: Vec<TurnRow> = inner
+            .turns
+            .iter()
+            .filter(|r| r.branch == branch)
+            .cloned()
+            .collect();
+        rows.sort_by_key(|r| r.seq);
+        Ok(rows)
     }
 
     async fn lease(&self, branch: BranchId) -> Result<BranchLease, SessionError> {

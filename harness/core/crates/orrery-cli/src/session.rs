@@ -47,6 +47,7 @@ use orrery_provider::{
 use orrery_session::{
     BranchLease, BranchOutcome, CompactResult, Materialised, NewTurn, SessionError, SessionHandle,
     SessionStore, SessionSummary, StoredEvent, TokenCounter as SessionTokenCounter, TurnKind,
+    TurnRow,
 };
 use orrery_transport::Hub;
 use tokio_util::sync::CancellationToken;
@@ -458,6 +459,12 @@ impl SessionStore for Recording {
 
     async fn delete(&self, session: SessionId) -> Result<(), SessionError> {
         self.inner.delete(session).await
+    }
+
+    /// Delegated like the rest. `orrery replay` reads here, so a wrapper that
+    /// did not pass this through would make a recorded session unreplayable.
+    async fn turns(&self, branch: BranchId) -> Result<Vec<TurnRow>, SessionError> {
+        self.inner.turns(branch).await
     }
 
     async fn append(&self, lease: &BranchLease, turn: NewTurn) -> Result<TurnId, SessionError> {

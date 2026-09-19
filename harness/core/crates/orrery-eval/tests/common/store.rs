@@ -180,6 +180,42 @@ impl SessionStore for MemoryStore {
         Ok(out)
     }
 
+    /// Drops a whole session: its branches, its rows and its events.
+    /// Implemented here and not inherited: the trait has no default, so a fake
+    /// that forgot this would not compile.
+    async fn delete(&self, session: SessionId) -> Result<(), SessionError> {
+        let mut inner = self.inner.lock().unwrap();
+        let gone = inner
+            .sessions
+            .remove(&session)
+            .ok_or(SessionError::NoSuchSession { session })?;
+        for branch in &gone.branches {
+            inner.branches.remove(branch);
+        }
+        inner.turns.retain(|r| !gone.branches.contains(&r.branch));
+        inner
+            .compactions
+            .retain(|(b, ..)| !gone.branches.contains(b));
+        Ok(())
+    }
+
+    /// The rows on one branch, in sequence order, kinds intact: the cold-replay
+    /// read, which `materialise` cannot answer.
+    async fn turns(&self, branch: BranchId) -> Result<Vec<TurnRow>, SessionError> {
+        let inner = self.inner.lock().unwrap();
+        if !inner.branches.contains_key(&branch) {
+            return Err(SessionError::NoSuchBranch { branch });
+        }
+        let mut rows: Vec<TurnRow> = inner
+            .turns
+            .iter()
+            .filter(|r| r.branch == branch)
+            .cloned()
+            .collect();
+        rows.sort_by_key(|r| r.seq);
+        Ok(rows)
+    }
+
     async fn lease(&self, branch: BranchId) -> Result<BranchLease, SessionError> {
         self.leases.lease(branch)
     }

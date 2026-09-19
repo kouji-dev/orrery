@@ -192,6 +192,31 @@ impl SessionStore for Hopeless {
         Err(orrery_session::SessionError::NoSuchSession { session })
     }
 
+    async fn list_sessions(
+        &self,
+    ) -> Result<Vec<orrery_session::turn::SessionSummary>, orrery_session::SessionError> {
+        Err(orrery_session::SessionError::Backend {
+            detail: "this backend does nothing".to_owned(),
+        })
+    }
+
+    async fn delete(
+        &self,
+        session: orrery_proto::SessionId,
+    ) -> Result<(), orrery_session::SessionError> {
+        let _ = session;
+        Err(orrery_session::SessionError::Backend {
+            detail: "this backend does nothing".to_owned(),
+        })
+    }
+
+    async fn turns(
+        &self,
+        branch: orrery_proto::BranchId,
+    ) -> Result<Vec<orrery_session::turn::TurnRow>, orrery_session::SessionError> {
+        Err(orrery_session::SessionError::NoSuchBranch { branch })
+    }
+
     async fn lease(
         &self,
         branch: orrery_proto::BranchId,
