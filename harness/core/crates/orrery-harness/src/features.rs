@@ -58,6 +58,14 @@ pub fn compiled_in() -> Vec<&'static str> {
     out.push("host-rpc");
     #[cfg(feature = "wasm-extensions")]
     out.push("host-wasm");
+    // Phase 4's three ported examples. Off by default; on, they are ordinary
+    // native bundles and `orrery ext list` lists them beside the others.
+    #[cfg(feature = "example-extensions")]
+    {
+        out.push("example-workspace-census");
+        out.push("example-patch-review");
+        out.push("example-release-train");
+    }
     out
 }
 
@@ -86,6 +94,18 @@ pub fn register_native(registry: &mut NativeRegistry) {
     registry.register(Arc::new(orrery_ext_git::GitTools::new()));
     #[cfg(feature = "lsp-tools")]
     registry.register(Arc::new(orrery_ext_lsp::LspTools::new()));
+    // Phase 4: three ported extensions that describe surfaces and draw none of
+    // them. They go through the same door as everything else above - manifest
+    // parse, policy check, ledger entry, deny rule - because the criterion is
+    // about what a *turn* can render, and a turn reaches them only through the
+    // extension table. `orrery-ported` proves the same three in a library test;
+    // this is what lets the binary prove it.
+    #[cfg(feature = "example-extensions")]
+    {
+        registry.register(Arc::new(workspace_census::WorkspaceCensus));
+        registry.register(Arc::new(patch_review::PatchReview));
+        registry.register(Arc::new(release_train::ReleaseTrain));
+    }
 }
 
 /// Build the OpenAI-compatible provider a config asked for.
