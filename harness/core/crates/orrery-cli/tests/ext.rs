@@ -555,3 +555,160 @@ fn a_compiled_in_bundle_is_not_hedged() {
         "there is nothing to start: {line}"
     );
 }
+
+/// DEFECT: `ext test <NAME>` meant a path whenever a directory of that name
+/// happened to sit in the process cwd.
+///
+/// Reproduced on two runtimes: from the directory it was installed from,
+/// `orrery ext test pyext` failed with
+/// `Activate: can't open file '…\ws\pyext\pyext\main.py'` — the relative root
+/// joined twice — while the same extension from an unrelated cwd answered
+/// `pyext 0.1.0 ok`. One command, two answers, decided by what the shell
+/// happened to be sitting in.
+///
+/// A name and a path are now told apart by how they are **written**: a path
+/// says so (`./x`, `../x`, an absolute one, or one ending in `.toml`), and
+/// everything else is a name. So a stray directory cannot shadow a bundle.
+#[test]
+fn a_name_is_not_shadowed_by_a_directory_of_the_same_name() {
+    let work = tempfile::tempdir().expect("a workspace");
+    // Something in the way: a directory called `builtin` that is not an
+    // extension at all.
+    std::fs::create_dir_all(work.path().join("builtin")).expect("the decoy directory");
+    std::fs::write(work.path().join("builtin/notes.txt"), "not an extension").expect("a file");
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_orrery"))
+        .args(["ext", "test", "builtin"])
+        .current_dir(work.path())
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("the orrery binary runs");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "`builtin` is the compiled-in bundle wherever the shell is: {stdout}{stderr}"
+    );
+    assert!(stdout.contains("bash"), "it tested the bundle: {stdout}");
+}
+
+/// The same command run from two different directories gives the same answer.
+///
+/// This is the property the defect broke, asserted directly rather than through
+/// one of its symptoms: `ext test <name>` from the directory the extension was
+/// installed from used to resolve as a relative path and report a failure of
+/// its own making, while the same command from anywhere else reported `ok`.
+#[test]
+fn ext_test_answers_the_same_from_any_directory() {
+    let home = tempfile::tempdir().expect("a sandboxed home");
+    let work = tempfile::tempdir().expect("a workspace");
+    let elsewhere = tempfile::tempdir().expect("an unrelated directory");
+    std::fs::create_dir_all(home.path().join("ProgramData")).expect("a sandboxed ProgramData");
+    package(work.path(), "buildgraph", "native");
+
+    let installed = sandboxed(
+        home.path(),
+        work.path(),
+        &["install", "./buildgraph", "--yes"],
+    );
+    assert!(
+        installed.status.success(),
+        "install: {}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+
+    // Same sandboxed home, so the same extension is installed for both runs;
+    // only the directory the shell is sitting in differs — and `buildgraph/`
+    // exists in one of them.
+    let here = sandboxed(home.path(), work.path(), &["ext", "test", "buildgraph"]);
+    let there = sandboxed(home.path(), elsewhere.path(), &["ext", "test", "buildgraph"]);
+
+    assert_eq!(
+        String::from_utf8_lossy(&here.stdout),
+        String::from_utf8_lossy(&there.stdout),
+        "the cwd is not part of the question; stderr here: {}",
+        String::from_utf8_lossy(&here.stderr)
+    );
+    assert_eq!(
+        here.status.code(),
+        there.status.code(),
+        "…and neither is the exit code"
+    );
+}
+
+/// And a name nothing answers to says how to ask for the directory instead,
+/// because that is the mistake somebody standing next to one will have made.
+#[test]
+fn an_unresolved_name_beside_a_directory_of_that_name_says_how_to_mean_the_directory() {
+    let work = tempfile::tempdir().expect("a workspace");
+    package(work.path(), "buildgraph", "native");
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_orrery"))
+        .args(["ext", "test", "buildgraph"])
+        .current_dir(work.path())
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("the orrery binary runs");
+    assert_eq!(out.status.code(), Some(2));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("./buildgraph"),
+        "it says what to write to mean the directory: {err}"
+    );
+}
+
+/// An explicit path is still a path, and is resolved to an absolute one so a
+/// host cannot join a relative root a second time.
+#[test]
+fn an_explicit_relative_path_is_still_a_path() {
+    let work = tempfile::tempdir().expect("a workspace");
+    package(work.path(), "buildgraph", "native");
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_orrery"))
+        .args(["ext", "test", "./buildgraph"])
+        .current_dir(work.path())
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("the orrery binary runs");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("buildgraph"),
+        "`./buildgraph` names the directory: {stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// DEFECT: `ext list` printed the word `ok` first for an extension it had not
+/// checked — `ok (manifest only; guest not started)`. The hedge is honest and
+/// the column is not: an extension `ext test` has just proved broken scans
+/// identically to a working one.
+#[test]
+fn an_unchecked_extension_does_not_scan_as_ok() {
+    let home = tempfile::tempdir().expect("a sandboxed home");
+    let work = tempfile::tempdir().expect("a workspace");
+    std::fs::create_dir_all(home.path().join("ProgramData")).expect("a sandboxed ProgramData");
+    package(work.path(), "degrade", "node");
+
+    let installed = sandboxed(home.path(), work.path(), &["install", "./degrade", "--yes"]);
+    assert!(
+        installed.status.success(),
+        "install: {}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+
+    let listed = sandboxed(home.path(), work.path(), &["ext", "list"]);
+    let listing = String::from_utf8_lossy(&listed.stdout);
+    let line = listing
+        .lines()
+        .find(|l| l.starts_with("degrade  "))
+        .unwrap_or_else(|| panic!("the extension is not listed: {listing}"));
+    let status = line
+        .split_whitespace()
+        .nth(2)
+        .unwrap_or_else(|| panic!("no status word in `{line}`"));
+    assert_eq!(
+        status, "unchecked",
+        "the column leads with what was checked, not with `ok`: {line}"
+    );
+}

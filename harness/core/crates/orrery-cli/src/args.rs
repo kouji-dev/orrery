@@ -179,6 +179,12 @@ pub enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    /// Decide whether a workspace's own configuration and code may load.
+    Trust {
+        /// What to do about it.
+        #[command(subcommand)]
+        command: TrustCommand,
+    },
     /// Write a starter configuration into the workspace.
     Init {
         /// Which profile to scaffold.
@@ -316,8 +322,11 @@ pub enum ExtCommand {
     List,
     /// Run an extension's tests against the mock broker, with no model and no network.
     Test {
-        /// The extension directory. Defaults to the current one.
-        #[arg(value_name = "PATH")]
+        /// An extension's name, or a path to it written as one: `./dir`,
+        /// `../dir`, an absolute path, or an `orrery.toml`. Anything else is
+        /// read as a name, whatever the current directory happens to hold.
+        /// Defaults to the workspace directory.
+        #[arg(value_name = "NAME|PATH")]
         path: Option<std::path::PathBuf>,
     },
 }
@@ -405,6 +414,31 @@ pub enum PermissionsCommand {
         #[arg(long, value_name = "SUBJECT")]
         subject: Option<String>,
     },
+}
+
+/// `orrery trust ...`
+///
+/// The verb the trust store never had. A workspace's own `config.toml`, its
+/// extensions and its interceptors do not load until somebody has vouched for
+/// the workspace, and until this landed the only way to say so was to hand-edit
+/// `trust.auto = true` into the user layer — so `orrery init` wrote a file that
+/// nothing could activate.
+#[derive(Debug, Subcommand)]
+pub enum TrustCommand {
+    /// Trust a workspace: its own configuration and code load from now on.
+    Grant {
+        /// Which workspace. Defaults to the one `--workspace` names.
+        #[arg(value_name = "PATH")]
+        path: Option<std::path::PathBuf>,
+    },
+    /// Forget the answer for a workspace, so it is untrusted again.
+    Revoke {
+        /// Which workspace. Defaults to the one `--workspace` names.
+        #[arg(value_name = "PATH")]
+        path: Option<std::path::PathBuf>,
+    },
+    /// Every stored answer, and what this workspace's is.
+    List,
 }
 
 /// `orrery config ...`

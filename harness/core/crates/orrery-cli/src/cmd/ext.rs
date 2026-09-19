@@ -32,6 +32,23 @@
 //! - so `orrery ext test builtin` cannot be a path, and used to fail with
 //!   `could not read builtin/orrery.toml`.
 //!
+//! # A name and a path are told apart by how they are WRITTEN
+//!
+//! They used to be told apart by `Path::exists`, and then what the command
+//! meant depended on what the shell happened to be sitting in. From the
+//! directory it was installed from, `orrery ext test pyext` answered
+//! `Activate: can't open file '...\ws\pyext\pyext\main.py'` - a relative
+//! root joined a second time - while the same extension from an unrelated
+//! directory answered `pyext 0.1.0 ok`. One command, two answers, and the
+//! failing one was the command's own.
+//!
+//! So [`is_written_as_a_path`] asks the argument, not the filesystem: `./x`,
+//! `../x`, `sub/x`, an absolute path or a `.toml` file is a path, and anything
+//! else is a name. A stray directory cannot shadow a bundle, and somebody who
+//! meant the directory is told to write `./x` rather than quietly given a
+//! different answer. A path that is a path leaves [`absolute`] absolute, so
+//! nothing downstream can join it twice.
+//!
 //! # It reports what the RUN PATH would do, not what a manifest says
 //!
 //! A driven acceptance run caught this command printing `ok` for an extension
@@ -75,12 +92,19 @@ pub fn dispatch(cli: &Cli, command: &ExtCommand) -> ! {
 
 /// Every extension this build can see: compiled in, then installed.
 fn list(cli: &Cli) -> ! {
+    // The rules in force, because a load is gated on them. Listing an extension
+    // as `ok` while the run path was about to cut half its tools away is the
+    // defect a driven acceptance run caught: a python extension asking for
+    // `spawn` under a `deny = ["spawn(*)"]` was listed `ok`, and this is the
+    // command a person runs to find that out.
+    let engine = engine(cli);
     let compiled = compiled_in();
     for manifest in &compiled {
         // A compiled-in bundle is registered by `features::register_native`, so
-        // it is live by construction: there is no disk root to gate, no runtime
-        // to find a host for, and no guest to start.
-        report(manifest, "builtin", None, &Checked::CompiledIn);
+        // there is no disk root to gate, no runtime to find a host for, and no
+        // guest to start — but it is still an ordinary extension, so policy
+        // still decides what it is granted.
+        report(manifest, "builtin", None, &Checked::CompiledIn, &engine);
     }
 
     let managed = orrery_harness::plan::managed_registry();
@@ -92,13 +116,14 @@ fn list(cli: &Cli) -> ! {
             managed.as_ref(),
         );
         // A listing does not start processes. Saying so is the whole point:
-        // what this checked is the manifest and the skip test, and the word it
-        // prints may not claim more than that.
+        // what this checked is the manifest, the skip test and the policy gate,
+        // and the word it prints may not claim more than that.
         report(
             &found.manifest,
             &found.layer,
             skip.as_ref(),
             &Checked::ManifestOnly,
+            &engine,
         );
     }
 
@@ -167,7 +192,11 @@ fn test(cli: &Cli, target: Option<&Path>) -> ! {
         (None, false) => Checked::ManifestOnly,
     };
 
-    report(&manifest, "", skip.as_ref(), &checked);
+    // `ext test` answers the author's question - "does this load, and what does
+    // it contribute" - so it is asked against the manifest's own ask rather than
+    // against the operator's rules. What happens when somebody refuses it is
+    // `ext list`'s answer, and the author's own test to write.
+    report(&manifest, "", skip.as_ref(), &checked, &SelfGranted);
     println!(
         "no model, no network: {} broker call(s) recorded",
         harness.recorded().len()
@@ -242,12 +271,13 @@ fn resolve(cli: &Cli, target: Option<&Path>) -> (ExtensionManifest, Option<Origi
         });
         return from_dir(&dir);
     };
-    if target.exists() {
-        return from_dir(target);
+    if is_written_as_a_path(target) {
+        return from_dir(&absolute(target));
     }
 
-    // Not a path, so it is a name. Compiled-in first: that set is fixed at build
-    // time and cannot be shadowed by something on disk.
+    // Written as a name, so it is a name — whatever happens to sit in the cwd.
+    // Compiled-in first: that set is fixed at build time and cannot be shadowed
+    // by something on disk.
     let name = target.to_string_lossy();
     if let Some(manifest) = compiled_in().into_iter().find(|m| m.name.as_str() == name) {
         return (manifest, None);
@@ -265,18 +295,55 @@ fn resolve(cli: &Cli, target: Option<&Path>) -> (ExtensionManifest, Option<Origi
         return (found.manifest, origin);
     }
 
+    // Somebody standing next to a directory of that name meant the directory,
+    // and the answer says exactly what to type. It does **not** quietly use it:
+    // that is the defect this replaced, where one command gave two answers
+    // depending on where the shell was sitting.
+    let beside = if target.exists() {
+        format!(
+            " — there is a `{name}` here; write `./{name}` if you meant the directory"
+        )
+    } else {
+        String::new()
+    };
     fail(
         Exit::Usage,
         format!(
-            "no extension named `{name}`: it is not a path, it is not compiled in ({}), \
-             and no layer in force has it installed",
-            compiled_in()
+            "no extension named `{name}`: it is not compiled in ({compiled}), \
+             and no layer in force has it installed{beside}",
+            compiled = compiled_in()
                 .iter()
                 .map(|m| m.name.to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
     )
+}
+
+/// Whether the argument was **written** as a path rather than as a name.
+///
+/// By construction, not by what the filesystem happens to hold: a path says so
+/// (`./x`, `../x`, `sub/x`, an absolute one, or a `.toml` file), and anything
+/// else is a name. Deciding this with `Path::exists` is what made
+/// `orrery ext test pyext` mean the installed bundle from one directory and a
+/// relative `./pyext` from another — the relative root then joined twice and
+/// the command reported a failure that was its own.
+fn is_written_as_a_path(target: &Path) -> bool {
+    if target.is_absolute() || target.extension().is_some_and(|e| e == "toml") {
+        return true;
+    }
+    let raw = target.to_string_lossy();
+    raw.starts_with('.') || raw.contains('/') || raw.contains('\\')
+}
+
+/// The same path, made absolute against the process directory.
+///
+/// A host is pointed at this root and joins the extension's own relative paths
+/// onto it. A relative root that is joined a second time is how
+/// `ws\pyext\main.py` became `ws\pyext\pyext\main.py`, so a root leaves here
+/// absolute or it does not leave.
+fn absolute(target: &Path) -> PathBuf {
+    std::path::absolute(target).unwrap_or_else(|_| target.to_path_buf())
 }
 
 /// A manifest read from a directory or a file.
@@ -290,9 +357,14 @@ fn from_dir(dir: &Path) -> (ExtensionManifest, Option<Origin>) {
     });
     let manifest = ExtensionManifest::from_toml_str(&src, file.display().to_string())
         .unwrap_or_else(|e| fail(Exit::Usage, e));
-    let root = file
-        .parent()
-        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    // Absolute: a host joins the extension's own relative paths onto this
+    // root, and a relative one joined twice is the `ws\pyext\pyext\main.py`
+    // defect.
+    let root = absolute(
+        &file
+            .parent()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf),
+    );
     (manifest, Some(Origin { root, src }))
 }
 
@@ -384,12 +456,78 @@ enum Checked {
     Guest(LoadOutcome),
 }
 
+/// Who decides what an extension is granted, for the purposes of one report.
+///
+/// Two answers, and they are different questions rather than two opinions of
+/// one: `ext list` asks the **operator's rules**, which is what the run path
+/// asks; `ext test` asks the **manifest**, because an author testing their own
+/// extension is not asking about somebody else's deny list.
+trait Granting {
+    /// What this extension gets.
+    fn granted(&self, manifest: &ExtensionManifest) -> Vec<Capability>;
+}
+
+/// The manifest's own ask, granted in full. `ext test`.
+struct SelfGranted;
+
+impl Granting for SelfGranted {
+    fn granted(&self, manifest: &ExtensionManifest) -> Vec<Capability> {
+        manifest.capabilities()
+    }
+}
+
+/// The rules in force, asked the way the loader asks them. `ext list`.
+///
+/// It is `orrery_broker::grant_for` — the function the run path calls — and not
+/// a second reading of the same rules, because the whole point of this listing
+/// is to say what the run path will do.
+struct Policed {
+    engine: orrery_policy::PolicyEngine,
+    scope: orrery_proto::AgentScope,
+}
+
+impl Granting for Policed {
+    fn granted(&self, manifest: &ExtensionManifest) -> Vec<Capability> {
+        orrery_broker::grant_for(
+            &self.engine,
+            &manifest.name,
+            &manifest.capabilities(),
+            Consent::Always,
+            &self.scope,
+        )
+        .capabilities
+    }
+}
+
+/// The engine `ext list` asks, built from the layers in force.
+fn engine(cli: &Cli) -> Policed {
+    let resolved = layers::resolve(cli);
+    let rules = std::sync::Arc::new(layers::rules(cli, &resolved));
+    Policed {
+        engine: orrery_policy::PolicyEngine::new(rules)
+            .with_consent(orrery_policy::ConsentMode::Never),
+        scope: orrery_proto::AgentScope {
+            agent: "main".to_owned(),
+            branch: orrery_proto::BranchId::new(),
+            tools: vec!["*".to_owned()],
+            // The main agent narrows nothing; only the rules decide here.
+            grant: Grant::nothing(),
+        },
+    }
+}
+
 /// One extension, as the ledger prints it: what loaded, what degraded, and why.
 ///
 /// `missing` is the function the real host calls, so a degraded line here says
 /// the same words a session would.
-fn report(manifest: &ExtensionManifest, origin: &str, skip: Option<&Skip>, checked: &Checked) {
-    let grants = manifest.capabilities();
+fn report(
+    manifest: &ExtensionManifest,
+    origin: &str,
+    skip: Option<&Skip>,
+    checked: &Checked,
+    granting: &dyn Granting,
+) {
+    let grants = granting.granted(manifest);
     let problems = orrery_ext_api::testing::missing(manifest, &grants);
     let contributions = names(&manifest.contributions());
     let origin = if origin.is_empty() {
@@ -424,7 +562,11 @@ fn report(manifest: &ExtensionManifest, origin: &str, skip: Option<&Skip>, check
     match checked {
         Checked::CompiledIn | Checked::Guest(LoadOutcome::Ok { .. }) => say("ok"),
         Checked::ManifestOnly => {
-            say("ok (manifest only; guest not started)");
+            // NOT `ok (manifest only; …)`. The column is what a person scans,
+            // and an extension `ext test` has just proved broken used to scan
+            // identically to a working one. The word says how far this command
+            // looked, and `ok` is not something it is in a position to say.
+            say("unchecked (manifest only; guest not started)");
             println!(
                 "    run `orrery ext test {}` to start the guest and see what it answers",
                 manifest.name
