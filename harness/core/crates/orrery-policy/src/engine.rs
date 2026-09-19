@@ -440,32 +440,7 @@ impl PolicyEngine {
     #[must_use]
     pub fn check(&self, call: &PendingCall, subject: &Subject, scope: &AgentScope) -> Decision {
         let rules = self.rules.load();
-        let parent = parent_of(subject);
-        let mut decision = match (&parent, rules.mentions(subject)) {
-            // Nothing was written about this subject: it inherits, rather than
-            // being silently denied everything.
-            (Some(parent), false) => self.decide_for(&rules, call, parent),
-            _ => {
-                let mine = self.decide_for(&rules, call, subject);
-                match &parent {
-                    // Intersect with the parent's answer: a child is narrowed,
-                    // never widened.
-                    Some(parent) => mine.min(self.decide_for(&rules, call, parent)),
-                    None => mine,
-                }
-            }
-        };
-
-        // And with the scope's own grant, which is the sub-agent's declared
-        // ceiling. A capability the scope does not carry is not available to it
-        // however the rules read.
-        if !scope_permits(scope, call) {
-            decision = decision.min(Decision::denied(format!(
-                "`{}` is outside the scope granted to `{}`",
-                call.match_text(),
-                scope.agent
-            )));
-        }
+        let mut decision = self.dress(&rules, call, &outcome(&rules, call, subject, Some(scope)));
 
         if self.consent == ConsentMode::Never {
             if let Decision::Ask { fallback, .. } = decision {
@@ -508,52 +483,97 @@ impl PolicyEngine {
 
     /// Dry-run a call: what would happen, which rule would do it, and where
     /// that rule is written.
+    ///
+    /// The verdict is [`PolicyEngine::check`]'s verdict, because both come from
+    /// the same [`outcome`]: naming the rule, the layer, the file and the line
+    /// is the *only* thing this adds. It has to be the only thing. When the two
+    /// worked the answer out separately they disagreed about a subject nobody
+    /// had written a rule about, and the tool list — which is built from this
+    /// side — came out empty for a run that would have been allowed.
     #[must_use]
     pub fn explain(&self, call: &PendingCall, subject: &Subject) -> Explanation {
+        self.explained(call, subject, None)
+    }
+
+    /// The same dry run, against a scope's grant as well as the rules.
+    ///
+    /// [`PolicyEngine::explain`] answers as a scope that narrows nothing would;
+    /// this answers for one particular sub-agent, ceiling included.
+    #[must_use]
+    pub fn explain_in(
+        &self,
+        call: &PendingCall,
+        subject: &Subject,
+        scope: &AgentScope,
+    ) -> Explanation {
+        self.explained(call, subject, Some(scope))
+    }
+
+    fn explained(
+        &self,
+        call: &PendingCall,
+        subject: &Subject,
+        scope: Option<&AgentScope>,
+    ) -> Explanation {
         let rules = self.rules.load();
-        let matched = rules.first_match(call, subject);
+        let outcome = outcome(&rules, call, subject, scope);
+        let inherited = outcome.subject != *subject;
+        let reason = match (outcome.rule, &outcome.refusal) {
+            (_, Some(why)) => why.clone(),
+            (Some(rule), None) if inherited => format!(
+                "`{}` in the {} list, inherited from `{}`",
+                rule.text,
+                rule.list.keyword(),
+                outcome.subject
+            ),
+            (Some(rule), None) => {
+                format!("`{}` in the {} list", rule.text, rule.list.keyword())
+            }
+            (None, None) => "no rule matched, and the default is to refuse".to_owned(),
+        };
         Explanation {
             subject: subject.clone(),
             request: call.match_text(),
-            verdict: matched.map_or(Verdict::Deny, |c| Verdict::from(c.rule.list)),
-            rule: matched.map(|c| RuleMatch::of(&c.rule, true)),
-            considered: rules.considered(call, subject),
-            reason: matched.map_or_else(
-                || "no rule matched, and the default is to refuse".to_owned(),
-                |c| format!("`{}` in the {} list", c.rule.text, c.rule.list.keyword()),
-            ),
+            verdict: outcome.verdict,
+            rule: outcome.rule.map(|rule| RuleMatch::of(rule, true)),
+            considered: subjects_for(&rules, subject)
+                .iter()
+                .flat_map(|s| rules.considered(call, s))
+                .collect(),
+            reason,
         }
     }
 
-    fn decide_for(&self, rules: &ResolvedRules, call: &PendingCall, subject: &Subject) -> Decision {
-        let Some(matched) = rules.first_match(call, subject) else {
-            return Decision::denied(format!(
-                "no rule allows `{}` for `{subject}`",
-                call.match_text()
-            ));
+    /// Turn an [`Outcome`] into a decision: mint the token, build the prompt.
+    ///
+    /// Nothing here chooses anything — the choosing happened in [`outcome`].
+    fn dress(&self, rules: &ResolvedRules, call: &PendingCall, outcome: &Outcome<'_>) -> Decision {
+        let Some(matched) = outcome.rule else {
+            return Decision::denied(
+                outcome
+                    .refusal
+                    .clone()
+                    .unwrap_or_else(|| "no rule matched, and the default is to refuse".to_owned()),
+            );
         };
-        let rule = matched.rule.id;
-        match matched.rule.list {
-            RuleList::Deny => Decision::Deny {
+        let rule = matched.id;
+        match outcome.verdict {
+            Verdict::Deny => Decision::Deny {
                 rule,
-                reason: format!("`{}` denies `{}`", matched.rule.text, call.match_text()),
+                reason: format!("`{}` denies `{}`", matched.text, call.match_text()),
             },
-            RuleList::Allow => Decision::Allow {
+            Verdict::Allow => Decision::Allow {
                 token: self
                     .minter
                     .mint(call.call, call.aspect, resolved_scope(call, rules), rule),
                 rule,
             },
-            RuleList::Ask => Decision::Ask {
+            Verdict::Ask => Decision::Ask {
                 prompt: Box::new(ConsentPrompt {
                     id: PromptId::new(),
-                    subject: subject.clone(),
+                    subject: outcome.subject.clone(),
                     capabilities: vec![Capability::scoped(call.aspect, [call.target.clone()])],
-                    reason: format!(
-                        "`{}` asks before `{}`",
-                        matched.rule.text,
-                        call.match_text()
-                    ),
+                    reason: format!("`{}` asks before `{}`", matched.text, call.match_text()),
                     rule: Some(rule),
                     surface: None,
                 }),
@@ -594,6 +614,97 @@ impl PolicyEngine {
             },
         });
     }
+}
+
+/// What the rules say about one call, before anybody dresses it up.
+///
+/// **The one thing both `check` and `explain` are built from.** A decision
+/// mints a token from it and an explanation prints the rule behind it; neither
+/// works the answer out for itself, so neither can drift from the other.
+#[derive(Debug)]
+struct Outcome<'r> {
+    /// Whose rules answered — not always the subject that asked, because a
+    /// subject nobody wrote about inherits.
+    subject: Subject,
+    /// The rule that answered, when a rule did.
+    rule: Option<&'r Rule>,
+    /// What the answer is.
+    verdict: Verdict,
+    /// Why, when no rule allowed it: the closed default, or the scope's own
+    /// ceiling. `None` whenever `rule` is `Some`.
+    refusal: Option<String>,
+}
+
+/// Whose rules a call is judged against, in the order they are consulted.
+///
+/// A subject's effective set is its own rules **intersected with its parent's**:
+/// a rule file narrows a sub-agent, it never widens one. A subject with no rule
+/// written about it at all inherits its parent's set outright, rather than
+/// being silently denied everything.
+fn subjects_for(rules: &ResolvedRules, subject: &Subject) -> Vec<Subject> {
+    match (parent_of(subject), rules.mentions(subject)) {
+        (Some(parent), false) => vec![parent],
+        (Some(parent), true) => vec![subject.clone(), parent],
+        (None, _) => vec![subject.clone()],
+    }
+}
+
+/// The answer to one call: the narrowest verdict across the subject chain,
+/// then the scope's own grant, which no rule can widen.
+///
+/// Ties go to the first subject consulted, which is the caller's own, so a
+/// denial names the rule that is actually about them.
+fn outcome<'r>(
+    rules: &'r ResolvedRules,
+    call: &PendingCall,
+    subject: &Subject,
+    scope: Option<&AgentScope>,
+) -> Outcome<'r> {
+    let mut best: Option<Outcome<'r>> = None;
+    for subject in subjects_for(rules, subject) {
+        let next = match rules.first_match(call, &subject) {
+            Some(matched) => Outcome {
+                subject,
+                rule: Some(&matched.rule),
+                verdict: Verdict::from(matched.rule.list),
+                refusal: None,
+            },
+            None => Outcome {
+                refusal: Some(format!(
+                    "no rule allows `{}` for `{subject}`",
+                    call.match_text()
+                )),
+                subject,
+                rule: None,
+                verdict: Verdict::Deny,
+            },
+        };
+        best = Some(match best {
+            Some(best) if best.verdict <= next.verdict => best,
+            _ => next,
+        });
+    }
+    let mut best = best.expect("a subject chain is never empty");
+
+    // The scope's grant is the sub-agent's declared ceiling. A capability the
+    // scope does not carry is not available to it however the rules read — and
+    // only a verdict above `Deny` is left to lose, so a rule that already
+    // refused keeps the credit for refusing.
+    if let Some(scope) = scope {
+        if best.verdict > Verdict::Deny && !scope_permits(scope, call) {
+            best = Outcome {
+                refusal: Some(format!(
+                    "`{}` is outside the scope granted to `{}`",
+                    call.match_text(),
+                    scope.agent
+                )),
+                subject: best.subject,
+                rule: None,
+                verdict: Verdict::Deny,
+            };
+        }
+    }
+    best
 }
 
 fn resolved_scope(call: &PendingCall, rules: &ResolvedRules) -> ResolvedScope {

@@ -295,6 +295,20 @@ Files: `orrery-policy/src/explain.rs`
 
 - [x] **Failing test first.** `explain::names_rule_layer_and_file` — dry-run a call; the explanation carries the rule id, the layer, the source file and line, and the verdict.
 - [x] Implement. The CLI surface is plan 17.
+- [x] **Amended in place 2026-09-19: `explain` and `check` are one answer, and
+  can no longer be made two.** They were two. `check` inherited the parent's
+  rules for a subject nobody had written about; `explain` did a bare
+  `first_match` with no inheritance and no intersection, and reported `Deny` for
+  every call by `agent:<name>`. `Registry::visible` filters the offered tool
+  list through `explain` for `Subject::SubAgent(scope.agent)`, so a default
+  workspace offered the model **zero tools** — invisible to every fixture test,
+  because `resolve` does not consult policy and the fixture provider replays
+  its stream whatever the prompt offered. Both now answer from one private
+  `outcome()`: it is the only caller of `first_match`, `subjects_for` and
+  `scope_permits`, and `check` merely mints the token while `explain` merely
+  names the rule. `orrery-policy/tests/agree.rs` asserts the **invariant** —
+  over generated rule sets, subjects, calls and scopes, `explain(..).verdict ==
+  check(..).verdict()` — rather than one example of it.
 
 ### Task 11 · Degrade, end to end
 
@@ -321,6 +335,12 @@ Files: `orrery-broker/tests/`
   `orrery-cli/tests/permissions_enforced.rs` asserts the equivalence — explain
   says deny ⇒ the run is denied, explain says allow ⇒ the run performs it —
   across the user, workspace and managed layers and across profiles.
+- **And the verdict a person is shown is the verdict a turn enforces**, for
+  *every* subject and not only for `agent`. One shared `outcome()` is what makes
+  that structural rather than hoped for; `tests/agree.rs` is the property, and
+  `orrery-cli/tests/tool_list.rs` is the consequence, asserted through the built
+  binary on a real turn: a workspace nobody configured offers a non-empty tool
+  list, with the built-in reader in it.
 - No credential value appears anywhere in the audit stream.
 
 ## Open questions

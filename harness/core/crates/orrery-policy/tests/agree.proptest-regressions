@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 63edbe4f96bea804576bfb74b996d1126f9cd3f543a13517434f21641074387b # shrinks to rules = [Rule { id: RuleId(01a0b93d-f78a-7f21-bcd3-6ce04ab75e03), list: Ask, layer: Project, subject: Agent, aspect: Tool, kind: Name, selector: Selector { primary: Some("*"), specifier: None, params: [], regex: None }, source: Source { file: "", line: 0 }, text: "tool(*)" }], subject = 0, shape = 0, scope = AgentScope { agent: "main", branch: BranchId(01a0b93d-f78a-7f21-bcd3-6cffe34712d9), tools: ["*"], grant: Grant { capabilities: [Capability { aspect: Read, scope: ["*"] }], consent: Never } }
