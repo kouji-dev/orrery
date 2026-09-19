@@ -309,6 +309,18 @@ Files: `orrery-broker/tests/`
 - `cargo test -p orrery-audit -p orrery-policy -p orrery-broker` green, including every compile-fail test.
 - An extension denied `spawn` degrades rather than failing.
 - Every decision appears in the audit with the rule that produced it.
+- **The rules a turn is checked against are the rules a person wrote.**
+  Amended in place 2026-09-19: the engine was always correct and the *binary*
+  never gave it the layers. `orrery_harness::ResolvedConfig` carried a
+  `policy_toml` field with no writer anywhere in the tree, so `assemble` fell
+  back to the hardcoded `DEFAULT_RULES` in every build and `[permissions]` was
+  inert — while `permissions explain`, reading the layers directly, reported
+  denials nothing enforced. The field is now the *resolved* rule set
+  (`Option<Arc<ResolvedRules>>`), `orrery-cli`'s `layers::rules` is the single
+  place it is chosen, and both halves read that one set.
+  `orrery-cli/tests/permissions_enforced.rs` asserts the equivalence — explain
+  says deny ⇒ the run is denied, explain says allow ⇒ the run performs it —
+  across the user, workspace and managed layers and across profiles.
 - No credential value appears anywhere in the audit stream.
 
 ## Open questions
