@@ -210,6 +210,19 @@ Files: `src/cmd/{permissions,config}.rs`
   asserts the **equivalence** rather than two separate facts: for one call under
   one set of layers, explain-says-deny ⇒ exit 4 with the denial in the ledger,
   explain-says-allow ⇒ exit 0 with the read performed.
+- [x] **Round 8, amended in place: the command can ask about a sub-agent, and
+  no longer names a file that is not there.** It took a call and assumed
+  `Subject::Agent`, so the one disagreement that mattered — `explain` and
+  `check` answering differently for `agent:<name>`, which emptied the offered
+  tool list — could not be seen from outside the binary at all.
+  `--subject <agent|agent:<name>|ext:<id>>` asks the real question, and the
+  answer says when a verdict was inherited. Two attributions were fiction as
+  well: the built-in `DEFAULT_PERMISSIONS` were attributed to
+  `<workspace>/orrery.toml`, sending anyone who went looking to a file that does
+  not exist, and a profile shorthand reported an empty file on line 0. The
+  default now names itself (`<built-in default>:2`, the line within that text)
+  and a shorthand carries its origin. `explain::{a_built_in_default_says_so,
+  a_sub_agent_can_be_asked_about, a_profile_shorthand_names_where_it_was_written}`.
 - [x] **And the help text names a call the parser accepts.** `--help` offered
   `builtin.write:$WORKSPACE/src/**`, which this command rejects as "is not a
   call". It now shows `read(./src/main.rs)`, `write(./src/main.rs)`,

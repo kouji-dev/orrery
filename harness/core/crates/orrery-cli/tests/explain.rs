@@ -271,3 +271,134 @@ fn config_explain_surfaces_a_permissions_table() {
         "{v}"
     );
 }
+
+/// A built-in default says it is a built-in default.
+///
+/// With nothing configured anywhere the rules are
+/// [`orrery_config::DEFAULT_PERMISSIONS`], and for several rounds they were
+/// attributed to `<workspace>/orrery.toml` — a file that is not there. The
+/// command promises the rule, the layer, the file and the line, so the one
+/// answer it must not give is the name of a file nobody can open.
+#[test]
+fn a_built_in_default_says_so() {
+    let home = home_with("");
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(
+        home.path(),
+        &args(
+            &quiet(ws.path()),
+            &["--json", "permissions", "explain", "read(./src/main.rs)"],
+        ),
+    );
+    assert!(out.status.success());
+    let v = &jsonl(&out.stdout)[0];
+    assert_eq!(v["verdict"], "allow");
+    assert_eq!(
+        v["rule"]["file"], "<built-in default>",
+        "the default names itself, not a file that is not there: {v}"
+    );
+    assert!(
+        !ws.path().join("orrery.toml").exists(),
+        "and the file it used to name really is absent"
+    );
+}
+
+/// A sub-agent can be asked about, and the answer is the one a turn enforces.
+///
+/// Without `--subject` the command could only ever answer for `agent`, which is
+/// why `explain` and `check` disagreeing about `agent:main` — the subject the
+/// offered tool list is filtered through — was invisible from outside.
+#[test]
+fn a_sub_agent_can_be_asked_about() {
+    let home = home_with("[permissions]\nallow = [\"tool(*)\"]\n");
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(
+        home.path(),
+        &args(
+            &quiet(ws.path()),
+            &[
+                "--json",
+                "permissions",
+                "explain",
+                "--subject",
+                "agent:main",
+                "tool(builtin.read)",
+            ],
+        ),
+    );
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let v = &jsonl(&out.stdout)[0];
+    assert_eq!(v["subject"], "agent:main");
+    assert_eq!(
+        v["verdict"], "allow",
+        "a sub-agent nobody wrote a rule about inherits the agent's: {v}"
+    );
+    assert!(
+        v["reason"].as_str().is_some_and(|r| r.contains("inherited")),
+        "and the explanation says so: {v}"
+    );
+}
+
+/// A subject that is not one is a usage error naming the spellings.
+#[test]
+fn a_subject_that_is_not_one_is_usage() {
+    let home = home_with("");
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(
+        home.path(),
+        &args(
+            &quiet(ws.path()),
+            &[
+                "permissions",
+                "explain",
+                "--subject",
+                "planner",
+                "read(./src/main.rs)",
+            ],
+        ),
+    );
+    assert_eq!(out.status.code(), Some(2), "a usage error");
+    let text = String::from_utf8_lossy(&out.stderr);
+    assert!(text.contains("agent:<name>"), "{text}");
+}
+
+/// A rule from a profile shorthand names where the profile wrote it.
+///
+/// It reported an empty file on line 0 — a rule from nowhere — because the
+/// expansion dropped the shorthand's origin on the floor.
+#[test]
+fn a_profile_shorthand_names_where_it_was_written() {
+    let home = home_with("[profile.careful.permissions]\nread = false\n");
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(
+        home.path(),
+        &args(
+            &quiet(ws.path()),
+            &[
+                "--json",
+                "--profile",
+                "careful",
+                "permissions",
+                "explain",
+                "read(./src/main.rs)",
+            ],
+        ),
+    );
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let v = &jsonl(&out.stdout)[0];
+    assert_eq!(v["verdict"], "deny");
+    assert_eq!(v["rule"]["text"], "read(./**)");
+    let file = v["rule"]["file"].as_str().unwrap_or_default();
+    assert!(
+        !file.is_empty(),
+        "a rule comes from somewhere a person can go and edit: {v}"
+    );
+    assert!(
+        file.ends_with("config.toml") || file.contains("careful"),
+        "and that is the profile's own file, or the profile: {v}"
+    );
+}

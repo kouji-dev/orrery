@@ -18,8 +18,9 @@ use crate::exit::{Exit, fail};
 
 /// Dispatch a `permissions` subcommand.
 pub fn dispatch(cli: &Cli, command: &PermissionsCommand) -> ! {
-    let PermissionsCommand::Explain { call } = command;
+    let PermissionsCommand::Explain { call, subject } = command;
     let pending = parse_call(call).unwrap_or_else(|e| fail(Exit::Usage, e));
+    let subject = parse_subject(subject.as_deref()).unwrap_or_else(|e| fail(Exit::Usage, e));
 
     let resolved = layers::resolve(cli);
     // `layers::rules` is what a run is built from too — a profile folds its
@@ -27,13 +28,26 @@ pub fn dispatch(cli: &Cli, command: &PermissionsCommand) -> ! {
     // will actually decide, not of a second one that resembles it.
     let engine = PolicyEngine::new(layers::rules(cli, &resolved));
 
-    let explanation = engine.explain(&pending, &Subject::Agent);
+    let explanation = engine.explain(&pending, &subject);
     if layers::wants_json(cli) {
         println!("{}", json(&explanation));
     } else {
         print!("{explanation}");
     }
     Exit::Ok.exit()
+}
+
+/// Who is asking. `agent` when nobody said.
+///
+/// The answer for `agent:planner` is not the answer for `agent`: a sub-agent
+/// inherits the agent's rules and its own file narrows them. That the command
+/// could only ever ask about `agent` is why `explain` and `check` could
+/// disagree about sub-agents for as long as they did.
+fn parse_subject(text: Option<&str>) -> Result<Subject, String> {
+    let Some(text) = text else {
+        return Ok(Subject::Agent);
+    };
+    text.trim().parse::<Subject>().map_err(|e| e.to_string())
 }
 
 /// The rule grammar, read as a *call*: `write(./src/main.rs)`,
@@ -139,6 +153,17 @@ fn json(explanation: &Explanation) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_subject_is_read_or_named() {
+        assert_eq!(parse_subject(None).expect("the default"), Subject::Agent);
+        assert_eq!(
+            parse_subject(Some("agent:planner")).expect("a sub-agent"),
+            Subject::SubAgent("planner".to_owned())
+        );
+        let e = parse_subject(Some("planner")).expect_err("not a subject");
+        assert!(e.contains("agent:<name>"), "{e}");
+    }
 
     #[test]
     fn a_call_is_read_in_the_rule_grammar() {

@@ -330,9 +330,9 @@ pub enum PermissionsCommand {
         /// Whose permissions to answer for: `agent` (the default), `agent:<name>`
         /// for a sub-agent, `ext:<id>` for an extension.
         ///
-        /// A sub-agent's answer is not the agent's: it inherits, and a rule
-        /// file narrows it. Without this flag the disagreement that emptied a
-        /// sub-agent's tool list could not be seen from outside at all.
+        /// A sub-agent's answer is not the agent's: it inherits the agent's
+        /// rules and its own file narrows them. The tool list a sub-agent is
+        /// offered is filtered through exactly this question.
         #[arg(long, value_name = "SUBJECT")]
         subject: Option<String>,
     },
