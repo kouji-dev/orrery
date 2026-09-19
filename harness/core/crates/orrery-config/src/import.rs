@@ -34,6 +34,7 @@
 //! **reported as a note**, never dropped in silence and never guessed at.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use crate::error::ConfigError;
 use crate::profile::{Profile, SHORTHANDS};
@@ -128,10 +129,10 @@ impl Imported {
 /// # Errors
 ///
 /// When the text is not JSON.
-pub fn claude_code(text: &str) -> Result<Imported, ConfigError> {
+pub fn claude_code(path: impl AsRef<Path>, text: &str) -> Result<Imported, ConfigError> {
     let root: serde_json::Value =
         serde_json::from_str(text).map_err(|e| ConfigError::Syntax {
-            file: "settings.json".into(),
+            file: path.as_ref().to_path_buf(),
             line: u32::try_from(e.line()).unwrap_or(0),
             message: e.to_string(),
         })?;
@@ -235,10 +236,13 @@ fn split_call(text: &str) -> Option<(&str, &str)> {
 /// # Errors
 ///
 /// When the text is not TOML.
-pub fn codex(text: &str) -> Result<Imported, ConfigError> {
+pub fn codex(path: impl AsRef<Path>, text: &str) -> Result<Imported, ConfigError> {
     let root: toml::Value = text.parse().map_err(|e: toml::de::Error| ConfigError::Syntax {
-        file: "config.toml".into(),
-        line: 0,
+        // The file that was actually read, not the bare name `config.toml`:
+        // the caller has just opened one of several candidate paths, and
+        // telling somebody "config.toml:0" leaves them to guess which.
+        file: path.as_ref().to_path_buf(),
+        line: crate::layer::line_of_toml(text, &e),
         message: e.to_string(),
     })?;
 

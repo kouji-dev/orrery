@@ -48,8 +48,8 @@ pub fn dispatch(cli: &Cli, from: Option<ImportFrom>) -> ! {
     };
 
     let imported: Imported = match from {
-        ImportFrom::ClaudeCode => orrery_config::import::claude_code(&text),
-        ImportFrom::Codex => orrery_config::import::codex(&text),
+        ImportFrom::ClaudeCode => orrery_config::import::claude_code(&path, &text),
+        ImportFrom::Codex => orrery_config::import::codex(&path, &text),
     }
     .unwrap_or_else(|e| fail(Exit::Usage, format!("{}: {e}", path.display())));
 

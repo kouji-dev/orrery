@@ -38,7 +38,7 @@ fn claude_code_permissions() {
     std::fs::write(fx.root().join("src/main.rs"), "fn main() {}").unwrap();
     std::fs::write(fx.root().join(".env"), "SECRET=1").unwrap();
 
-    let imported = import::claude_code(CLAUDE).expect("a real-shaped settings file imports");
+    let imported = import::claude_code("claude/settings.json", CLAUDE).expect("a real-shaped settings file imports");
     let written = imported.to_toml();
 
     // The three lists came across in the rule grammar.
@@ -104,7 +104,7 @@ fn claude_code_permissions() {
 
 #[test]
 fn codex_mcp_servers() {
-    let imported = import::codex(CODEX).expect("a real-shaped codex config imports");
+    let imported = import::codex("codex/config.toml", CODEX).expect("a real-shaped codex config imports");
     let written = imported.to_toml();
 
     assert!(written.contains("[mcp_servers.ripgrep]"), "{written}");

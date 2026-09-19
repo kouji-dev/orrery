@@ -75,6 +75,17 @@ pub fn line_at(text: &str, offset: usize) -> u32 {
     u32::try_from(text[..end].bytes().filter(|b| *b == b'\n').count() + 1).unwrap_or(0)
 }
 
+/// The 1-based line a `toml` deserialise error points at, or 0 when it points
+/// at nothing.
+///
+/// A `:0` in a message is the shape this crate keeps trying to be rid of: it
+/// tells a person to look at a line that does not exist. Every `toml::de::Error`
+/// that has a span can name a real line, and this is how.
+#[must_use]
+pub fn line_of_toml(text: &str, error: &toml::de::Error) -> u32 {
+    error.span().map_or(0, |span| line_at(text, span.start))
+}
+
 /// Where each layer's file lives.
 ///
 /// Built either from the OS defaults or, in tests and in sandboxes,
