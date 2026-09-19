@@ -12,6 +12,7 @@ publish = false
 # publishable, `path` makes it build in-tree. At split time the path goes and
 # nothing else changes. See harness/extensions/README.md.
 [dependencies]
+orrery-ext-api = { version = "0.2", path = "../../../core/crates/orrery-ext-api" }
 orrery-session = { version = "0.1", path = "../../../core/crates/orrery-session" }
 orrery-proto = { workspace = true }
 rusqlite = { workspace = true }

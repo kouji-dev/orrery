@@ -330,10 +330,14 @@ impl SessionStore for SqliteSessionStore {
 
 /// Build the `session` singleton.
 ///
-/// TODO(plan-06): this is the direct constructor. Once the extension loader
-/// exists, `orrery-host` reads [`orrery.toml`](../orrery.toml) and calls this
-/// through the same path a third-party extension takes — the ledger shows it, a
-/// deny rule disables it, `orrery ext test` runs it.
+/// The direct constructor, for an embedder that has already decided it wants
+/// SQLite. The loader half is [`SqliteSessions`]: registering that with
+/// `orrery_host::NativeRegistry` is what puts this extension's `orrery.toml`
+/// through the same parser a third-party manifest goes through, so the ledger
+/// shows the `session` slot has a holder, a deny rule can name `sqlite`, and
+/// `orrery ext test` can run it. Both halves are needed — the same split
+/// `orrery-ext-views-default` has, because neither a session store nor a view
+/// is a tool the model can call.
 ///
 /// # Errors
 ///
@@ -343,4 +347,47 @@ pub fn build(state_dir: &Path) -> Result<std::sync::Arc<dyn SessionStore>, Sessi
     Ok(std::sync::Arc::new(SqliteSessionStore::open(
         state_dir.join("sessions.db"),
     )?))
+}
+
+
+/// The loader's half of this extension.
+///
+/// A session store is not a tool, so this contributes none. What it does is
+/// make the crate an *extension* rather than a library the harness happens to
+/// call: the host parses the manifest below with the same parser it holds a
+/// third party to, records the `session` singleton against `sqlite`, and gives
+/// policy a name to deny. The store itself comes from [`build`].
+#[derive(Copy, Clone, Debug, Default)]
+pub struct SqliteSessions;
+
+/// The shipped manifest, compiled in so the binary and the source cannot drift.
+pub const MANIFEST: &str = include_str!("../orrery.toml");
+
+#[async_trait::async_trait]
+impl orrery_ext_api::NativeExtension for SqliteSessions {
+    fn manifest(&self) -> &str {
+        MANIFEST
+    }
+
+    fn manifest_path(&self) -> &str {
+        "harness/extensions/crates/orrery-ext-session-sqlite/orrery.toml"
+    }
+
+    /// None. A session store is reached through the `session` singleton slot,
+    /// never offered to the model and never called with an input.
+    fn tools(&self) -> Vec<orrery_ext_api::ToolDef> {
+        Vec::new()
+    }
+
+    async fn call(
+        &self,
+        tool: &str,
+        _input: serde_json::Value,
+        _ctx: &orrery_ext_api::CallCtx,
+    ) -> Result<orrery_proto::Outcome, orrery_ext_api::HostError> {
+        Err(orrery_ext_api::HostError::NoSuchTool {
+            ext: orrery_proto::ExtId::new("sqlite").expect("a literal ext id"),
+            tool: tool.to_owned(),
+        })
+    }
 }
