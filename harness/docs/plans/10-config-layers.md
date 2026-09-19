@@ -215,6 +215,15 @@ Files: `src/import.rs`, `tests/import.rs`
   **Stale, corrected 2026-09-18: `orrery config explain <key>` exists**, prints
   the winning layer, the file, the line and what it shadowed, and takes
   `--json`. `orrery init` and `orrery import` are wired to task 8 as well.
+  **Amended 2026-09-19: it answers for a table too.** `config explain
+  permissions` printed "not set in any layer" under `--profile fast`
+  (`read = true`) *and* under `--profile careful` (`read = false`), while
+  `permissions explain` and the turn itself both enforced the shorthand — an
+  explanation contradicting the rule set in force. `permissions` is never a leaf:
+  a layer writes `permissions.deny` and a profile writes
+  `profile.<name>.permissions.read`, and the explainer only looked for a leaf. A
+  key that names a table now answers with its leaves, each contribution carrying
+  the dotted key it was read from (`Contribution::from`, `"from"` in `--json`).
 - ~~Two profiles produce measurably different agents from one binary.~~
   **Amended:** `review` and `ci` produce measurably different *assembled
   agents* — different model, different visible tool set, `review` denied a

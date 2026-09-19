@@ -308,6 +308,15 @@ address inside one — an `orrery-proto` change, not this plan's, and nothing ne
   The "no drawing code" half is a source scan that fails on `std::io`, `print!`, a terminal
   crate or a width. See Task 8 for what it found.
 
+- [x] **And exercisable through the binary, added 2026-09-19.** The bullet above was
+  true of `orrery-ported`'s own tests and of nothing a person could type: no crate in
+  `core/` named the three, so `orrery ext list` never listed them and no turn could
+  call one. They are now compiled in behind `orrery-harness`'s `example-extensions`
+  feature — off by default — and registered through the same `features::register_native`
+  door as the builtin tools, so the listing and the run path read one table.
+  `orrery-cli/tests/ported.rs` proves the criterion through the built binary in both
+  clients: `cargo test -p orrery-cli --features example-extensions --test ported`.
+
 - [x] **Closed, round 6: the shipped binary links this crate and a client sees
   what it produces.** It was open because `ExtensionTable` held **one**
   session-wide `SurfaceSink` and `SurfaceEmit::emit(&self, surface: &Surface)`

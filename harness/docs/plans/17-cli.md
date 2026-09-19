@@ -318,6 +318,23 @@ caps and every routing rule were green library tests a person could not reach.
   drift from the loader, and `ext test` starts the guest for any runtime this
   build hosts. `ext.rs`, three tests driving install-then-list; a native
   extension on disk now says `skipped` and why.
+- **Three things the binary said that were not so, fixed 2026-09-19**, each found
+  by driving it rather than by a test: `install --yes` printed "1 capability
+  request(s) were denied by default; pass --yes to grant them" **after** `--yes`
+  had been passed and then succeeded — it counted the defaults rather than the
+  decision; `ext test` with no target read the process cwd and ignored the global
+  `--workspace <PATH>`, so it only worked after a `cd`; and `config explain
+  permissions` said "not set in any layer" for a shorthand `permissions explain`
+  and `run` both enforced. Tests: `install::passing_yes_does_not_then_ask_for_yes`,
+  `ext::test_with_no_target_honours_the_workspace_flag`,
+  `explain::config_explain_surfaces_a_profiles_permission_shorthands`.
+- **A call that reached no tool is still a logged decision.** A model naming a tool
+  it was not offered settles as `no-such-tool` and the turn exits 0 — which is
+  right: the model wrote the name, the failure goes back to it as a value, and the
+  next pass recovers. The silence was not: the ledger was empty about the one thing
+  that had happened. The kernel now writes a failed `tool.call` line before it
+  settles the call (`ledger::a_tool_name_that_resolved_to_nothing_is_still_logged`).
+  The exit code is deliberately unchanged.
 - **Every command in `--help` answers for itself.** As of 2026-09-19 nothing in
   the tree exits 2 saying "not implemented in this build";
   `cli::no_subcommand_is_a_stub` reads the command list out of `--help` and

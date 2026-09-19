@@ -199,6 +199,16 @@ Files: `orrery-mcp/src/expose.rs`, `tests/expose.rs`
   made-up list (`register::list_changed_is_re_resolved`) and once end to end against
   the fixture server announcing its own growth
   (`health::list_changed_from_a_real_server_is_re_resolved`).
+- **Added 2026-09-19, the bullet only the binary can satisfy: a real turn CALLS an
+  MCP tool, and a real turn carries a discovered `SKILL.md`.** **True** —
+  `orrery-cli/tests/mcp_turn.rs` declares the conformant fixture server in a
+  sandboxed home and drives `orrery run`: `mcp.fixture.echo` comes back `ok` with
+  the server's own answer (it answered `no-such-tool` before this round), the
+  server's admitted tools are in the load stream as `mcp.fixture`, and with a
+  `SKILL.md` on disk the kernel reports `skills=1` and a `skills(...)` section in
+  the system prompt it sent. Removing the two lines in `cli/src/session.rs` that
+  hand `setup.mcp_servers` and `setup.skills` to the kernel config turns three of
+  those four tests red, which is the check the old bullets could not make.
 
 ## State
 
@@ -217,6 +227,17 @@ closure. The lesson is worth writing down rather than fixing quietly: a crate's
 own test suite passing is not the same claim as the capability shipping, and
 this plan's "Done when" section should have had a bullet that only the binary
 could satisfy.
+
+**Amended again 2026-09-19: the CLI fix was the inspection half only.**
+`orrery mcp tools fixture` did a real handshake and listed `mcp.fixture.echo`
+while a turn calling that name answered `no-such-tool`, because `orrery-cli`
+depended on both crates and `orrery-harness` — which builds what a turn runs —
+depended on neither. The run path now registers declared MCP servers through the
+ordinary registry as `mcp.<server>` behind the ordinary policy gate
+(`orrery-harness/src/mcp.rs`) and renders discovered skills into section 4 of the
+system prompt (`orrery-harness/src/skills.rs`), and `cmd::setup` reads **one**
+list that both the listing and the turn use. The bullet above is the one that
+would have caught it, which is why it is now written down.
 
 Two things a later plan has to pick up, both recorded in the code:
 

@@ -244,6 +244,17 @@ This is the task that keeps the ergonomics honest.
 - [x] `cargo test -p orrery-registry` green, including the tamper tests. *(42 tests
   across `index`, `verify`, `fetch`, `tamper`, `diff`, `source`, `pin` and
   `install`, every one of them offline.)*
+- [x] **A refusal to load is logged by the run that refused it, added 2026-09-19.**
+  It was visible in `ext list` and `ext test` and nowhere else: a fresh run under
+  managed `unpinned = "refuse"` left `audit/*.jsonl` holding two `model.request`
+  lines and not a word about the extension the session had just refused. Section 8
+  phase 3 says every decision is logged, and a refusal is a decision — `assemble`
+  now appends `AuditEvent::ExtensionLoad` with status `skipped` and the reason
+  before it moves on (`orrery-cli/tests/ext.rs::a_refused_load_is_recorded_by_the_run_that_refused_it`,
+  which reads the stream the run wrote). The refusal message also stopped naming
+  an index it does not have: a managed layer may refuse everything unpinned and
+  set no `index`, and the sentence interpolated the empty string and ended "may be
+  loaded from  " (`pin::a_refusal_with_no_index_does_not_name_an_empty_one`).
 - [x] An admin pins a version set; unpinned extensions refuse to load and say why.
   *(`pin::unpinned_refuses_under_managed`, plus `pin::version_set_is_exact` for
   the pin being a version rather than a range.)*
