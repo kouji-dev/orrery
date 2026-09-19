@@ -237,6 +237,21 @@ Files: `src/import.rs`, `tests/import.rs`
   `orrery-cli/tests/budget.rs` now stops a real turn from a config file, through
   the binary, exit 3.
 
+  **Round 7: `[permissions]` was inert for the same reason and is not any
+  more.** The layers reached `KernelConfig`, but not the policy engine:
+  `orrery_harness::ResolvedConfig::policy_toml` had no writer in the tree, so
+  the kernel dispatched through the hardcoded `DEFAULT_RULES` while
+  `permissions explain` answered from the layers — a permission system that
+  reported a denial it did not enforce. Resolution now owns the fallback
+  (`merge::DEFAULT_PERMISSIONS`, used only when **no** layer declares a rule),
+  `ResolvedConfig::policy` and `rules_in_force` hand the compiled set out, and
+  `cmd::layers::rules` gives that same set to the engine a turn dispatches
+  through. Layer precedence is unchanged — still `PolicyBuilder`'s, deny a union
+  and a managed deny final — which is exactly why the rules travel as
+  `ResolvedRules` and not as a re-parsed TOML fragment that would collapse into
+  one layer. `orrery-cli/tests/permissions_enforced.rs` drives the binary and
+  asserts explain and run agree, per layer and per profile.
+
   `ProviderChoice` had only `Fixture` and `Custom`, so no configuration could
   name a real model. It has an `Anthropic` variant now, selected by
   `[provider] kind = "anthropic"`, with the feature that links it still off in
