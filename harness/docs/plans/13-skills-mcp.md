@@ -207,6 +207,17 @@ test-first. `cargo test -p orrery-skills -p orrery-mcp` green, clippy clean,
 `cargo run -p xtask -- deps-check` ok. Two "Done when" bullets are amended above
 rather than quietly weakened.
 
+**Amended 2026-09-19: "done" was true of the libraries and false of the
+product.** Both crates were green and **neither was in `cargo tree -p
+orrery-cli`** — nothing a person could type reached a line of either, which is
+why section 8 phase 7 read PARTIAL against a plan that said Done. That is now
+fixed from the CLI side (plan 17 task 11): `orrery mcp list | tools` and
+`orrery skills list | show` are the surface, and both crates are in the binary's
+closure. The lesson is worth writing down rather than fixing quietly: a crate's
+own test suite passing is not the same claim as the capability shipping, and
+this plan's "Done when" section should have had a bullet that only the binary
+could satisfy.
+
 Two things a later plan has to pick up, both recorded in the code:
 
 1. **`orrery-broker` has no interactive spawn.** `proc::Child` gives its child

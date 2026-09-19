@@ -30,6 +30,8 @@ orrery-session = { workspace = true }
 orrery-config = { path = "../orrery-config" }
 orrery-broker = { workspace = true }
 orrery-eval = { path = "../orrery-eval" }
+orrery-mcp = { path = "../orrery-mcp" }
+orrery-skills = { path = "../orrery-skills" }
 orrery-policy = { workspace = true }
 orrery-kernel = { path = "../orrery-kernel" }
 orrery-harness = { path = "../orrery-harness" }
@@ -44,6 +46,9 @@ orrery-client-ratatui = { path = "../../../clients/ratatui" }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+# `[skills.<name>]` settings are read back out of the resolved layers as TOML
+# values and deserialised into `SkillSettings`. One dependency, one direction.
+toml = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

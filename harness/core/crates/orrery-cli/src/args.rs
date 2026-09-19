@@ -180,6 +180,18 @@ pub enum Command {
         #[arg(long = "from", value_name = "HARNESS")]
         from: Option<ImportFrom>,
     },
+    /// Inspect the MCP servers this workspace declares.
+    Mcp {
+        /// What to do with them.
+        #[command(subcommand)]
+        command: McpCommand,
+    },
+    /// Inspect the skills the discovery pass found.
+    Skills {
+        /// What to do with them.
+        #[command(subcommand)]
+        command: SkillsCommand,
+    },
     /// Run, compare and replay evaluation suites.
     Eval {
         /// What to do.
@@ -320,5 +332,43 @@ pub enum EvalCommand {
         /// The case id.
         #[arg(long, value_name = "ID")]
         case: String,
+    },
+}
+
+/// `orrery mcp ...`
+///
+/// Two questions, and they are deliberately separate: **what is declared** does
+/// not start anything, and **what a server offers** does. §4.11's lifecycle —
+/// discovered at session start, connected when first needed — would be a
+/// sentence in a plan rather than a property if one command did both.
+#[derive(Debug, Subcommand)]
+pub enum McpCommand {
+    /// List declared servers, the layer that declared them, and their health.
+    /// Starts no process.
+    List,
+    /// Connect to one server and list the tools it offers, by the namespaced
+    /// `ToolRef` a policy rule would name.
+    Tools {
+        /// The server name, without the `mcp.` prefix.
+        #[arg(value_name = "SERVER")]
+        server: String,
+    },
+}
+
+/// `orrery skills ...`
+#[derive(Debug, Subcommand)]
+pub enum SkillsCommand {
+    /// List discovered skills, with what each one's scripts may do.
+    List {
+        /// Only the skills this agent may load. A skill scoped elsewhere is
+        /// absent, not refused.
+        #[arg(long, value_name = "AGENT")]
+        agent: Option<String>,
+    },
+    /// Show one skill's front matter and body.
+    Show {
+        /// The skill name, from its front matter.
+        #[arg(value_name = "NAME")]
+        name: String,
     },
 }

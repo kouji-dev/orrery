@@ -15,6 +15,8 @@ Commands:
   config       Explain resolved configuration
   init         Write a starter configuration into the workspace
   import       Import configuration from another harness
+  mcp          Inspect the MCP servers this workspace declares
+  skills       Inspect the skills the discovery pass found
   eval         Run, compare and replay evaluation suites
   ledger       Query the decision ledger: what was asked, what was decided, and which rule decided it
   telemetry    Query the telemetry stream: model requests and routing decisions

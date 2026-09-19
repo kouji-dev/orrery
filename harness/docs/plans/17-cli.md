@@ -241,13 +241,37 @@ Files: `src/term.rs`
 - [x] ~~`term::ctrl_c_during_startup` — interrupting before attach exits cleanly.~~ **Amended: landed as `term::restoring_twice_is_fine`.** Nothing in this build installs a `^C` handler — the default disposition kills the process — so "interrupting before attach" is exactly "the process died before `setup` ran", and what has to be true is that there is nothing to undo and that undoing it anyway is safe. That is what is asserted. A `^C` that cancels a *turn* rather than the process is a different feature and belongs with the interactive loop.
 - [x] Implement a guard that restores on drop and on panic. *(Both: a `RestoreGuard` whose `Drop` restores, and a panic hook installed at `main` that restores **before** the default hook prints, so the backtrace lands in a terminal that can render it.)*
 
+### Task 11 · `mcp` and `skills`
+
+Files: `src/cmd/{mcp,skills}.rs`
+
+**Added 2026-09-19.** This task was not in the plan and should have been: this
+file is the command tree of record, `orrery-mcp` and `orrery-skills` were both
+built and tested, and **neither was in the binary's dependency closure at all**,
+which is the whole reason section 8 phase 7 read PARTIAL. A capability nothing
+can reach is not shipped.
+
+- [x] **Failing test first.** `mcp::list_shows_what_configuration_declares` — a `[mcp_servers.jira]` in a config layer is listed with its extension id `mcp.jira`, the layer that declared it, and health `discovered`. *(The id is the assertion that matters: §4.11 says an MCP server is an extension id like any other, and if the command invented an MCP-shaped name here there would be two namespacing schemes.)*
+- [x] `orrery mcp list` starts **no process**. Discovery and connection are separate subcommands because §4.11's lifecycle — discovered at session start, connected when first needed — is a property, not a sentence. `Servers::started()` is zero after a list, and the command asserts it.
+- [x] `orrery mcp tools <server>` connects to one server and prints the namespaced `ToolRef` a policy rule would name. *(**What the CLI suite does not cover: a successful handshake.** That is `orrery-mcp`'s own `client::real_server_works_unmodified`, which spawns the committed spec-conformant fixture server — a bin `cargo test -p orrery-cli` does not build. What is covered here is everything the command adds: the declaration is found, an undeclared server is exit 2 pointing at `mcp list`, and a server that will not start fails with a sentence rather than a hang.)*
+- [x] `orrery skills list [--agent <name>]` — name, layer, and **whether its scripts may run at all**. That column is the point: everywhere else a skill's bundled `scripts/` run with the user's full privileges, and the absence of a grant needs to be a visible, ordinary state. A skill scoped to another agent is *absent* rather than listed and refused, which is what `SkillSet::for_agent` already meant.
+- [x] `orrery skills show <name>` — the front matter and the body an agent would be handed.
+- [x] Scope and grant are read from **configuration**, never from the front matter. The `SKILL.md` format is adopted unchanged, so a skill cannot widen its own reach by editing itself; `skills::a_scoped_skill_is_absent_from_another_agent` declares the scope in `[skills.<name>]` and proves it.
+- [x] Neither command builds a kernel or a provider, for the same reason `config explain` does not: asking what is declared must work in a checkout with no key in sight.
+
 ---
 
 ## Done when
 
-- `cargo test -p orrery-cli` green; `--help` snapshots committed. *(13 unit
-  tests, and `cli`, `json`, `exit_codes`, `serve`, `ext`, `explain`, `init` and
-  `session` as integration suites. 26 snapshots under `tests/snapshots/`.)*
+- `cargo test -p orrery-cli` green; `--help` snapshots committed. *(Unit tests,
+  and `cli`, `json`, `exit_codes`, `serve`, `ext`, `explain`, `init`, `session`,
+  `replay`, `ledger`, `eval`, `mcp` and `skills` as integration suites. 32
+  snapshots under `tests/snapshots/`.)*
+- **Every command in `--help` answers for itself.** As of 2026-09-19 nothing in
+  the tree exits 2 saying "not implemented in this build";
+  `cli::no_subcommand_is_a_stub` reads the command list out of `--help` and
+  checks each one, which is the property the old list of unimplemented
+  subcommands existed to protect.
 - `orrery run -p "…"` completes a real turn with a real tool call.
   *(`json::completes_a_turn_with_a_tool_call`, the phase-1 acceptance criterion,
   and `json::the_tool_call_really_happened`, which checks the bytes in

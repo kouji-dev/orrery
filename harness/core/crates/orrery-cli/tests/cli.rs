@@ -72,6 +72,12 @@ fn help_snapshot() {
         ("eval-run", &["eval", "run", "--help"]),
         ("eval-compare", &["eval", "compare", "--help"]),
         ("eval-replay", &["eval", "replay", "--help"]),
+        ("mcp", &["mcp", "--help"]),
+        ("mcp-list", &["mcp", "list", "--help"]),
+        ("mcp-tools", &["mcp", "tools", "--help"]),
+        ("skills", &["skills", "--help"]),
+        ("skills-list", &["skills", "list", "--help"]),
+        ("skills-show", &["skills", "show", "--help"]),
         ("ledger", &["ledger", "--help"]),
         ("telemetry", &["telemetry", "--help"]),
     ];
@@ -158,7 +164,6 @@ fn a_usage_error_does_not_pollute_stdout() {
         String::from_utf8_lossy(&out.stdout)
     );
 }
-
 
 /// `session rm` is in the tree, takes `--yes`, and needs it: a delete that
 /// cannot be undone must not happen because a script forgot a flag.
