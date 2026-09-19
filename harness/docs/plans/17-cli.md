@@ -310,6 +310,14 @@ caps and every routing rule were green library tests a person could not reach.
   it: `permissions explain` and `run` were built from two different rule sets.
   They are built from one now, and `permissions_enforced` asserts the
   equivalence directly rather than asserting each half separately.
+- **`ext list` and `ext test` report the state the run path reaches.** Added
+  round 6, because `ext list --help` promised "including degraded and skipped
+  ones with reasons" and the command printed `ok` for extensions the session
+  skipped. Both go through `orrery_harness::plan::skip_for` — the same call the
+  builder makes before handing a manifest to a host — so the listing cannot
+  drift from the loader, and `ext test` starts the guest for any runtime this
+  build hosts. `ext.rs`, three tests driving install-then-list; a native
+  extension on disk now says `skipped` and why.
 - **Every command in `--help` answers for itself.** As of 2026-09-19 nothing in
   the tree exits 2 saying "not implemented in this build";
   `cli::no_subcommand_is_a_stub` reads the command list out of `--help` and

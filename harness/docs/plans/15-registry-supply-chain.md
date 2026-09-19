@@ -247,6 +247,19 @@ This is the task that keeps the ergonomics honest.
 - [x] An admin pins a version set; unpinned extensions refuse to load and say why.
   *(`pin::unpinned_refuses_under_managed`, plus `pin::version_set_is_exact` for
   the pin being a version rather than a range.)*
+  **Amended round 6: this was true of install and not of load.** An extension
+  installed *before* an admin set `unpinned = "refuse"` went on loading
+  afterwards, because `ManagedRegistry::read` was reached from
+  `cmd/install.rs` and from nowhere else. The load path had nothing to go on —
+  a directory and a manifest say nothing about whether a signature was ever
+  checked — so an install now writes what pinning decided to
+  `<layer>/registry/receipts/<id>.toml`, beside the extension rather than inside
+  it, and `pin::load_refusal` answers the load-time question from it. A missing
+  receipt refuses: the only way to have none is to predate the check or to have
+  been placed by hand. The refusal is a `LoadOutcome::Skipped` the ledger and
+  `orrery ext list` both show, and
+  `orrery-cli/tests/ext.rs::an_unpinned_extension_refuses_to_load_once_the_pin_is_set`
+  drives the whole sequence through the binary.
 - [x] A capability added in an upgrade is surfaced distinctly and defaults to deny.
   *(`diff::new_capability_on_upgrade_is_flagged`, and end to end in
   `install::an_upgrade_that_adds_a_capability_denies_it_by_default`.)*

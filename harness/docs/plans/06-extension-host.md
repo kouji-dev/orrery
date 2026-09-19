@@ -324,7 +324,14 @@ Files: `extensions/node/ext-sdk/*`
 
 - `cargo test -p orrery-ext-api -p orrery-host -p orrery-jsonrpc -p orrery-host-rpc` green, and the builtin bundle's own suite with `-p orrery-harness --test builtin` (see Task 4). `builtin::bash_is_contained` needs its example built first: `cargo build -p orrery-harness --example contain_probe`.
 - The node SDK's own suite is `node --test "test/*.test.mjs"` in `extensions/node/ext-sdk`, and it is checked against the host by `-p orrery-host-rpc --test sdk`.
-- Two extensions claiming `search` coexist as `a.search` and `b.search`; unloading one leaves the session alive.
+- Two extensions claiming `search` coexist as `a.search` and `b.search`; unloading one leaves the session alive. **Proved from the binary, round 6.** The
+  library had always had this; what it did not have was evidence that two
+  extensions *on disk* reach a turn, and the acceptance run's evidence turned
+  out to be two extensions that appeared in `ext list` and never loaded.
+  `orrery-cli/tests/node_extensions.rs::two_extensions_claim_search_and_killing_one_leaves_the_session_alive`
+  installs two node extensions that both provide `search`, calls `alpha.search`
+  — which answers and then exits its own process — and then calls
+  `beta.search` in the same session, which answers.
 - `builtin.read` on a huge file demonstrably does not buffer it —
   `builtin::read_respects_the_output_ceiling` reads 10 MB under a 4 KB ceiling
   and asserts, through `LimitedReader`'s own pull counter, that no more than the
@@ -336,6 +343,22 @@ Files: `extensions/node/ext-sdk/*`
   extension with no `--provider`, no key and nothing to reach.
   `ext::a_broken_manifest_is_usage` pins the other half: a manifest that will
   not parse is exit 2 naming the file, never a panic.
+- **…and what it reports is what the run path would do.** Amended round 6: both
+  `ext list` and `ext test` answered from the manifest alone, so a
+  `runtime = "native"` extension discovered on disk — which `features::host_for`
+  skips, on purpose, because a native bundle is compiled in — was printed `ok`
+  while the session logged it as skipped. Both now ask
+  `orrery_harness::plan::skip_for`, the same call the builder makes, and a skip
+  is a ledger entry rather than a log line. `ext test` additionally starts the
+  guest through the real host for any runtime this build has one for, so an
+  extension that parses and then cannot activate is not a pass.
+- **The node worked example is installable.** Amended round 6: it imported the
+  SDK by a relative path that resolves only in this tree, and nothing put the
+  SDK beside an installed copy, so `orrery install ./node-hello` produced an
+  extension whose first turn died with `ERR_MODULE_NOT_FOUND`. `@orrery/ext` now
+  travels inside the binary (`orrery_host_rpc::sdk`) and `RpcHost::install`
+  vendors it into `node_modules/@orrery/ext` beside whatever directory it is
+  told to run. The example imports `@orrery/ext` like a published extension.
 
 ## Open questions
 
