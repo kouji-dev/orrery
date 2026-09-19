@@ -54,7 +54,13 @@ graphify-out/
 
 # local env & tooling
 .env
+# rtk writes its savings database to `rtk/` here and `.rtk/` elsewhere; both are
+# local tool state, never source.
 .rtk/
+rtk/
+
+# The clean-artefacts script's run output, not its input.
+ade/scripts/.clean-list.txt
 
 # transient build/dev logs
 .cargobuild.log
