@@ -70,8 +70,12 @@ impl ToolSpec {
 
 /// Where the owning extension is in its lifecycle.
 ///
-/// TODO(plan-06): the extension host owns this; the registry keeps a copy so
-/// that `visible` can hide a draining extension without a call across crates.
+/// Plan 06 landed the generation-keyed instance table in `orrery_host`, which
+/// is the owner of record. This stays a deliberate copy, not a leftover: it
+/// lets [`crate::visible`] and [`crate::resolve`] hide a draining extension
+/// with a map lookup instead of an async call across crates on the hot path.
+/// The host keeps the two in step through [`Registry::set_state`] — see
+/// `orrery_host::unload`, which flips an extension to `Dead` there.
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ExtState {

@@ -82,9 +82,13 @@ impl CallCtx {
 /// let host = registry.host();  // private method
 /// ```
 ///
-/// TODO(plan-06): the extension host implements this. Until then the registry
-/// ships [`UnavailableHost`], so every path below dispatch already exists and
-/// plan 06 drops in without touching the dispatch order.
+/// # Who implements it
+///
+/// Plan 06 landed: `orrery_host::ExtensionTable` is the real implementation,
+/// and `orrery_mcp::McpHost` is a second one. [`UnavailableHost`] is now only
+/// the **default** a bare [`Registry`] starts with, so a registry nobody gave a
+/// host to answers `Unloaded` instead of panicking. Call
+/// [`Registry::with_host`] to replace it.
 #[async_trait]
 pub trait ToolHost: Send + Sync {
     /// Run the tool and report how it went.
@@ -166,9 +170,11 @@ impl PolicyCheck for AllowAll {
 
 /// The `tool.resolve`, `tool.before` and `tool.after` phases.
 ///
-/// TODO(plan-05): the kernel owns the interceptor chain and its `Phase` trait.
-/// This is the tool-side slice of it, so the dispatch order already has the
-/// three hook points in the right places.
+/// Plan 05 landed the full chain in `orrery_kernel::intercept`, typed over
+/// every `orrery_kernel::phase::Phase`. This trait stays as the tool-side
+/// slice of it: dispatch keeps the three hook points, and a registry with no
+/// interceptors registered — the **default** — runs them as no-ops. The kernel
+/// registers its own adapters through [`Registry::intercept`].
 pub trait ToolInterceptor: Send + Sync {
     /// Step 1: rewrite or refuse a resolved reference.
     fn on_resolve(&self, _ref: &ToolRef) -> Verdict<ToolRef> {
