@@ -54,24 +54,49 @@ pub fn base(dir: &Path, streams: &[&str]) -> Vec<String> {
     args
 }
 
-/// Run the binary to completion.
+/// The sandboxed home every run in this file's helpers gets.
+///
+/// One per test binary, made on first use and taken down with the process.
+/// Without it these tests read the developer's own `~/.orrery` and the
+/// machine's `%ProgramData%\Orrery\managed.toml`, which makes what they assert
+/// a property of the box they ran on: a managed `deny` on a CI machine would
+/// quietly change the answers. A test that wants a home with something *in* it
+/// still builds its own with [`home_with`] and runs [`orrery_in`].
+#[must_use]
+pub fn sandbox_home() -> &'static Path {
+    static HOME: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+    HOME.get_or_init(|| {
+        let dir = tempfile::tempdir().expect("a temporary home");
+        std::fs::create_dir_all(dir.path().join("ProgramData"))
+            .expect("the sandboxed ProgramData");
+        dir
+    })
+    .path()
+}
+
+/// Point a command's home, user profile and `%ProgramData%` inside the sandbox.
+fn sandboxed(cmd: &mut Command) -> &mut Command {
+    let home = sandbox_home();
+    cmd.env("COLUMNS", "100")
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("ProgramData", home.join("ProgramData"))
+}
+
+/// Run the binary to completion, with a sandboxed home.
 #[must_use]
 pub fn orrery(args: &[String]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_orrery"))
-        .args(args)
-        .env("COLUMNS", "100")
+    sandboxed(Command::new(env!("CARGO_BIN_EXE_orrery")).args(args))
         .stdin(Stdio::null())
         .output()
         .expect("the orrery binary runs")
 }
 
-/// Run it with something on stdin.
+/// Run it with something on stdin, with a sandboxed home.
 #[must_use]
 pub fn orrery_with_stdin(args: &[String], stdin: &str) -> Output {
     use std::io::Write;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_orrery"))
-        .args(args)
-        .env("COLUMNS", "100")
+    let mut child = sandboxed(Command::new(env!("CARGO_BIN_EXE_orrery")).args(args))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

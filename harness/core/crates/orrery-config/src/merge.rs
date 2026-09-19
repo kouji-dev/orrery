@@ -139,11 +139,71 @@ pub fn merge(files: &[LayerFile]) -> Result<MergeReport, ConfigError> {
 ///
 /// When a rule does not parse or a pattern does not compile.
 pub fn policy(root: impl AsRef<Path>, files: &[LayerFile]) -> Result<ResolvedRules, ConfigError> {
+    let rules = builder(root.as_ref(), files)?.build()?;
+    if rules.is_empty() {
+        return Ok(default_builder(root.as_ref())?.build()?);
+    }
+    Ok(rules)
+}
+
+/// The permission rules a workspace has when **no layer declares any**.
+///
+/// Read, write and spawn **inside the workspace**, and every tool that is
+/// registered. Deliberately not "everything": a path outside the root does not
+/// match `./**`, so the first thing a misbehaving tool tries is the first thing
+/// that is refused.
+///
+/// It lives here, beside the layering, rather than in the harness, because the
+/// default has to be the *same* default on both sides: the rules a run
+/// dispatches through and the rules `permissions explain` prints are one
+/// answer, and a default only one of them knew about is how they came to
+/// disagree.
+pub const DEFAULT_PERMISSIONS: &str = "[permissions]
+allow = [\"tool(*)\", \"read(./**)\", \"write(./**)\", \"spawn(*)\"]
+";
+
+/// A builder loaded with every layer's rules, and nothing else.
+///
+/// Separate from [`policy`] because a caller that folds more rules in — a
+/// profile's shorthands — needs the layers *before* they are compiled.
+///
+/// # Errors
+///
+/// When a rule does not parse or a pattern does not compile.
+pub fn builder(root: impl AsRef<Path>, files: &[LayerFile]) -> Result<PolicyBuilder, ConfigError> {
     let mut builder = PolicyBuilder::new(root.as_ref());
     for file in files {
         builder = builder.layer_toml(&file.text, &file.path, file.layer, false)?;
     }
-    Ok(builder.build()?)
+    Ok(builder)
+}
+
+/// A builder carrying [`DEFAULT_PERMISSIONS`] alone.
+///
+/// # Errors
+///
+/// When the default does not parse, which is a bug in this crate.
+pub fn default_builder(root: impl AsRef<Path>) -> Result<PolicyBuilder, ConfigError> {
+    let root = root.as_ref();
+    Ok(PolicyBuilder::new(root).layer_toml(
+        DEFAULT_PERMISSIONS,
+        root.join("orrery.toml"),
+        Layer::Project,
+        true,
+    )?)
+}
+
+/// Whether any layer wrote a permission rule at all.
+///
+/// The question [`policy`] asks before falling back to the default: a workspace
+/// nobody configured gets the default, and a workspace somebody did configure
+/// gets exactly what they wrote.
+///
+/// # Errors
+///
+/// When a rule does not parse or a pattern does not compile.
+pub fn any_rules(root: impl AsRef<Path>, files: &[LayerFile]) -> Result<bool, ConfigError> {
+    Ok(!builder(root.as_ref(), files)?.build()?.is_empty())
 }
 
 /// How a key folds across layers.

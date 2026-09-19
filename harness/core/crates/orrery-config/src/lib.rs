@@ -47,7 +47,7 @@ pub use error::ConfigError;
 pub use explain::Explanation;
 pub use import::Imported;
 pub use layer::{CONFIG_DIR, CONFIG_FILE, ConfigPaths, LayerFile};
-pub use merge::{IgnoredClaim, MergeReport, Relaxation};
+pub use merge::{DEFAULT_PERMISSIONS, IgnoredClaim, MergeReport, Relaxation};
 pub use profile::{AgentDef, Assembled, Profile, Shorthand};
 pub use provenance::{Fold, Origin, Provenanced, Slot};
 pub use trust::{TrustDecision, TrustSource, TrustState, TrustStore};
@@ -181,6 +181,32 @@ impl ResolvedConfig {
     /// When a rule does not parse or a pattern does not compile.
     pub fn assemble(&self) -> Result<Assembled, ConfigError> {
         profile::assemble(&self.profile, &self.root, &self.layers)
+    }
+
+    /// The rules in force, compiled again from the layers that produced them.
+    ///
+    /// The same set as [`rules`](Self::rules), as an owned value a caller can
+    /// hand to a [`PolicyEngine`](orrery_policy::PolicyEngine) of its own —
+    /// which is what the composition root does, so that the engine a turn
+    /// dispatches through is the engine `permissions explain` reads.
+    ///
+    /// # Errors
+    ///
+    /// When a rule does not parse or a pattern does not compile.
+    pub fn policy(&self) -> Result<ResolvedRules, ConfigError> {
+        merge::policy(&self.root, &self.layers)
+    }
+
+    /// The same, with the profile in force folded in.
+    ///
+    /// Use this wherever `--profile` is honoured: a profile's permission
+    /// shorthands are rules, and a run under one must dispatch through them.
+    ///
+    /// # Errors
+    ///
+    /// When a rule does not parse or a pattern does not compile.
+    pub fn rules_in_force(&self) -> Result<ResolvedRules, ConfigError> {
+        profile::rules(&self.profile, &self.root, &self.layers)
     }
 
     /// Where one key's value came from, and what it beat.

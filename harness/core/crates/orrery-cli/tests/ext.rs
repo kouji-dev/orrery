@@ -8,8 +8,14 @@ mod common;
 
 use common::orrery;
 
-/// `orrery ext test` passes on a fixture extension with no provider named at
-/// all — no `--provider`, no key, nothing to reach (plan 06 task 8).
+/// `orrery ext test` answers with no provider named at all — no `--provider`,
+/// no key, nothing to reach (plan 06 task 8).
+///
+/// Round 6 changed what the answer is, not what it costs. The fixture declares
+/// `runtime = "native"` and sits on disk, and this build has no host that can
+/// load a native extension from a directory — so the honest report is
+/// `skipped`, with the reason, and a non-zero exit. It still parses the
+/// manifest, still names the tools, and still records zero broker calls.
 #[test]
 fn test_runs_without_a_model() {
     let dir = tempfile::tempdir().expect("a temporary extension");
@@ -37,10 +43,16 @@ read = [\"$WORKSPACE/**\"]
         "test".to_owned(),
         dir.path().display().to_string(),
     ]);
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(0), "stderr was: {stderr}");
-
     let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "a native extension on disk is skipped, not passed: {stdout}"
+    );
+    assert!(
+        stdout.contains("skipped") && stdout.contains("compiled in"),
+        "…and it says why: {stdout}"
+    );
     assert!(stdout.contains("fixture-ext"), "it names it: {stdout}");
     assert!(
         stdout.contains("hello"),
@@ -221,4 +233,159 @@ fn the_floor_loads_like_any_other_bundle() {
         assert!(stdout.contains(ext), "{stdout}");
         assert!(stdout.contains("no model, no network"), "{stdout}");
     }
+}
+
+// ── Round 6: `ext list` and `ext test` report the state the RUN PATH reaches ──
+//
+// A driven acceptance run found `ext list` printing `ok` for extensions the run
+// path skips: a `runtime = "native"` manifest discovered on disk has no host in
+// this build (`features::host_for` returns `None` for `Native` on purpose), and
+// the session logged "this build has no host for that runtime, so the extension
+// is skipped" while the listing said `ok`. `ext list --help` promises
+// "including degraded and skipped ones with reasons", so the command was
+// documented to do the thing it was not doing.
+
+/// A sandboxed home, a workspace, and the binary with neither pointed at the
+/// real machine.
+fn sandboxed(
+    home: &std::path::Path,
+    work: &std::path::Path,
+    argv: &[&str],
+) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_orrery"))
+        .args(argv)
+        .current_dir(work)
+        .env("COLUMNS", "100")
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("ProgramData", home.join("ProgramData"))
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("the orrery binary runs")
+}
+
+/// A package on disk with the runtime and id a test asks for.
+fn package(work: &std::path::Path, id: &str, runtime: &str) -> std::path::PathBuf {
+    let pkg = work.join(id);
+    std::fs::create_dir_all(&pkg).expect("the package directory");
+    std::fs::write(
+        pkg.join("orrery.toml"),
+        format!(
+            "api = \"orrery-ext/1\"\nruntime = \"{runtime}\"\n\n\
+             [extension]\nid = \"{id}\"\nversion = \"1.2.0\"\n\n\
+             [provides]\ntools = [\"graph\"]\n\n[requires]\nread = [\"./**\"]\n"
+        ),
+    )
+    .expect("the manifest");
+    pkg
+}
+
+/// DEFECT 2: a `native` extension installed from disk is **skipped** by the run
+/// path, and the listing has to say so rather than printing `ok`.
+#[test]
+fn list_says_a_disk_native_extension_is_skipped() {
+    let home = tempfile::tempdir().expect("a sandboxed home");
+    let work = tempfile::tempdir().expect("a workspace");
+    package(work.path(), "buildgraph", "native");
+
+    let installed = sandboxed(
+        home.path(),
+        work.path(),
+        &["install", "./buildgraph", "--yes"],
+    );
+    assert!(
+        installed.status.success(),
+        "install: {}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+
+    let out = sandboxed(home.path(), work.path(), &["ext", "list"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    let line = stdout
+        .lines()
+        .find(|l| l.contains("buildgraph"))
+        .unwrap_or_else(|| panic!("buildgraph is not listed at all: {stdout}"));
+    assert!(
+        line.contains("skipped"),
+        "the run path skips it, so the listing must not claim otherwise: {stdout}"
+    );
+    assert!(
+        stdout.contains("native"),
+        "…and says which runtime has no host: {stdout}"
+    );
+    assert!(
+        stdout.contains("compiled in"),
+        "…and why a native extension cannot be loaded from disk: {stdout}"
+    );
+}
+
+/// The same fact through `ext test`, which reported `ok` for it too.
+#[test]
+fn test_says_a_disk_native_extension_is_skipped() {
+    let home = tempfile::tempdir().expect("a sandboxed home");
+    let work = tempfile::tempdir().expect("a workspace");
+    package(work.path(), "buildgraph", "native");
+
+    let installed = sandboxed(
+        home.path(),
+        work.path(),
+        &["install", "./buildgraph", "--yes"],
+    );
+    assert!(installed.status.success());
+
+    let out = sandboxed(home.path(), work.path(), &["ext", "test", "buildgraph"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_ne!(
+        out.status.code(),
+        Some(0),
+        "an extension no turn can call is not a pass: {stdout}{stderr}"
+    );
+    assert!(
+        stdout.contains("skipped") || stderr.contains("skipped"),
+        "and it says so: {stdout}{stderr}"
+    );
+}
+
+/// DEFECT 4, phase 8: the criterion is that unpinned extensions refuse to
+/// **load**, not merely to install. An extension installed before the admin set
+/// the pin used to go on loading afterwards.
+#[test]
+fn an_unpinned_extension_refuses_to_load_once_the_pin_is_set() {
+    let home = tempfile::tempdir().expect("a sandboxed home");
+    let work = tempfile::tempdir().expect("a workspace");
+    package(work.path(), "tool", "node");
+
+    let installed = sandboxed(home.path(), work.path(), &["install", "./tool", "--yes"]);
+    assert!(
+        installed.status.success(),
+        "install before the pin: {}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+
+    // The admin arrives afterwards.
+    let managed = home.path().join("ProgramData").join("Orrery");
+    std::fs::create_dir_all(&managed).expect("the managed directory");
+    std::fs::write(
+        managed.join("managed.toml"),
+        "[registry]\nindex = \"https://registry.corp.internal/orrery/index.toml\"\n\
+         unpinned = \"refuse\"\n",
+    )
+    .expect("managed.toml");
+
+    let out = sandboxed(home.path(), work.path(), &["ext", "list"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let line = stdout
+        .lines()
+        .find(|l| l.starts_with("tool"))
+        .unwrap_or_else(|| panic!("tool is not listed at all: {stdout}"));
+    assert!(
+        line.contains("skipped"),
+        "an unpinned extension refuses to load under managed `refuse`: {stdout}"
+    );
+    assert!(
+        stdout.contains("managed.toml"),
+        "…and the refusal names the file that said so: {stdout}"
+    );
 }

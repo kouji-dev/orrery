@@ -9,6 +9,7 @@
 //! runs with a sandboxed `HOME` and no `--provider`.
 
 use orrery_config::{ConfigPaths, ResolvedConfig, StartupCtx};
+use orrery_policy::ResolvedRules;
 
 use crate::args::Cli;
 use crate::exit::{Exit, fail};
@@ -45,6 +46,26 @@ pub fn resolve_with(cli: &Cli, profile: Option<&str>) -> ResolvedConfig {
         );
     }
     resolved
+}
+
+/// The permission rules in force for these flags.
+///
+/// **The one place the rules are chosen.** `permissions explain` prints what
+/// this returns and `cmd::setup` hands the very same set to the kernel, so the
+/// verdict a person is shown and the decision a turn makes cannot disagree.
+/// They did, for every round before this one: the explanation read the layers
+/// and the kernel ran on a hardcoded default, which is a permission system that
+/// reports a denial it does not enforce.
+///
+/// `--profile` folds that profile's permission shorthands in, on both sides.
+#[must_use]
+pub fn rules(cli: &Cli, resolved: &ResolvedConfig) -> ResolvedRules {
+    let rules = if cli.profile.is_some() {
+        resolved.rules_in_force()
+    } else {
+        resolved.policy()
+    };
+    rules.unwrap_or_else(|e| fail(Exit::Usage, e))
 }
 
 /// Whether the person asked for machine-readable output.

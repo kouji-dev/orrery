@@ -531,6 +531,14 @@ pub struct Setup {
     pub routing_toml: Option<String>,
     /// The extensions discovery found, beyond the compiled-in set.
     pub extensions: Vec<orrery_harness::ExtensionSource>,
+    /// The permission rules the layers on disk resolved to, profile shorthands
+    /// included.
+    ///
+    /// Not optional and not a default: `[permissions]` was inert in every build
+    /// before this field existed, because nothing carried the resolved rules
+    /// from `cmd::setup` to the engine the kernel dispatches through. It is an
+    /// `Arc` because [`Setup`] is cloned and a rule set is not.
+    pub policy: std::sync::Arc<orrery_policy::ResolvedRules>,
     /// What the loop runs under, as the layers on disk resolved it.
     ///
     /// Not built here: `cmd::setup` folds the five configuration layers into
@@ -600,6 +608,9 @@ impl Session {
         config.audit = audit;
         config.kernel = setup.kernel.clone();
         config.extensions = setup.extensions.clone();
+        // The rules `orrery permissions explain` prints, handed to the engine
+        // every tool call is checked against. One rule set, two readers.
+        config.policy = Some(setup.policy.clone());
         config.routing_toml = setup.routing_toml.clone();
         // Where a surface an extension described actually goes. Without this
         // the differ runs and its output is thrown away, which is what it did

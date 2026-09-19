@@ -27,7 +27,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use orrery_policy::{ConsentMode, PolicyBuilder, PolicyEngine, Rule, RuleList};
+use orrery_policy::{ConsentMode, PolicyEngine, ResolvedRules, Rule, RuleList};
 use orrery_proto::{Aspect, Budget, Layer, Subject};
 
 use crate::error::ConfigError;
@@ -220,17 +220,7 @@ pub fn assemble(
     root: &Path,
     layers: &[LayerFile],
 ) -> Result<Assembled, ConfigError> {
-    let mut builder = PolicyBuilder::new(root);
-    for file in layers {
-        builder = builder.layer_toml(&file.text, &file.path, file.layer, false)?;
-    }
-    let shorthands: Vec<Rule> = profile.permissions.iter().map(Shorthand::rule).collect();
-    if !shorthands.is_empty() {
-        // The layer is only where the rules sort; a deny is walked before any
-        // allow from any layer, so a shorthand deny is not relaxable either.
-        builder = builder.layer_rules(Layer::Project, shorthands);
-    }
-    let rules = builder.build()?;
+    let rules = rules(profile, root, layers)?;
 
     let tools = profile
         .extensions
@@ -245,6 +235,39 @@ pub fn assemble(
         consent: profile.consent,
         engine: PolicyEngine::new(rules).with_consent(profile.consent),
     })
+}
+
+/// The rules in force: every layer, plus the profile's shorthands.
+///
+/// The one place those two are combined. `permissions explain` prints what this
+/// returns and the kernel dispatches through it, so an explanation cannot
+/// describe a rule set the run does not have.
+///
+/// When no layer writes a permission rule the built-in default
+/// ([`crate::merge::DEFAULT_PERMISSIONS`]) stands in, and a shorthand is folded
+/// on top of it — a profile that says `read = false` narrows the default rather
+/// than being the only rule in a workspace where nothing else is allowed.
+///
+/// # Errors
+///
+/// When a rule does not parse or a pattern does not compile.
+pub fn rules(
+    profile: &Profile,
+    root: &Path,
+    layers: &[LayerFile],
+) -> Result<ResolvedRules, ConfigError> {
+    let mut builder = if crate::merge::any_rules(root, layers)? {
+        crate::merge::builder(root, layers)?
+    } else {
+        crate::merge::default_builder(root)?
+    };
+    let shorthands: Vec<Rule> = profile.permissions.iter().map(Shorthand::rule).collect();
+    if !shorthands.is_empty() {
+        // The layer is only where the rules sort; a deny is walked before any
+        // allow from any layer, so a shorthand deny is not relaxable either.
+        builder = builder.layer_rules(Layer::Project, shorthands);
+    }
+    Ok(builder.build()?)
 }
 
 fn agents(values: &Provenanced) -> BTreeMap<String, AgentDef> {

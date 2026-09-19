@@ -22,16 +22,10 @@ pub fn dispatch(cli: &Cli, command: &PermissionsCommand) -> ! {
     let pending = parse_call(call).unwrap_or_else(|e| fail(Exit::Usage, e));
 
     let resolved = layers::resolve(cli);
-    // A profile folds its shorthands into the rules, so an explanation under
-    // `--profile ci` has to be the profile's engine and not the bare layers.
-    let engine = if cli.profile.is_some() {
-        match resolved.assemble() {
-            Ok(assembled) => assembled.engine,
-            Err(e) => fail(Exit::Usage, e),
-        }
-    } else {
-        PolicyEngine::new(resolved.rules)
-    };
+    // `layers::rules` is what a run is built from too — a profile folds its
+    // shorthands in on both sides — so this explanation is of the rule set that
+    // will actually decide, not of a second one that resembles it.
+    let engine = PolicyEngine::new(layers::rules(cli, &resolved));
 
     let explanation = engine.explain(&pending, &Subject::Agent);
     if layers::wants_json(cli) {

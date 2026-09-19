@@ -288,7 +288,13 @@ pub enum ExtCommand {
 pub enum PermissionsCommand {
     /// Explain what would happen to a call, naming the rule, layer, file and line.
     Explain {
-        /// The call to explain, for example `builtin.write:$WORKSPACE/src/**`.
+        // Every example below is run back through the parser by
+        // `tests/permissions_enforced.rs`. Help that documents a spelling the
+        // parser rejects — as this line did, with
+        // `builtin.write:$WORKSPACE/src/**` — is its own defect.
+        /// One call in the rule grammar: `read(./src/main.rs)`,
+        /// `write(./src/main.rs)`, `spawn(cmd: git)` or `net(domain: docs.rs)`.
+        /// A call names one thing; it is not a pattern.
         #[arg(value_name = "CALL")]
         call: String,
     },

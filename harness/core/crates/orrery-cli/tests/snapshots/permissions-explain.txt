@@ -4,7 +4,7 @@ Usage: orrery permissions explain [OPTIONS] <CALL>
 
 Arguments:
   <CALL>
-          The call to explain, for example `builtin.write:$WORKSPACE/src/**`
+          One call in the rule grammar: `read(./src/main.rs)`, `write(./src/main.rs)`, `spawn(cmd: git)` or `net(domain: docs.rs)`. A call names one thing; it is not a pattern
 
 Options:
       --profile <NAME>

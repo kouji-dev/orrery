@@ -85,7 +85,7 @@ fn warn_mode_loads_with_a_ledger_warning() {
 #[test]
 fn version_set_is_exact() {
     // A pinned 1.2.0 refuses 1.2.1: a pin is a version, not a range.
-    let mut fixture = common::Fixture::new();
+    let fixture = common::Fixture::new();
     fixture.publish("buildgraph", "1.2.0", "read = [\"./**\"]", &["read(./**)"]);
     let asked = Source::from_str("buildgraph@1.2.1").unwrap();
     let err = resolve_entry(&fixture.index, &asked, common::INDEX_URL).unwrap_err();
@@ -97,7 +97,7 @@ fn version_set_is_exact() {
 
 #[test]
 fn non_registry_source_is_recorded_unpinned() {
-    let mut fixture = common::Fixture::new();
+    let fixture = common::Fixture::new();
     let pkg = fixture.publish("signed", "1.0.0", "read = [\"./**\"]", &["read(./**)"]);
     let loose = common::write_package(
         &fixture.tmp.path().join("loose"),
@@ -180,7 +180,7 @@ fn managed_refuse_blocks_every_non_registry_source() {
 
 #[test]
 fn warn_mode_installs_loudly() {
-    let mut fixture = common::Fixture::new();
+    let fixture = common::Fixture::new();
     fixture.managed("warn");
     let loose = common::write_package(
         &fixture.tmp.path().join("loose"),
@@ -321,7 +321,7 @@ fn a_linked_install_is_refused_at_load_under_refuse() {
 /// the extension directory, so copying one onto a machine carries no pin.
 #[test]
 fn install_writes_a_receipt_the_load_path_can_find() {
-    let mut fixture = common::Fixture::new();
+    let fixture = common::Fixture::new();
     let src = common::write_package(&fixture.packages(), "buildgraph", "1.2.0", "");
     let record = fixture
         .installer()

@@ -35,6 +35,7 @@ pub mod features;
 #[cfg(feature = "fixture-provider")]
 pub mod fixture;
 pub mod memory;
+pub mod plan;
 pub mod steps;
 pub mod surfaces;
 
@@ -54,6 +55,7 @@ pub use build::{
 };
 pub use config::{kernel_config, price_table};
 pub use memory::KernelMemory;
+pub use plan::{Skip, skip_for};
 pub use steps::KernelSteps;
 pub use surfaces::{KernelSurfaces, NoPatches, SurfacePatches};
 

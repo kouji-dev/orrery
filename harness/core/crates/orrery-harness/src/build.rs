@@ -225,9 +225,17 @@ pub struct ResolvedConfig {
     /// Empty is the honest default for a caller that built this by hand; a
     /// caller that resolved config gets whatever the layers in force declare.
     pub extensions: Vec<ExtensionSource>,
-    /// The permission rules, as TOML. `None` takes the workspace default:
-    /// read, write and spawn inside the workspace, and nothing outside it.
-    pub policy_toml: Option<String>,
+    /// The permission rules, already resolved and compiled.
+    ///
+    /// `None` takes the workspace default ([`DEFAULT_RULES`]): read, write and
+    /// spawn inside the workspace, and nothing outside it. That is the right
+    /// answer for a caller that built this by hand — a test, an embedder — and
+    /// the wrong one for a composition root that read the layers, which is why
+    /// this is the *resolved* rule set rather than a TOML fragment. Rules carry
+    /// their layer, file and line; a fragment could only be re-parsed as one
+    /// layer, and the engine would then disagree with `permissions explain`
+    /// about precedence.
+    pub policy: Option<Arc<orrery_policy::ResolvedRules>>,
     /// Where the patches the kernel-side differ produces go.
     ///
     /// `None` still runs the differ; its output simply goes nowhere. A
@@ -282,7 +290,7 @@ impl ResolvedConfig {
             provider,
             store,
             extensions: extension_sources(resolved),
-            policy_toml: None,
+            policy: None,
             routing_toml: None,
             surfaces: None,
             kernel,
@@ -302,7 +310,7 @@ impl ResolvedConfig {
             provider: ProviderChoice::Fixture { passes },
             store: StoreChoice::Sqlite,
             extensions: Vec::new(),
-            policy_toml: None,
+            policy: None,
             routing_toml: None,
             surfaces: None,
             kernel: KernelConfig::default(),
@@ -317,10 +325,11 @@ impl ResolvedConfig {
 /// registered. Deliberately not "everything": a path outside the root does not
 /// match `./**`, so the first thing a misbehaving tool tries is the first thing
 /// that is refused.
-pub const DEFAULT_RULES: &str = "\
-[permissions]
-allow = [\"tool(*)\", \"read(./**)\", \"write(./**)\", \"spawn(*)\"]
-";
+///
+/// Re-exported from `orrery-config`, which is where configuration resolution
+/// falls back to it. One constant, so the rules a run dispatches through and
+/// the rules `permissions explain` prints cannot drift apart.
+pub use orrery_config::DEFAULT_PERMISSIONS as DEFAULT_RULES;
 
 /// A harness that could not be built.
 #[non_exhaustive]
@@ -384,15 +393,23 @@ pub(crate) struct Assembled {
 
 /// Everything, in the order the diagram shows.
 pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, BuildError> {
-    // 1 · The rules, and the engine that mints against them.
-    let rules = PolicyBuilder::new(&config.workspace)
-        .layer_toml(
-            config.policy_toml.as_deref().unwrap_or(DEFAULT_RULES),
-            config.workspace.join("orrery.toml"),
-            Layer::Project,
-            true,
-        )?
-        .build()?;
+    // 1 · The rules, and the engine that mints against them. A composition root
+    //     that resolved the configuration layers hands its own compiled set
+    //     over — the same one `permissions explain` prints — and a caller that
+    //     built this by hand gets the workspace default.
+    let rules: Arc<orrery_policy::ResolvedRules> = match &config.policy {
+        Some(rules) => Arc::clone(rules),
+        None => Arc::new(
+            PolicyBuilder::new(&config.workspace)
+                .layer_toml(
+                    DEFAULT_RULES,
+                    config.workspace.join("orrery.toml"),
+                    Layer::Project,
+                    true,
+                )?
+                .build()?,
+        ),
+    };
     let engine = Arc::new(
         PolicyEngine::new(rules)
             .with_audit(config.audit.clone())
@@ -493,6 +510,7 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
     //      else's extension that will not start means their extension will not
     //      start, and a harness that refused to open over it would be unusable.
     //      It lands in the ledger, which is what `orrery ext list` reads.
+    let managed = crate::plan::managed_registry();
     for source in &config.extensions {
         let Ok(text) = std::fs::read_to_string(&source.manifest_path) else {
             tracing::warn!(
@@ -518,12 +536,32 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
             }
         };
         let ext = manifest.name.clone();
+
+        // What the run path decides is what `orrery ext list` reports, because
+        // both ask `plan::skip_for`. A skip that is only a log line is a skip
+        // the listing cannot see, which is how `ext list` came to print `ok`
+        // for extensions this loop had already passed over.
+        if let Some(skip) = crate::plan::skip_for(manifest.runtime, &source.root, managed.as_ref())
+        {
+            tracing::warn!(
+                target: "orrery.harness.build",
+                ext = %ext,
+                runtime = %manifest.runtime,
+                why = %skip.why,
+                "an installed extension is skipped"
+            );
+            table.ledger().record(skip.outcome(&ext));
+            continue;
+        }
+
         let Some(host) = crate::features::host_for(
             manifest.runtime,
             &ext,
             &source.root,
             facade.clone() as Arc<dyn orrery_ext_api::BrokerFacade>,
         ) else {
+            // Unreachable while `plan::no_host_reason` and `features::host_for`
+            // agree, which `plan::tests::the_two_agree` holds them to.
             tracing::warn!(
                 target: "orrery.harness.build",
                 ext = %ext,

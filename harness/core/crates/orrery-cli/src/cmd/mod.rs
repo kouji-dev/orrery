@@ -167,6 +167,10 @@ pub fn setup(cli: &Cli) -> Setup {
         // What `orrery ext list` prints and what a turn can actually call have
         // to be the same set, or installing an extension is theatre.
         extensions: orrery_harness::extension_sources(&resolved),
+        // Same argument, for `[permissions]`: what `permissions explain` says
+        // and what a turn is allowed to do have to be the one rule set, or a
+        // denial the operator was shown is a denial nothing enforces.
+        policy: std::sync::Arc::new(layers::rules(cli, &resolved)),
     }
 }
 

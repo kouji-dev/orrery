@@ -95,6 +95,11 @@ orrery-ext-api = { workspace = true }
 # By path, not `workspace = true`: these are `publish = false`, so they are not
 # among the version+path pairs the root declares for the published half.
 orrery-config = { path = "../orrery-config" }
+# The supply-chain half of plan 15. Named here because the LOAD path is what
+# phase 8's criterion is about - "unpinned extensions refuse to load" - and the
+# load path is built in this crate. `orrery-cli` reads the same answer through
+# `plan::skip_for` rather than implementing the gate a second time.
+orrery-registry = { path = "../orrery-registry" }
 orrery-tools = { path = "../orrery-tools" }
 orrery-host = { path = "../orrery-host" }
 orrery-kernel = { path = "../orrery-kernel" }
