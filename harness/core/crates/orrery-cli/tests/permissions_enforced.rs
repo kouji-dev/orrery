@@ -82,8 +82,9 @@ fn ledger(home: &Path, ws: &Path) -> String {
 }
 
 /// **The invariant.** `explain` and `run` answer the same question the same
-/// way: a call `explain` calls `deny` is one `run` refuses (exit 4, per
-/// `17-cli.md`'s table), and one it calls `allow` is one `run` performs.
+/// way: a call `explain` calls `deny` is one `run` refuses — at the point of
+/// use with exit 4 (per `17-cli.md`'s table), or before it by not offering the
+/// tool at all — and one it calls `allow` is one `run` performs.
 fn they_agree(home: &Path, ws: &Path, profile: &[&str], expected: &str) {
     let verdict = explain(home, ws, profile);
     assert_eq!(verdict, expected, "the layers say what the test set up");
@@ -91,10 +92,38 @@ fn they_agree(home: &Path, ws: &Path, profile: &[&str], expected: &str) {
     let text = ledger(home, ws);
     match verdict.as_str() {
         "deny" => {
-            assert_eq!(
-                code, 4,
-                "`explain` said deny, so the run must be denied; the ledger was:\n{text}"
-            );
+            // One refusal, seen at whichever of two moments comes first.
+            //
+            // A capability policy refuses **outright** is now missing from the
+            // grant an extension loads under (section 8 phase 3, on the run
+            // path at last), so the tool that needed it is never registered
+            // and never offered to the model. The turn therefore never reaches
+            // the point of use, and exit 4 — "denied while doing it" — is not
+            // the shape of that answer; the tool was withheld before the model
+            // was told what it had.
+            //
+            // What must hold in both shapes, and is what this file exists to
+            // protect: the call did not happen, and the binary wrote down the
+            // refusal that stopped it. Which shape applies is read off the
+            // ledger rather than assumed, so a withheld tool cannot quietly
+            // become an allowed one.
+            let withheld = text.contains("is disabled: no `read` grant");
+            if withheld {
+                assert!(
+                    text.contains("degraded"),
+                    "a withheld tool degrades the extension it came from, \
+                     and the ledger says so: {text}"
+                );
+                assert!(
+                    !text.lines().any(|l| l.starts_with("allow") && l.contains("read(")),
+                    "and nothing was allowed to read: {text}"
+                );
+            } else {
+                assert_eq!(
+                    code, 4,
+                    "`explain` said deny, so the run must be denied; the ledger was:\n{text}"
+                );
+            }
             assert!(
                 text.lines().any(|l| l.starts_with("deny")),
                 "and the denial is written down: {text}"

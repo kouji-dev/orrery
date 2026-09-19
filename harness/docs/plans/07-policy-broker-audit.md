@@ -357,12 +357,38 @@ Files: `orrery-broker/tests/`
 
 - [x] **Failing test first, and it is the phase-3 criterion.** `degrade::denied_spawn_degrades` — install an extension requesting `spawn`; deny it; assert the install succeeds, the spawn-needing tool is disabled, its other tools work, the ledger says `degraded`, and the audit holds the decision with its rule.
 
+  **Amended in place 2026-09-19.** That test passed against a function nothing
+  else called. `orrery_broker::install` had exactly one caller in the
+  repository — this test — while the run path
+  (`orrery_harness::build::assemble`) handed **every** extension a grant of
+  `Capability::all` for `tool`, `read`, `write` and `spawn`, so "denied `spawn`"
+  was a state the loader could not be in. Driven through the binary, a python
+  extension declaring `[requires] spawn = ["*"]` under a user
+  `deny = ["spawn(*)"]` was listed `ok`, dispatched its tool, and had `allow`
+  written in the ledger.
+
+  `install` is gone. In its place `gate::grant_for` asks the policy engine, per
+  aspect, what one extension may have, and `assemble` calls it for the
+  compiled-in bundle and the installed set alike — so the host's
+  `disabled_by_grant` (which was already right) finally has a grant that can be
+  missing something. The criterion is now claimed from the binary by
+  `orrery-cli/tests/degrade.rs`: with `spawn` denied, `builtin.bash` is absent
+  from the offered set of a real turn, `read`/`write`/`grep`/`glob` are still
+  there, `orrery ledger --stream load` says `builtin degraded` and names the
+  tool and the capability, `orrery ext list` no longer says `ok`, and the turn
+  exits 0. What is left in `orrery-broker/tests/degrade.rs` is the *rule*
+  alone — which aspect survives which deny — because a library test cannot
+  speak for the product.
+
 ---
 
 ## Done when
 
 - `cargo test -p orrery-audit -p orrery-policy -p orrery-broker` green, including every compile-fail test.
-- An extension denied `spawn` degrades rather than failing.
+- An extension denied `spawn` degrades rather than failing. **Proved through
+  the binary** as of 2026-09-19 (`orrery-cli/tests/degrade.rs`), not only in a
+  library test: the load path asks `gate::grant_for`, and the tool that needed
+  the refused capability is missing from what the model is offered.
 - Every decision appears in the audit with the rule that produced it.
 - **The rules a turn is checked against are the rules a person wrote.**
   Amended in place 2026-09-19: the engine was always correct and the *binary*
@@ -464,8 +490,9 @@ clippy is clean across all targets.
 - **`orrery-broker`** — `LimitedReader` bounded *while* reading, temp-then-rename
   `WriteHandle`, per-call Windows job object / unix `setsid` containment with a
   wall-clock watchdog and stdout backpressure, `CredStore` with no `get`, and
-  `gate.rs`: the real `PolicyCheck` for plan 04's dispatch plus `install`, which
-  is what makes a denied `spawn` degrade.
+  `gate.rs`: the real `PolicyCheck` for plan 04's dispatch plus `grant_for`,
+  which is what makes a denied `spawn` degrade — and which the run path calls,
+  which `install` (deleted) never was.
 
 **Also done here, outside this plan:** plan 04 task 5 — `orrery-audit` is now in
 the workspace dependency table and `Registry::with_audit` sends every ledger

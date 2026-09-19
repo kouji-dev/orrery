@@ -6,17 +6,14 @@
 //! both, and because a tool call reaching the outside world goes through this
 //! crate anyway.
 //!
-//! It also does the load-time half — [`install`] — which is what makes an
+//! It also does the load-time half — [`grant_for`] — which is what makes an
 //! extension denied `spawn` **degrade** instead of failing.
 
 use std::sync::Arc;
 
-use orrery_audit::{Audit, AuditEvent};
 use orrery_policy::{Decision, PendingCall, PolicyEngine};
-use orrery_proto::{
-    Aspect, Contribution, ContributionKind, ExtId, Layer, LoadOutcome, Subject, ToolRef,
-};
-use orrery_tools::{CallCtx, PolicyCheck, PolicyDecision, Registry, ToolSpec};
+use orrery_proto::{AgentScope, Aspect, Capability, Consent, ExtId, Grant, Subject, ToolRef};
+use orrery_tools::{CallCtx, PolicyCheck, PolicyDecision};
 
 /// The real step 4: the policy engine, behind the registry's trait.
 #[derive(Debug)]
@@ -74,140 +71,96 @@ impl PolicyCheck for EngineGate {
     }
 }
 
-/// What one tool an extension contributes needs in order to work.
-#[derive(Clone, Debug)]
-pub struct ToolNeeds {
-    /// The tool, unqualified.
-    pub spec: ToolSpec,
-    /// What it must be granted, or it cannot be offered at all.
-    pub requires: Vec<(Aspect, String)>,
-}
 
-impl ToolNeeds {
-    /// A tool that needs nothing beyond being called.
-    #[must_use]
-    pub fn plain(name: &str) -> Self {
-        Self {
-            spec: ToolSpec::new(name),
-            requires: Vec::new(),
-        }
-    }
-
-    /// A tool that needs a capability.
-    #[must_use]
-    pub fn needing(name: &str, aspect: Aspect, target: impl Into<String>) -> Self {
-        Self {
-            spec: ToolSpec::new(name),
-            requires: vec![(aspect, target.into())],
-        }
-    }
-}
-
-/// Install an extension, registering only the tools policy will let it use.
+/// The aspects an extension is offered whether or not its manifest names one.
 ///
-/// **This is the phase-3 criterion.** An extension whose `spawn` is denied does
-/// not fail to load: it loads, the tool that needed `spawn` is left out, every
-/// other tool it brought works, and the outcome says
-/// [`LoadOutcome::Degraded`] with the problem named. Half an extension is
-/// usable, and saying which half is what stops a user hunting for a tool that
-/// quietly never registered.
+/// This is what the run path handed out unconditionally: `Capability::all` for
+/// each of these four, for every extension, forever — which is why "an
+/// extension denied `spawn` degrades" could not happen on the run path, because
+/// `spawn` was never missing. They are still the *starting* set (a manifest
+/// that asks for nothing is not an extension that may do nothing), and
+/// [`grant_for`] is what takes one away again.
+const BASELINE: &[Aspect] = &[Aspect::Tool, Aspect::Read, Aspect::Write, Aspect::Spawn];
+
+/// What policy actually grants one extension, aspect by aspect.
 ///
-/// Every decision — the denials and the grants — is in the audit with the rule
-/// that produced it, because it went through [`PolicyEngine::check`].
+/// **This is the phase-3 criterion, on the run path.** The loader hands this
+/// grant to the host; the host disables every tool whose `requires` names an
+/// aspect the grant does not carry
+/// ([`orrery_host::host::disabled_by_grant`](../../orrery_host/host/fn.disabled_by_grant.html)),
+/// and a load with a disabled tool is [`LoadOutcome::Degraded`] with the tool
+/// named. So an extension whose `spawn` is refused loads, keeps every tool that
+/// did not need `spawn`, and is *reported* — rather than failing, and rather
+/// than being offered a tool it can never run.
+///
+/// # What is asked, and of whom
+///
+/// The subject is [`Subject::Ext`], so `[permissions."ext:<id>"]` narrows one
+/// extension and the agent's own rules are inherited behind it — the same
+/// subject chain a dispatch goes through, so a rule cannot mean one thing at
+/// load and another at call time.
+///
+/// Each aspect is asked about the targets the manifest declared for it
+/// (`spawn = ["*"]` asks about `spawn(*)`), or about `*` when it declared
+/// none. **One refused target refuses the aspect**: a grant is coarse — it
+/// carries an aspect or it does not — and pretending a partly-refused
+/// capability is whole is how a tool comes to be offered and then denied at the
+/// moment it is used.
+///
+/// An [`Decision::Ask`] counts as refused here for the same reason: there is
+/// nobody to answer a question at load time, and the engine the harness builds
+/// runs [`ConsentMode::Never`](orrery_policy::ConsentMode) anyway.
 #[must_use]
-pub fn install(
-    registry: &mut Registry,
+pub fn grant_for(
     engine: &PolicyEngine,
-    audit: &Audit,
     ext: &ExtId,
-    layer: Layer,
-    tools: &[ToolNeeds],
-    scope: &orrery_proto::AgentScope,
-) -> LoadOutcome {
+    wants: &[Capability],
+    consent: Consent,
+    scope: &AgentScope,
+) -> Grant {
     let subject = Subject::Ext(ext.clone());
-    let mut contributions = Vec::new();
-    let mut problems = Vec::new();
-
-    for tool in tools {
-        let mut refused: Option<String> = None;
-        for (aspect, target) in &tool.requires {
-            let call = PendingCall::new(*aspect, target.clone());
-            match engine.check(&call, &subject, scope) {
-                Decision::Allow { .. } => {}
-                Decision::Ask { .. } => {
-                    refused = Some(format!(
-                        "`{}` needs `{}`, which requires consent that cannot be given at load",
-                        tool.spec.name,
-                        call.match_text()
-                    ));
-                }
-                Decision::Deny { reason, .. } => {
-                    refused = Some(format!(
-                        "`{}` needs `{}`, which policy refuses: {reason}",
-                        tool.spec.name,
-                        call.match_text()
-                    ));
-                }
-                _ => {
-                    refused = Some(format!(
-                        "`{}` needs `{}`, and the verdict was not one this loader knows",
-                        tool.spec.name,
-                        call.match_text()
-                    ));
-                }
-            }
-            if refused.is_some() {
-                break;
-            }
-        }
-
-        match refused {
-            None => {
-                registry.register(ext, layer, tool.spec.clone());
-                contributions.push(Contribution {
-                    kind: ContributionKind::Tool,
-                    name: tool.spec.name.clone(),
-                });
-            }
-            Some(problem) => problems.push(problem),
+    let mut aspects: Vec<Aspect> = BASELINE.to_vec();
+    for want in wants {
+        if !aspects.contains(&want.aspect) {
+            aspects.push(want.aspect);
         }
     }
 
-    let outcome = if problems.is_empty() {
-        LoadOutcome::Ok {
-            ext: ext.clone(),
-            contributions,
-            ms: 0,
+    let mut capabilities = Vec::new();
+    for aspect in aspects {
+        let targets = declared_targets(wants, aspect);
+        let granted = targets.iter().all(|target| {
+            matches!(
+                engine.check(&PendingCall::new(aspect, target.clone()), &subject, scope),
+                Decision::Allow { .. }
+            )
+        });
+        if granted {
+            // `all`, not the manifest's narrower scope: the scope a call is
+            // held to is the policy engine's, checked again at the moment of
+            // the call. Narrowing here as well would be a second, coarser copy
+            // of the same rules — and the day the two disagreed, the one
+            // nobody could see would win.
+            capabilities.push(Capability::all(aspect));
         }
+    }
+    Grant {
+        capabilities,
+        consent,
+    }
+}
+
+/// What the manifest asked for under one aspect, or `*` when it asked for the
+/// aspect without naming anything.
+fn declared_targets(wants: &[Capability], aspect: Aspect) -> Vec<String> {
+    let declared: Vec<String> = wants
+        .iter()
+        .filter(|c| c.aspect == aspect)
+        .flat_map(|c| c.scope.clone())
+        .collect();
+    if declared.is_empty() {
+        vec!["*".to_owned()]
     } else {
-        LoadOutcome::Degraded {
-            ext: ext.clone(),
-            contributions,
-            ms: 0,
-            problems,
-        }
-    };
-
-    audit.append(AuditEvent::ExtensionLoad {
-        ext: ext.clone(),
-        status: match &outcome {
-            LoadOutcome::Ok { .. } => "ok",
-            LoadOutcome::Degraded { .. } => "degraded",
-            LoadOutcome::Skipped { .. } => "skipped",
-            LoadOutcome::Failed { .. } => "failed",
-            _ => "unknown",
-        }
-        .to_owned(),
-        contributions: outcome
-            .contributions()
-            .iter()
-            .map(|c| c.name.clone())
-            .collect(),
-        problems: match &outcome {
-            LoadOutcome::Degraded { problems, .. } => problems.clone(),
-            _ => Vec::new(),
-        },
-    });
-
-    outcome
+        declared
+    }
 }

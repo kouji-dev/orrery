@@ -444,9 +444,16 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
         .await?;
     let branch = store.open(session).await?.root;
 
-    // 3 · What the agent is allowed to be. The grant is the ceiling the tools
-    //     are offered under: a bundle whose `spawn` is missing here loads
-    //     `Degraded` with the tool that needed it disabled, rather than failing.
+    // 3 · What the **agent** is allowed to be. This is the main agent's own
+    //     ceiling, and it is deliberately not narrowed: the rules decide what
+    //     the agent may do, and this grant exists so a *sub*-agent can be given
+    //     less.
+    //
+    //     It is **not** what an extension is loaded under. It used to be, and
+    //     that is precisely how section 8 phase 3 came to be unreachable: every
+    //     extension was handed `Capability::all` for all four aspects, so
+    //     "denied `spawn`" was a state the loader could not be in. What an
+    //     extension gets is `gate::grant_for`, below, asked of the same engine.
     let grant = Grant {
         capabilities: vec![
             Capability::all(Aspect::Tool),
@@ -460,7 +467,7 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
         agent: "main".to_owned(),
         branch,
         tools: vec!["*".to_owned()],
-        grant: grant.clone(),
+        grant,
     };
 
     // 4 · The broker an extension actually reaches, behind the same engine.
@@ -518,9 +525,15 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
     let mut registry = Registry::with_host(tool_host).with_policy(gate.clone());
     for manifest in host.manifests() {
         let ext = manifest.name.clone();
+        // The policy gate, at load. A compiled-in bundle is an ordinary
+        // extension (translation #14), so it is asked the same question a
+        // third-party one is: an operator who denies `spawn` denies it to the
+        // builtin tools as well, and `builtin.bash` is then never offered.
+        let granted = extension_grant(&engine, &manifest, &scope);
         let outcome = table
-            .load(host.clone(), manifest, Layer::Project, grant.clone())
+            .load(host.clone(), manifest, Layer::Project, granted)
             .await;
+        record_load(&config.audit, &outcome);
         match &outcome {
             LoadOutcome::Ok { .. } | LoadOutcome::Degraded { .. } => {
                 table.register_into(&mut registry, &ext);
@@ -622,10 +635,10 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
             );
             continue;
         };
-        match table
-            .load(host, manifest, source.layer, grant.clone())
-            .await
-        {
+        let granted = extension_grant(&engine, &manifest, &scope);
+        let outcome = table.load(host, manifest, source.layer, granted).await;
+        record_load(&config.audit, &outcome);
+        match outcome {
             LoadOutcome::Ok { .. } | LoadOutcome::Degraded { .. } => {
                 table.register_into(&mut registry, &ext);
             }
@@ -702,6 +715,50 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
         branch,
         scope,
     })
+}
+
+/// What one extension is loaded under: its manifest's ask, put to the policy
+/// engine.
+///
+/// One line, in one place, called from both load loops — the compiled-in bundle
+/// and the installed set — because "what may this extension do" answered twice
+/// is how a `native` bundle came to be privileged over a `node` one.
+fn extension_grant(
+    engine: &PolicyEngine,
+    manifest: &ExtensionManifest,
+    scope: &AgentScope,
+) -> Grant {
+    orrery_broker::grant_for(
+        engine,
+        &manifest.name,
+        &manifest.capabilities(),
+        Consent::Always,
+        scope,
+    )
+}
+
+/// Put a load in the audit's `load` stream, not only in the in-memory ledger.
+///
+/// `orrery ledger --stream load` reads the stream; the table's ledger dies with
+/// the process. Until this was here, a degrade the loader had decided was
+/// visible to nothing a person could run — the same defect the skip path had
+/// already been fixed for, one branch over.
+fn record_load(audit: &orrery_audit::Audit, outcome: &LoadOutcome) {
+    let (ext, status, problems) = match outcome {
+        LoadOutcome::Ok { ext, .. } => (ext.clone(), "ok", Vec::new()),
+        LoadOutcome::Degraded { ext, problems, .. } => {
+            (ext.clone(), "degraded", problems.clone())
+        }
+        LoadOutcome::Skipped { ext, reason } => (ext.clone(), "skipped", vec![format!("{reason:?}")]),
+        LoadOutcome::Failed { ext, message, .. } => (ext.clone(), "failed", vec![message.clone()]),
+        _ => return,
+    };
+    audit.append(orrery_audit::AuditEvent::ExtensionLoad {
+        ext,
+        status: status.to_owned(),
+        contributions: outcome.contributions().iter().map(|c| c.name.clone()).collect(),
+        problems,
+    });
 }
 
 /// Build the provider a [`ProviderChoice`] names.

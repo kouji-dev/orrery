@@ -56,7 +56,7 @@ pub use contain::MemoryEnforcement;
 pub use creds::{CredStore, CredUse, FileCredStore, MemoryCredStore, RequestSlot};
 pub use error::BrokerError;
 pub use fs::WriteHandle;
-pub use gate::{EngineGate, ToolNeeds, install};
+pub use gate::{EngineGate, grant_for};
 pub use limit::{LimitedReader, PullCounter};
 pub use net::{NetRequest, NetResponse, NetTransport, NoTransport};
 pub use proc::{Child, Output, SpawnSpec};

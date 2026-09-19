@@ -1,207 +1,165 @@
-//! Task 11 · degrade, end to end. **This is the phase-3 criterion.**
+//! Task 11 · the load-time gate. **This is the phase-3 criterion's first
+//! half.**
+//!
+//! The second half — the tool actually disappearing from what a turn offers,
+//! with the session still alive — is `orrery-cli/tests/degrade.rs`, driven
+//! through the binary. That split is deliberate and was learned the hard way:
+//! this file used to test an `install` function whose only caller was this
+//! file, while the run path handed every extension `Capability::all` and could
+//! never be missing anything. A green test here proves nothing about the
+//! product, so the criterion is claimed from the binary and only the *rule* is
+//! claimed here.
 
 mod common;
 
-use std::sync::Arc;
-
-use async_trait::async_trait;
 use common::Fixture;
-use orrery_audit::AuditEvent;
-use orrery_broker::{EngineGate, ToolNeeds, install};
-use orrery_policy::PendingCall;
-use orrery_proto::{Aspect, CallId, ExtId, Layer, LoadOutcome, Outcome, Subject, ToolRef};
-use orrery_tools::{CallCtx, Registry, ToolBudget, ToolError, ToolHost};
+use orrery_broker::grant_for;
+use orrery_proto::{Aspect, Capability, Consent, ExtId};
 
-/// An extension host that answers for real, so "its other tools work" is a call
-/// that happened rather than a registry lookup that succeeded.
-#[derive(Debug, Default)]
-struct EchoHost;
-
-#[async_trait]
-impl ToolHost for EchoHost {
-    async fn call(
-        &self,
-        r#ref: &ToolRef,
-        input: serde_json::Value,
-        _ctx: &CallCtx,
-    ) -> Result<Outcome, ToolError> {
-        Ok(Outcome::Ok {
-            surface: None,
-            value: Some(serde_json::json!({ "tool": r#ref.to_string(), "echo": input })),
-        })
-    }
-}
-
-/// `buildgraph` wants `spawn(bazel *)` for one tool and nothing for the others.
-/// The operator denies `spawn`. The install must survive it.
+/// `buildgraph` wants `spawn` for one tool and `read` for the others. The
+/// operator denies `spawn` to that extension and to nobody else.
 const RULES: &str = r#"
 [permissions]
-allow = ["tool(*)", "read(./**)", "spawn(*)"]
+allow = ["tool(*)", "read(./**)", "write(./**)", "spawn(*)"]
 
 [permissions."ext:buildgraph"]
-allow = ["tool(*)", "read(./**)"]
+allow = ["tool(*)", "read(./**)", "write(./**)"]
 deny  = ["spawn(*)"]
 "#;
 
-fn budget() -> ToolBudget {
-    ToolBudget::new(30_000, 1 << 20)
+fn wants() -> Vec<Capability> {
+    vec![
+        Capability::scoped(Aspect::Spawn, vec!["*".to_owned()]),
+        Capability::scoped(Aspect::Read, vec!["./**".to_owned()]),
+    ]
 }
 
-#[tokio::test]
-async fn denied_spawn_degrades() {
+fn ext() -> ExtId {
+    ExtId::new("buildgraph").expect("a valid id")
+}
+
+fn carries(grant: &orrery_proto::Grant, aspect: Aspect) -> bool {
+    grant.capabilities.iter().any(|c| c.aspect == aspect)
+}
+
+/// The refused aspect is the one that goes, and only it.
+#[test]
+fn a_denied_aspect_is_absent_from_the_grant() {
     let fx = Fixture::with_rules(RULES);
-    let engine = Arc::new(fx.engine);
-    let audit = Arc::clone(&fx.audit) as orrery_audit::Audit;
-    let ext = ExtId::new("buildgraph").expect("a valid id");
-
-    let mut registry = Registry::with_host(Arc::new(EchoHost))
-        .with_policy(Arc::new(EngineGate::new(Arc::clone(&engine))))
-        .with_audit(Arc::clone(&audit));
-
-    let outcome = install(
-        &mut registry,
-        &engine,
-        &audit,
-        &ext,
-        Layer::Project,
-        &[
-            ToolNeeds::needing("build", Aspect::Spawn, "bazel build //..."),
-            ToolNeeds::needing("query", Aspect::Read, "./BUILD"),
-            ToolNeeds::plain("explain"),
-        ],
+    let grant = grant_for(
+        &fx.engine,
+        &ext(),
+        &wants(),
+        Consent::Always,
         &Fixture::scope(),
     );
 
-    // 1 · the install succeeded.
-    let LoadOutcome::Degraded {
-        ext: named,
-        contributions,
-        problems,
-        ..
-    } = &outcome
-    else {
-        panic!("a denied capability must degrade, not fail: {outcome:?}");
-    };
-    assert_eq!(named, &ext);
-
-    // 2 · the spawn-needing tool is disabled, and the ledger says why.
     assert!(
-        !contributions.iter().any(|c| c.name == "build"),
-        "the tool that needed `spawn` must not be offered"
+        !carries(&grant, Aspect::Spawn),
+        "a refused capability must not be granted: {:?}",
+        grant.capabilities
     );
-    assert_eq!(problems.len(), 1, "{problems:?}");
-    assert!(problems[0].contains("build"), "{}", problems[0]);
-    assert!(problems[0].contains("spawn"), "{}", problems[0]);
-    assert!(
-        registry
-            .entry(&"buildgraph.build".parse().unwrap())
-            .is_none(),
-        "a disabled tool must not be in the name table either"
-    );
-
-    // 3 · its other tools work — really dispatched, not merely registered.
-    for name in ["query", "explain"] {
+    for kept in [Aspect::Tool, Aspect::Read, Aspect::Write] {
         assert!(
-            contributions.iter().any(|c| c.name == name),
-            "`{name}` should have loaded"
-        );
-        let r#ref: ToolRef = format!("buildgraph.{name}").parse().unwrap();
-        let ctx = CallCtx::new(
-            CallId::new(),
-            Subject::Ext(ext.clone()),
-            Fixture::scope(),
-            budget(),
-        );
-        let out = registry
-            .dispatch(&r#ref, serde_json::json!({ "q": "deps" }), ctx)
-            .await
-            .expect("the harness could carry the call");
-        assert!(
-            matches!(out, Outcome::Ok { .. }),
-            "`{name}` should still work: {out:?}"
+            carries(&grant, kept),
+            "`{kept:?}` was not refused, so it stays: {:?}",
+            grant.capabilities
         );
     }
+}
 
-    // 4 · the audit holds the decision, with the rule that produced it.
+/// Nothing denied: the same manifest gets everything it asked for.
+#[test]
+fn an_extension_nobody_refused_keeps_its_capabilities() {
+    let fx = Fixture::new();
+    let grant = grant_for(
+        &fx.engine,
+        &ext(),
+        &wants(),
+        Consent::Always,
+        &Fixture::scope(),
+    );
+    for aspect in [Aspect::Tool, Aspect::Read, Aspect::Write, Aspect::Spawn] {
+        assert!(
+            carries(&grant, aspect),
+            "`{aspect:?}` should be granted: {:?}",
+            grant.capabilities
+        );
+    }
+}
+
+/// The rule is read for **this** extension, not for the agent: a deny written
+/// under one `ext:` heading does not cut another one down.
+#[test]
+fn the_refusal_is_read_for_the_named_extension() {
+    let fx = Fixture::with_rules(RULES);
+    let other = ExtId::new("cartographer").expect("a valid id");
+    let grant = grant_for(
+        &fx.engine,
+        &other,
+        &wants(),
+        Consent::Always,
+        &Fixture::scope(),
+    );
+    assert!(
+        carries(&grant, Aspect::Spawn),
+        "the deny named `buildgraph`: {:?}",
+        grant.capabilities
+    );
+}
+
+/// An aspect the manifest never mentioned is still asked about, because the
+/// baseline is what a tool's `requires` may name whatever the manifest said.
+#[test]
+fn an_undeclared_aspect_is_still_refusable() {
+    let fx = Fixture::with_rules(RULES);
+    let grant = grant_for(
+        &fx.engine,
+        &ext(),
+        // Declares nothing at all.
+        &[],
+        Consent::Always,
+        &Fixture::scope(),
+    );
+    assert!(
+        !carries(&grant, Aspect::Spawn),
+        "the deny applies whether or not the manifest asked: {:?}",
+        grant.capabilities
+    );
+}
+
+/// The decision is in the audit, with the rule that produced it.
+#[test]
+fn the_decision_is_evidence() {
+    let fx = Fixture::with_rules(RULES);
+    let _ = grant_for(
+        &fx.engine,
+        &ext(),
+        &wants(),
+        Consent::Always,
+        &Fixture::scope(),
+    );
     let records = fx.audit.records();
     let decision = records
         .iter()
         .find_map(|r| match &r.event {
-            AuditEvent::CapabilityDecision {
+            orrery_audit::AuditEvent::CapabilityDecision {
                 subject,
                 request,
                 verdict,
                 rule_text,
-                layer,
                 ..
             } if request.starts_with("spawn(") => {
-                Some((subject.clone(), *verdict, rule_text.clone(), *layer))
+                Some((subject.clone(), *verdict, rule_text.clone()))
             }
             _ => None,
         })
         .expect("the spawn decision is in the audit");
-    assert_eq!(decision.0, Subject::Ext(ext.clone()));
+    assert_eq!(decision.0, orrery_proto::Subject::Ext(ext()));
     assert_eq!(decision.1, orrery_audit::Verdict::Deny);
     assert_eq!(
         decision.2.as_deref(),
         Some("spawn(*)"),
         "the audit must name the rule that produced the decision"
     );
-    assert_eq!(decision.3, Some(Layer::Project));
-
-    // ...and the load itself is recorded as degraded, with the problem.
-    let load = records
-        .iter()
-        .find_map(|r| match &r.event {
-            AuditEvent::ExtensionLoad {
-                status, problems, ..
-            } => Some((status.clone(), problems.clone())),
-            _ => None,
-        })
-        .expect("the load is in the audit");
-    assert_eq!(load.0, "degraded");
-    assert_eq!(load.1.len(), 1);
-}
-
-/// And the enforcement is not the pattern: even if the tool had loaded, the
-/// broker would refuse, because the engine never mints a token for a denied
-/// spawn.
-#[tokio::test]
-async fn a_denied_spawn_never_gets_a_token() {
-    let fx = Fixture::with_rules(RULES);
-    let ext = Subject::Ext(ExtId::new("buildgraph").unwrap());
-    let call = PendingCall::spawn("bazel build //...");
-    let decision = fx.engine.check(&call, &ext, &Fixture::scope());
-    assert!(
-        matches!(decision, orrery_policy::Decision::Deny { .. }),
-        "{decision:?}"
-    );
-    // There is no token, so there is nothing to hand the broker. That is the
-    // whole design: the refusal is a missing capability, not a checked flag.
-}
-
-/// Nothing denied: the same install loads clean.
-#[tokio::test]
-async fn an_extension_that_is_granted_everything_loads_ok() {
-    let fx = Fixture::new();
-    let engine = Arc::new(fx.engine);
-    let audit = Arc::clone(&fx.audit) as orrery_audit::Audit;
-    let ext = ExtId::new("buildgraph").unwrap();
-    let mut registry = Registry::with_host(Arc::new(EchoHost))
-        .with_policy(Arc::new(EngineGate::new(Arc::clone(&engine))));
-
-    let outcome = install(
-        &mut registry,
-        &engine,
-        &audit,
-        &ext,
-        Layer::Project,
-        &[ToolNeeds::needing(
-            "build",
-            Aspect::Spawn,
-            "bazel build //...",
-        )],
-        &Fixture::scope(),
-    );
-    assert!(matches!(outcome, LoadOutcome::Ok { .. }), "{outcome:?}");
 }
