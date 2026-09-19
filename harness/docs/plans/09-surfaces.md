@@ -308,29 +308,54 @@ address inside one — an `orrery-proto` change, not this plan's, and nothing ne
   The "no drawing code" half is a source scan that fails on `std::io`, `print!`, a terminal
   crate or a width. See Task 8 for what it found.
 
-- [ ] **Open, named in round 5: the shipped binary does not link this crate.**
-  `orrery-surface` is absent from `cargo tree -p orrery-cli`, with or without
-  `--all-features`, and the reason is structural rather than an oversight.
-  `ExtensionTable` holds **one session-wide** `SurfaceSink` and hands every call
-  a clone of it, while `SurfaceEmit::emit(&self, surface: &Surface)` — the
-  published signature in `orrery-ext-api` — carries neither a `TurnId` nor a
-  `SurfaceId`. A kernel-side `SurfaceStore` therefore has nothing to key a diff
-  on: it cannot tell a re-emission of one surface from a second surface, which
-  is the one distinction the differ exists to make. The consequence today is
-  that an extension's `ctx.ui.*` output is described, returned in the tool's
-  `Outcome`, and **discarded** by the table's `SurfaceSink::discarding()`; the
-  only surfaces a client sees are the ones `orrery-cli`'s own `Publisher` mints
-  by hand for assistant text and tool arguments.
+- [x] **Closed, round 6: the shipped binary links this crate and a client sees
+  what it produces.** It was open because `ExtensionTable` held **one**
+  session-wide `SurfaceSink` and `SurfaceEmit::emit(&self, surface: &Surface)`
+  carries neither a `TurnId` nor a `SurfaceId`, so a kernel-side `SurfaceStore`
+  had nothing to key a diff on — it could not tell a re-emission of one surface
+  from a second surface, which is the one distinction the differ exists to make.
+  Every `ctx.ui.*` was therefore described, returned in the tool's `Outcome`,
+  and **discarded**.
 
-  The fix is an addition, not a break, and it already has a model in this
-  codebase: mirror `BrokerSource`. A `SurfaceSource` on `orrery-ext-api` with
-  `fn for_call(&self, call: CallId) -> SurfaceSink`, a second field on
-  `ExtensionTable` beside `brokers`, and a `SurfaceSource` implementation in
-  `orrery-harness` holding `Mutex<SurfaceStore>` and keying each call's surface
-  off its `CallId` — which is what `orrery-cli` already does for tool arguments
-  (`SurfaceId::from_uuid(*call.as_uuid())`). Not attempted in round 5 because it
-  touches the published extension API across three crates and deserves its own
-  failing test rather than a drive-by.
+  The fix is the one this plan proposed, an addition rather than a break:
+  `SurfaceSource::for_call(&self, call: CallId) -> SurfaceSink` on
+  `orrery-ext-api`, mirroring `BrokerSource` exactly; a second field on
+  `ExtensionTable` beside `brokers`, with `set_surface_sink` kept as the
+  one-sink case (`SharedSurfaces`); and `orrery-harness`'s `KernelSurfaces`
+  holding `Mutex<SurfaceStore>`. The composition root says when a turn begins
+  and when it seals, so a patch to a closed turn is refused **once**, at the
+  store, exactly as the module doc promised.
+
+  **One departure, for a reason this plan could not have known.** It proposed
+  keying the surface on `SurfaceId::from_uuid(*call.as_uuid())`, the derivation
+  `orrery-cli` already uses for streaming tool arguments. That does not survive
+  contact with the wire: `orrery-agui` encodes a `Replace` on an *open call's*
+  surface as `TOOL_CALL_ARGS`, so the file `builtin.read` described arrived at
+  the client claiming to be the arguments the model had written. Two different
+  things on one id is one too many, so the sink mints its own id, once per
+  call — which `for_call` makes natural, because it is called once per call.
+
+  `replay` re-emits described surfaces too, off the stored `Outcome`, so a
+  replayed session produces the frame sequence the live one did. Nothing extra
+  is persisted: turns stay the record and frames stay a view of it.
+
+  Proved from the binary, not the library:
+  `orrery-cli`'s `reachable::a_surface_the_kernel_produced_reaches_the_client`
+  drives `CARGO_BIN_EXE_orrery` through a real tool call and finds what the
+  extension described on the wire, as its own frame, before the result.
+
+- [x] **The floor can draw a login prompt** (§6.7, round 6). `AuthState` grew
+  `Pending { user_code, verification_uri, verification_uri_complete,
+  expires_at, interval_secs }` — everything a client needs to draw a
+  device-code wait — and **nothing rendered it**: the only consumer was
+  `orrery-kernel`'s refusal *sentence*, so the one flow that most needs a real
+  surface was the one reduced to prose a client would have to scrape.
+  `auth.state` is now a floor binding. `orrery-ext-api` does not and must not
+  depend on `orrery-provider`, so the binding reads the serialised form; both
+  sides of that contract are pinned, by `the_tagged_shape_is_the_contract` in
+  `orrery-provider` and by three render tests in `orrery-ext-views-default`.
+  `orrery ext list` names it, so "the binding exists" and "the binding is in
+  the product" are not two different claims.
 
 ## State
 

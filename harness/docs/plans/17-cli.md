@@ -44,6 +44,9 @@ orrery config explain <key>
 orrery init [--profile <name>]
 orrery import [--from claude-code|codex]
 
+orrery workflow check <file>             # typecheck one; starts no kernel
+orrery workflow run <file> [--max-tokens N]
+
 orrery eval run <suite> [--profile a,b] [--model x,y] [--format junit]
 orrery eval compare <run-a> <run-b>
 orrery eval replay <run> --case <id>
@@ -259,6 +262,23 @@ can reach is not shipped.
 - [x] Scope and grant are read from **configuration**, never from the front matter. The `SKILL.md` format is adopted unchanged, so a skill cannot widen its own reach by editing itself; `skills::a_scoped_skill_is_absent_from_another_agent` declares the scope in `[skills.<name>]` and proves it.
 - [x] Neither command builds a kernel or a provider, for the same reason `config explain` does not: asking what is declared must work in a checkout with no key in sight.
 
+### Task 12 · `workflow`
+
+Files: `src/cmd/workflow.rs`
+
+**Added 2026-09-19.** Not in the plan, and it should have been: this file is
+the command tree of record, and `orrery-router` and `orrery-orchestrator` were
+absent from `cargo tree -p orrery-cli` altogether. `run -p` submits exactly one
+turn and has nowhere to put a workflow file, so plan 11's loop machine, its
+caps and every routing rule were green library tests a person could not reach.
+
+- [x] **Failing test first.** `workflow::a_verify_loop_terminates_on_its_own_cap` — against the fixture provider, a loop whose predicate never holds stops at `max_iterations`, names the cap and the iteration count on stdout, and exits **0**. A capped loop is an ordinary ending, not a failure and not a hang. This is plan 11's headline criterion, driven from the binary rather than from `orrery-orchestrator/tests`.
+- [x] `workflow check <file>` starts **no kernel and no provider**, for the same reason `config explain` and `mcp list` do not: asking whether a file is well-formed must work in a checkout with no key in sight. It is also where translation #5 becomes a product property — `workflow::an_invalid_workflow_fails_at_load` gets exit 2 naming the offending step, with **nothing on stdout**.
+- [x] A `tool` step makes no model call. `workflow::a_tool_only_workflow_needs_no_model` asserts zero tokens and the file's real bytes in the step's value.
+- [x] A sub-agent's work is turn rows on its **own branch**, and the parent wrote the join. `workflow::a_sub_agent_leaves_its_own_branch_behind` reads the tree back through `orrery session show`: four branches for three iterations, one join row each.
+- [x] `[[route]]` rules are read from the workspace's own `orrery.toml`, beside `[permissions]`. `workflow::a_declared_route_rule_reaches_the_run` denies the sub-agent rung there and finds the router's own words in the step's failure — the router in the product, not in its own test suite.
+- [x] Exit codes: completed **0**, a budget ceiling **3**, a gate or a failed step **1**. A capped loop is `Completed`, so it is 0.
+
 ---
 
 ## Done when
@@ -272,6 +292,19 @@ can reach is not shipped.
   `cli::no_subcommand_is_a_stub` reads the command list out of `--help` and
   checks each one, which is the property the old list of unimplemented
   subcommands existed to protect.
+- **`--provider` reaches every provider a `[provider]` table can name.** Round
+  5 left the flag parsing exactly one prefix, `fixture:`, while
+  `orrery_harness::config::provider_choice` could name Anthropic and any
+  OpenAI-compatible endpoint — and `Session::build` refused to start at all
+  unless fixtures had been passed, so a configured provider could never run a
+  turn. `<kind>:<model>[@<base-url>]` now covers all of them, only `fixture:`
+  repeats, an unknown word prints the forms, and with no flag the table in force
+  decides. `orrery_harness::provider_for` is the single selector both `assemble`
+  and the CLI go through, so neither can grow an arm the other lacks.
+  `tests/provider.rs`, six tests. Both TLS-linking providers stay **off by
+  default** and are reachable through this crate's own `anthropic` and
+  `openai-compat` passthrough features — which had to be added, because until
+  round 6 the error named a feature no `cargo build` of this package could set.
 - `orrery run -p "…"` completes a real turn with a real tool call.
   *(`json::completes_a_turn_with_a_tool_call`, the phase-1 acceptance criterion,
   and `json::the_tool_call_really_happened`, which checks the bytes in

@@ -367,6 +367,32 @@ Both are reachable from the **binary**, which is the part that was missing:
 bundles, and `orrery-cli/tests/reachable.rs` drives `CARGO_BIN_EXE_orrery` to
 keep it that way.
 
+**Amended 2026-09-19 (round 6): that paragraph was half true, and the half it
+missed is the half a person meets.** `ProviderChoice` had the variants and the
+`[provider]` table could name them, but `--provider` parsed exactly one prefix,
+`fixture:`, and `Session::build` refused to start unless fixtures had been
+passed — so a configured provider could never run a turn and the flag could
+never reach one. Worse, `orrery-cli` declared no features at all, so the error
+that says "enable the `anthropic` feature" named something no `cargo build` of
+that package could set. Both are fixed: `<kind>:<model>[@<base-url>]` covers
+every variant, `orrery_harness::provider_for` is the one selector both routes
+go through, and `orrery-cli` carries `anthropic` and `openai-compat`
+passthroughs — **off by default**, because each links a TLS stack and the
+default build must reach no network. `orrery-cli/tests/provider.rs` and
+`reachable::the_providers_left_out_can_be_turned_on` hold both halves.
+
+**Amended 2026-09-19: task 10's `Pending` variant had no renderer.** "A client
+draws the wait from data rather than scraping a rendered string" was true of
+the *type* and false of the system: nothing rendered `AuthState` at all, and
+the only consumer was `orrery-kernel/src/turn.rs` reading it for a refusal
+sentence. The device-code flow stayed visible only because it emits its wait as
+an ordinary `Surface` — which is exactly the scraped string the variant was
+meant to replace. `auth.state` is now a §6.7 floor binding in
+`orrery-ext-views-default`; `AuthState` serialises with a `state` tag and
+camelCase fields, pinned here by `the_tagged_shape_is_the_contract` and there
+by three render tests, because `orrery-ext-api` neither does nor should depend
+on this crate.
+
 Phase 1 was implemented and green as of 2026-09-18: tasks 1-9 except the
 `openai-compat` crate, which the plan itself placed in phase 5. `cargo test -p
 orrery-provider -p orrery-ext-provider-fixture -p orrery-ext-provider-anthropic`

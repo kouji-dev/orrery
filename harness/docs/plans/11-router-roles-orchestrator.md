@@ -239,23 +239,51 @@ Files: `orrery-router/src/lib.rs`, `orrery-ext-agents-default/*`
 - A sub-agent's work is visible as ordinary turn **rows on its own branch** — `User` and `Assistant` turns, inspectable and replayable, never collapsed into one tool result. *Amended*: the plan said "in the transcript", and rendering a transcript is a client's job (plan 09); what this plan makes true is the shape in the tree, asserted in `subagent::runs_on_a_branch`.
 - Every routing decision is audited with its signal values. `Router` holds an `Audit`, not an `Option<Audit>`, so the record is unconditional and a router built without a sink writes to the null one.
 
-- [ ] **Open, named in round 5: neither crate is reachable from the binary.**
-  `orrery-router` and `orrery-orchestrator` are absent from
-  `cargo tree -p orrery-cli` with or without `--all-features`, so every
-  criterion above is true as a **library** test and unreachable as a product.
-  A green test the binary cannot reach does not count as done, and
-  `agents-default` shipping in the default build (round 5) makes the gap
-  sharper rather than smaller: the five roles now load, appear in the ledger and
-  bind — and nothing in the binary can route to one or run a step.
+- [x] **Closed, round 6: both crates are in the binary, and phase 6 is
+  reachable from the product.** It was open because `orrery-router` and
+  `orrery-orchestrator` were absent from `cargo tree -p orrery-cli` with or
+  without `--all-features`, so every criterion above was true as a **library**
+  test and unreachable as a product. A green test the binary cannot reach does
+  not count as done.
 
-  What is missing is named and bounded, not vague. Both crates are deliberately
-  acyclic with the kernel: `Router::decide` is sync and returns data, and the
-  orchestrator runs steps through the `TurnRunner` and `StepExecutor` traits
-  **which nothing implements**. `orrery-harness` is the crate that may name both
-  a kernel and an orchestrator, so the two implementations belong there; and
-  then `orrery-cli` needs a verb to reach them, since `orrery run -p` submits
-  exactly one turn and has nowhere to put a workflow file. That is section 8
-  phase 6, and it is a plan-sized piece rather than a wiring change.
+  What was missing was named here and is what landed. Both crates are
+  deliberately acyclic with the kernel — `Router::decide` is sync and returns
+  data, and the orchestrator runs steps through `TurnRunner` and `StepExecutor`,
+  **which nothing implemented**. `orrery-harness` is the crate that may name a
+  kernel *and* an orchestrator, so `steps::KernelSteps` implements
+  `StepExecutor` there, and `orrery-cli` gained the verb this plan said it
+  needed: `orrery run -p` submits exactly one turn and has nowhere to put a
+  workflow file.
+
+  - `orrery workflow check <file>` typechecks and **starts no kernel**, so
+    translation #5 — an invalid workflow fails at load, not after three model
+    calls — is a property of the product and not only of `Checked`.
+  - `orrery workflow run <file>` runs it. An `agent` step asks the router,
+    writes the parent's `User` row, forks a child branch at it, runs the turn on
+    the child's own lease, closes the child, and writes the `BranchResult` join
+    under the parent's lease. A `tool` step dispatches through the registry and
+    makes **no model call at all**.
+  - `[[route]]` rules are read from the workspace's own `orrery.toml`, beside
+    `[permissions]`: a routing rule and a permission rule are the same kind of
+    thing and belong in the same file.
+
+  **The headline criterion, driven from the built binary.**
+  `workflow::a_verify_loop_terminates_on_its_own_cap` runs a loop whose
+  predicate never holds against the committed fixture stream: it stops at
+  `max_iterations`, reports the cap by name, and exits 0 — a capped loop is an
+  ordinary ending, not a failure and not a hang.
+  `workflow::a_sub_agent_leaves_its_own_branch_behind` then reads the tree back
+  through `orrery session show`: four branches for three iterations, and one
+  parent-written join per child.
+
+  **One thing stayed unreconciled, and it is named rather than hidden.**
+  `subagent::spawn` already encodes exactly that order and is tested for it, but
+  drives its child through `TurnRunner::run`, which takes `&BranchLease`, while
+  `Kernel::run_turn` takes the lease **by value** and holds it for the length of
+  the turn. No implementation of that trait over this kernel is possible until
+  one of the two signatures moves, so `KernelSteps` writes the order out against
+  the store directly. Reconciling them — most likely by `run_turn` borrowing —
+  would let the facade delegate to `spawn` and delete the duplication.
 
 ## Open questions
 
