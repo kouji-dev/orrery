@@ -198,6 +198,24 @@ Files: `src/cmd/{permissions,config}.rs`
 - [x] **Failing test first.** `explain::permissions_names_rule_layer_file` — output contains the rule, the layer, the file and the line. ~~**Not landed: plan 07 task 10 has not.**~~ **It had, and the note was stale.** `PolicyEngine::explain` shipped with plan 07; what actually kept this unbuilt was duller — `orrery-cli` did not depend on `orrery-policy` at all. The command reads the call in the **rule grammar** (`read(./src/main.rs)`, `net(domain: docs.rs)`), which is the spelling `PendingCall::match_text` prints, so what a person types to ask is what they read back in the audit.
 - [x] `explain::config_names_the_winning_layer` (plan 10 task 7). ~~**Not landed: plan 10 has not.**~~ **Stale as well: plan 10 landed 2026-09-18.** The command resolves the five layers with `orrery_config::resolve` and prints `ResolvedConfig::explain` — the winner **and** what it shadowed, because naming only the winner is how somebody spends an afternoon editing a file that is not in force.
 - [x] Implement; both support `--json`. *(One JSON object on one line each. Neither command builds a kernel, a store or a provider: explaining a rule has to work in a checkout with no key in sight, and `tests/explain.rs` runs exactly that — sandboxed `HOME`, no `--provider`.)*
+- [x] **Round 7, amended in place: the explanation now describes the rules that
+  actually decide.** It did not. `cmd::setup` set nine fields on the harness
+  config and never `policy_toml`, which had no writer anywhere in the tree, so
+  every run dispatched through the hardcoded default while this command read the
+  layers: `permissions explain 'read(./Cargo.toml)'` printed `Deny ... [User]
+  config.toml:2` and the same binary's `run` read the file, with the ledger
+  recording `allow`. `cmd::layers::rules` is now the one place the rule set is
+  chosen — layers, plus the profile's shorthands under `--profile` — and both
+  this command and `Session::build` take it. `tests/permissions_enforced.rs`
+  asserts the **equivalence** rather than two separate facts: for one call under
+  one set of layers, explain-says-deny ⇒ exit 4 with the denial in the ledger,
+  explain-says-allow ⇒ exit 0 with the read performed.
+- [x] **And the help text names a call the parser accepts.** `--help` offered
+  `builtin.write:$WORKSPACE/src/**`, which this command rejects as "is not a
+  call". It now shows `read(./src/main.rs)`, `write(./src/main.rs)`,
+  `spawn(cmd: git)` and `net(domain: docs.rs)`, and
+  `permissions_enforced::every_example_in_the_help_parses` reads the examples
+  back out of `--help` and runs each one, so the two cannot drift again.
 
 **Decided while implementing: an untrusted workspace says so, on stderr.** A
 person running either command in a workspace whose own `.orrery/config.toml` is
@@ -284,9 +302,14 @@ caps and every routing rule were green library tests a person could not reach.
 ## Done when
 
 - `cargo test -p orrery-cli` green; `--help` snapshots committed. *(Unit tests,
-  and `cli`, `json`, `exit_codes`, `serve`, `ext`, `explain`, `init`, `session`,
-  `replay`, `ledger`, `eval`, `mcp` and `skills` as integration suites. 32
-  snapshots under `tests/snapshots/`.)*
+  and `cli`, `json`, `exit_codes`, `serve`, `ext`, `explain`,
+  `permissions_enforced`, `init`, `session`, `replay`, `ledger`, `eval`, `mcp`
+  and `skills` as integration suites. 32 snapshots under `tests/snapshots/`.)*
+- **What the binary reports and what the binary enforces are the same answer.**
+  Added round 7, because it was not true and no library test could have caught
+  it: `permissions explain` and `run` were built from two different rule sets.
+  They are built from one now, and `permissions_enforced` asserts the
+  equivalence directly rather than asserting each half separately.
 - **Every command in `--help` answers for itself.** As of 2026-09-19 nothing in
   the tree exits 2 saying "not implemented in this build";
   `cli::no_subcommand_is_a_stub` reads the command list out of `--help` and
@@ -376,6 +399,17 @@ plan 16 owns it.
 **Also landed this wave:** `orrery install <source>` and `orrery remove <name>`,
 with `orrery-registry` behind them. `tests/install.rs` runs six of them against
 a sandboxed home with nothing on the network.
+
+**Corrected 2026-09-19: every run in this crate's tests is sandboxed, not just
+the ones that remembered.** `tests/budget.rs` and `tests/install.rs` pointed
+`HOME`, `USERPROFILE` and `%ProgramData%` inside a temporary directory; the
+shared `common::orrery` set `COLUMNS` and nothing else, so the other fourteen
+test files resolved their configuration against the developer's real
+`~/.orrery` and the machine's real `%ProgramData%\Orrery\managed.toml` — a
+managed `deny` on a CI box would have changed what they assert, silently. The
+helper now sandboxes, `common::sandbox_home` names the directory, and
+`tests/sandbox.rs` pins it from the other side: a config written into the
+sandbox home is the one the binary answers from.
 
 **Three limits listed here were no longer true, which is the point of writing
 them down.** The policy engine had grown `explain`, the layered config had
