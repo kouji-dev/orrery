@@ -546,3 +546,42 @@ fn a_long_workspace_path_runs_and_is_graded() {
     );
     assert_eq!(results[0]["score"], 1.0);
 }
+
+/// The residual of that same fact, one layer down: the session store.
+///
+/// At 200 characters the grader's read was the thing that crossed `MAX_PATH`.
+/// At 244 the *state file* does: `<workspace>\.orrery\sessions.db` reaches 263
+/// characters, past Windows' 260, and `eval run` exited 6 with "session store
+/// backend failed: unable to open database file". That was an honest
+/// filesystem error rather than a policy denial, which is why it was a
+/// residual and not a regression — but the database was fine and only the path
+/// was in the wrong form. SQLite's Win32 VFS stops at `MAX_PATH` unless the
+/// path arrives extended-length, so the store opens every connection in `\?\`
+/// form. This pins the length that broke it.
+#[test]
+fn a_244_character_workspace_opens_its_session_store() {
+    let temp = tempfile::tempdir().expect("a temporary root");
+    let mut dir = temp.path().to_path_buf();
+    while dir.display().to_string().len() < 244 {
+        dir.push("a-long-workspace-segment");
+    }
+    std::fs::create_dir_all(&dir).expect("a long workspace directory");
+    let len = dir.display().to_string().len();
+    assert!(len >= 244, "the fixture is {len} characters, not 244");
+    assert!(
+        dir.join(".orrery/sessions.db").display().to_string().len() > 260,
+        "the state file has to be past MAX_PATH to be testing anything"
+    );
+    std::fs::write(dir.join(TARGET), CONTENTS).expect("the target file");
+
+    // `run_suite` asserts exit 0, which is the whole assertion: the failure
+    // this pins was exit 6 before a single case had been graded.
+    let report = run_suite(&dir);
+    let results = report["results"].as_array().expect("results");
+    assert_eq!(
+        results[0]["outcome"], "pass",
+        "a 244-character workspace grades like any other: {}",
+        results[0]
+    );
+    assert_eq!(results[0]["score"], 1.0);
+}
