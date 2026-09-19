@@ -36,6 +36,7 @@ pub mod features;
 pub mod fixture;
 pub mod memory;
 pub mod steps;
+pub mod surfaces;
 
 use std::sync::Arc;
 
@@ -54,6 +55,7 @@ pub use build::{
 pub use config::{kernel_config, price_table};
 pub use memory::KernelMemory;
 pub use steps::KernelSteps;
+pub use surfaces::{KernelSurfaces, NoPatches, SurfacePatches};
 
 /// A built harness: a runtime, a kernel, and the session it opened.
 pub struct Harness {
@@ -61,6 +63,7 @@ pub struct Harness {
     kernel: Arc<Kernel>,
     registry: Arc<orrery_tools::Registry>,
     router: orrery_router::Router,
+    surfaces: surfaces::KernelSurfaces,
     store: Arc<dyn SessionStore>,
     engine: Arc<PolicyEngine>,
     ledger: Ledger,
@@ -97,6 +100,7 @@ impl Harness {
             kernel: assembled.kernel,
             registry: assembled.registry,
             router: assembled.router,
+            surfaces: assembled.surfaces,
             store: assembled.store,
             engine: assembled.engine,
             ledger: assembled.ledger,
@@ -134,6 +138,13 @@ impl Harness {
     #[must_use]
     pub fn registry(&self) -> Arc<orrery_tools::Registry> {
         self.registry.clone()
+    }
+
+    /// The kernel's surface store, for the composition root that has to tell
+    /// it when a turn starts and when it seals.
+    #[must_use]
+    pub fn surfaces(&self) -> &surfaces::KernelSurfaces {
+        &self.surfaces
     }
 
     /// The router the declared `[[route]]` rules built.

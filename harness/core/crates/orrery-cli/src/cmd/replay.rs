@@ -125,6 +125,7 @@ fn encode(profile: &str, rows: &[TurnRow]) -> Vec<Frame> {
                     publisher.turn_started(row.id);
                     open = Some((row.id, Usage::default()));
                 }
+                described(&publisher, outcome);
                 publisher.tool_settled(*call, outcome.clone());
             }
             // A summary, a join and a recall all read back as prose, which is
@@ -163,6 +164,7 @@ fn replay_block(publisher: &Publisher, block: &ContentBlock) {
             }
         }
         ContentBlock::ToolResult { call, outcome } => {
+            described(publisher, outcome);
             publisher.tool_settled(*call, outcome.clone());
         }
         // An image has no frame of its own in this build; saying so beats
@@ -171,6 +173,27 @@ fn replay_block(publisher: &Publisher, block: &ContentBlock) {
             publisher.text(&format!("[image {media_type}]"));
         }
         _ => {}
+    }
+}
+
+/// Re-emit what a call **described**, before the result that carries it.
+///
+/// A live run emits this as its own frame — the extension called `ctx.ui.*`,
+/// the kernel-side differ diffed it and published a patch — so a replay that
+/// skipped it would produce a different frame sequence from the run it is
+/// replaying. The surface is in the stored outcome, so nothing extra had to be
+/// persisted for this to be possible.
+fn described(publisher: &Publisher, outcome: &orrery_proto::Outcome) {
+    if let orrery_proto::Outcome::Ok {
+        surface: Some(surface),
+        ..
+    }
+    | orrery_proto::Outcome::Truncated {
+        surface: Some(surface),
+        ..
+    } = outcome
+    {
+        publisher.surface(surface.clone());
     }
 }
 

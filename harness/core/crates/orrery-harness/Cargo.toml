@@ -103,6 +103,9 @@ orrery-kernel = { path = "../orrery-kernel" }
 # are implemented here in `steps.rs`. Without this the loop machine, its caps
 # and every routing rule were green library tests the binary could not reach.
 orrery-router = { path = "../orrery-router" }
+# The kernel-side differ. Named here because this is where the extension table
+# is built, and the table is what hands each call its sink.
+orrery-surface = { path = "../orrery-surface" }
 orrery-orchestrator = { path = "../orrery-orchestrator" }
 async-trait = { workspace = true }
 futures-util = { workspace = true }

@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use indexmap::IndexMap;
 use orrery_ext_api::{
     BrokerFacade, BrokerSource, CallCtx, DeniesEverything, ExtensionManifest, Generation,
-    HostError, InstanceState, Ledger, SharedBroker, SingletonSlot, SurfaceSink, ToolDef,
+    HostError, InstanceState, Ledger, SharedBroker, SharedSurfaces, SingletonSlot, SurfaceSink,
+    SurfaceSource, ToolDef,
 };
 use orrery_proto::{
     Contribution, ExtId, Grant, Layer, LoadOutcome, LoadStage, Outcome, RuleId, ToolRef,
@@ -155,7 +156,7 @@ pub struct ExtensionTable {
     ledger: Ledger,
     next_generation: AtomicU64,
     brokers: Arc<dyn BrokerSource>,
-    ui: RwLock<SurfaceSink>,
+    surfaces: RwLock<Arc<dyn SurfaceSource>>,
 }
 
 impl std::fmt::Debug for ExtensionTable {
@@ -202,13 +203,28 @@ impl ExtensionTable {
             ledger: Ledger::new(),
             next_generation: AtomicU64::new(1),
             brokers,
-            ui: RwLock::new(SurfaceSink::discarding()),
+            surfaces: RwLock::new(SharedSurfaces::discarding()),
         })
     }
 
-    /// Send every surface an extension describes somewhere.
+    /// Send every surface an extension describes to one sink, whatever call
+    /// produced it.
+    ///
+    /// Right for a test that records everything; wrong for a differ, which
+    /// needs to know which call it is diffing — see
+    /// [`set_surface_source`](Self::set_surface_source).
     pub fn set_surface_sink(&self, ui: SurfaceSink) {
-        *self.ui.write() = ui;
+        self.set_surface_source(SharedSurfaces::new(ui));
+    }
+
+    /// Ask this for a sink **per call**.
+    ///
+    /// The production wiring. `orrery-harness` answers with a sink that keys
+    /// each call's surface off its own [`CallId`](orrery_proto::CallId) and
+    /// diffs it against what that call last emitted, which is the one thing a
+    /// session-wide sink cannot do.
+    pub fn set_surface_source(&self, surfaces: Arc<dyn SurfaceSource>) {
+        *self.surfaces.write() = surfaces;
     }
 
     /// What loaded, what degraded, what failed, what was skipped.
@@ -474,7 +490,7 @@ impl ExtensionTable {
             cancel,
             broker,
         )
-        .with_ui(self.ui.read().clone());
+        .with_ui(self.surfaces.read().for_call(ctx.call));
 
         match instance
             .host

@@ -188,6 +188,23 @@ impl Publisher {
         });
     }
 
+    /// A surface something described, as the frame that carries it.
+    ///
+    /// Live, this arrives through [`SurfacePatches`](orrery_harness::SurfacePatches):
+    /// the extension described it, the kernel-side differ turned it into a
+    /// patch. `replay` calls this directly, off the stored outcome, so a
+    /// replayed session emits the same frames the live one did — the whole
+    /// point of "turns are the record; frames are a view of it" is that the
+    /// view is reproducible.
+    pub fn surface(&self, value: Surface) {
+        let id = value.id.unwrap_or_else(SurfaceId::new);
+        self.publish(Event::Delta {
+            seq: self.next(),
+            surface: id,
+            patch: SurfacePatch::Replace { id, value },
+        });
+    }
+
     /// A tool call settled.
     pub fn tool_settled(&self, call: orrery_proto::CallId, outcome: Outcome) {
         self.state
@@ -240,6 +257,23 @@ impl Publisher {
                 retryable,
                 data: None,
             },
+        });
+    }
+}
+
+/// **A surface the kernel produced, reaching the client.**
+///
+/// Everything else this publisher mints, it mints itself: assistant prose, a
+/// tool call's streaming arguments. This is the one that comes from somewhere
+/// else — an extension called `ctx.ui.*`, the kernel-side differ in
+/// `orrery-harness` turned it into a patch, and the patch arrives here already
+/// diffed. The publisher's only job is to give it a `seq` and put it on the hub.
+impl orrery_harness::SurfacePatches for Publisher {
+    fn patch(&self, surface: SurfaceId, patch: SurfacePatch) {
+        self.publish(Event::Delta {
+            seq: self.next(),
+            surface,
+            patch,
         });
     }
 }
@@ -560,6 +594,10 @@ impl Session {
         config.kernel = setup.kernel.clone();
         config.extensions = setup.extensions.clone();
         config.routing_toml = setup.routing_toml.clone();
+        // Where a surface an extension described actually goes. Without this
+        // the differ runs and its output is thrown away, which is what it did
+        // for every round before this one.
+        config.surfaces = Some(publisher.clone());
 
         Ok(Self {
             harness: Arc::new(Harness::build(config)?),
@@ -611,8 +649,15 @@ impl Session {
         cancel: CancellationToken,
     ) -> Result<Completed, orrery_kernel::KernelError> {
         publisher.turn_started(turn);
+        // The store is keyed by turn, which is what makes sealing possible; the
+        // harness has no other way to know which turn is running.
+        harness.surfaces().begin_turn(turn);
         match harness.submit(prompt, cancel).await {
             Ok(outcome) => {
+                // Sealed **before** `turn.settled` goes out: a client that has
+                // closed the turn has nowhere to put a later patch, so the
+                // refusal happens once, here, and goes back to the extension.
+                harness.surfaces().seal_turn(turn);
                 let tools = publisher.turn_settled(turn, outcome.usage());
                 match &outcome {
                     TurnOutcome::Failed { code, message, .. } => {
@@ -626,6 +671,7 @@ impl Session {
                 Ok(Completed { outcome, tools })
             }
             Err(e) => {
+                harness.surfaces().seal_turn(turn);
                 publisher.error("kernel", &e.to_string(), false);
                 publisher.turn_settled(turn, Usage::default());
                 Err(e)

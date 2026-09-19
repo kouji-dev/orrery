@@ -228,6 +228,13 @@ pub struct ResolvedConfig {
     /// The permission rules, as TOML. `None` takes the workspace default:
     /// read, write and spawn inside the workspace, and nothing outside it.
     pub policy_toml: Option<String>,
+    /// Where the patches the kernel-side differ produces go.
+    ///
+    /// `None` still runs the differ; its output simply goes nowhere. A
+    /// composition root with a client attached passes something that turns each
+    /// patch into a frame — which is how a surface the *kernel* produced
+    /// reaches a renderer instead of being described and thrown away.
+    pub surfaces: Option<Arc<dyn crate::surfaces::SurfacePatches>>,
     /// The routing rules, as the `[[route]]` list of a configuration layer.
     /// `None` is an empty set, which is a router that decides on its own
     /// ladder rather than one that refuses.
@@ -277,6 +284,7 @@ impl ResolvedConfig {
             extensions: extension_sources(resolved),
             policy_toml: None,
             routing_toml: None,
+            surfaces: None,
             kernel,
             audit: orrery_audit::null(),
         }
@@ -296,6 +304,7 @@ impl ResolvedConfig {
             extensions: Vec::new(),
             policy_toml: None,
             routing_toml: None,
+            surfaces: None,
             kernel: KernelConfig::default(),
             audit: orrery_audit::null(),
         }
@@ -364,6 +373,7 @@ pub(crate) struct Assembled {
     pub kernel: Arc<Kernel>,
     pub registry: Arc<Registry>,
     pub router: orrery_router::Router,
+    pub surfaces: crate::surfaces::KernelSurfaces,
     pub store: Arc<dyn SessionStore>,
     pub engine: Arc<PolicyEngine>,
     pub ledger: orrery_ext_api::Ledger,
@@ -433,6 +443,17 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
 
     // 5 · The extension table, the native bundle, and whatever discovery found.
     let table = orrery_host::table::ExtensionTable::with_broker_source(facade.clone());
+    // Every `ctx.ui.*` an extension makes now reaches a differ keyed on the
+    // call that made it. Before this the table held one session-wide sink that
+    // threw everything away, so the surfaces a client saw were the ones the
+    // client had minted itself.
+    let surfaces = crate::surfaces::KernelSurfaces::new(
+        config
+            .surfaces
+            .clone()
+            .unwrap_or_else(|| Arc::new(crate::surfaces::NoPatches)),
+    );
+    table.set_surface_source(Arc::new(surfaces.clone()));
     let mut native = NativeRegistry::new();
     crate::features::register_native(&mut native);
     let host = Arc::new(NativeHost::new(native));
@@ -559,6 +580,7 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
         kernel: Arc::new(kernel),
         registry,
         router,
+        surfaces,
         store,
         engine,
         ledger: table.ledger().clone(),

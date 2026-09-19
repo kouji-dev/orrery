@@ -171,3 +171,66 @@ fn the_providers_left_out_can_be_turned_on() {
         "and neither is on by default: {features}"
     );
 }
+
+/// **A surface the kernel produced reaches an attached client.**
+///
+/// `orrery-surface` — validate, hash, diff, the per-turn store, the seal at
+/// `turn.settled` — was absent from `cargo tree -p orrery-cli` entirely. Every
+/// `ctx.ui.*` an extension made was described, returned in the tool's
+/// `Outcome`, and thrown away by the extension table's session-wide
+/// `SurfaceSink::discarding()`, so the only surfaces a client ever saw were the
+/// ones the client itself had minted.
+///
+/// `builtin.read` describes what it read through `ctx.ui.markdown`. This drives
+/// the binary through a real tool call and asserts that description arrives on
+/// the wire **as its own frame**, not only folded into the tool result — which
+/// is the difference between the kernel producing surfaces and clients
+/// inventing them.
+#[test]
+fn a_surface_the_kernel_produced_reaches_the_client() {
+    let dir = tempfile::tempdir().expect("a temporary workspace");
+    std::fs::write(
+        dir.path().join("Cargo.toml"),
+        "[package]\nname = \"the-file-the-tool-really-read\"\n",
+    )
+    .expect("the target file");
+    let streams = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../clients/conformance/streams");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_orrery"))
+        .args([
+            "--workspace",
+            &dir.path().display().to_string(),
+            "--state-dir",
+            &dir.path().join(".orrery").display().to_string(),
+            "--provider",
+            &format!("fixture:{}", streams.join("tool-call.jsonl").display()),
+            "--provider",
+            &format!("fixture:{}", streams.join("text-turn.jsonl").display()),
+            "--json",
+            "run",
+            "-p",
+            "what is in Cargo.toml?",
+        ])
+        .env("COLUMNS", "100")
+        .output()
+        .expect("the orrery binary runs");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+
+    // The tool result carries the surface too — it always did. What is new is a
+    // frame of its own, minted by the differ from the extension's description,
+    // *before* the call is reported as ended.
+    let frames: Vec<&str> = stdout.lines().collect();
+    let settled = frames
+        .iter()
+        .position(|l| l.contains("TOOL_CALL_RESULT"))
+        .expect("the call settled");
+    let described = frames[..settled]
+        .iter()
+        .filter(|l| l.contains("the-file-the-tool-really-read"))
+        .count();
+    assert!(
+        described > 0,
+        "nothing the extension described reached the wire before the result:\n{stdout}"
+    );
+}

@@ -51,7 +51,9 @@ pub use broker::{
     SpawnOutput, SpawnRequest, WriteRequest,
 };
 pub use creds::{BrokerCredStore, CredStore, EnvCredStore, MemoryCredStore};
-pub use ctx::{CallCtx, SurfaceEmit, SurfaceLog, SurfaceSink, ToolBudget};
+pub use ctx::{
+    CallCtx, SharedSurfaces, SurfaceEmit, SurfaceLog, SurfaceSink, SurfaceSource, ToolBudget,
+};
 pub use error::HostError;
 pub use instance::{Generation, InstanceState};
 pub use ledger::Ledger;

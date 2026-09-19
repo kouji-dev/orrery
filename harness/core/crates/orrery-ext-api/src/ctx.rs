@@ -107,6 +107,57 @@ impl SurfaceEmit for SurfaceLog {
     }
 }
 
+/// Where a call's surface sink comes from.
+///
+/// # Why a source and not one sink
+///
+/// [`SurfaceEmit::emit`] carries neither a `TurnId` nor a `SurfaceId`, so a
+/// kernel-side differ handed one session-wide sink has nothing to key a diff
+/// on: it cannot tell a re-emission of one surface from a second surface, which
+/// is the one distinction a differ exists to make. The consequence was that
+/// every `ctx.ui.*` call in the product was described, returned in the tool's
+/// `Outcome`, and **discarded**.
+///
+/// So the sink is asked for **per call**, exactly as
+/// [`BrokerSource`](crate::BrokerSource) asks for a facade per call and for the
+/// same reason: the [`CallId`] is what ties what a call produces to the call
+/// that produced it.
+///
+/// A sink with nothing per-call to say implements this by cloning itself; see
+/// [`SharedSurfaces`].
+pub trait SurfaceSource: Send + Sync {
+    /// The sink for one call.
+    fn for_call(&self, call: CallId) -> SurfaceSink;
+}
+
+/// One sink, handed to every call unchanged.
+///
+/// The honest name for what a session-wide sink is. Right for a test that
+/// records everything and for [`SurfaceSink::discarding`], and wrong for a
+/// differ — which is why the distinction is a type rather than a comment.
+#[derive(Clone, Debug)]
+pub struct SharedSurfaces(SurfaceSink);
+
+impl SharedSurfaces {
+    /// Hand this sink to every call.
+    #[must_use]
+    pub fn new(sink: SurfaceSink) -> Arc<Self> {
+        Arc::new(Self(sink))
+    }
+
+    /// A source that throws every surface away. The default.
+    #[must_use]
+    pub fn discarding() -> Arc<Self> {
+        Self::new(SurfaceSink::discarding())
+    }
+}
+
+impl SurfaceSource for SharedSurfaces {
+    fn for_call(&self, _call: CallId) -> SurfaceSink {
+        self.0.clone()
+    }
+}
+
 /// `ctx.ui` — describes, never draws.
 ///
 /// `ctx.ui.table(..)` produces a [`Surface`]: ratatui renders a widget, Ink
