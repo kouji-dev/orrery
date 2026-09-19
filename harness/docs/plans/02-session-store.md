@@ -227,7 +227,7 @@ Files: `tests/conformance.rs`
 Files: `orrery-ext-session-sqlite/orrery.toml`
 
 - [x] Write the manifest: `runtime = "native"`, `[provides] session = "sqlite"` (the singleton field names its implementation, which is what the scaffold already wrote and what lets a config layer say which one wins), `[requires] read/write = ["$STATE/**"]`.
-- [x] Register through `orrery-host` like any extension (plan 06 provides the loader; until then a direct constructor is fine, marked `TODO(plan-06)`).
+- [x] Register through `orrery-host` like any extension. **Done (2026-09-19).** `orrery_ext_session_sqlite::SqliteSessions` implements `NativeExtension`, so the host parses this bundle's `orrery.toml` with the parser it holds a third party to, the `session` singleton has a named holder, and a deny rule can name `sqlite`. `build(state_dir)` stays as the direct constructor for an embedder that has already chosen SQLite - the same two-halves split `orrery-ext-views-default` has, because neither a session store nor a view is a tool the model can call. `tests/loader.rs` drives the real manifest parser.
 
 ---
 
@@ -303,3 +303,26 @@ Two things worth knowing that are not obvious from the task list:
 
 - **`algebra::materialise` yields when the last turn alone will not fit.** "Never the head" and "never the most recent" are both in the plan, and a two-turn branch under a one-token budget cannot honour both. The most recent turn wins: dropping what the model just did is how a loop starts. `tests/algebra.rs::the_most_recent_turn_survives_any_budget` pins it.
 - **A superseded summary is dropped from the view, not hoisted.** With two compactions, the view shows the summary the *winning* watermark points at and nothing from the earlier one — both rows are still on disk, and `tests/conformance.rs::materialise_uses_the_highest_watermark` asserts all eight rows are there.
+
+---
+
+## State
+
+**Landed.** SQLite in WAL mode, one transaction per turn append, a writer actor
+per session, and the conformance suite in `orrery-session/src/conformance.rs`
+run by both the in-memory store and the SQLite one — which is what makes the
+suite a contract rather than a description of one implementation.
+
+**Amended (2026-09-19): the last task is genuinely done.** "Register through
+`orrery-host` like any extension" had been ticked with a `TODO(plan-06)` and a
+direct constructor standing in, and the loader had existed for several waves.
+`orrery_ext_session_sqlite::SqliteSessions` now implements `NativeExtension`, so
+this bundle's `orrery.toml` goes through the same parser a third party's does,
+the `session` singleton has a named holder in the ledger, and a deny rule can
+name `sqlite`. `build(state_dir)` stays beside it as the direct constructor for
+an embedder that has already chosen SQLite — the same two-halves split
+`orrery-ext-views-default` has, because neither a session store nor a view is a
+tool the model can call. `tests/loader.rs` drives the real manifest parser.
+
+Crash safety is covered by a real killed child process (`tests/crash.rs` plus
+`examples/crash_child.rs`), not by a simulated one.

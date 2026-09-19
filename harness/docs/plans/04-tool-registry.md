@@ -157,19 +157,30 @@ Files: `src/registry.rs`
 
 ---
 
-## Stubs standing in for plans not yet written
+## The seams, and what came to fill them
 
-The seams are traits in `src/dispatch.rs`, with the dispatch path already
-routed through every one of them, so each plan substitutes an implementation
-rather than reshaping this crate:
+The seams are traits in `src/dispatch.rs`, with the dispatch path already routed
+through every one of them, so each plan substituted an implementation rather
+than reshaping this crate. **All four are filled (2026-09-19).** What is left in
+this crate is the *default* a bare `Registry::new()` gets — a unit test of the
+dispatch path, never what the product runs:
 
-- `ToolHost` — TODO(plan-06). Stub `UnavailableHost` answers `Outcome::Unloaded`.
-- `PolicyCheck` — TODO(plan-07). Stub `AllowAll` allows everything; step 4 of
-  dispatch calls it unconditionally.
-- `ToolInterceptor` — TODO(plan-05). No interceptors registered by default;
-  steps 1, 3 and 6 run the (empty) chain.
-- `ExtState` — TODO(plan-06). The registry keeps its own copy so `visible` can
-  hide a draining extension without a call across crates.
+- `ToolHost` — **filled by plan 06.** `orrery_host::ExtensionTable` is the real
+  implementation and `orrery_mcp::McpHost` is a second. `UnavailableHost` is the
+  default, so a registry nobody gave a host to answers `Outcome::Unloaded`
+  instead of panicking.
+- `PolicyCheck` — **filled by plan 07.** `orrery_broker::EngineGate` wraps
+  `PolicyEngine`, and `orrery_harness::build::assemble` wires it into every
+  registry the product builds. `AllowAll` is the default and is not the
+  product's policy.
+- `ToolInterceptor` — **filled by plan 05.** `orrery_kernel::intercept` is the
+  typed chain, over every `Phase`; the kernel registers its adapters through
+  `Registry::intercept`. A registry with none registered — the default — runs
+  steps 1, 3 and 6 as no-ops.
+- `ExtState` — **owned by plan 06's generation-keyed instance table**, and the
+  copy here is deliberate rather than leftover: it keeps `visible` and `resolve`
+  off an async hop across crates on the hot path. `orrery_host::unload` keeps the
+  two in step through `Registry::set_state`.
 - ~~The ledger is in-crate (`Registry::ledger`), not `orrery-audit`~~ —
   **done in plan 07's wave.** `orrery-audit` is now in the workspace dependency
   table and `Registry::with_audit` sends every ledger decision to it as a
@@ -210,3 +221,31 @@ rather than reshaping this crate:
    before the fully-qualified parse and before the generated short-name table —
    so a user can settle an ambiguity permanently. Plan 10 calls it and changes
    nothing here. Covered by `resolve::user_alias_resolves`.
+
+---
+
+## State
+
+**Landed**, and the four seams this plan left open are all filled — see *The
+seams, and what came to fill them* above, which was rewritten on 2026-09-19 when
+it turned out to still be headed "Stubs standing in for plans not yet written"
+long after plans 05, 06 and 07 had all landed.
+
+- `ToolHost` → `orrery_host::ExtensionTable` (plan 06), with
+  `orrery_mcp::McpHost` as a second implementation.
+- `PolicyCheck` → `orrery_broker::EngineGate` over `PolicyEngine` (plan 07),
+  wired in by `orrery_harness::build::assemble`.
+- `ToolInterceptor` → `orrery_kernel::intercept` (plan 05), typed over every
+  `Phase`.
+- `ExtState` → owned by plan 06's generation-keyed instance table; the copy in
+  this crate is a deliberate hot-path optimisation, kept in step through
+  `Registry::set_state`.
+
+`UnavailableHost` and `AllowAll` remain as the defaults a bare
+`Registry::new()` gets. They are a unit test of the dispatch path and are never
+what the product runs; the doc comments in `src/dispatch.rs` say so at the
+definitions.
+
+The ledger moved to `orrery-audit` in plan 07's wave (`Registry::with_audit`),
+and dispatch emits `AuditEvent::ToolCall` on every exit including the six early
+refusals.

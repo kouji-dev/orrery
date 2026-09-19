@@ -191,3 +191,73 @@ whose items can only be checked after the move is a wish, not a checklist.
 2. **Versioning policy across the boundary. — Still open, deliberately.** If `orrery-ext-api` goes 0.1 → 0.2, every extension needs a bump. This is the `api = "orrery-ext/1"` question from plan 06 open question 3, and it cannot be answered before the manifest freezes: a compatibility window promised over a moving contract is a promise to break. What *is* settled is the mechanism — `api = "orrery-ext/1"` is the major, additions inside it are non-breaking (plan 06 added `BrokerFacade::list` under it), and `SUPPORTED_API_MAJOR` is the one place the host decides. The duration of the window is a phase-2 decision.
 3. **Where do community extensions get listed? — Settled: not here, and not by the registry.** The signed registry is an enterprise pin list; conflating it with discovery would mean either signing things we have not reviewed or refusing to list things that are fine. A public index is a separate, later product decision. `extensions/README.md` says the one-line version: the registry is how you trust an extension, the other sources are how you try one.
 4. **Should `examples/` be published too? — Settled: no.** `native-hello` is `publish = false`, and `publish-check` therefore holds it to none of the publishing rules. Publishing the examples would make `cargo add orrery-ext-example` a starting point at the cost of four names in the crates.io namespace that exist only to be copied. A `cargo generate` template is the better shape and is not urgent: the four examples are four directories a reader can copy today.
+
+---
+
+## The publish order
+
+`cargo publish` refuses a crate whose dependencies are not already on
+crates.io, so a first publish is a sequence, not a batch. Today
+`cargo publish --dry-run` fails for `orrery-ext-api`, `orrery-provider`,
+`orrery-session`, `orrery-memory` and `orrery-grader` for exactly this reason
+and no other: each names `orrery-proto`, which has never been uploaded. There is
+nothing to fix in those crates — `cargo xtask publish-check` is green, and it is
+green correctly.
+
+Publish in this order, waiting for each wave to be live on the index before
+starting the next. Crates within a wave are independent of each other.
+
+| Wave | Crates | Why here |
+|---|---|---|
+| 1 | `orrery-proto` | The wire types. Everything below depends on it and it depends on nothing published. |
+| 2 | `orrery-ext-api`, `orrery-provider`, `orrery-session`, `orrery-grader` | The trait crates an extension author implements. Each names `orrery-proto` and nothing else published. |
+| 3 | `orrery-memory` | Names `orrery-proto` **and** `orrery-session`, so it cannot go in wave 2. |
+
+`orrery-guest` and `orrery-updater` depend on no published crate of ours and can
+go in any wave, including first. `orrery-ade` is the desktop app: it is
+`publish = true` for its own release machinery and does not belong to this
+sequence at all.
+
+Two things that are easy to get wrong:
+
+- **The index lags the upload.** A wave-2 publish started the second wave 1
+  returned will sometimes still fail to resolve `orrery-proto`. Re-run it rather
+  than reaching for `--no-verify`.
+- **A version, once published, is gone.** Yank replaces nothing. Run
+  `cargo xtask publish-check` and a `cargo package` of each crate first — that
+  is the rehearsal, and it needs no network.
+
+### `orrery-ext-api` 0.2.0 is a breaking change
+
+It is the one crate in the list that has been published before, so its bump is
+not bookkeeping. `CredStore` moved *into* it — from copies in
+`orrery-ext-provider-anthropic` and `orrery-ext-provider-openai-compat` — and
+became **async** on the way, because a broker call is async and the sync copies
+could only ever have been backed by a file the crate picked for you. The error
+type changed with it: `ProviderError` became `BrokerError`, so a denial carries
+the rule that refused it.
+
+Under pre-1.0 semver that is a major bump, which is why it is 0.2.0 and not
+0.1.1. `orrery-ext-api/CHANGELOG.md` carries the migration diff; every extension
+naming `orrery-ext-api = "0.1"` must be bumped and rebuilt, not just recompiled.
+
+## State
+
+**Landed.** `extensions/README.md` is the community path end to end,
+`cargo xtask deps-check` and `cargo xtask publish-check` both enforce the rules
+this plan wrote, and four example extensions in four runtimes are in the tree.
+
+**Amended (2026-09-19): `orrery-guest` could not actually be packaged.**
+Task 5 ticked "every `publish = true` crate packages cleanly", and for the SDK
+every community wasm-extension author depends on that was not true:
+`wit_bindgen::generate!` pointed at `../../../wit`, outside the crate directory,
+which `cargo package` does not put in the tarball. The published crate failed to
+read the WIT and then failed to compile — `E0433` on `bindings::orrery`, `E0432`
+on `wit::NodeKind`, `wit::NodeStatus` and `raw::ProcOut`. The `.wit` is now
+vendored at `orrery-guest/wit/`, and `orrery-wit/tests/wit.rs` — which
+`cargo xtask wit-check` runs — fails if that copy ever differs by a byte from
+`harness/wit/orrery-extension.wit`, which stays the one source of truth.
+
+**Added (2026-09-19): the publish order above.** The five remaining dry-run
+failures were being re-diagnosed each round as crate defects. They are not; they
+are first-publish ordering, and the order is now written down.

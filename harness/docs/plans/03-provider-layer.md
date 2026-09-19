@@ -6,7 +6,7 @@
 
 **Crates.** `core/crates/orrery-provider` (published, trait only) · `extensions/crates/orrery-ext-provider-fixture` · `extensions/crates/orrery-ext-provider-anthropic` · `extensions/crates/orrery-ext-provider-openai-compat` (phase 5).
 
-**Depends on.** [`01-proto-shared-types.md`](01-proto-shared-types.md). The `creds` grant it uses is plan 07; until then a dev-only env-var resolver marked `TODO(plan-07)`.
+**Depends on.** [`01-proto-shared-types.md`](01-proto-shared-types.md). The `creds` grant it uses is plan 07, **which landed**: `orrery_ext_api::creds` holds the store, `BrokerCredStore` reads through the grant, and `EnvCredStore` is now a documented development fallback rather than the stand-in this line used to describe.
 
 ---
 
@@ -405,7 +405,7 @@ Three shapes departed from the sketch above, each for a reason worth keeping:
    and share nothing but the grant, and `methods()` on each reports only what
    it actually runs. OpenAI-compatible endpoints get no flow, because "whatever
    you are running" has no authorization server to name.
-3. **Retry policy lives in the kernel** — but *where* do the defaults come from? Profile config (plan 10) is the natural home. Until then a hardcoded bounded backoff in plan 05, marked `TODO(plan-10)`.
+3. **Retry policy lives in the kernel** — but *where* do the defaults come from? **Answered, round 5: the profile, as expected.** Plan 10 landed and config reaches the kernel: `[retry] maxAttempts / baseMs / maxMs / jitter` is read through the profile overlay by `orrery_harness::kernel_config` and handed over as `KernelConfig::retry`. Nothing is hardcoded any more.
 4. **Prompt caching across providers.** `cache_breakpoint` is an Anthropic-shaped idea. OpenAI-compatible endpoints cache implicitly by prefix. Confirm the field degrades to a no-op rather than forcing a bad request.
 
 > **Confirmed, and pinned by a test.** (2026-09-18) `cache_breakpoint` is advice, not an

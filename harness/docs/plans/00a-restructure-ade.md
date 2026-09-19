@@ -252,3 +252,25 @@ Nothing breaks at rest — they share `.git`, and no worktree path moves (the wo
   warnings (dead-code on `pub` items in a `staticlib`/`cdylib` crate,
   `type_complexity`), none introduced here. `cargo clippy -p orrery-ade
   --all-targets` is clean of errors and picks up the root `clippy.toml`.
+
+---
+
+## State
+
+**Landed.** The repository has two roots: `ade/` holds the Tauri 2 + Angular
+desktop app and `harness/` holds the runtime, under one virtual workspace at the
+repo root with `resolver = "2"` and a shared `target/`.
+
+- `default-members = ["ade/src-tauri"]`, so a bare `cargo build` builds the ADE
+  and the harness crates are named with `-p`. This is what keeps a routine ADE
+  build from compiling 40 crates it does not use.
+- The identity the plan promised not to touch was not touched: the app still
+  ships as `Orrery.exe` with the identifier `com.kouji.orrery`, and the crate is
+  still `orrery-ade` (lib `orrery_ade_lib`).
+- Shared version pins live in the root `[workspace.dependencies]`; `clippy.toml`
+  is at the root and applies to both trees.
+- Frontend work runs through `pnpm -C ade`; the root `package.json` is a private
+  passthrough and the pnpm workspace lists `ade` as a package.
+
+No open items. The move is recorded in the project `CLAUDE.md` so a new session
+starts from it rather than rediscovering it.

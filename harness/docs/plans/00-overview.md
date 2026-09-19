@@ -401,3 +401,26 @@ Also flagged, not yet decided:
 - Never two test runners at once.
 - Commits wait for review.
 - Each plan's open questions get answered **in the plan file** when the executor decides them.
+
+---
+
+## State
+
+**Living document, current as of 2026-09-19.** This file is the map rather than
+a wave of work, so it has no task list to tick. What it records is a shape, and
+the shape has held: `core/` · `extensions/` · `clients/` · `xtask/` · `wit/` ·
+`protocol/`, with the dependency direction enforced mechanically by
+`cargo xtask deps-check` rather than by agreement.
+
+Two of its claims have been tested by the rounds since and are worth stating as
+outcomes rather than intentions:
+
+- **The crate table is real.** 37 of the 44 crates it names are reachable from
+  the shipped `orrery` binary, which `orrery-cli/tests/reachable.rs` asserts by
+  driving `CARGO_BIN_EXE_orrery` rather than the libraries.
+- **The dependency rule survived contact.** The two exceptions this file grants
+  — `orrery-harness` as the facade and `orrery-cli` as a binary — are still the
+  only two, and `deps-check` fails rather than warns when a third appears.
+
+The overview is amended in place as decisions land; the per-plan `## State`
+sections carry the wave-by-wave record.

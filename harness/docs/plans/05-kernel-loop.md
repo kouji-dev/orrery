@@ -287,7 +287,7 @@ Files: `src/retry.rs`
 - [x] **Failing test first.** `retry::retryable_is_retried_and_charged` — a fixture stream that fails twice with `RateLimited` then succeeds; assert 3 attempts, all audited, and the backoff time counted against wall clock.
 - [x] `retry::terminal_is_not_retried` — `Auth` fails immediately, one attempt.
 - [x] `retry::exhaustion_is_an_outcome` — after the cap, the turn ends with a typed outcome rather than an error.
-- [x] Implement bounded exponential backoff with jitter. Defaults hardcoded with `TODO(plan-10)`.
+- [x] Implement bounded exponential backoff with jitter. ~~Defaults hardcoded with `TODO(plan-10)`.~~ **Not hardcoded any more (round 5):** plan 10 landed, and `orrery_harness::kernel_config` reads `[retry] maxAttempts / baseMs / maxMs / jitter` off the profile overlay into `KernelConfig::retry`.
 
 ### Task 7 · Cancellation
 
@@ -378,8 +378,9 @@ Files: `src/turn.rs`
    the lower, `max_ms` the lower. One direction, so a profile can make a
    provider less patient and never more.
 
-   Today `RetryPolicy` is one struct on `KernelConfig` with a `TODO(plan-10)`,
-   and `backoff` already obeys a provider's `Retry-After` over its own doubling
+   `RetryPolicy` is one struct on `KernelConfig`, and plan 10 landed: it is
+   filled from the profile overlay rather than hardcoded. The per-provider
+   half stays unbuilt because nothing asks for it; `backoff` already obeys a provider's `Retry-After` over its own doubling
    - which is the per-provider half in the one place it currently matters.
 2. **Compaction attempts = 2.** Arbitrary. Is one enough? Is three ever useful? Decide with a real over-long context.
 

@@ -206,3 +206,29 @@ All four decided while executing this plan. Recorded here rather than renegotiat
   `orrery-harness` exception and a `ok/` fixture that must stay green. `18` extends them.
 - **`orrery-guest`**, the wasm guest SDK named in plan 14, is **not** scaffolded here: it is
   in no table of `00-overview.md`, and plan 14 creates it.
+
+---
+
+## State
+
+**Landed, and since outgrown in the way a scaffold should be.** Every directory
+this plan created exists and holds real code: `harness/core/crates/*`,
+`harness/extensions/`, `harness/clients/`, `harness/xtask/`, `harness/wit/` and
+`harness/protocol/`.
+
+The four xtask subcommands it scaffolded are the part worth recording, because
+three of them were explicitly stubs that exited 0 with "not implemented":
+
+- `deps-check` — real from the start, and still the enforcement point for the
+  dependency direction. Nine tests, one fixture workspace per broken rule.
+- `typegen` — **implemented.** Regenerates `harness/protocol` from the
+  `orrery-proto` schemars derives.
+- `wit-check` — **implemented.** Runs `orrery-wit`'s drift tests: the `.wit`
+  parses, the embedded world matches the file on disk, the frozen shapes match
+  the Rust, and (since 2026-09-19) the guest SDK's vendored copy is byte-identical
+  to the canonical file.
+- `agui-drift` — **implemented**, offline by default, `--fetch` for CI.
+
+`publish-check` was added later and is not in this plan's list; it is plan 18's.
+
+No stubs remain from this wave.

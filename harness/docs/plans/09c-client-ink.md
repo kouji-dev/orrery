@@ -72,7 +72,7 @@ registerRenderer("buildgraph.flamegraph", FlamegraphComponent);
 
 Under a `render` grant (§4.8), sandboxed, and recorded in the ledger. Without a matching renderer, `<Custom>` draws `surface.fallback`. One deny rule degrades every custom surface everywhere.
 
-Phase 4 scope: the registration API and the fallback path. Actually loading third-party bundles is phase 8 territory (it needs the signed registry) — leave the hook and a `TODO(plan-15)`.
+Phase 4 scope: the registration API and the fallback path. **Plan 15 has since landed** — `orrery-registry` verifies ed25519 signatures, and `Aspect::Render` exists — and loading a third party's bundle is *still* not possible from this client, for two reasons that are host-side rather than client-side: no frame or on-disk receipt tells this process which installed bundles verified, and its only contract is `--endpoint` / `$ORRERY_ENDPOINT`, so reaching into `~/.orrery/extensions/` would replace that contract with the filesystem. `src/registry.ts` states both in full. The unblocking change is an install receipt plus a frame naming the verified renderer bundles a session may load.
 
 ---
 
@@ -151,13 +151,13 @@ Files: `test/conformance.test.tsx`
 Files: `src/registry.ts`, `src/surfaces/Custom.tsx`
 
 - [x] **Failing test first.** `custom.falls_back_without_a_renderer`, `custom.uses_a_registered_renderer`.
-- [x] Implement `registerRenderer`; leave loading third-party bundles as `TODO(plan-15)`.
+- [x] Implement `registerRenderer`. Loading third-party bundles is **not** a `TODO(plan-15)` any more: plan 15 landed, and the remaining blockers are host-side, named precisely in `src/registry.ts` and in the section above.
 
 ### Task 9 · Launch integration
 
 Files: `orrery-cli` (plan 17 owns the command; this task owns the contract)
 
-- [x] **Failing test first.** `smoke.ink_renders_a_fixture_turn` — ~~spawn `orrery serve --provider fixture:…`~~, run this client against the endpoint, assert the final frame contains the tool table. **Amended — and the amendment's premise is now stale: `orrery serve` landed with plan 17 and no longer exits 2.** What the test does today is stand a loopback HTTP listener up in-process that speaks the two endpoints `@orrery/client` uses (`POST /control`, `POST /run` as SSE) and replays `conformance/tool-call.jsonl` + the table delta down it. Nothing on the client side is mocked: `AguiSession` → `sessionConnection` → `<App>`, the exact path `orrery --ui ink` takes. When `serve` lands, the one line that changes is the one that starts the server.
+- [x] **Failing test first.** `smoke.ink_renders_a_fixture_turn` — ~~spawn `orrery serve --provider fixture:…`~~, run this client against the endpoint, assert the final frame contains the tool table. **Amended — and the amendment's premise is now stale: `orrery serve` landed with plan 17 and no longer exits 2.** What the test does today is stand a loopback HTTP listener up in-process that speaks the two endpoints `@orrery/client` uses (`POST /control`, `POST /run` as SSE) and replays `conformance/tool-call.jsonl` + the table delta down it. Nothing on the client side is mocked: `AguiSession` → `sessionConnection` → `<App>`, the exact path `orrery --ui ink` takes. `serve` has since landed, and the one line that would change is the one that starts the server — it has deliberately **not** been changed: spawning the real binary would turn this spec into a `serve` integration test and put a second runtime inside a vitest run, where today it exercises the client path and nothing else.
 - [x] Document the `ORRERY_ENDPOINT` contract in the README so a third-party client can copy it.
 
 ---

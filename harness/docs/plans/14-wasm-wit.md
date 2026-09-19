@@ -317,3 +317,31 @@ does not model.
   `{ workspace = true }`: the root pins 0.36, whose generated `export!` emits
   edition-2021 attribute syntax and will not compile inside an edition-2024
   guest. Move it back to the workspace pin once the root moves.
+
+---
+
+## State
+
+**Landed.** `harness/wit/orrery-extension.wit` is the world, `orrery-wit`
+embeds it and freezes the shapes against the Rust, `orrery-host-wasm` generates
+the host bindings from it, and `orrery-guest` is the guest SDK: the broker, the
+`ui` builders and the arena behind them.
+
+- `cargo xtask wit-check` is the drift gate — the `.wit` parses, the embedded
+  world matches the file on disk, and the twelve `NodeKind` variants match the
+  Rust enum from both sides.
+- `wit-bindgen` is pinned at 0.51 in `orrery-guest` rather than at the root's
+  0.36, because 0.36's generated `export!` emits edition-2021 attribute syntax
+  that will not compile in an edition-2024 guest. Move it back to the workspace
+  pin once the root moves.
+
+**Amended (2026-09-19): the guest SDK could not be packaged.** `generate!`
+pointed at `../../../wit`, outside the crate directory, so `cargo package` left
+the `.wit` out of the tarball and the published crate failed to build — "failed
+to read path for WIT", then `E0433` on `bindings::orrery` and `E0432` on
+`wit::NodeKind`, `wit::NodeStatus` and `raw::ProcOut`. This mattered more than
+most packaging bugs because `orrery-guest` is the crate every community
+wasm-extension author depends on. The `.wit` is now vendored at
+`orrery-guest/wit/` and `generate!` reads `"wit"`; the canonical file is still
+`harness/wit/orrery-extension.wit`, and `wit-check` fails if the copy differs by
+a byte. `cargo package -p orrery-guest` builds the tarball standalone.

@@ -161,7 +161,7 @@ expressible at all.
 
 Files: `orrery-eval/src/{case,run,matrix}.rs`
 
-- [x] **Failing test first.** `matrix::expands` — 2 profiles × 2 models × 2 seeds = 8 runs, in a deterministic order.
+- [x] **Failing test first.** `matrix_expands` — 2 profiles × 2 models × 2 seeds = 8 runs, in a deterministic order. (This plan called it `matrix::expands`; it landed as `matrix_expands` in `orrery-eval/tests/run.rs`, which is where to look for it.)
 - [x] `run::defaults_are_reproducible` — a deserialized `EvalRun` with no `memory`/`router` keys has `Off` and `Declared`.
 - [x] Implement.
 
@@ -322,3 +322,21 @@ it goes. The judge grader is not installed: it costs money and this build cannot
    rather than a `BTreeMap<Role, _>`. `orrery_proto::Role` derives no `Ord` and is
    `#[non_exhaustive]`, and adding a derive to a crate this plan does not own is not this
    plan's business.
+
+---
+
+## State
+
+**Landed.** `orrery-eval` builds and runs eval suites, and the CLI reaches it:
+`orrery eval` is implemented, not a `not_implemented` stub.
+
+- The matrix expands profile-major, then model, then seed, and that order is the
+  contract. The test is `matrix_expands` in `orrery-eval/tests/run.rs` — this
+  plan's Task 2 originally named it `matrix::expands`, which is amended in place
+  above.
+- Reproducibility is a property of the run: an `EvalRun` that declares memory or
+  a router is not pinned, and `run::defaults_are_reproducible` holds the
+  defaults (`Off`, `Declared`).
+- Every eval in this repository's suite runs against committed fixtures through
+  the fixture provider. No eval reaches a network or a paid API, which is a
+  precondition a test can hold rather than a convention.
