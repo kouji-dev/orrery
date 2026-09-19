@@ -14,6 +14,14 @@ use crate::provenance::{Fold, Origin, Provenanced, Slot};
 /// One layer's contribution to a key.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Contribution {
+    /// The dotted key this value was read from.
+    ///
+    /// The same as [`Explanation::resolved_from`] for an ordinary scalar, and
+    /// **not** the same when the key asked about names a table: `permissions`
+    /// answers with `permissions.deny`, `profile.fast.permissions.read`, and so
+    /// on, one contribution per leaf. Without it a table's answer would print
+    /// every leaf under the name of the table.
+    pub from: String,
     /// The value, as written.
     pub value: toml::Value,
     /// Where it was written.
@@ -71,7 +79,7 @@ impl fmt::Display for Explanation {
                 writeln!(f)?;
             }
             let layer = format!("{:?}", c.origin.layer).to_lowercase();
-            let key = &self.resolved_from;
+            let key = &c.from;
             if c.in_force {
                 let word = match self.fold {
                     Fold::Union => "in force (union)",
@@ -94,7 +102,7 @@ pub fn explain(values: &Provenanced, key: &str) -> Explanation {
         key: key.to_owned(),
         resolved_from: key.to_owned(),
         fold,
-        contributions: contributions(values, key, fold),
+        contributions: contributions_or_leaves(values, key, fold),
     }
 }
 
@@ -121,14 +129,14 @@ pub fn explain_in(values: &Provenanced, key: &str, profile: Option<&str>) -> Exp
         .fold(&overlaid)
         .or_else(|| values.fold(key))
         .unwrap_or(Fold::Override);
-    let mut from_profile = contributions(values, &overlaid, fold);
+    let mut from_profile = contributions_or_leaves(values, &overlaid, fold);
     if from_profile.is_empty() {
         // Nothing under the profile: the bare key is the whole answer, and the
         // key it was read from is the one that was typed.
         return explain(values, key);
     }
     // Everything the overlay beat, which under an override is all of it.
-    let mut beaten = contributions(values, key, fold);
+    let mut beaten = contributions_or_leaves(values, key, fold);
     if fold == Fold::Override {
         for c in &mut beaten {
             c.in_force = false;
@@ -150,6 +158,7 @@ fn contributions(values: &Provenanced, key: &str, fold: Fold) -> Vec<Contributio
         .iter()
         .enumerate()
         .map(|(i, slot): (usize, &Slot)| Contribution {
+            from: key.to_owned(),
             value: slot.value.clone(),
             origin: slot.origin.clone(),
             // Under a union every layer stays in force; under an override only
@@ -157,6 +166,31 @@ fn contributions(values: &Provenanced, key: &str, fold: Fold) -> Vec<Contributio
             in_force: fold == Fold::Union || i == 0,
         })
         .collect()
+}
+
+/// The same, for a key that names a **table** rather than a value.
+///
+/// `permissions` is not a leaf anywhere: what a layer writes is
+/// `permissions.deny`, and what a profile writes is
+/// `profile.fast.permissions.read`. Asking the explainer for the table got
+/// "not set in any layer" — under `--profile fast` (`read = true`) and under
+/// `--profile careful` (`read = false`) alike — while `permissions explain`
+/// and the turn itself both enforced the shorthand. An explanation that
+/// contradicts the rule set in force is worse than no explanation, so a table
+/// answers with its leaves.
+fn leaves(values: &Provenanced, prefix: &str) -> Vec<Contribution> {
+    let mut out = Vec::new();
+    for key in values.keys_under(prefix) {
+        let fold = values.fold(key).unwrap_or(Fold::Override);
+        out.extend(contributions(values, key, fold));
+    }
+    out
+}
+
+/// A key's own contributions, or — when it names a table — its leaves'.
+fn contributions_or_leaves(values: &Provenanced, key: &str, fold: Fold) -> Vec<Contribution> {
+    let own = contributions(values, key, fold);
+    if own.is_empty() { leaves(values, key) } else { own }
 }
 
 #[cfg(test)]

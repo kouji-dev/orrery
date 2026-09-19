@@ -269,3 +269,47 @@ fn relative(path: &Path, root: &Path) -> String {
         .to_string()
         .replace('\\', "/")
 }
+
+/// `--yes` grants, so nothing was denied, so the install must not say anything
+/// was.
+///
+/// It did: `orrery install ./node-hello --to user --yes` printed "1 capability
+/// request(s) were denied by default; pass --yes to grant them" **after** --yes
+/// had been passed, and then succeeded. The line counted the defaults rather
+/// than the decision, which is a sentence about a code path that did not run —
+/// and the kind of line that makes a person doubt an install that worked.
+#[test]
+fn passing_yes_does_not_then_ask_for_yes() {
+    let home = tempfile::tempdir().unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let pkg = package(work.path(), "granted", "0.1.0", "read = [\"./**\"]");
+
+    let out = run(
+        home.path(),
+        work.path(),
+        &args(
+            &quiet(work.path()),
+            &[
+                "install",
+                &format!("./{}", relative(&pkg, work.path())),
+                "--to",
+                "user",
+                "--yes",
+            ],
+        ),
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("pass --yes"),
+        "--yes was passed: {stderr}"
+    );
+    assert!(
+        !stderr.contains("denied by default"),
+        "and nothing was denied by default: {stderr}"
+    );
+}

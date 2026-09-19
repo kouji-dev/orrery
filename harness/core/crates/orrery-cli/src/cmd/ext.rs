@@ -210,7 +210,15 @@ struct Origin {
 /// What `ext test` was pointed at: a directory, a manifest file, or a name.
 fn resolve(cli: &Cli, target: Option<&Path>) -> (ExtensionManifest, Option<Origin>) {
     let Some(target) = target else {
-        return from_dir(&std::env::current_dir().unwrap_or_else(|e| fail(Exit::Usage, e)));
+        // The global `--workspace <PATH>` says which directory the workspace
+        // root is, and every other command in this binary honours it. This one
+        // read the process cwd, so `orrery --workspace X ext test` tested
+        // whatever directory the shell happened to be in — which meant the
+        // command only worked after a `cd`, and said nothing about why.
+        let dir = cli.workspace.clone().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|e| fail(Exit::Usage, e))
+        });
+        return from_dir(&dir);
     };
     if target.exists() {
         return from_dir(target);

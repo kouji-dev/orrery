@@ -104,7 +104,7 @@ pub fn install(
         Err(e) => fail(Exit::Usage, e),
     };
 
-    print_diff(&record.diff);
+    print_diff(&record.diff, yes);
     println!(
         "installed {} {} into the {} layer at {}",
         record.ext,
@@ -155,7 +155,7 @@ pub fn remove(cli: &Cli, name: &str, from: Option<Layer>) -> ! {
 /// Rendering the `Surface` rather than the rows keeps one description of the
 /// prompt: what a ratatui client draws and what this prints come from the same
 /// value.
-fn print_diff(diff: &GrantDiff) {
+fn print_diff(diff: &GrantDiff, granted: bool) {
     let surface = diff.surface();
     let SurfaceKind::Stack { children, .. } = &surface.kind else {
         return;
@@ -167,11 +167,19 @@ fn print_diff(diff: &GrantDiff) {
             _ => {}
         }
     }
-    let denied = diff
-        .defaults()
-        .into_iter()
-        .filter(|(_, d)| *d == Decision::Deny)
-        .count();
+    // `--yes` is `allow_all`: the defaults were not what decided anything, so
+    // saying they denied something is a sentence about a code path that did not
+    // run. It read "pass --yes to grant them" **after** --yes was passed, which
+    // is the kind of line that makes a person doubt the install that just
+    // succeeded.
+    let denied = if granted {
+        0
+    } else {
+        diff.defaults()
+            .into_iter()
+            .filter(|(_, d)| *d == Decision::Deny)
+            .count()
+    };
     if denied > 0 && !std::io::stdin().is_terminal() {
         let _ = std::io::stdout().flush();
         eprintln!(

@@ -31,6 +31,9 @@ pub fn dispatch(cli: &Cli, command: &ConfigCommand) -> ! {
 
 fn contribution(c: &Contribution) -> serde_json::Value {
     serde_json::json!({
+        // The key this one was read from: a table answers with its leaves, and
+        // they are not all the key that was typed.
+        "from": c.from,
         "value": serde_json::to_value(&c.value).unwrap_or(serde_json::Value::Null),
         "layer": format!("{:?}", c.origin.layer).to_lowercase(),
         "file": c.origin.file.display().to_string(),

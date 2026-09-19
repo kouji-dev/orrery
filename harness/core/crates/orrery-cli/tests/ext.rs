@@ -389,3 +389,113 @@ fn an_unpinned_extension_refuses_to_load_once_the_pin_is_set() {
         "…and the refusal names the file that said so: {stdout}"
     );
 }
+
+/// `--workspace <PATH>` is where the workspace is, for this command too.
+///
+/// `orrery ext test` with no target read the **process cwd** and ignored the
+/// global flag, so it only ever worked after a `cd` into the extension
+/// directory — and said nothing about why it had not found a manifest
+/// somewhere else. Every other command in this binary honours the flag.
+#[test]
+fn test_with_no_target_honours_the_workspace_flag() {
+    let dir = tempfile::tempdir().expect("a temporary extension");
+    std::fs::write(
+        dir.path().join("orrery.toml"),
+        "\
+api = \"orrery-ext/1\"
+runtime = \"native\"
+
+[extension]
+id = \"flagged-ext\"
+version = \"0.1.0\"
+
+[provides]
+tools = [\"hello\"]
+",
+    )
+    .expect("the manifest is writable");
+
+    // No positional target, and the process cwd is this crate, not `dir`.
+    let out = orrery(&[
+        "--workspace".to_owned(),
+        dir.path().display().to_string(),
+        "ext".to_owned(),
+        "test".to_owned(),
+    ]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("flagged-ext"),
+        "it read the manifest the flag pointed at: {stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// A refusal to load is a decision, and a **run** has to record it.
+///
+/// `ext list` and `ext test` both said `skipped` for an unpinned extension
+/// under managed `refuse`, and a fresh run said nothing at all: `audit/*.jsonl`
+/// held two `model.request` lines and not one word about the extension the
+/// session had just refused to load. Section 8 phase 3 says every decision is
+/// logged, and the inspection commands seeing what the run path does not record
+/// is the defect class this round is about.
+#[test]
+fn a_refused_load_is_recorded_by_the_run_that_refused_it() {
+    let home = tempfile::tempdir().expect("a sandboxed home");
+    let work = tempfile::tempdir().expect("a workspace");
+    package(work.path(), "tool", "node");
+
+    let installed = sandboxed(home.path(), work.path(), &["install", "./tool", "--yes"]);
+    assert!(
+        installed.status.success(),
+        "install before the pin: {}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+
+    let managed = home.path().join("ProgramData").join("Orrery");
+    std::fs::create_dir_all(&managed).expect("the managed directory");
+    std::fs::write(
+        managed.join("managed.toml"),
+        "[registry]\nindex = \"https://registry.corp.internal/orrery/index.toml\"\n\
+         unpinned = \"refuse\"\n",
+    )
+    .expect("managed.toml");
+
+    let state = work.path().join(".orrery");
+    let provider = format!("fixture:{}", common::stream("text-turn.jsonl").display());
+    let out = sandboxed(
+        home.path(),
+        work.path(),
+        &[
+            "--state-dir",
+            &state.display().to_string(),
+            "--provider",
+            &provider,
+            "run",
+            "-p",
+            "say something",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "the turn runs without the refused extension: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let mut stream = String::new();
+    for entry in std::fs::read_dir(state.join("audit")).expect("the run wrote an audit directory") {
+        let path = entry.expect("a directory entry").path();
+        stream.push_str(&std::fs::read_to_string(&path).expect("an audit stream"));
+    }
+    let refusal = stream
+        .lines()
+        .find(|l| l.contains("\"ext\":\"tool\""))
+        .unwrap_or_else(|| panic!("the refusal is in the stream: {stream}"));
+    assert!(
+        refusal.contains("\"status\":\"skipped\""),
+        "recorded as the skip it was: {refusal}"
+    );
+    assert!(
+        refusal.contains("managed.toml"),
+        "…and it carries the reason, naming the file that said so: {refusal}"
+    );
+}

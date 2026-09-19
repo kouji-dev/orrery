@@ -555,22 +555,36 @@ pub fn load_refusal(
     if managed.unpinned != Unpinned::Refuse {
         return None;
     }
+    let source = index_clause(&managed.index);
     match receipt {
         Some(r) if r.pinned && !r.development => None,
         Some(r) => Some(format!(
-            "unpinned ({}) — {} sets `registry.unpinned = \"refuse\"`, so only the signed \
-             index at {} may be loaded from",
-            r.reason.map_or("no signature was checked", UnpinnedReason::as_str),
-            managed.file.display(),
-            managed.index,
+            "unpinned ({reason}) — {file} sets `registry.unpinned = \"refuse\"`, so {source}",
+            reason = r.reason.map_or("no signature was checked", UnpinnedReason::as_str),
+            file = managed.file.display(),
         )),
         None => Some(format!(
-            "no install receipt, so nothing about it was ever verified — {} sets \
-             `registry.unpinned = \"refuse\"`, so only the signed index at {} may be \
-             loaded from",
-            managed.file.display(),
-            managed.index,
+            "no install receipt, so nothing about it was ever verified — {file} sets \
+             `registry.unpinned = \"refuse\"`, so {source}",
+            file = managed.file.display(),
         )),
+    }
+}
+
+/// Where a load may come from, as the half-sentence a refusal ends with.
+///
+/// A managed layer may set `unpinned = "refuse"` and name **no index**, and
+/// that is a coherent thing to say: nothing unpinned loads, and there is no
+/// signed source to install from instead. The refusal interpolated the empty
+/// string into its sentence anyway and read "may be loaded from  " — which
+/// points a person at a URL that is not there and stops mid-thought.
+fn index_clause(index: &str) -> String {
+    if index.trim().is_empty() {
+        "nothing unpinned may load, and that layer names no signed index to install from \
+         instead"
+            .to_owned()
+    } else {
+        format!("only the signed index at {index} may be loaded from")
     }
 }
 

@@ -346,3 +346,30 @@ fn install_writes_a_receipt_the_load_path_can_find() {
     orrery_registry::remove(&fixture.layout, "buildgraph", Some(Target::User)).unwrap();
     assert!(!receipt.exists(), "the receipt did not outlive the install");
 }
+
+/// A managed layer may refuse everything unpinned and name **no** index. The
+/// refusal used to interpolate the empty string and end "may be loaded from  ",
+/// pointing a person at a URL that is not there.
+#[test]
+fn a_refusal_with_no_index_does_not_name_an_empty_one() {
+    let m = ManagedRegistry::from_toml(
+        "[registry]\nunpinned = \"refuse\"\n",
+        PathBuf::from("/etc/orrery/managed.toml"),
+    )
+    .unwrap()
+    .unwrap();
+
+    let why = orrery_registry::load_refusal(Some(&m), None).expect("no receipt is not a pass");
+    assert!(
+        !why.contains("index at "),
+        "it must not name an index it does not have: {why}"
+    );
+    assert!(
+        !why.trim_end().ends_with("from"),
+        "and it must not end mid-thought: {why}"
+    );
+    assert!(
+        why.contains("no signed index"),
+        "it says there is none: {why}"
+    );
+}

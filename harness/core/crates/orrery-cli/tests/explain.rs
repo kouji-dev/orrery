@@ -196,3 +196,78 @@ fn config_explain_still_takes_the_raw_dotted_path() {
     assert_eq!(v["key"], "profile.review.model");
     assert_eq!(v["winner"]["value"], "review-model");
 }
+
+/// A profile's permission shorthands are permissions, and `config explain
+/// permissions` has to say so.
+///
+/// It said "permissions: not set in any layer" under `--profile fast`
+/// (`read = true`) and under `--profile careful` (`read = false`) alike, while
+/// `permissions explain` and `run` both **enforced** the shorthand — the
+/// explanation and the rule set disagreeing is exactly the defect the one-rule-
+/// set-two-readers arrangement exists to prevent. The cause: `permissions` is a
+/// table and the explainer only ever looked for a leaf.
+#[test]
+fn config_explain_surfaces_a_profiles_permission_shorthands() {
+    let home = home_with(
+        "[profile.fast.permissions]\n\
+         read = true\n\
+         [profile.careful.permissions]\n\
+         read = false\n",
+    );
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    for (profile, value) in [("fast", true), ("careful", false)] {
+        let out = orrery_in(
+            home.path(),
+            &args(
+                &quiet(ws.path()),
+                &[
+                    "--json",
+                    "--profile",
+                    profile,
+                    "config",
+                    "explain",
+                    "permissions",
+                ],
+            ),
+        );
+        assert!(out.status.success(), "explaining is not a failure");
+        let v = &jsonl(&out.stdout)[0];
+        let winner = &v["winner"];
+        assert_eq!(
+            winner["value"], value,
+            "the shorthand `{profile}` enforces is the one it reports: {v}"
+        );
+        assert_eq!(
+            winner["from"], "profile.{profile}.permissions.read".replace("{profile}", profile),
+            "and it names the key it read, which is not the one that was typed: {v}"
+        );
+        assert!(
+            winner["line"].as_u64().is_some_and(|l| l > 0),
+            "with the file and the line, like any other answer: {v}"
+        );
+    }
+}
+
+/// The same for a `[permissions]` table written straight into a layer, with no
+/// profile in play: a table key answers with its leaves rather than with
+/// "not set in any layer".
+#[test]
+fn config_explain_surfaces_a_permissions_table() {
+    let home = home_with("[permissions]\ndeny = [\"net(domain: *)\"]\n");
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(
+        home.path(),
+        &args(&quiet(ws.path()), &["--json", "config", "explain", "permissions"]),
+    );
+    assert!(out.status.success());
+    let v = &jsonl(&out.stdout)[0];
+    assert_eq!(v["winner"]["from"], "permissions.deny", "{v}");
+    assert!(
+        v["winner"]["value"]
+            .as_array()
+            .is_some_and(|a| a.iter().any(|x| x == "net(domain: *)")),
+        "{v}"
+    );
+}
