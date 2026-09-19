@@ -43,6 +43,8 @@ thiserror = "2.0.18"
 rusqlite = { version = "0.40.0", features = ["bundled"] }
 uuid = { version = "1.23.2", features = ["v4", "v7", "serde"] }
 blake3 = "1"
+# Same version the ADE already resolves. Pure Rust, no network, no build script.
+base64 = "0.22"
 regex = "1"
 semver = "1"
 clap = { version = "4.5", features = ["derive"] }

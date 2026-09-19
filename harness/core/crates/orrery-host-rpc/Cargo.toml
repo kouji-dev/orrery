@@ -13,6 +13,7 @@ orrery-proto = { workspace = true }
 orrery-ext-api = { workspace = true }
 orrery-host = { path = "../orrery-host" }
 orrery-jsonrpc = { path = "../orrery-jsonrpc" }
+base64 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

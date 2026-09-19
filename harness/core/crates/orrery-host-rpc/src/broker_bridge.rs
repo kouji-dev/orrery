@@ -92,11 +92,11 @@ impl Handler for BrokerBridge {
                     .read(ReadRequest::new(&p.path, p.limit).at(p.offset))
                     .await
                     .map_err(to_rpc)?;
-                Ok(serde_json::to_value(protocol::ReadReply {
-                    text: String::from_utf8_lossy(&chunk.bytes).into_owned(),
-                    eof: chunk.eof,
-                    total: chunk.total,
-                })
+                Ok(serde_json::to_value(protocol::ReadReply::from_bytes(
+                    &chunk.bytes,
+                    chunk.eof,
+                    chunk.total,
+                ))
                 .expect("a read reply always serialises"))
             }
             protocol::BROKER_WRITE => {

@@ -4,6 +4,8 @@
 //! The guest half is what `@orrery/ext` implements; the host half is the broker,
 //! and it is the *only* thing a guest can reach.
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as B64;
 use orrery_ext_api::{ToolBudget, ToolDef};
 use orrery_proto::{Aspect, Outcome};
 use serde::{Deserialize, Serialize};
@@ -142,11 +144,16 @@ pub struct ReadParams {
 
 /// What `broker/read` answers.
 ///
-/// Text, not bytes. A JSON string cannot carry arbitrary bytes, and base64 in
-/// every read would cost a third of the bandwidth on the hot path to buy a case
-/// no first-party tool has yet.
+/// Text first. A JSON string cannot carry arbitrary bytes, and base64 in every
+/// read would cost a third of the bandwidth on the hot path — reading source
+/// files — to buy a case most calls do not have.
 ///
-/// TODO(plan-14): binary reads want a `bytes_b64` field beside this one.
+/// So [`ReadReply::bytes_b64`] is **conditional**, not additional: it is filled
+/// in only when the lossy decode actually lost something, which is exactly the
+/// case where `text` alone is a lie. A guest that wants the real bytes reads
+/// `bytes_b64` when it is there and falls back to `text` when it is not; a
+/// guest written before the field existed still parses the reply, because the
+/// field is `Option` and skipped when empty.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ReadReply {
     /// What was read, lossily decoded.
@@ -156,6 +163,57 @@ pub struct ReadReply {
     /// The whole file's size, when known.
     #[serde(default)]
     pub total: Option<u64>,
+    /// The chunk's exact bytes, base64, when `text` could not carry them.
+    ///
+    /// `None` on a read whose bytes were valid UTF-8 — the common case, where
+    /// `text` is already lossless.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes_b64: Option<String>,
+}
+
+impl ReadReply {
+    /// Build a reply from a chunk, encoding only when the decode would lose.
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8], eof: bool, total: Option<u64>) -> Self {
+        match std::str::from_utf8(bytes) {
+            // Lossless already: no base64, no extra third of the bandwidth.
+            Ok(text) => Self {
+                text: text.to_owned(),
+                eof,
+                total,
+                bytes_b64: None,
+            },
+            Err(_) => Self {
+                text: String::from_utf8_lossy(bytes).into_owned(),
+                eof,
+                total,
+                bytes_b64: Some(B64.encode(bytes)),
+            },
+        }
+    }
+
+    /// The exact bytes this reply carries: the base64 when there is some, and
+    /// the text's own bytes when there is not.
+    ///
+    /// # Errors
+    ///
+    /// [`base64::DecodeError`] when `bytes_b64` is not valid base64, which can
+    /// only happen if something other than a host wrote the frame.
+    pub fn bytes(&self) -> Result<Vec<u8>, base64::DecodeError> {
+        match &self.bytes_b64 {
+            Some(encoded) => Self::decode_b64(encoded),
+            None => Ok(self.text.clone().into_bytes()),
+        }
+    }
+
+    /// Decode one `bytes_b64` value.
+    ///
+    /// # Errors
+    ///
+    /// [`base64::DecodeError`] when the value is not valid base64.
+    pub fn decode_b64(encoded: &str) -> Result<Vec<u8>, base64::DecodeError> {
+        B64.decode(encoded)
+    }
 }
 
 /// What `broker/list` is given.
