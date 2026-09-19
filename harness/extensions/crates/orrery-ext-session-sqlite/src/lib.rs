@@ -46,6 +46,11 @@ use crate::writer::{Writer, wait};
 /// The `session` singleton, on SQLite.
 pub struct SqliteSessionStore {
     path: PathBuf,
+    /// The same file in the form every connection is opened with: see
+    /// [`extended`]. Kept beside `path` rather than replacing it, because a
+    /// per-session writer is spawned long after `open` returned and must not
+    /// be the one connection that goes back to the short form.
+    opened: PathBuf,
     reader: Reader,
     leases: LeaseRegistry,
     /// One actor per session, spawned on first write.
@@ -68,12 +73,17 @@ impl SqliteSessionStore {
     /// [`SessionError::Backend`] when SQLite will not open the file.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SessionError> {
         let path = path.as_ref().to_path_buf();
+        // SQLite is handed the extended-length form, never the plain one: see
+        // `extended`. `self.path` keeps what the caller asked for, because that
+        // is the name a person recognises in an error.
+        let opened = extended(&path);
         // Spawning the control writer applies the schema, which is what makes
         // the read-only connection below openable at all.
-        let control = Writer::spawn(path.clone())?;
-        let reader = Reader::open(path.clone())?;
+        let control = Writer::spawn(opened.clone())?;
+        let reader = Reader::open(opened.clone())?;
         Ok(Self {
             path,
+            opened,
             reader,
             leases: LeaseRegistry::new(),
             writers: DashMap::new(),
@@ -109,7 +119,7 @@ impl SqliteSessionStore {
         if let Some(w) = self.writers.get(&session) {
             return Ok(w.clone());
         }
-        let writer = Writer::spawn(self.path.clone())?;
+        let writer = Writer::spawn(self.opened.clone())?;
         Ok(self
             .writers
             .entry(session)
@@ -328,6 +338,42 @@ impl SessionStore for SqliteSessionStore {
     }
 }
 
+/// The form SQLite is given a path in.
+///
+/// Windows' Win32 layer, which SQLite's default VFS calls, refuses a path
+/// longer than `MAX_PATH` (260 characters) unless it arrives in the
+/// extended-length `\\?\` form. The eval runner is where this bit: at a
+/// 244-character workspace the state file reaches 263 characters, and
+/// `orrery eval run` came back with "unable to open database file" - a
+/// perfectly honest filesystem error about a database that was fine.
+///
+/// The conversion is the one Windows documents: fully qualify the path first
+/// (the extended form takes no `.`, `..` or forward slashes), then prefix
+/// `\\?\`, or `\\?\UNC\` for a UNC share. Off Windows, and for a path
+/// that already carries the prefix, this is the identity.
+///
+/// `dunce` is the other half of the same story and deliberately not used here:
+/// it *removes* the prefix for paths that do not need it, which is right for
+/// comparing paths and exactly wrong for opening a long one.
+#[must_use]
+fn extended(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let raw = path.as_os_str().to_string_lossy().into_owned();
+        if raw.starts_with(r"\\?\") || raw.starts_with(r"\\.\") {
+            return path.to_path_buf();
+        }
+        if let Ok(absolute) = std::path::absolute(path) {
+            let text = absolute.as_os_str().to_string_lossy().into_owned();
+            if let Some(share) = text.strip_prefix(r"\\") {
+                return PathBuf::from(format!(r"\\?\UNC\{share}"));
+            }
+            return PathBuf::from(format!(r"\\?\{text}"));
+        }
+    }
+    path.to_path_buf()
+}
+
 /// Build the `session` singleton.
 ///
 /// The direct constructor, for an embedder that has already decided it wants
@@ -343,7 +389,9 @@ impl SessionStore for SqliteSessionStore {
 ///
 /// [`SessionError::Backend`] when the database will not open.
 pub fn build(state_dir: &Path) -> Result<std::sync::Arc<dyn SessionStore>, SessionError> {
-    std::fs::create_dir_all(state_dir).map_err(SessionError::backend)?;
+    // The directory is made through the extended form too: `create_dir_all`
+    // hits the same ceiling one segment earlier than the file does.
+    std::fs::create_dir_all(extended(state_dir)).map_err(SessionError::backend)?;
     Ok(std::sync::Arc::new(SqliteSessionStore::open(
         state_dir.join("sessions.db"),
     )?))
