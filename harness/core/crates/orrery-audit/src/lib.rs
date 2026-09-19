@@ -36,7 +36,7 @@ pub mod sink;
 pub use error::AuditError;
 pub use event::{AuditEvent, AuditRecord, CallOutcome, Verdict};
 pub use layer::{LineSink, MemoryLines, Stream, StreamLayer};
-pub use read::{Query, Scan, scan, scan_str};
+pub use read::{Query, Scan, Streams, scan, scan_str};
 pub use redact::{ContentRef, Digest};
 pub use sink::{AuditSink, FileSink, MemorySink, NullSink, Rotation};
 

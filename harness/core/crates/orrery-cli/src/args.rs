@@ -220,6 +220,10 @@ pub enum Command {
         /// written as.
         #[arg(long, value_name = "RULE")]
         rule: Option<String>,
+        /// Only one stream. Without it, every stream that carries a decision:
+        /// what was loaded and what was refused as well as what was allowed.
+        #[arg(long, value_name = "STREAM")]
+        stream: Option<StreamName>,
         /// Show at most this many, counted from the end.
         #[arg(long, short = 'n', value_name = "N")]
         limit: Option<usize>,
@@ -233,6 +237,32 @@ pub enum Command {
         #[arg(long, short = 'n', value_name = "N")]
         limit: Option<usize>,
     },
+}
+
+/// One of the three audit streams, as `--stream` spells it.
+///
+/// `orrery ledger` reads both decision streams by default. This narrows it to
+/// one, which is the question an operator asks about **retention** — the three
+/// streams are separate files with separate retention — rather than about what
+/// happened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum StreamName {
+    /// What loaded, what degraded and what was refused.
+    Load,
+    /// Decisions, calls and consent. The evidence stream.
+    Audit,
+    /// Counts and timings. Also `orrery telemetry`.
+    Telemetry,
+}
+
+impl From<StreamName> for orrery_audit::layer::Stream {
+    fn from(name: StreamName) -> Self {
+        match name {
+            StreamName::Load => orrery_audit::layer::Stream::Load,
+            StreamName::Audit => orrery_audit::layer::Stream::Audit,
+            StreamName::Telemetry => orrery_audit::layer::Stream::Telemetry,
+        }
+    }
 }
 
 /// `orrery session ...`
@@ -297,6 +327,14 @@ pub enum PermissionsCommand {
         /// A call names one thing; it is not a pattern.
         #[arg(value_name = "CALL")]
         call: String,
+        /// Whose permissions to answer for: `agent` (the default), `agent:<name>`
+        /// for a sub-agent, `ext:<id>` for an extension.
+        ///
+        /// A sub-agent's answer is not the agent's: it inherits, and a rule
+        /// file narrows it. Without this flag the disagreement that emptied a
+        /// sub-agent's tool list could not be seen from outside at all.
+        #[arg(long, value_name = "SUBJECT")]
+        subject: Option<String>,
     },
 }
 

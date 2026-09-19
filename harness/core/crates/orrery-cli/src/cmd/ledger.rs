@@ -15,6 +15,24 @@
 //! written into the same file in the same order, because splitting them at
 //! write time would mean deciding at write time which one a new variant is.
 //!
+//! # A refusal to load is a decision, and it is in this listing
+//!
+//! Decided here, 2026-09-19: **load events belong in the same listing**, not
+//! behind a flag. `orrery ledger` is the one command that answers "what did
+//! this harness decide", and an operator asking it should not have to know
+//! that a refusal to load is filed in a different stream from a refusal to
+//! write. The three streams are separate *files* because they have separate
+//! retention — that is a storage decision, not a query one — so `--stream`
+//! exists to narrow to one when retention is the actual question.
+//!
+//! What made this a defect rather than a preference: `AuditEvent::ExtensionLoad`
+//! is `Stream::Load`, this command named `Stream::Audit`, and **no command in
+//! the binary named `Load` at all**. A run under managed `unpinned = "refuse"`
+//! wrote the refusal, `orrery ext list` printed it, and `orrery ledger` said
+//! "nothing matched". The fix is not a second stream name in this file: which
+//! streams carry decisions is [`Stream::is_decision`]'s answer, asked through
+//! [`Streams::Decisions`], so a stream added later cannot be forgotten here.
+//!
 //! # One file per session
 //!
 //! A run writes `<state-dir>/audit/<session>.jsonl`; see
@@ -35,10 +53,10 @@
 use std::path::PathBuf;
 
 use orrery_audit::layer::Stream;
-use orrery_audit::{AuditEvent, AuditRecord, Query, Scan};
+use orrery_audit::{AuditEvent, AuditRecord, Query, Scan, Streams};
 use orrery_proto::Subject;
 
-use crate::args::Cli;
+use crate::args::{Cli, StreamName};
 use crate::cmd::layers;
 use crate::exit::{Exit, fail};
 
@@ -48,6 +66,7 @@ pub fn ledger(
     session: Option<&str>,
     subject: Option<&str>,
     rule: Option<&str>,
+    stream: Option<StreamName>,
     limit: Option<usize>,
 ) -> ! {
     let subject = subject.map(|s| {
@@ -55,7 +74,7 @@ pub fn ledger(
             .unwrap_or_else(|e| fail(Exit::Usage, e))
     });
     let query = Query {
-        stream: Some(Stream::Audit),
+        streams: stream.map_or(Streams::Decisions, |one| Streams::Only(one.into())),
         subject,
         rule: rule.map(str::to_owned),
         limit,
@@ -66,7 +85,7 @@ pub fn ledger(
 /// Query the telemetry stream.
 pub fn telemetry(cli: &Cli, session: Option<&str>, limit: Option<usize>) -> ! {
     let query = Query {
-        stream: Some(Stream::Telemetry),
+        streams: Streams::Only(Stream::Telemetry),
         limit,
         ..Query::default()
     };
@@ -182,7 +201,22 @@ fn line(record: &AuditRecord) -> String {
         AuditEvent::RoutingDecision { chose, signals } => {
             format!("route {chose} ({} signals)", signals.len())
         }
-        AuditEvent::ExtensionLoad { ext, status, .. } => format!("load  {ext} {status}"),
+        // The reason matters as much as the status: a `skipped` with nothing
+        // after it is the listing saying a decision was made and refusing to
+        // say why.
+        AuditEvent::ExtensionLoad {
+            ext,
+            status,
+            problems,
+            ..
+        } => {
+            let mut out = format!("load  {ext} {status}");
+            for problem in problems {
+                out.push_str(&format!("
+    {problem}"));
+            }
+            out
+        }
         AuditEvent::Content { action, .. } => format!("content {action}"),
         // `AuditEvent` is `#[non_exhaustive]`. A variant this build does not
         // know how to render is still evidence; print its tag.

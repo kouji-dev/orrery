@@ -140,8 +140,10 @@ fn a_real_turn_calls_a_declared_mcp_tool() {
 /// The same declaration, seen by the audit stream: an MCP server contributes
 /// its tools through the ordinary extension door, as `mcp.<server>`.
 ///
-/// The load stream is the one `orrery ext list` reads and `orrery ledger` does
-/// not, so this reads the `.jsonl` the run itself wrote.
+/// This reads the `.jsonl` the run itself wrote, because the claim is about
+/// what the **run** recorded rather than about what a reader can select. The
+/// same record is in `orrery ledger` — every stream that carries a decision is
+/// — and `ledger::a_refused_load_is_in_the_ledger` is that half.
 #[test]
 fn the_admitted_tools_are_recorded_as_an_extension_load() {
     let home = home(None);

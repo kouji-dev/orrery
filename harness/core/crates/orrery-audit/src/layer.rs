@@ -40,6 +40,29 @@ impl Stream {
         }
     }
 
+    /// Whether this stream carries **decisions** rather than counts.
+    ///
+    /// The one definition of the word. `orrery ledger` is the operator command
+    /// for "what did this harness decide", and it selects streams through
+    /// [`crate::Streams::Decisions`], which asks this — so the listing cannot
+    /// drift from the streams again. It did: a refusal to load is a decision,
+    /// it is written to [`Stream::Load`], and the ledger queried
+    /// [`Stream::Audit`] alone, so the one command an operator has for the
+    /// question answered "nothing matched" while the file held the refusal.
+    ///
+    /// A stream added later has to answer this here, in one place, rather than
+    /// in every command that reads the ledger.
+    #[must_use]
+    pub const fn is_decision(self) -> bool {
+        match self {
+            // What loaded and what was refused: both are decisions.
+            Stream::Load | Stream::Audit => true,
+            // Counts and timings, lossy on purpose. `orrery telemetry` is its
+            // own command because a count is not evidence.
+            Stream::Telemetry => false,
+        }
+    }
+
     /// The stream a `tracing` target belongs to, if any.
     ///
     /// A target is in a stream when it *is* the prefix or begins with the prefix

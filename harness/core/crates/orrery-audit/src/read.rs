@@ -29,15 +29,46 @@ use crate::error::AuditError;
 use crate::event::{AuditEvent, AuditRecord};
 use crate::layer::Stream;
 
+/// Which streams a query reads.
+///
+/// **Not an `Option<Stream>`.** It was, and that is how `orrery ledger` came to
+/// hide a decision: it named [`Stream::Audit`], a refusal to load is written to
+/// [`Stream::Load`], and no command in the binary named `Load` at all. A
+/// caller that wants "every decision" now says so, and which streams that means
+/// is [`Stream::is_decision`]'s answer rather than a list each caller keeps.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum Streams {
+    /// Every record in the file, whatever stream it belongs to.
+    #[default]
+    All,
+    /// Every stream that carries decisions. What `orrery ledger` reads.
+    Decisions,
+    /// Exactly one, for an operator who is asking about retention rather than
+    /// about what happened.
+    Only(Stream),
+}
+
+impl Streams {
+    /// Whether records of this stream are selected.
+    #[must_use]
+    pub fn contains(self, stream: Stream) -> bool {
+        match self {
+            Streams::All => true,
+            Streams::Decisions => stream.is_decision(),
+            Streams::Only(one) => one == stream,
+        }
+    }
+}
+
 /// What to select out of a stream.
 ///
-/// Every field is an `Option`, and `None` means "do not filter on this". The
-/// default selects everything, which is what `orrery ledger` with no flags is.
+/// Every field but [`Query::streams`] is an `Option`, and `None` means "do not
+/// filter on this". The default selects everything.
 #[derive(Clone, Debug, Default)]
 pub struct Query {
-    /// Only records belonging to this stream. `orrery ledger` passes
-    /// [`Stream::Audit`], `orrery telemetry` passes [`Stream::Telemetry`].
-    pub stream: Option<Stream>,
+    /// Which streams to read. `orrery ledger` passes [`Streams::Decisions`],
+    /// `orrery telemetry` passes [`Streams::Only(Stream::Telemetry)`](Streams::Only).
+    pub streams: Streams,
     /// Only decisions and spawns by this subject, spelled the way
     /// [`Subject`] displays: `agent`, `ext:<id>`, `agent:<name>`.
     pub subject: Option<Subject>,
@@ -54,14 +85,12 @@ impl Query {
     /// Whether one record is selected.
     #[must_use]
     pub fn matches(&self, record: &AuditRecord) -> bool {
-        if let Some(stream) = self.stream {
-            if record.event.stream() != stream {
-                return false;
-            }
+        if !self.streams.contains(record.event.stream()) {
+            return false;
         }
         if let Some(subject) = &self.subject {
             match subject_of(&record.event) {
-                Some(found) if found == subject => {}
+                Some(found) if &found == subject => {}
                 _ => return false,
             }
         }
@@ -132,17 +161,23 @@ pub fn scan_str(text: &str, query: &Query) -> Scan {
 
 /// Who did it, for the variants that name somebody.
 ///
-/// Not every event has a subject — a model request and an extension load do
-/// not — and a `--subject` filter therefore *excludes* them rather than
-/// matching everything. That is the right way round: asking "what did `ext:git`
-/// do" should not hand back the whole stream.
+/// Not every event has a subject — a model request does not — and a
+/// `--subject` filter therefore *excludes* them rather than matching
+/// everything. That is the right way round: asking "what did `ext:git` do"
+/// should not hand back the whole stream.
+///
+/// An extension load **does** name somebody: the extension. It used to be left
+/// out here, which meant `orrery ledger --subject ext:git` could not show the
+/// refusal that stopped `git` loading — the one record about `ext:git` in the
+/// whole file.
 #[must_use]
-pub fn subject_of(event: &AuditEvent) -> Option<&Subject> {
+pub fn subject_of(event: &AuditEvent) -> Option<Subject> {
     match event {
         AuditEvent::CapabilityDecision { subject, .. } | AuditEvent::SubAgentSpawn {
             parent: subject,
             ..
-        } => Some(subject),
+        } => Some(subject.clone()),
+        AuditEvent::ExtensionLoad { ext, .. } => Some(Subject::Ext(ext.clone())),
         _ => None,
     }
 }
@@ -216,19 +251,94 @@ mod tests {
         let ledger = scan_str(
             &text,
             &Query {
-                stream: Some(Stream::Audit),
+                streams: Streams::Only(Stream::Audit),
                 ..Query::default()
             },
         );
         let telemetry = scan_str(
             &text,
             &Query {
-                stream: Some(Stream::Telemetry),
+                streams: Streams::Only(Stream::Telemetry),
                 ..Query::default()
             },
         );
         assert_eq!(ledger.records.len(), 2);
         assert_eq!(telemetry.records.len(), 1);
+    }
+
+    /// `orrery ledger` reads every stream that carries a decision, and a
+    /// refusal to load is one. Telemetry is not.
+    #[test]
+    fn decisions_are_every_stream_that_carries_one() {
+        let sink = MemorySink::new();
+        sink.append(AuditEvent::ExtensionLoad {
+            ext: "git".parse().expect("an ext id"),
+            status: "skipped".to_owned(),
+            contributions: Vec::new(),
+            problems: vec!["managed.toml refuses unpinned extensions".to_owned()],
+        });
+        sink.append(AuditEvent::ModelRequest {
+            model: "fixture".to_owned(),
+            input_tokens: 1,
+            output_tokens: 1,
+        });
+        sink.append(AuditEvent::ConsentAnswer {
+            prompt: orrery_proto::PromptId::new(),
+            answer: "allow-once".to_owned(),
+        });
+        let text = sink.to_jsonl();
+
+        let decisions = scan_str(
+            &text,
+            &Query {
+                streams: Streams::Decisions,
+                ..Query::default()
+            },
+        );
+        assert_eq!(
+            decisions.records.len(),
+            2,
+            "the load and the consent, not the count: {:#?}",
+            decisions.records
+        );
+        assert!(
+            decisions
+                .records
+                .iter()
+                .any(|r| matches!(r.event, AuditEvent::ExtensionLoad { .. })),
+            "the refusal is one of them"
+        );
+
+        // And the load stream is reachable on its own, for retention questions.
+        let only = scan_str(
+            &text,
+            &Query {
+                streams: Streams::Only(Stream::Load),
+                ..Query::default()
+            },
+        );
+        assert_eq!(only.records.len(), 1);
+    }
+
+    /// An extension load names the extension, so a subject filter finds the
+    /// one record in the file that is about it.
+    #[test]
+    fn a_load_is_findable_by_the_extension_it_is_about() {
+        let sink = MemorySink::new();
+        sink.append(AuditEvent::ExtensionLoad {
+            ext: "git".parse().expect("an ext id"),
+            status: "skipped".to_owned(),
+            contributions: Vec::new(),
+            problems: Vec::new(),
+        });
+        let found = scan_str(
+            &sink.to_jsonl(),
+            &Query {
+                subject: Some(Subject::Ext("git".parse().expect("an ext id"))),
+                ..Query::default()
+            },
+        );
+        assert_eq!(found.records.len(), 1);
     }
 
     /// A subject filter picks that subject, and leaves out the events that

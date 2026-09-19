@@ -242,3 +242,121 @@ fn a_tool_name_that_resolved_to_nothing_is_still_logged() {
         "and it is recorded as the failure it was: {refused}"
     );
 }
+
+/// DEFECT 2: a refusal to load is a decision, and `orrery ledger` is where an
+/// operator asks what was decided.
+///
+/// The run recorded it, `orrery ext list` printed it, and `orrery ledger` said
+/// "nothing matched" — because `AuditEvent::ExtensionLoad` is `Stream::Load`
+/// and the ledger queried `Stream::Audit` alone. No command in the binary
+/// exposed the load stream at all, so "every decision is logged" was true of a
+/// file nobody could ask.
+#[test]
+fn a_refused_load_is_in_the_ledger() {
+    let home = tempfile::tempdir().expect("a sandboxed home");
+    let work = tempfile::tempdir().expect("a workspace");
+    let pkg = work.path().join("tool");
+    std::fs::create_dir_all(&pkg).expect("the package directory");
+    std::fs::write(
+        pkg.join("orrery.toml"),
+        "api = \"orrery-ext/1\"\nruntime = \"node\"\n\n\
+         [extension]\nid = \"tool\"\nversion = \"1.2.0\"\n\n\
+         [provides]\ntools = [\"graph\"]\n\n[requires]\nread = [\"./**\"]\n",
+    )
+    .expect("the manifest");
+
+    let installed = sandboxed(home.path(), work.path(), &["install", "./tool", "--yes"]);
+    assert!(
+        installed.status.success(),
+        "install before the pin: {}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+
+    let managed = home.path().join("ProgramData").join("Orrery");
+    std::fs::create_dir_all(&managed).expect("the managed directory");
+    std::fs::write(
+        managed.join("managed.toml"),
+        "[registry]\nindex = \"https://registry.corp.internal/orrery/index.toml\"\n\
+         unpinned = \"refuse\"\n",
+    )
+    .expect("managed.toml");
+
+    let state = work.path().join(".orrery");
+    let provider = format!("fixture:{}", common::stream("text-turn.jsonl").display());
+    let run = sandboxed(
+        home.path(),
+        work.path(),
+        &[
+            "--state-dir",
+            &state.display().to_string(),
+            "--provider",
+            &provider,
+            "run",
+            "-p",
+            "say something",
+        ],
+    );
+    assert!(
+        run.status.success(),
+        "the turn runs without the refused extension: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let out = sandboxed(
+        home.path(),
+        work.path(),
+        &["--state-dir", &state.display().to_string(), "ledger"],
+    );
+    let text = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        text.contains("tool") && text.contains("skipped"),
+        "the refusal an operator has to see is in the ledger: {text}{stderr}"
+    );
+    assert!(
+        text.contains("managed.toml"),
+        "…with the reason that refused it: {text}{stderr}"
+    );
+}
+
+/// And the streams can still be asked for one at a time, because they are kept
+/// apart for retention rather than for querying.
+#[test]
+fn the_ledger_can_be_narrowed_to_one_stream() {
+    let dir = workspace();
+    one_turn(dir.path(), &["tool-call.jsonl", "text-turn.jsonl"]);
+
+    let out = orrery(&args(
+        &base(dir.path(), &[]),
+        &["--json", "ledger", "--stream", "audit"],
+    ));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let rows = jsonl(&out.stdout);
+    assert!(!rows.is_empty(), "the audit stream alone is not empty");
+    assert!(
+        rows.iter().all(|r| r["t"] != "ext.load"),
+        "and it holds no load events: {rows:#?}"
+    );
+}
+
+/// The binary, with a **sandboxed home** and a working directory of its own.
+fn sandboxed(
+    home: &std::path::Path,
+    work: &std::path::Path,
+    argv: &[&str],
+) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_orrery"))
+        .args(argv)
+        .current_dir(work)
+        .env("COLUMNS", "100")
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("ProgramData", home.join("ProgramData"))
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("the orrery binary runs")
+}

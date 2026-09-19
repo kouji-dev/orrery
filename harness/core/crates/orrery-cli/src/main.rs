@@ -86,12 +86,14 @@ fn main() {
             session,
             subject,
             rule,
+            stream,
             limit,
         }) => cmd::ledger::ledger(
             &cli,
             session.as_deref(),
             subject.as_deref(),
             rule.as_deref(),
+            *stream,
             *limit,
         ),
         Some(Command::Telemetry { session, limit }) => {
