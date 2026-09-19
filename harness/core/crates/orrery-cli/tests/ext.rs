@@ -499,3 +499,59 @@ fn a_refused_load_is_recorded_by_the_run_that_refused_it() {
         "…and it carries the reason, naming the file that said so: {refusal}"
     );
 }
+
+/// DEFECT 3: `ext list` checks a manifest and the run path's skip test. It
+/// never boots the guest — so it must not print a word that claims it did.
+///
+/// Observed: an rpc extension listed as `degrade 0.1.0 ok user search,
+/// shellout` while the run path logged
+/// `Failed { stage: Activate, message: "the guest answered ext/load with
+/// something unusable" }` and the turn answered no-such-tool for both its
+/// tools. A listing that says `ok` for that is the same defect class as the
+/// other five this round: two paths that must agree, and only one of them was
+/// right.
+#[test]
+fn list_does_not_claim_a_guest_it_never_started() {
+    let home = tempfile::tempdir().expect("a sandboxed home");
+    let work = tempfile::tempdir().expect("a workspace");
+    std::fs::create_dir_all(home.path().join("ProgramData")).expect("a sandboxed ProgramData");
+    package(work.path(), "degrade", "node");
+
+    let installed = sandboxed(home.path(), work.path(), &["install", "./degrade", "--yes"]);
+    assert!(
+        installed.status.success(),
+        "install: {}",
+        String::from_utf8_lossy(&installed.stderr)
+    );
+
+    let listed = sandboxed(home.path(), work.path(), &["ext", "list"]);
+    let listing = String::from_utf8_lossy(&listed.stdout);
+    let line = listing
+        .lines()
+        .find(|l| l.starts_with("degrade  "))
+        .unwrap_or_else(|| panic!("the extension is not listed: {listing}"));
+    assert!(
+        line.contains("guest not started"),
+        "the listing says what it did not check: {listing}"
+    );
+    assert!(
+        listing.contains("orrery ext test degrade"),
+        "…and how to check it: {listing}"
+    );
+}
+
+/// The other half: a bundle this build compiled in has **no guest to start**,
+/// so it is not hedged. `register_native` registered it at build time.
+#[test]
+fn a_compiled_in_bundle_is_not_hedged() {
+    let out = orrery(&["ext".to_owned(), "list".to_owned()]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let line = stdout
+        .lines()
+        .find(|l| l.starts_with("builtin  "))
+        .unwrap_or_else(|| panic!("the builtin bundle is not listed: {stdout}"));
+    assert!(
+        !line.contains("guest not started"),
+        "there is nothing to start: {line}"
+    );
+}

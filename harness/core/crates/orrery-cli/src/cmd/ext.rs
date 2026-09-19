@@ -15,6 +15,18 @@
 //! only the compiled-in set is how somebody installs an extension, runs the one
 //! command named after listing them, and does not see it.
 //!
+//! # The status word says how far the command looked
+//!
+//! `ext list` reads a manifest and runs the run path's own skip test. **It does
+//! not boot the guest**, and it printed `ok` anyway: an rpc extension was
+//! listed `degrade 0.1.0 ok user search, shellout` while the run path logged
+//! `Failed { stage: Activate }` and the turn answered no-such-tool for both
+//! its tools. So the word is no longer chosen from what happens to be in
+//! scope — [`report`] takes a [`Checked`] saying how far the caller actually
+//! went, and derives the word from it. `ext list` can only pass
+//! [`Checked::ManifestOnly`], which cannot print an unqualified `ok`; only a
+//! caller holding a real [`LoadOutcome`] can.
+//!
 //! `ext test` therefore takes a name as well as a path. A compiled-in bundle has
 //! no `orrery.toml` anywhere on disk - its manifest is a value its Rust returns
 //! - so `orrery ext test builtin` cannot be a path, and used to fail with
@@ -66,9 +78,9 @@ fn list(cli: &Cli) -> ! {
     let compiled = compiled_in();
     for manifest in &compiled {
         // A compiled-in bundle is registered by `features::register_native`, so
-        // it is live by construction: there is no disk root to gate and no
-        // runtime to find a host for.
-        report(manifest, "builtin", None);
+        // it is live by construction: there is no disk root to gate, no runtime
+        // to find a host for, and no guest to start.
+        report(manifest, "builtin", None, &Checked::CompiledIn);
     }
 
     let managed = orrery_harness::plan::managed_registry();
@@ -79,7 +91,15 @@ fn list(cli: &Cli) -> ! {
             &found.root,
             managed.as_ref(),
         );
-        report(&found.manifest, &found.layer, skip.as_ref());
+        // A listing does not start processes. Saying so is the whole point:
+        // what this checked is the manifest and the skip test, and the word it
+        // prints may not claim more than that.
+        report(
+            &found.manifest,
+            &found.layer,
+            skip.as_ref(),
+            &Checked::ManifestOnly,
+        );
     }
 
     if compiled.is_empty() && installed.is_empty() {
@@ -127,7 +147,27 @@ fn test(cli: &Cli, target: Option<&Path>) -> ! {
         None => orrery_ext_api::testing::load_parsed_for_test(manifest.clone(), &refs),
     };
     let outcome = harness.load_outcome();
-    report(&manifest, "", skip.as_ref());
+
+    // For a runtime this build hosts, the manifest is only half the answer:
+    // start the guest through the very host a session would use. This is what
+    // catches an extension that parses, lists its tools, and then cannot
+    // activate — the node worked example could not resolve its SDK and `ext
+    // test` still said `ok`. It happens **before** the report, so the status
+    // word is the guest's answer rather than the manifest's.
+    let activated = origin
+        .as_ref()
+        .filter(|_| !is_compiled_in && skip.is_none())
+        .and_then(|origin| activate(&manifest, &origin.root));
+
+    let checked = match (&activated, is_compiled_in) {
+        (Some(real), _) => Checked::Guest(real.clone()),
+        (None, true) => Checked::CompiledIn,
+        // No host for this runtime in this build. The skip above already says
+        // so; hedging is still the honest word for what was checked.
+        (None, false) => Checked::ManifestOnly,
+    };
+
+    report(&manifest, "", skip.as_ref(), &checked);
     println!(
         "no model, no network: {} broker call(s) recorded",
         harness.recorded().len()
@@ -135,28 +175,10 @@ fn test(cli: &Cli, target: Option<&Path>) -> ! {
     if skip.is_some() {
         Exit::TaskFailed.exit();
     }
-
-    // For a runtime this build hosts, the manifest is only half the answer:
-    // start the guest through the very host a session would use. This is what
-    // catches an extension that parses, lists its tools, and then cannot
-    // activate — the node worked example could not resolve its SDK and `ext
-    // test` still said `ok`.
-    if let Some(origin) = origin.as_ref().filter(|_| !is_compiled_in)
-        && let Some(real) = activate(&manifest, &origin.root)
+    if let Some(real) = &activated
+        && !matches!(real, LoadOutcome::Ok { .. } | LoadOutcome::Degraded { .. })
     {
-        match real {
-            LoadOutcome::Ok { .. } => println!("activated: the guest started and registered"),
-            LoadOutcome::Degraded { problems, .. } => {
-                println!("activated: degraded");
-                for problem in problems {
-                    println!("    {problem}");
-                }
-            }
-            other => {
-                println!("did not activate: {}", describe(&other));
-                Exit::TaskFailed.exit();
-            }
-        }
+        Exit::TaskFailed.exit();
     }
 
     match outcome {
@@ -345,11 +367,28 @@ fn manifest_file(dir: &Path) -> PathBuf {
     }
 }
 
+/// How far the caller actually looked.
+///
+/// **The status word is derived from this and nothing else**, which is what
+/// stops a listing claiming a guest it never started. `ext list` has no way to
+/// construct [`Checked::Guest`]: only a caller holding a real [`LoadOutcome`]
+/// from [`activate`] can, and that is `ext test`.
+enum Checked {
+    /// Registered by this build at startup. There is no guest to start, so
+    /// `ok` here is the whole truth.
+    CompiledIn,
+    /// The manifest parsed and the run path's skip test ran. **The guest was
+    /// not started**, so nothing here speaks for what it answers at `ext/load`.
+    ManifestOnly,
+    /// The guest was started through the host a session uses, and answered.
+    Guest(LoadOutcome),
+}
+
 /// One extension, as the ledger prints it: what loaded, what degraded, and why.
 ///
 /// `missing` is the function the real host calls, so a degraded line here says
 /// the same words a session would.
-fn report(manifest: &ExtensionManifest, origin: &str, skip: Option<&Skip>) {
+fn report(manifest: &ExtensionManifest, origin: &str, skip: Option<&Skip>, checked: &Checked) {
     let grants = manifest.capabilities();
     let problems = orrery_ext_api::testing::missing(manifest, &grants);
     let contributions = names(&manifest.contributions());
@@ -358,30 +397,49 @@ fn report(manifest: &ExtensionManifest, origin: &str, skip: Option<&Skip>) {
     } else {
         format!("  {origin}")
     };
-
-    // A skip outranks a degrade: an extension no turn can reach does not have
-    // half its tools, it has none of them.
-    if let Some(skip) = skip {
+    let say = |status: &str| {
         println!(
-            "{}  {}  skipped{origin}  {contributions}",
+            "{}  {}  {status}{origin}  {contributions}",
             manifest.name, manifest.version
         );
+    };
+
+    // A skip outranks everything: an extension no turn can reach does not have
+    // half its tools, it has none of them.
+    if let Some(skip) = skip {
+        say("skipped");
         println!("    {}", skip.why);
         return;
     }
-    if problems.is_empty() {
-        println!(
-            "{}  {}  ok{origin}  {contributions}",
-            manifest.name, manifest.version
-        );
+    // A manifest asking for something no grant covers is a degrade whatever the
+    // guest goes on to say.
+    if !problems.is_empty() {
+        say("degraded");
+        for problem in problems {
+            println!("    {problem}");
+        }
         return;
     }
-    println!(
-        "{}  {}  degraded{origin}  {contributions}",
-        manifest.name, manifest.version
-    );
-    for problem in problems {
-        println!("    {problem}");
+
+    match checked {
+        Checked::CompiledIn | Checked::Guest(LoadOutcome::Ok { .. }) => say("ok"),
+        Checked::ManifestOnly => {
+            say("ok (manifest only; guest not started)");
+            println!(
+                "    run `orrery ext test {}` to start the guest and see what it answers",
+                manifest.name
+            );
+        }
+        Checked::Guest(LoadOutcome::Degraded { problems, .. }) => {
+            say("degraded");
+            for problem in problems {
+                println!("    {problem}");
+            }
+        }
+        Checked::Guest(other) => {
+            say("failed");
+            println!("    {}", describe(other));
+        }
     }
 }
 
