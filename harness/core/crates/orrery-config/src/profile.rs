@@ -27,7 +27,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use orrery_policy::{ConsentMode, PolicyEngine, ResolvedRules, Rule, RuleList};
+use orrery_policy::{ConsentMode, PolicyEngine, ResolvedRules, Rule, RuleList, Source};
 use orrery_proto::{Aspect, Budget, Layer, Subject};
 
 use crate::error::ConfigError;
@@ -55,6 +55,24 @@ pub struct Shorthand {
 }
 
 impl Shorthand {
+    /// The rule it expands to, carrying where it was written.
+    ///
+    /// The source matters: `permissions explain` names the file and the line
+    /// behind a verdict, and a shorthand that dropped its origin reported an
+    /// empty file on line 0 — a rule from nowhere. When the origin has no file
+    /// of its own the profile is named instead, because a profile is a real
+    /// place a person can go and edit.
+    #[must_use]
+    pub fn rule_in(&self, profile: &str) -> Rule {
+        let mut rule = self.rule();
+        rule.source = if self.origin.file.as_os_str().is_empty() {
+            Source::new(format!("<profile: {profile}>"), 0)
+        } else {
+            Source::new(&self.origin.file, self.origin.line)
+        };
+        rule
+    }
+
     /// The rule it expands to.
     #[must_use]
     pub fn rule(&self) -> Rule {
@@ -261,7 +279,11 @@ pub fn rules(
     } else {
         crate::merge::default_builder(root)?
     };
-    let shorthands: Vec<Rule> = profile.permissions.iter().map(Shorthand::rule).collect();
+    let shorthands: Vec<Rule> = profile
+        .permissions
+        .iter()
+        .map(|s| s.rule_in(&profile.name))
+        .collect();
     if !shorthands.is_empty() {
         // The layer is only where the rules sort; a deny is walked before any
         // allow from any layer, so a shorthand deny is not relaxable either.

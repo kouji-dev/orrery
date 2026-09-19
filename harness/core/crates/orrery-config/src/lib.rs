@@ -47,7 +47,9 @@ pub use error::ConfigError;
 pub use explain::Explanation;
 pub use import::Imported;
 pub use layer::{CONFIG_DIR, CONFIG_FILE, ConfigPaths, LayerFile};
-pub use merge::{DEFAULT_PERMISSIONS, IgnoredClaim, MergeReport, Relaxation};
+pub use merge::{
+    DEFAULT_PERMISSIONS, DEFAULT_PERMISSIONS_SOURCE, IgnoredClaim, MergeReport, Relaxation,
+};
 pub use profile::{AgentDef, Assembled, Profile, Shorthand};
 pub use provenance::{Fold, Origin, Provenanced, Slot};
 pub use trust::{TrustDecision, TrustSource, TrustState, TrustStore};

@@ -146,6 +146,15 @@ pub fn policy(root: impl AsRef<Path>, files: &[LayerFile]) -> Result<ResolvedRul
     Ok(rules)
 }
 
+/// What [`DEFAULT_PERMISSIONS`]'s rules name as the file they were written in.
+///
+/// Not a path. `permissions explain` promises the rule, the layer, the file and
+/// the line, and for as long as the default was attributed to
+/// `<workspace>/orrery.toml` it named a file that is not there — sending anyone
+/// who went to look for the rule to a file that does not exist. The line number
+/// stays true: it is the line within this text.
+pub const DEFAULT_PERMISSIONS_SOURCE: &str = "<built-in default>";
+
 /// The permission rules a workspace has when **no layer declares any**.
 ///
 /// Read, write and spawn **inside the workspace**, and every tool that is
@@ -187,7 +196,7 @@ pub fn default_builder(root: impl AsRef<Path>) -> Result<PolicyBuilder, ConfigEr
     let root = root.as_ref();
     Ok(PolicyBuilder::new(root).layer_toml(
         DEFAULT_PERMISSIONS,
-        root.join("orrery.toml"),
+        DEFAULT_PERMISSIONS_SOURCE,
         Layer::Project,
         true,
     )?)
