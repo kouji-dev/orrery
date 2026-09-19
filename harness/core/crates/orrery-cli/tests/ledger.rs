@@ -192,3 +192,53 @@ fn an_empty_state_dir_says_so() {
         "and it says so"
     );
 }
+
+/// A tool call that never reached a tool is still a decision, and the ledger
+/// says so.
+///
+/// The open question this round: a model naming a tool it was not offered
+/// answers `no-such-tool` and the turn still exits 0. The exit code is right —
+/// the model wrote the name, the failure goes back to it as a value, and the
+/// next pass recovers — but the **silence** was not: a run whose only event was
+/// a refused call left `audit/*.jsonl` holding two `model.request` lines and
+/// `orrery ledger` answering "nothing matched". A call the harness refused to
+/// dispatch is a decision the harness made, and section 8 phase 3 says every
+/// decision is logged.
+#[test]
+fn a_tool_name_that_resolved_to_nothing_is_still_logged() {
+    let dir = workspace();
+    let invented = dir.path().join("invented.jsonl");
+    std::fs::write(
+        &invented,
+        "{\"t\":\"started\",\"id\":\"msg_invented\"}\n\
+         {\"t\":\"tool-use-start\",\"call\":\"0192f3a0-0000-7000-8000-0000000000c1\",\"name\":\"builtin.raed\"}\n\
+         {\"t\":\"tool-use-delta\",\"call\":\"0192f3a0-0000-7000-8000-0000000000c1\",\"json_fragment\":\"{\\\"path\\\":\\\"Cargo.toml\\\"}\"}\n\
+         {\"t\":\"tool-use-end\",\"call\":\"0192f3a0-0000-7000-8000-0000000000c1\"}\n\
+         {\"t\":\"done\",\"stop\":\"tool-use\"}\n",
+    )
+    .expect("the invented-name stream");
+
+    let mut flags = base(dir.path(), &[]);
+    flags.push("--provider".to_owned());
+    flags.push(format!("fixture:{}", invented.display()));
+    flags.push("--provider".to_owned());
+    flags.push(format!("fixture:{}", common::stream("text-turn.jsonl").display()));
+
+    let run = orrery(&args(&flags, &["run", "-p", "call something that is not there"]));
+    assert!(
+        run.status.success(),
+        "the turn completes — an invented name is the model's mistake, not a crash: {}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let out = orrery(&args(&base(dir.path(), &[]), &["--json", "ledger"]));
+    let rows = jsonl(&out.stdout);
+    let refused = rows
+        .iter()
+        .find(|r| r["t"] == "tool.call" && r["tool"] == "builtin.raed")
+        .unwrap_or_else(|| panic!("the refused call is in the ledger: {rows:#?}"));
+    assert_eq!(
+        refused["outcome"], "failed",
+        "and it is recorded as the failure it was: {refused}"
+    );
+}

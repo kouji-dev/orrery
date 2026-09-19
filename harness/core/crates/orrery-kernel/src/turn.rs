@@ -879,6 +879,21 @@ impl Kernel {
                         did_you_mean.join(", ")
                     )
                 };
+                // A name that reached no tool is still a **decision this
+                // harness made**, and section 8 phase 3 says every decision is
+                // logged. It was not: a run whose only event was a refused call
+                // left the audit stream holding two `model.request` lines and
+                // `orrery ledger` answering "nothing matched", so the one thing
+                // that had happened was the one thing nothing recorded. The
+                // turn's exit code is deliberately left alone — the model wrote
+                // the name, the failure goes back to it as a value, and the next
+                // pass recovers.
+                self.audit.append(AuditEvent::tool_call(
+                    call.call,
+                    name.clone(),
+                    &pending.input,
+                    CallOutcome::Failed,
+                ));
                 self.append_result(
                     lease,
                     call.call,
@@ -895,6 +910,14 @@ impl Kernel {
             // been taught about is not a licence to dispatch on a guess: the
             // call settles, and the model is told the name did not resolve.
             other => {
+                // Same argument as the unknown name above: nothing was
+                // dispatched, and that is a decision rather than a non-event.
+                self.audit.append(AuditEvent::tool_call(
+                    call.call,
+                    pending.name.clone(),
+                    &pending.input,
+                    CallOutcome::Failed,
+                ));
                 self.append_result(
                     lease,
                     call.call,
@@ -1072,6 +1095,23 @@ impl Kernel {
             // Everything above this is stable from pass to pass. The volatile
             // suffix — recalled, history, the newest message — begins after it.
             let cache_breakpoint = system.len();
+
+            // What the model is actually being told, by section. This is the
+            // only place that knows, and until it said so there was no way at
+            // all to ask the running binary whether a discovered `SKILL.md`
+            // reached a turn — which is how `KernelConfig::skills` went several
+            // rounds with nothing filling it and nobody noticing.
+            tracing::debug!(
+                target: "orrery.kernel.context",
+                sections = %system
+                    .iter()
+                    .map(|s| format!("{}({})", s.name, s.text.chars().count()))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                tools = tools.len(),
+                skills = self.config.skills.len(),
+                "the system prompt this pass carries"
+            );
 
             let draft = ContextDraft {
                 system,
