@@ -271,6 +271,19 @@ that matters most: the *neighbouring* session is untouched. There is no
 - The conformance suite passes against both the in-test memory store and SQLite.
 - The crash test demonstrably loses ≤ 1 turn.
 - The parent-join test completes rather than hanging.
+- **A state directory past Windows' `MAX_PATH` opens, and appends — added 2026-09-19.**
+  `long_path::a_state_dir_past_max_path_still_opens`. At a 244-character workspace the
+  state file reaches 263 characters and `orrery eval run` exited 6 with "session store
+  backend failed: unable to open database file". Nothing was wrong with the database:
+  SQLite's Win32 VFS stops at 260 characters unless the path arrives in the
+  extended-length `\\?\` form, and this store handed it the plain one. Every connection
+  now gets the converted path, `self.path` keeps what the caller asked for (it is the
+  name a person recognises in an error), and the field is `opened` rather than a
+  conversion inside `open` because the **per-session writer is spawned on the first
+  append**, long after `open` returned — converting only in `open` left that one
+  connection short and the run still died, one layer further in. `dunce` is the other
+  half of the same story and deliberately unused here: it *removes* the prefix, which is
+  right for comparing paths and exactly wrong for opening a long one.
 
 ## Open questions
 
