@@ -93,7 +93,10 @@ fn report(cli: &Cli, which: &str) -> RunReport {
 fn run(cli: &Cli, suite: &str, profiles: &[String], models: &[String], format: Option<&str>) -> ! {
     let suite = load_suite(suite);
     let matrix = Matrix::new(profiles.to_vec(), models.to_vec());
-    let points = matrix.expand();
+    // The suite's `[adapter.<id>]` blocks are points as well. `EvalRunner::run`
+    // expands the same list, so the bindings below and the run cannot disagree
+    // about what the suite asked for.
+    let points = matrix.expand_with_adapters(suite.adapter_ids());
 
     // One kernel's worth of wiring — a store, a provider, a policy engine — and
     // then the eval runner over it. `cmd::session` is what refuses when no
@@ -132,6 +135,11 @@ fn run(cli: &Cli, suite: &str, profiles: &[String], models: &[String], format: O
     // because a matrix whose points are secretly identical is a matrix that
     // reports agreement it did not measure.
     for point in &points {
+        // A competitor's point is not ours to bind a provider to: it is driven
+        // by `with_adapters` below, out of the suite's own declaration.
+        if suite.adapters.contains_key(&point.profile) {
+            continue;
+        }
         let mut bindings = HashMap::new();
         bindings.insert(
             Role::Executor,
@@ -149,6 +157,13 @@ fn run(cli: &Cli, suite: &str, profiles: &[String], models: &[String], format: O
             )),
         );
     }
+    // The competing harnesses the suite named. No key and no network of ours is
+    // involved: this starts a binary that is already installed, reads what it
+    // prints, and labels the cost as that tool's own. A block naming a CLI that
+    // is not on `PATH` is refused here, before a single case has run.
+    runner = runner
+        .with_adapters(&suite, store.clone())
+        .unwrap_or_else(|e| fail(Exit::Usage, e));
 
     let spec = EvalRun::new(suite.name.clone(), matrix);
     let report = harness
@@ -201,12 +216,17 @@ fn emit(cli: &Cli, report: &RunReport, format: Option<&str>) {
             println!("{}", report.reproducibility.describe());
             for r in &report.results {
                 let score = r.score.map_or_else(String::new, |s| format!("  {s:.2}"));
+                // The provenance rides with the number, never behind a flag: a
+                // competitor's total and ours on adjacent lines without it
+                // would read as two measurements of the same kind.
                 println!(
-                    "{:?}  {}  {} turns, {} tool calls{score}",
+                    "{:?}  {}  {} turns, {} tool calls{score}  [{} tokens, {}]",
                     r.outcome,
                     r.key(),
                     r.turns,
-                    r.tool_calls
+                    r.tool_calls,
+                    r.cost.total_tokens(),
+                    r.cost_provenance.label(),
                 );
             }
             println!("{}/{} passed", report.passed(), report.results.len());

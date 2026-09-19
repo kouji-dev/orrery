@@ -272,7 +272,25 @@ Files: `orrery-eval/src/junit.rs`
 - [x] `cargo test -p orrery-grader -p orrery-eval -p orrery-ext-graders` green. 63 tests.
 - [x] One suite runs against two profiles and one competing harness with the same graders —
   `adapter::one_suite_two_profiles_one_competitor`, the competitor stubbed by a fake binary
-  because nothing here may call a real agent CLI.
+  because nothing here may call a real agent CLI. **And from the binary, 2026-09-19:** the
+  library half above was green while nothing a suite could *say* reached it — `run.rs`,
+  `case.rs` and `matrix.rs` between them mentioned `adapter` once, in a doc comment. A
+  suite now declares its competitor in `[adapter.<id>]`, `Matrix::expand_with_adapters`
+  grows the point, `EvalRunner::with_adapters` binds it, and `orrery eval run` puts both
+  harnesses in one report:
+
+  ```text
+  Fail  writes-a-file·careful/profile-default  1 turns, 0 tool calls  0.00  [823 tokens, measured at the provider boundary]
+  Pass  writes-a-file·fake-agent/profile-default  1 turns, 0 tool calls  1.00  [1540 tokens, reported by fake-agent]
+  Fail  writes-a-file·fast/profile-default  1 turns, 0 tool calls  0.00  [823 tokens, measured at the provider boundary]
+  ```
+
+  The competitor is a fake `.cmd` in a temporary directory in the tests too — `eval.rs`'s
+  `a_suite_puts_a_competing_harness_beside_ours`, `the_text_report_labels_whose_number_each_one_is`
+  and `two_cross_runs_compare` — because **no real agent CLI is started and no key exists**.
+  A bare `[adapter.claude]` takes its argv from `known_adapter`, the ADE's own; an id with
+  no known argv and no `command` is refused by name, and so is a `command` whose program is
+  not on `PATH` — both before the first case runs, not an hour into a suite.
 - [x] Cost numbers are read at the provider boundary, provably: no API accepts a `Usage`,
   and the estimator probe is asked nothing for a whole run.
 - [x] A failed case opens with `replay::replay` — **as a library call.**
@@ -297,6 +315,17 @@ written down in `cmd/eval.rs`:
   provider is the only selectable one. Said out loud in the source, because a matrix
   whose points are secretly identical reports agreement it did not measure. When a real
   provider becomes selectable (plan 10), that binding is the only line that changes.
+  **Amended 2026-09-19:** every point *of ours*. A point whose profile is one of the
+  suite's `[adapter.<id>]` blocks is skipped here and bound by `with_adapters` instead,
+  because a competitor's run is not ours to point a provider at.
+
+**Task 7 amended, 2026-09-19.** Its two boxes were ticked against library tests, and
+`orrery eval run` could reach neither: the suite format had no way to name a competitor.
+The files this adds to the task's list are `orrery-eval/src/{case,matrix,run}.rs` and
+`orrery-cli/src/cmd/eval.rs`. What it deliberately does **not** add is a way to pick the
+competitor's model: an adapter is one matrix point, not one per model and seed, because
+imposing our model axis on another harness would put a label on their run that we did not
+set.
 
 The graders come through `orrery_harness::features::graders`, behind a new `graders`
 feature that is **in the default set**: `orrery-ext-graders` is an extension, `orrery-cli`

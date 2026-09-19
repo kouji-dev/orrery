@@ -21,7 +21,7 @@ use orrery_eval::adapter::{
     parse_reported_cost,
 };
 use orrery_eval::case::{EvalCase, GraderSpec, Suite};
-use orrery_eval::matrix::Matrix;
+use orrery_eval::matrix::{Matrix, MatrixPoint};
 use orrery_eval::report::CostProvenance;
 use orrery_eval::run::{EvalRun, HarnessRunner, RoleBinding};
 use orrery_eval::{CaseRunner, EvalRunner, GradeInput, Grader, Isolator, Score};
@@ -254,4 +254,124 @@ fn a_tool_that_reports_nothing_is_unknown_not_free() {
     // Dollars become micro-USD as an integer, like every other price here.
     let priced = parse_reported_cost("{\"total_cost_usd\":1.5}", ParseMode::Json);
     assert_eq!(priced.usage.micro_usd, Some(1_500_000));
+}
+
+/// The half of the criterion that was built and unreachable.
+///
+/// `ExternalRunner` and `AdapterSpec` shipped and were exported, and nothing a
+/// *suite* could say reached them: `run.rs`, `case.rs` and `matrix.rs` between
+/// them mentioned `adapter` once, in a doc comment. A suite now declares the
+/// competitor in `[adapter.<id>]`, the matrix grows a point for it, and the
+/// runner binds it — which is what makes `orrery eval run` able to put the two
+/// harnesses in one report.
+#[tokio::test]
+async fn a_suite_declares_the_competitor() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let bin = tmp.path().join("bin");
+    std::fs::create_dir_all(&bin).expect("mkdir");
+    let agent = fake_agent(&bin);
+
+    // The suite document, exactly as a repository would commit it — except for
+    // the absolute path, which is how a test drives a competitor without
+    // installing one. `which` takes a path with a separator in it as given.
+    let text = format!(
+        r#"
+name = "cross"
+
+[adapter.fake-agent]
+command = "{agent} --print"
+parse = "json"
+timeout-ms = 30000
+
+[[case]]
+id = "write-a-file"
+prompt = "write out.txt"
+
+[case.workspace]
+kind = "empty"
+
+[case.grade]
+grader = "wrote-the-file"
+"#,
+        agent = agent.display().to_string().replace('\\', "\\\\"),
+    );
+    let suite = Suite::from_toml(&text).expect("the suite parses");
+
+    assert_eq!(
+        suite.adapter_ids(),
+        vec!["fake-agent"],
+        "the suite knows its competitor"
+    );
+
+    // The matrix grows a point for it, after ours, and does not multiply it
+    // across our model axis: their model is not ours to set.
+    let matrix = Matrix::new(["review", "fast"], ["m"]);
+    let points = matrix.expand_with_adapters(suite.adapter_ids());
+    assert_eq!(
+        points.iter().map(MatrixPoint::label).collect::<Vec<_>>(),
+        vec!["review/m", "fast/m", "fake-agent/profile-default"],
+    );
+
+    let store: Arc<dyn SessionStore> = Arc::new(MemoryStore::default());
+    let report = EvalRunner::new(Isolator::new(tmp.path().join("runs")))
+        .with_runner("review", Arc::new(ours(Arc::clone(&store), "big")))
+        .with_runner("fast", Arc::new(ours(Arc::clone(&store), "small")))
+        .with_grader(Arc::new(WroteTheFile))
+        // The one new line of wiring: the suite's own declaration, resolved.
+        .with_adapters(&suite, Arc::clone(&store))
+        .expect("the declared adapter resolves")
+        .run(&EvalRun::new("cross", matrix), &suite)
+        .await
+        .expect("the run");
+
+    assert_eq!(report.results.len(), 3, "two profiles and one competitor");
+    let theirs = report
+        .result("write-a-file", "fake-agent")
+        .expect("the competitor's result");
+    assert_eq!(theirs.outcome, orrery_eval::EvalOutcome::Pass);
+    assert_eq!(
+        theirs.cost_provenance,
+        CostProvenance::ReportedByTool {
+            tool: "fake-agent".to_owned()
+        }
+    );
+    for profile in ["review", "fast"] {
+        assert!(
+            report
+                .result("write-a-file", profile)
+                .unwrap_or_else(|| panic!("no result for {profile}"))
+                .cost_provenance
+                .is_measured()
+        );
+    }
+}
+
+/// A bare `[adapter.claude]` is the ADE's own argv, and an id nobody knows
+/// without a `command` is the person's mistake, said by name.
+#[test]
+fn a_bare_block_falls_back_to_the_known_argv() {
+    let suite = Suite::from_toml(
+        r#"
+name = "cross"
+[adapter.claude]
+"#,
+    )
+    .expect("the suite parses");
+    let specs = suite.adapter_specs().expect("claude is known");
+    assert_eq!(specs.len(), 1);
+    // The id is the block's key, and the command is `known_adapter`'s.
+    assert_eq!(specs[0].id, "claude");
+    assert!(specs[0].command.contains("--output-format json"));
+    assert_eq!(specs[0].parse, ParseMode::Json);
+
+    let unknown = Suite::from_toml(
+        r#"
+name = "cross"
+[adapter.nothing-like-this]
+"#,
+    )
+    .expect("the suite parses");
+    let err = unknown.adapter_specs().expect_err("no argv is knowable").to_string();
+    assert!(err.contains("nothing-like-this"), "{err}");
+    assert!(err.contains("command"), "it says what to write: {err}");
 }

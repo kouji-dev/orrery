@@ -91,6 +91,71 @@ impl AdapterSpec {
     }
 }
 
+/// One `[adapter.<id>]` block of a suite, before its id is attached.
+///
+/// The id is the block's key rather than a field, which is what makes the
+/// section read the way a person writes it:
+///
+/// ```toml
+/// [adapter.claude]            # the ADE's own argv, by name
+///
+/// [adapter.codex]
+/// command    = "codex exec --json"
+/// parse      = "jsonl"
+/// timeout-ms = 300000
+/// ```
+///
+/// Everything is optional: an id [`known_adapter`] recognises needs no
+/// `command`, because the argv for these three binaries is already knowledge
+/// this crate holds. An id it does not recognise must bring one, and
+/// [`AdapterEntry::resolve`] says so by name rather than guessing.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct AdapterEntry {
+    /// The command line, program first. Omitted for a known id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// How to read what it prints. Omitted takes the known id's answer, and
+    /// [`ParseMode::Json`] for an unknown one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parse: Option<ParseMode>,
+    /// How long one case may take. Omitted is the runner's own default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+}
+
+impl AdapterEntry {
+    /// The full spec for this block, under the id it was written against.
+    ///
+    /// # Errors
+    ///
+    /// [`EvalError::Adapter`] when the id names no CLI this crate knows and the
+    /// block carries no `command`, because the alternative is inventing an
+    /// argv for a binary nobody named.
+    pub fn resolve(&self, id: &str) -> Result<AdapterSpec, EvalError> {
+        let known = known_adapter(id);
+        let command = match (&self.command, &known) {
+            (Some(command), _) => command.clone(),
+            (None, Some(known)) => known.command.clone(),
+            (None, None) => {
+                return Err(EvalError::Adapter {
+                    adapter: id.to_owned(),
+                    detail: "is not a CLI this build knows an argv for — give the block a \
+                             `command`, or name one of `claude`, `codex` or `pi`"
+                        .to_owned(),
+                });
+            }
+        };
+        let parse = self
+            .parse
+            .or_else(|| known.map(|k| k.parse))
+            .unwrap_or_default();
+        // The id stays the suite's, even when the argv came from a known one:
+        // it is what the matrix point and the report are named by.
+        Ok(AdapterSpec::new(id, command, parse))
+    }
+}
+
 /// The non-interactive argv for the three CLIs the ADE already drives.
 ///
 /// Claude Code prints one JSON object with `--print --output-format json`;

@@ -51,7 +51,7 @@ pub mod report;
 pub mod run;
 pub mod telemetry;
 
-pub use adapter::{AdapterSpec, ExternalRunner, ParseMode, ReportedCost};
+pub use adapter::{AdapterEntry, AdapterSpec, ExternalRunner, ParseMode, ReportedCost};
 pub use case::{EvalCase, GraderSpec, Suite, WorkspaceSpec};
 pub use compare::{CompareError, Comparison, Delta, compare};
 pub use conformance::{Singletons, run_conformance};

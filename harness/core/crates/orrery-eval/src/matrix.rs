@@ -111,4 +111,36 @@ impl Matrix {
         }
         out
     }
+
+    /// Every point of the matrix, then one per competing harness.
+    ///
+    /// A competitor is **one** point, not one per model and seed: our model
+    /// axis is a setting we impose on our own runner, and imposing it on
+    /// another harness would put a label on their run that we did not set. So
+    /// an adapter point carries [`DEFAULT_MODEL`] and no seed, and is named by
+    /// its adapter id — which is also the profile name its runner is bound to.
+    ///
+    /// Ours come first and the order within each half is the order above, so
+    /// two runs of one suite still produce results in the same sequence.
+    #[must_use]
+    pub fn expand_with_adapters<'a>(
+        &self,
+        adapters: impl IntoIterator<Item = &'a str>,
+    ) -> Vec<MatrixPoint> {
+        let mut out = self.expand();
+        for id in adapters {
+            // A matrix that already names the adapter as a profile has said the
+            // same thing twice; running it twice would report agreement it did
+            // not measure.
+            if out.iter().any(|p| p.profile == id) {
+                continue;
+            }
+            out.push(MatrixPoint {
+                profile: id.to_owned(),
+                model: DEFAULT_MODEL.to_owned(),
+                seed: None,
+            });
+        }
+        out
+    }
 }

@@ -4,11 +4,13 @@
 //! suite over a team's own monorepo install from the registry like any other
 //! extension and need no special treatment.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use orrery_proto::Budget;
 use serde::{Deserialize, Serialize};
 
+use crate::adapter::{AdapterEntry, AdapterSpec};
 use crate::error::EvalError;
 
 /// Where a case's workspace comes from.
@@ -120,7 +122,7 @@ impl EvalCase {
     }
 }
 
-/// A named list of cases.
+/// A named list of cases, and the competing harnesses to stand beside them.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Suite {
     /// What the suite is called. `orrery eval run <name>`.
@@ -128,6 +130,14 @@ pub struct Suite {
     /// Its cases, in the order they were written.
     #[serde(default, rename = "case")]
     pub cases: Vec<EvalCase>,
+    /// The external agent CLIs this suite runs its cases against as well,
+    /// one `[adapter.<id>]` block each.
+    ///
+    /// A `BTreeMap` rather than a list, so that the section is keyed by the id
+    /// the way TOML writes it and so that two runs of the same suite expand
+    /// their competitors in the same order.
+    #[serde(default, rename = "adapter")]
+    pub adapters: BTreeMap<String, AdapterEntry>,
 }
 
 impl Suite {
@@ -137,7 +147,34 @@ impl Suite {
         Self {
             name: name.into(),
             cases: Vec::new(),
+            adapters: BTreeMap::new(),
         }
+    }
+
+    /// Declare a competing harness.
+    #[must_use]
+    pub fn with_adapter(mut self, id: impl Into<String>, entry: AdapterEntry) -> Self {
+        self.adapters.insert(id.into(), entry);
+        self
+    }
+
+    /// The ids of the competitors, in the order the matrix will add them.
+    #[must_use]
+    pub fn adapter_ids(&self) -> Vec<&str> {
+        self.adapters.keys().map(String::as_str).collect()
+    }
+
+    /// Every competitor's full spec.
+    ///
+    /// # Errors
+    ///
+    /// [`EvalError::Adapter`] when a block names an unknown id and carries no
+    /// `command`.
+    pub fn adapter_specs(&self) -> Result<Vec<AdapterSpec>, EvalError> {
+        self.adapters
+            .iter()
+            .map(|(id, entry)| entry.resolve(id))
+            .collect()
     }
 
     /// Add a case.

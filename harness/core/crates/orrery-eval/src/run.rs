@@ -531,6 +531,42 @@ impl EvalRunner {
         self
     }
 
+    /// Bind an [`ExternalRunner`] for every `[adapter.<id>]` the suite declares.
+    ///
+    /// This is what closes the loop the rest of phase 9 left open: the adapter
+    /// existed, was exported, and nothing a *suite* could say reached it. The
+    /// id becomes the profile name, [`Matrix::expand_with_adapters`] adds the
+    /// point, and the result carries
+    /// [`CostProvenance::ReportedByTool`](crate::report::CostProvenance::ReportedByTool)
+    /// next to a number we did not measure.
+    ///
+    /// A profile already bound wins: an explicit `with_runner` is somebody
+    /// saying exactly what they want, and this must not overrule it.
+    ///
+    /// # Errors
+    ///
+    /// [`EvalError::Adapter`] when a block names an id with no known argv and
+    /// no `command`, or when the program it names is nowhere on `PATH`. Both
+    /// are found here, once, rather than per case an hour into a run.
+    pub fn with_adapters(
+        mut self,
+        suite: &Suite,
+        store: Arc<dyn SessionStore>,
+    ) -> Result<Self, EvalError> {
+        for (id, entry) in &suite.adapters {
+            if self.runners.contains_key(id) {
+                continue;
+            }
+            let spec = entry.resolve(id)?;
+            let mut runner = crate::adapter::ExternalRunner::new(spec, Arc::clone(&store))?;
+            if let Some(ms) = entry.timeout_ms {
+                runner = runner.with_timeout_ms(ms);
+            }
+            self.runners.insert(id.clone(), Arc::new(runner));
+        }
+        Ok(self)
+    }
+
     /// Run every case on every point of the matrix.
     ///
     /// Results come back sorted by [`EvalResult::key`], whatever order they
@@ -541,7 +577,10 @@ impl EvalRunner {
     ///
     /// [`EvalError`] when the runner itself fails. A failing case is a result.
     pub async fn run(&self, spec: &EvalRun, suite: &Suite) -> Result<RunReport, EvalError> {
-        let points = spec.matrix.expand();
+        // The suite's competitors are points too. Expanding them here rather
+        // than in the caller is what makes `[adapter.<id>]` reach a run at all:
+        // every caller shares one answer about what a suite means.
+        let points = spec.matrix.expand_with_adapters(suite.adapter_ids());
         for point in &points {
             if !self.runners.contains_key(&point.profile) {
                 return Err(EvalError::NoRunner {
