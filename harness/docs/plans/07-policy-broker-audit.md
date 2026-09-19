@@ -43,6 +43,47 @@ Borrow [Claude Code's ergonomics](https://code.claude.com/docs/en/permissions): 
 
 Operator set, small on purpose: `*` any text, `**` any depth in a path, trailing `prefix:*`, and `param:value` to match one named input. A `re:` escape hatch exists but is **off by default and warned about at load** — a permission rule nobody can read at a glance is a governance problem rather than a feature.
 
+### The built-in defaults are a **floor**, not a fallback
+
+Decided 2026-09-19, and it is the answer to the ninth instance of one defect
+class. `orrery_config::merge::DEFAULT_PERMISSIONS` —
+`tool(*)`, `read(./**)`, `write(./**)`, `spawn(*)` — used to apply only when
+**no layer declared any permission rule at all**. Declaring one replaced the
+whole set, so a user `config.toml` whose entire content was
+
+```toml
+[permissions]
+allow = ["read(./**)"]
+```
+
+left nothing matching `tool(builtin.read)`, the offered tool list came out
+**empty**, and the run exited 4 — while `permissions explain
+'read(./Cargo.toml)'` answered Allow. The same was true of a workspace file and
+of **the file `orrery init` itself writes**. The user was told their
+configuration was fine while the model silently had no tools.
+
+The rule now, which is the one this plan already states — *a rule file narrows a
+sub-agent, it never widens one* — applied **per aspect**:
+
+- A layer's `allow` or `ask` for an aspect says what is **permitted** for that
+  aspect, and so **replaces** that aspect's floor entirely. Naming one tool
+  offers one tool.
+- A layer's `deny` says what is **refused**, not what is permitted, so it
+  narrows the floor and leaves the rest standing. The alternative turns a
+  managed `deny = ["tool(shell.*)"]` into a workspace with no tools at all.
+- An aspect no layer allows or asks about keeps its floor.
+- "Deny them all" stays expressible, unchanged: `deny = ["tool(*)"]` is walked
+  before any allow from any layer, floor included.
+
+The floor is applied inside `orrery_config::merge::builder` — the **one**
+function both `merge::policy` and `profile::rules` are built from — rather than
+by a caller that remembers to. `merge::any_rules` and `merge::default_builder`
+were deleted with it, because a second construction path that knows a different
+default is how this defect kept coming back. The floor's rules are parsed from
+`DEFAULT_PERMISSIONS` text rather than built in code, so each one carries
+`<built-in default>` and its own line and `permissions explain` can say where
+the verdict came from.
+
 ### Per subject
 
 The part a single-principal harness has no equivalent for.
@@ -341,6 +382,14 @@ Files: `orrery-broker/tests/`
   `orrery-cli/tests/tool_list.rs` is the consequence, asserted through the built
   binary on a real turn: a workspace nobody configured offers a non-empty tool
   list, with the built-in reader in it.
+- **And a workspace somebody *did* configure still has tools.** Added
+  2026-09-19. `tool_list.rs` only ever asserted the **unconfigured** path; every
+  configured one was zero. `orrery-cli/tests/permission_floor.rs` drives the
+  binary for each: a user layer that names only `read`, a trusted workspace
+  layer that names only `read`, the file `orrery init` writes, a layer that
+  names one tool (exactly one is offered), a layer that denies every tool (none
+  is), and a layer that denies *one* tool (the rest survive). The last two are
+  the two directions the floor has to get right at once.
 - No credential value appears anywhere in the audit stream.
 
 ## Open questions

@@ -202,6 +202,56 @@ Files: `src/import.rs`, `tests/import.rs`
 
 ---
 
+### Task 9 · The floor, and a verb for trust
+
+Added 2026-09-19, after the same defect class was found for the ninth and tenth
+time: a subsystem built, tested and exported, and **not reachable** from the
+product.
+
+Files: `src/merge.rs`, `src/trust.rs`, `src/profile.rs`, `src/error.rs`,
+`orrery-cli/src/cmd/trust.rs`, `orrery-cli/src/cmd/init.rs`,
+`orrery-cli/tests/{permission_floor,trust}.rs`
+
+- [x] **Failing test first.** `permission_floor::a_user_layer_that_only_names_read_keeps_its_tools`
+      — a user `config.toml` whose whole content is `[permissions] allow =
+      ["read(./**)"]` made the offered tool list **empty** and the run exit 4,
+      because `DEFAULT_PERMISSIONS` applied only when *no* layer declared any
+      rule and declaring one replaced the set wholesale. Reproduced from the
+      user layer, from a trusted workspace layer, and from **the file `orrery
+      init` itself writes**; `permissions explain 'read(./Cargo.toml)'` answered
+      Allow the whole time.
+- [x] **Decided: the built-in defaults are a floor, per aspect.** A layer's
+      `allow`/`ask` for an aspect replaces that aspect's floor and nothing else;
+      a `deny` narrows the floor without removing it, because a deny says what
+      is refused, not what is permitted. See `merge::DEFAULT_PERMISSIONS`.
+- [x] **The floor lives inside `merge::builder`**, the one function both
+      `merge::policy` and `profile::rules` are built from. `merge::any_rules`
+      and `merge::default_builder` are **deleted**, so there is no second
+      construction path that could know a different default — which is how this
+      kept coming back.
+- [x] `permission_floor::{a_layer_that_names_tools_is_obeyed_exactly,
+      denying_one_tool_leaves_the_rest,
+      explain_and_the_offered_set_answer_from_one_floor,
+      the_file_init_writes_produces_a_working_first_turn}` — all driven through
+      the built binary, off `orrery.kernel.context`, which is the only place
+      that knows what the model was actually told.
+- [x] **`orrery trust grant|revoke|list`.** `TrustStore::record` had one caller
+      inside `resolve` and no CLI verb anywhere, so `init` wrote a workspace
+      layer that nothing could activate short of hand-editing `trust.auto =
+      true` into the user layer. `TrustStore` grew `answers()` and `key_for()`;
+      `trust list` takes `--json`.
+- [x] `init` now says, on stderr, that the file it just wrote is not in force
+      and names `orrery trust grant`. `trust::init_names_the_command_that_activates_what_it_wrote`
+      runs the command the message names.
+- [x] `ConfigError::NoSuchProfile` — `--profile review` was reported against
+      `config.toml:0`, a bare filename that is not a path and a line that is not
+      a line. It names no file, because there is none to name, and lists the
+      profiles that *are* defined with the file and line of each. The other
+      `:0`s went with it: `import::{claude_code,codex}` take the path that was
+      actually read, and the trust store's parse error names its line.
+
+---
+
 ## Done when
 
 - `cargo test -p orrery-config` green. **True** — 30 tests, 0 failures.
@@ -255,7 +305,16 @@ Files: `src/import.rs`, `tests/import.rs`
   (`merge::DEFAULT_PERMISSIONS`, used only when **no** layer declares a rule),
   `ResolvedConfig::policy` and `rules_in_force` hand the compiled set out, and
   `cmd::layers::rules` gives that same set to the engine a turn dispatches
-  through. Layer precedence is unchanged — still `PolicyBuilder`'s, deny a union
+  through.
+
+  **Round 9 amends the sentence in brackets above.** "Used only when **no**
+  layer declares a rule" is exactly what was wrong: it made every *configured*
+  workspace a workspace with **no tools**, because declaring one rule replaced
+  the whole default set and nothing then matched `tool(builtin.read)`. The
+  default is now a **floor per aspect** — a layer's `allow`/`ask` replaces that
+  aspect's floor, a `deny` narrows it — and it is applied inside
+  `merge::builder`, the single function every rule set is built from. See task
+  9. Layer precedence is unchanged — still `PolicyBuilder`'s, deny a union
   and a managed deny final — which is exactly why the rules travel as
   `ResolvedRules` and not as a re-parsed TOML fragment that would collapse into
   one layer. `orrery-cli/tests/permissions_enforced.rs` drives the binary and
@@ -270,6 +329,19 @@ Files: `src/import.rs`, `tests/import.rs`
 - A Claude Code settings file imports into working rules. **True** —
   `import::claude_code_permissions` round-trips a real-shaped fixture through a
   real `PolicyEngine` and checks the verdicts.
+- **The file `orrery init` writes produces a working first turn.** Added
+  2026-09-19. **True** —
+  `orrery-cli/tests/permission_floor.rs::the_file_init_writes_produces_a_working_first_turn`
+  runs `init`, then `orrery trust grant`, then a real turn, and asserts the
+  model was offered tools. It was offered none for every round before this one.
+- **A workspace config can be activated without hand-editing a dotfile.**
+  Added 2026-09-19. **True** — `orrery trust grant|revoke|list`, driven end to
+  end in `orrery-cli/tests/trust.rs`: `init`, `trust grant`, then `config
+  explain model` answering from the workspace layer.
+- **No message attributes a problem to `config.toml:0`.** Added 2026-09-19.
+  **True** — `init::an_unknown_profile_is_not_blamed_on_a_file_that_does_not_exist`
+  and its sibling. `ConfigError::NoSuchProfile` names no file; `import` names
+  the file it read; the trust store names its line.
 
 ## State
 
