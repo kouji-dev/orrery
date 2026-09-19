@@ -49,8 +49,14 @@ pub mod bindings {
     // Generated code: the docs are the `.wit`.
     #![allow(missing_docs)]
 
+    // `wit/`, inside this crate, not `../../../wit`. `cargo package` only puts
+    // files under the crate directory into the tarball, so a path that escapes
+    // it makes the published crate unbuildable - and this is the crate every
+    // community wasm-extension author depends on. The file is a copy of
+    // `harness/wit/orrery-extension.wit`, which stays the one source of truth:
+    // `cargo xtask wit-check` fails if the two ever differ by a byte.
     wit_bindgen::generate!({
-        path: "../../../wit",
+        path: "wit",
         world: "orrery-extension",
         pub_export_macro: true,
     });

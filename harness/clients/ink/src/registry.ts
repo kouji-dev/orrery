@@ -8,13 +8,42 @@
  * registerRenderer("buildgraph.flamegraph", Flamegraph);
  * ```
  *
- * Phase 4 scope is this registry and the fallback path. Actually *loading* a
- * third party's bundle needs the signed registry, a `render` grant (§4.8) and a
- * sandbox, and a deny rule on that grant degrades every custom surface
- * everywhere — which is the behaviour the fallback already gives.
+ * Phase 4 scope is this registry and the fallback path: a `custom` surface
+ * whose kind nobody registered draws its `fallback` subtree, so a missing or
+ * refused renderer degrades rather than blanks.
  *
- * TODO(plan-15): load a renderer from a signed extension bundle under a
- * `render` grant, record the load in the ledger, and refuse an unsigned one.
+ * # Why a third party's bundle still does not load here
+ *
+ * Plan 15 landed `orrery-registry` — ed25519 signature verification, a keyring
+ * with rotation, and the `install`/`remove` verbs — and `Aspect.Render` exists
+ * in `orrery-proto`, so the grant this would run under is real. Two things
+ * between that and `import()`ing a stranger's component are still genuinely
+ * missing, and neither is work this file can do:
+ *
+ * 1. **The client has no filesystem contract with the kernel.** Everything this
+ *    process gets arrives over `--endpoint` / `$ORRERY_ENDPOINT` as AG-UI
+ *    frames — deliberately, because that is the whole contract a third-party
+ *    client implements. No frame announces "extension X holds `render` and its
+ *    renderer entry is at <path>"; `AguiEvent.Custom` carries a name and a
+ *    value and nothing about where code lives. Reaching into
+ *    `~/.orrery/extensions/` instead would make this client's contract the
+ *    filesystem, which is the contract the endpoint replaced.
+ * 2. **Verification would have to happen twice.** `orrery-registry` verifies
+ *    with `ring` at install time and writes no receipt beside the unpacked
+ *    bundle — `orrery.toml` is the only file it puts there. A loader in this
+ *    process therefore has nothing to trust, and re-implementing ed25519 in TS
+ *    would make the same trust decision in a second place, which is precisely
+ *    what a single signed index exists to prevent.
+ *
+ * A third, smaller one: `import()` in this process hands the module the
+ * client's own Node privileges, so a denied `render` grant would be
+ * unenforceable rather than merely degraded.
+ *
+ * The unblocking change is a host-side one — an install receipt plus a frame
+ * (or an endpoint method) that names the verified renderer bundles this session
+ * may load. Until that exists, `registerRenderer` is how a renderer gets in:
+ * an embedder that compiles the component in has already made the trust
+ * decision itself.
  */
 
 import type { ComponentType } from "react";

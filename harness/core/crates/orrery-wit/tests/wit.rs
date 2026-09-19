@@ -6,6 +6,11 @@
 use orrery_wit::arena::NodeKind;
 use wit_parser::{Resolve, TypeDefKind};
 
+/// Windows checkouts normalise line endings; the comparison must not care.
+const CRLF: &str = "\r\n";
+/// The newline a normalised comparison uses.
+const LF: &str = "\n";
+
 fn resolve() -> (Resolve, wit_parser::PackageId) {
     let mut resolve = Resolve::default();
     let id = resolve
@@ -36,6 +41,35 @@ fn the_embedded_world_matches_the_file_on_disk() {
         on_disk.replace("\r\n", "\n"),
         orrery_wit::WORLD.replace("\r\n", "\n"),
         "the embedded world and the file have drifted"
+    );
+}
+
+/// The guest SDK ships its own copy, and `cargo package` is why.
+///
+/// `orrery-guest` is the crate every community wasm-extension author depends
+/// on, so it has to package. `wit_bindgen::generate!` used to point at
+/// `../../../wit` — outside the crate directory, which `cargo package` does not
+/// put in the tarball, so the published crate could not build at all.
+///
+/// The fix is a vendored copy under `orrery-guest/wit/`, and this test is what
+/// keeps it from being a second source of truth: it must be the canonical file,
+/// byte for byte. Edit `harness/wit/orrery-extension.wit` and copy it over;
+/// `cargo xtask wit-check` fails until you do.
+#[test]
+fn the_guest_sdks_vendored_copy_is_the_canonical_file() {
+    let vendored = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../extensions/crates/orrery-guest/wit/orrery-extension.wit");
+    let copy = std::fs::read_to_string(&vendored).unwrap_or_else(|e| {
+        panic!(
+            "the guest SDK's vendored `.wit` is missing: {e}; \
+             copy harness/wit/orrery-extension.wit to {}",
+            vendored.display()
+        )
+    });
+    assert_eq!(
+        copy.replace(CRLF, LF),
+        orrery_wit::WORLD.replace(CRLF, LF),
+        "the guest SDK's vendored `.wit` has drifted from harness/wit/orrery-extension.wit"
     );
 }
 
