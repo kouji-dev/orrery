@@ -1,6 +1,6 @@
 Install an extension. A bare name is the signed registry.
 
-Seven source forms, disambiguated by prefix: `name`, `name@1.2.0`, `github:owner/repo#ref`, a git URL, `crate:<name>`, `npm:<name>`, `./path`.
+Seven source forms, disambiguated by prefix, in the one vocabulary `orrery registry add --source` also speaks: `name`, `name@1.2.0`, `github:owner/repo#ref`, a git URL, `crates-io:<name>` (also spelled `crate:<name>`), `npm:<name>`, and a path — `./path`, `../path`, `file:path` or an absolute one.
 
 Usage: orrery install [OPTIONS] <SOURCE>
 

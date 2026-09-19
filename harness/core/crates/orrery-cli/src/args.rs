@@ -335,10 +335,10 @@ pub enum ExtCommand {
     List,
     /// Run an extension's tests against the mock broker, with no model and no network.
     Test {
-        /// An extension's name, or a path to it written as one: `./dir`,
-        /// `../dir`, an absolute path, or an `orrery.toml`. Anything else is
-        /// read as a name, whatever the current directory happens to hold.
-        /// Defaults to the workspace directory.
+        /// An extension's name, or a path written as one: `./dir`, `../dir`,
+        /// an absolute path, or an `orrery.toml`. Anything else is a name,
+        /// whatever the current directory happens to hold. Defaults to the
+        /// workspace directory.
         #[arg(value_name = "NAME|PATH")]
         path: Option<std::path::PathBuf>,
     },
