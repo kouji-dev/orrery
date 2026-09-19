@@ -47,6 +47,81 @@ fn init_writes_a_workspace_config() {
     assert!(stdout.trim().ends_with("config.toml"), "{stdout}");
 }
 
+/// DEFECT 4: `orrery init` with no `--profile` wrote 49 bytes of nothing.
+///
+/// The whole file was
+/// ``# Written by `orrery init` from the `` profile.`` — an empty profile name
+/// interpolated into a comment — and then it said "review it before you use
+/// it". This is the first command a new user runs.
+#[test]
+fn init_with_no_profile_writes_a_starter_config() {
+    let home = home_with("");
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(home.path(), &args(&quiet(ws.path()), &["init"]));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let text = std::fs::read_to_string(ws.path().join(".orrery/config.toml"))
+        .expect("the file is where the layer expects it");
+    assert!(
+        !text.contains("the `` profile"),
+        "an empty profile name is not a document: {text}"
+    );
+    assert!(
+        text.parse::<toml::Value>().is_ok(),
+        "it is a configuration, not a comment: {text}"
+    );
+
+    // Real rules, in the grammar, that a person can read and edit.
+    assert!(
+        text.contains("[permissions]") && text.contains("read(./**)"),
+        "{text}"
+    );
+    // And it says what the file is and what to do next.
+    assert!(
+        text.contains("orrery config explain"),
+        "it documents how to ask what is in force: {text}"
+    );
+    assert!(
+        text.contains("[profile."),
+        "…and how to write a profile, since there was none to scaffold: {text}"
+    );
+
+    // stdout stays data: the path, and nothing else.
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(stdout.lines().count(), 1, "{stdout}");
+}
+
+/// …and when profiles **do** exist and none was named, it says so, because
+/// `--profile` is the flag that would have scaffolded one of them.
+#[test]
+fn init_with_no_profile_names_the_profiles_there_are() {
+    let home = home_with(
+        "[profile.ci]
+model = \"fixture\"
+[profile.review]
+model = \"fixture\"
+",
+    );
+    let ws = tempfile::tempdir().expect("a workspace");
+
+    let out = orrery_in(home.path(), &args(&quiet(ws.path()), &["init"]));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("ci") && err.contains("review"),
+        "it names the profiles `--profile` could have used: {err}"
+    );
+}
+
 /// History and configuration are not the same thing, but neither is silently
 /// replaceable: a second `init` refuses rather than overwriting.
 #[test]
