@@ -126,6 +126,26 @@ impl TrustStore {
         self.answers.get(&key(workspace.as_ref())).copied()
     }
 
+    /// Every stored answer, path first, in path order.
+    ///
+    /// What `orrery trust list` prints. Without it the store was write-only
+    /// from outside the crate: there was no way to ask it what had been
+    /// answered, and therefore no way for a person to find out why a workspace
+    /// they thought they had trusted was not loading its own configuration.
+    pub fn answers(&self) -> impl Iterator<Item = (&str, bool)> {
+        self.answers.iter().map(|(path, trusted)| (path.as_str(), *trusted))
+    }
+
+    /// The key a workspace path is stored under: canonical, as a string.
+    ///
+    /// The same normalisation [`answer`](Self::answer) and
+    /// [`record`](Self::record) use, exposed so a caller that prints an entry
+    /// can tell which one is *this* workspace.
+    #[must_use]
+    pub fn key_for(workspace: impl AsRef<Path>) -> String {
+        key(workspace.as_ref())
+    }
+
     /// Record an answer for a path, and persist it.
     ///
     /// # Errors
@@ -169,7 +189,9 @@ impl TrustStore {
 fn parse(text: &str, path: &Path) -> Result<BTreeMap<String, bool>, ConfigError> {
     let doc: toml::Value = text.parse().map_err(|e: toml::de::Error| ConfigError::Syntax {
         file: path.to_path_buf(),
-        line: 0,
+        // Not 0: the store is a file a person can open, and a parse error that
+        // will not say which line is a parse error nobody can act on.
+        line: crate::layer::line_of_toml(text, &e),
         message: e.to_string(),
     })?;
     let mut out = BTreeMap::new();

@@ -19,6 +19,7 @@ pub mod run;
 pub mod serve;
 pub mod session;
 pub mod skills;
+pub mod trust;
 pub mod workflow;
 
 use std::path::PathBuf;

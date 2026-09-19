@@ -77,6 +77,7 @@ fn main() {
         Some(Command::Ext { command }) => cmd::ext::dispatch(&cli, command),
         Some(Command::Permissions { command }) => cmd::permissions::dispatch(&cli, command),
         Some(Command::Config { command }) => cmd::config::dispatch(&cli, command),
+        Some(Command::Trust { command }) => cmd::trust::dispatch(&cli, command),
         Some(Command::Init { profile }) => cmd::init::dispatch(&cli, profile.as_deref()),
         Some(Command::Import { from }) => cmd::import::dispatch(&cli, *from),
         Some(Command::Mcp { command }) => cmd::mcp::dispatch(&cli, command),

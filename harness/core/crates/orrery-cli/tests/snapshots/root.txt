@@ -14,6 +14,7 @@ Commands:
   ext          Inspect and manage extensions
   permissions  Explain a permission decision
   config       Explain resolved configuration
+  trust        Decide whether a workspace's own configuration and code may load
   init         Write a starter configuration into the workspace
   import       Import configuration from another harness
   mcp          Inspect the MCP servers this workspace declares

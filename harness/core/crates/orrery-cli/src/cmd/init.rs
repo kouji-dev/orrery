@@ -80,6 +80,21 @@ pub fn dispatch(cli: &Cli, profile: Option<&str>) -> ! {
     }
 
     eprintln!("orrery: review it before you use it");
+    // The file it just wrote is the **workspace** layer, and the workspace
+    // layer does not load until somebody has vouched for the workspace. For
+    // several rounds `init` said nothing about this and there was no command to
+    // say it with, so the first thing a new user did was write a file that had
+    // no effect and nothing told them why.
+    if !resolved.trust.is_trusted() {
+        eprintln!(
+            "orrery: {} is not trusted yet, so nothing in that file is in force ({})",
+            resolved.root.display(),
+            resolved.trust_why.why
+        );
+        eprintln!(
+            "orrery: run `orrery trust grant` to make it take effect, then `orrery config explain permissions.allow` to see it win"
+        );
+    }
     // stdout is data: the path, so `orrery init` composes with an editor.
     println!("{}", path.display());
     Exit::Ok.exit()
