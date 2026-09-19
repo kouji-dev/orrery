@@ -129,14 +129,41 @@ fn the_node_worked_example_installs_and_a_turn_calls_it() {
     );
 
     // The listing must agree with the run path, which is the other half of this
-    // round: an extension that cannot start is not `ok`.
+    // round: an extension that cannot start is not `ok`. `ext list` reads
+    // manifests and never boots a guest, so `unchecked` is the most it may say
+    // (see `ext::an_unchecked_extension_does_not_scan_as_ok`) - and the command
+    // it names is the one that does start it.
     let listed = orrery(home.path(), work.path(), &own(&["ext", "list"]));
     let listing = String::from_utf8_lossy(&listed.stdout);
     let line = listing
         .lines()
         .find(|l| l.starts_with("hello  "))
         .unwrap_or_else(|| panic!("the example is not listed: {listing}"));
-    assert!(line.contains("ok"), "it loads: {listing}");
+    assert_eq!(
+        line.split_whitespace().nth(2),
+        Some("unchecked"),
+        "the listing may not claim a guest it never started: {line}"
+    );
+    assert!(line.contains("greet"), "it lost its tools: {line}");
+
+    // So this is where "it loads" is actually asked: `ext test` activates the
+    // guest before it reports.
+    let tested = orrery(home.path(), work.path(), &own(&["ext", "test", "hello"]));
+    let report = String::from_utf8_lossy(&tested.stdout);
+    assert_eq!(
+        tested.status.code(),
+        Some(0),
+        "the guest starts: {report}{}",
+        String::from_utf8_lossy(&tested.stderr)
+    );
+    assert_eq!(
+        report
+            .lines()
+            .find(|l| l.starts_with("hello  "))
+            .and_then(|l| l.split_whitespace().nth(2)),
+        Some("ok"),
+        "and having started it, it says so: {report}"
+    );
 
     // And a turn really calls it.
     let mut argv = own(&[
@@ -249,7 +276,10 @@ fn two_extensions_claim_search_and_killing_one_leaves_the_session_alive() {
         );
     }
 
-    // Both load, and the listing says so rather than merely naming them.
+    // Both load, and the listing says so rather than merely naming them - but
+    // `ext list` never starts a guest, so it may only say `unchecked` and name
+    // the command that does. `ext test` is that command, and it is what answers
+    // "did it load" for each of them.
     let listed = orrery(home.path(), work.path(), &own(&["ext", "list"]));
     let listing = String::from_utf8_lossy(&listed.stdout);
     for id in ["alpha", "beta"] {
@@ -257,8 +287,29 @@ fn two_extensions_claim_search_and_killing_one_leaves_the_session_alive() {
             .lines()
             .find(|l| l.starts_with(&format!("{id}  ")))
             .unwrap_or_else(|| panic!("`{id}` is not listed: {listing}"));
-        assert!(line.contains("ok"), "`{id}` did not load: {listing}");
+        assert_eq!(
+            line.split_whitespace().nth(2),
+            Some("unchecked"),
+            "the listing may not claim a guest it never started: {line}"
+        );
         assert!(line.contains("search"), "`{id}` lost its tool: {listing}");
+
+        let tested = orrery(home.path(), work.path(), &own(&["ext", "test", id]));
+        let report = String::from_utf8_lossy(&tested.stdout);
+        assert_eq!(
+            tested.status.code(),
+            Some(0),
+            "`{id}` did not load: {report}{}",
+            String::from_utf8_lossy(&tested.stderr)
+        );
+        assert_eq!(
+            report
+                .lines()
+                .find(|l| l.starts_with(&format!("{id}  ")))
+                .and_then(|l| l.split_whitespace().nth(2)),
+            Some("ok"),
+            "`{id}` started but did not report ok: {report}"
+        );
     }
 
     let mut argv = own(&[
