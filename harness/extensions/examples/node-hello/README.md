@@ -18,9 +18,11 @@ No model, no network, no key. `orrery-host-rpc`'s `sdk` test loads this very
 directory through the real `RpcHost` and dispatches both tools, which is what
 keeps the example and the SDK honest about the protocol.
 
-One deviation from a published extension: the import is
-`../../node/ext-sdk/src/index.mjs` rather than `@orrery/ext`, because the SDK
-lives in this repository and is not installed from a registry here.
+No deviation from a published extension: the import is `@orrery/ext`. The SDK
+travels inside the `orrery` binary and the host vendors it into
+`node_modules/@orrery/ext` beside the extension before starting it — which is
+what makes `orrery install ./node-hello` produce something a turn can call,
+with no registry and no network. The vendored directory is ignored by git.
 
 **Before you reach for `fs`:** read `@orrery/ext`'s README. The loader hook that
 strips it is a convenience, not a boundary.

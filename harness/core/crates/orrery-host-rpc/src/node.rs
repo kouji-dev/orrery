@@ -98,8 +98,35 @@ impl RpcHost {
 
     /// Where an extension's files are. Its `[process]` command is relative to
     /// this, and so is the default entry point.
+    /// Where an extension's files are, and where `@orrery/ext` is put so the
+    /// guest can import it.
+    ///
+    /// The SDK travels in this binary (see [`crate::sdk`]) because there is
+    /// nowhere else it could come from: the default build makes no network
+    /// request, so `npm install` is not available, and an installed extension
+    /// is a copied directory with no `node_modules` of its own. Without this,
+    /// `orrery install ./node-hello` produced an extension whose first turn
+    /// died with `ERR_MODULE_NOT_FOUND`.
+    ///
+    /// A directory that will not take the files is **not** fatal here: the load
+    /// goes on and the guest fails with node's own message, which names the
+    /// specifier it could not resolve. Failing the install instead would make a
+    /// read-only extension directory unloadable for reasons unrelated to the
+    /// extension.
     pub fn install(&self, ext: &ExtId, root: impl Into<PathBuf>) {
-        self.roots.write().insert(ext.clone(), root.into());
+        let root = root.into();
+        if self.runtime == RuntimeKind::Node
+            && let Err(e) = crate::sdk::vendor(&root)
+        {
+            tracing::warn!(
+                target: "orrery.host.rpc",
+                ext = %ext,
+                root = %root.display(),
+                error = %e,
+                "could not vendor `@orrery/ext` beside the extension"
+            );
+        }
+        self.roots.write().insert(ext.clone(), root);
     }
 
     /// Give guests a broker to call back into. Until this is set they are

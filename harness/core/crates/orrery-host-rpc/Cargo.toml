@@ -35,4 +35,5 @@ libc = { workspace = true }
 
 [dev-dependencies]
 orrery-tools = { path = "../orrery-tools" }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "process"] }

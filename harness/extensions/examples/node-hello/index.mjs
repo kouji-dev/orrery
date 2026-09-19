@@ -1,10 +1,11 @@
 // A node extension, whole. `node index.mjs` is all the host does to start it.
 //
-// A published extension writes `import { defineExtension } from "@orrery/ext"`.
-// This one lives in the same repository as the SDK and is not installed from a
-// registry, so it reaches for the source directly — the only difference.
+// The import is the published one, `@orrery/ext`, with nothing in this file
+// aware of where the repository keeps the SDK. The host vendors the package
+// into `node_modules/@orrery/ext` beside whatever directory it is told to run,
+// so the same line resolves in this tree and in `~/.orrery/extensions/hello`.
 
-import { defineExtension } from "../../node/ext-sdk/src/index.mjs";
+import { defineExtension } from "@orrery/ext";
 
 export default defineExtension({
   tools: {

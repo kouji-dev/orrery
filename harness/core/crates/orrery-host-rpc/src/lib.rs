@@ -25,6 +25,7 @@ pub mod broker_bridge;
 pub mod contain;
 pub mod node;
 pub mod protocol;
+pub mod sdk;
 pub mod spawn;
 
 pub use broker_bridge::BrokerBridge;
