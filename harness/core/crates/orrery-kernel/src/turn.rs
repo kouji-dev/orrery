@@ -1109,6 +1109,15 @@ impl Kernel {
                     .collect::<Vec<_>>()
                     .join(" "),
                 tools = tools.len(),
+                // The names, not only the count: a count of zero says the
+                // model was offered nothing but not which set was emptied, and
+                // an offered set nobody can read is how a policy bug that
+                // silently emptied it survived a whole round.
+                offered = %tools
+                    .iter()
+                    .map(|t| t.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(","),
                 skills = self.config.skills.len(),
                 "the system prompt this pass carries"
             );
