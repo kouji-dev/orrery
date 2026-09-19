@@ -168,6 +168,39 @@ pub struct ExtensionSource {
     pub layer: Layer,
 }
 
+/// Every extension discovery found, in the shape a host wants.
+///
+/// Public because the composition root needs it too: `orrery-cli` builds its
+/// `ResolvedConfig` field by field rather than through
+/// [`ResolvedConfig::from_layers`], and an installed extension that the binary
+/// lists but cannot dispatch is exactly the failure this round exists to end.
+#[must_use]
+pub fn extension_sources(resolved: &orrery_config::ResolvedConfig) -> Vec<ExtensionSource> {
+    resolved
+        .manifest
+        .extensions
+        .iter()
+        .map(|found| {
+            let (root, manifest_path) = if found.source.is_dir() {
+                (found.source.clone(), found.source.join("orrery.toml"))
+            } else {
+                (
+                    found
+                        .source
+                        .parent()
+                        .map_or_else(|| found.source.clone(), std::path::Path::to_path_buf),
+                    found.source.clone(),
+                )
+            };
+            ExtensionSource {
+                manifest_path,
+                root,
+                layer: found.layer,
+            }
+        })
+        .collect()
+}
+
 /// Everything a harness needs to exist.
 ///
 /// This is the **kernel-shaped subset** of `orrery_config::ResolvedConfig`:
@@ -237,29 +270,7 @@ impl ResolvedConfig {
             },
             provider,
             store,
-            extensions: resolved
-                .manifest
-                .extensions
-                .iter()
-                .map(|found| {
-                    let (root, manifest_path) = if found.source.is_dir() {
-                        (found.source.clone(), found.source.join("orrery.toml"))
-                    } else {
-                        (
-                            found
-                                .source
-                                .parent()
-                                .map_or_else(|| found.source.clone(), std::path::Path::to_path_buf),
-                            found.source.clone(),
-                        )
-                    };
-                    ExtensionSource {
-                        manifest_path,
-                        root,
-                        layer: found.layer,
-                    }
-                })
-                .collect(),
+            extensions: extension_sources(resolved),
             policy_toml: None,
             kernel,
             audit: orrery_audit::null(),

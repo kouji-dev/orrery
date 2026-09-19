@@ -37,12 +37,12 @@ use futures_util::StreamExt;
 use futures_util::stream::BoxStream;
 use orrery_harness::{Harness, ProviderChoice, ResolvedConfig, StoreChoice};
 use orrery_kernel::{KernelConfig, TurnOutcome};
-use orrery_provider::{
-    Capabilities, ModelEvent, ModelRequest, Provider, ProviderAuth, ProviderError, TokenCounter,
-};
 use orrery_proto::{
     BranchId, Event, Outcome, Seq, SessionId, Surface, SurfaceId, SurfaceKind, SurfacePatch,
     TokenBudget, TurnId, Usage,
+};
+use orrery_provider::{
+    Capabilities, ModelEvent, ModelRequest, Provider, ProviderAuth, ProviderError, TokenCounter,
 };
 use orrery_session::{
     BranchLease, BranchOutcome, CompactResult, Materialised, NewTurn, SessionError, SessionHandle,
@@ -484,6 +484,8 @@ pub struct Setup {
     /// One `.jsonl` per pass, the last repeating. Empty is an error: phase 1
     /// has no provider that does not need to be named.
     pub fixtures: Vec<PathBuf>,
+    /// The extensions discovery found, beyond the compiled-in set.
+    pub extensions: Vec<orrery_harness::ExtensionSource>,
     /// What the loop runs under, as the layers on disk resolved it.
     ///
     /// Not built here: `cmd::setup` folds the five configuration layers into
@@ -550,6 +552,7 @@ impl Session {
         // state directory. `orrery ledger` is what reads it back.
         config.audit = audit;
         config.kernel = setup.kernel.clone();
+        config.extensions = setup.extensions.clone();
 
         Ok(Self {
             harness: Arc::new(Harness::build(config)?),

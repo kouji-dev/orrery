@@ -6,16 +6,18 @@ pub mod config;
 pub mod eval;
 pub mod ext;
 pub mod import;
-pub mod interactive;
 pub mod init;
 pub mod install;
+pub mod interactive;
 pub mod layers;
 pub mod ledger;
+pub mod mcp;
 pub mod permissions;
 pub mod replay;
 pub mod run;
 pub mod serve;
 pub mod session;
+pub mod skills;
 
 use std::path::PathBuf;
 
@@ -70,6 +72,9 @@ pub fn setup(cli: &Cli) -> Setup {
         profile: cli.profile.clone().unwrap_or_else(|| "default".to_owned()),
         fixtures,
         kernel,
+        // What `orrery ext list` prints and what a turn can actually call have
+        // to be the same set, or installing an extension is theatre.
+        extensions: orrery_harness::extension_sources(&resolved),
     }
 }
 

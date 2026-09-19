@@ -39,9 +39,7 @@ use orrery_ext_api::{
     NetRequest, NetResponse, ReadChunk, ReadRequest, SpawnOutput, SpawnRequest, WriteRequest,
 };
 use orrery_kernel::CallRevoker;
-use orrery_policy::{
-    CapabilityToken, Decision, PendingCall, PolicyEngine, TokenLedger, Verdict,
-};
+use orrery_policy::{CapabilityToken, Decision, PendingCall, PolicyEngine, TokenLedger, Verdict};
 use orrery_proto::{AgentScope, CallId, CancelReason, Subject};
 use orrery_tools::ToolBudget;
 use tokio_util::sync::CancellationToken;

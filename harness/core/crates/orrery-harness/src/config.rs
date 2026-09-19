@@ -134,7 +134,9 @@ pub fn kernel_config(values: &Provenanced, profile: &str, base: KernelConfig) ->
 
     out.budget = Budget {
         max_turns: keys.u32("budget.maxTurns").unwrap_or(out.budget.max_turns),
-        max_tokens: keys.u64("budget.maxTokens").unwrap_or(out.budget.max_tokens),
+        max_tokens: keys
+            .u64("budget.maxTokens")
+            .unwrap_or(out.budget.max_tokens),
         wall_clock_ms: keys
             .u64("budget.wallClockMs")
             .unwrap_or(out.budget.wall_clock_ms),
@@ -185,8 +187,14 @@ pub fn provider_choice(values: &Provenanced, profile: &str) -> Option<crate::Pro
     let keys = Keys::new(values, profile);
     match keys.str("provider.kind")? {
         "anthropic" => Some(crate::ProviderChoice::Anthropic {
-            model: keys.str("provider.model").unwrap_or("claude-sonnet-4-5").to_owned(),
-            credential: keys.str("provider.credential").unwrap_or("anthropic").to_owned(),
+            model: keys
+                .str("provider.model")
+                .unwrap_or("claude-sonnet-4-5")
+                .to_owned(),
+            credential: keys
+                .str("provider.credential")
+                .unwrap_or("anthropic")
+                .to_owned(),
             base_url: keys.str("provider.baseUrl").map(str::to_owned),
         }),
         // Two spellings, one provider: `ollama` and `vllm` are what people

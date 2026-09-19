@@ -32,9 +32,9 @@ pub mod broker;
 pub mod build;
 pub mod config;
 pub mod features;
-pub mod memory;
 #[cfg(feature = "fixture-provider")]
 pub mod fixture;
+pub mod memory;
 
 use std::sync::Arc;
 
@@ -46,11 +46,12 @@ use orrery_session::SessionStore;
 use tokio_util::sync::CancellationToken;
 
 pub use broker::{LedgerRevoker, PolicyBroker};
+pub use build::{
+    BuildError, DEFAULT_RULES, ExtensionSource, ProviderChoice, ResolvedConfig, StoreChoice,
+    default_tool_budget, extension_sources,
+};
 pub use config::{kernel_config, price_table};
 pub use memory::KernelMemory;
-pub use build::{
-    BuildError, DEFAULT_RULES, ProviderChoice, ResolvedConfig, StoreChoice, default_tool_budget,
-};
 
 /// A built harness: a runtime, a kernel, and the session it opened.
 pub struct Harness {
