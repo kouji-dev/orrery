@@ -57,7 +57,10 @@ pub fn dispatch(cli: &Cli, endpoint: &str, since: Option<u64>, submit: Option<&s
              the `http://` endpoint `orrery serve` printed.",
         );
     }
-    let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
         Ok(runtime) => runtime,
         Err(e) => fail(Exit::Kernel, format!("could not start a runtime: {e}")),
     };
@@ -94,7 +97,9 @@ async fn connect(endpoint: &Endpoint, since: Option<u64>, submit: Option<&str>) 
                 Ok(client) => client,
                 Err(e) => fail(
                     Exit::Kernel,
-                    format!("could not reach `pipe:{name}` ({e}). Is `orrery serve` still running?"),
+                    format!(
+                        "could not reach `pipe:{name}` ({e}). Is `orrery serve` still running?"
+                    ),
                 ),
             };
             if let Some(prompt) = submit {
@@ -129,7 +134,10 @@ async fn connect(endpoint: &Endpoint, since: Option<u64>, submit: Option<&str>) 
             }
             if let Some(prompt) = submit {
                 if let Err(e) = session.attach(SessionId::new(), since.map(Seq)).await {
-                    fail(Exit::Kernel, format!("could not attach to `{endpoint}`: {e}"));
+                    fail(
+                        Exit::Kernel,
+                        format!("could not attach to `{endpoint}`: {e}"),
+                    );
                 }
                 if let Err(e) = session.submit(UserInput::text(prompt)).await {
                     fail(Exit::Kernel, format!("could not submit the turn: {e}"));

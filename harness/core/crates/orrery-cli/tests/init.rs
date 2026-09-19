@@ -25,7 +25,11 @@ fn init_writes_a_workspace_config() {
         home.path(),
         &args(&quiet(ws.path()), &["--profile", "ci", "init"]),
     );
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let written = ws.path().join(".orrery/config.toml");
     assert!(written.is_file(), "the file is where the layer expects it");
@@ -86,7 +90,11 @@ fn import_claude_code_prints_a_config_to_review() {
         home.path(),
         &args(&quiet(ws.path()), &["import", "--from", "claude-code"]),
     );
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("read(./src/**)"), "{text}");

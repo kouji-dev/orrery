@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{args, base, jsonl, orrery, workspace, CONTENTS, TARGET};
+use common::{CONTENTS, TARGET, args, base, jsonl, orrery, workspace};
 
 /// A suite file, and the fixture workspace its one case runs in.
 ///
@@ -53,12 +53,7 @@ fn run_suite(dir: &std::path::Path) -> serde_json::Value {
     let suite = a_suite(dir);
     let out = orrery(&args(
         &base(dir, &["text-turn.jsonl"]),
-        &[
-            "--json",
-            "eval",
-            "run",
-            &suite.display().to_string(),
-        ],
+        &["--json", "eval", "run", &suite.display().to_string()],
     ));
     assert_eq!(
         out.status.code(),
@@ -179,15 +174,28 @@ fn two_runs_compare() {
         String::from_utf8_lossy(&out.stderr)
     );
     let comparison = jsonl(&out.stdout)[0].clone();
-    assert!(comparison["regressions"].as_array().expect("regressions").is_empty());
-    assert!(comparison["unmatched"].as_array().expect("unmatched").is_empty());
+    assert!(
+        comparison["regressions"]
+            .as_array()
+            .expect("regressions")
+            .is_empty()
+    );
+    assert!(
+        comparison["unmatched"]
+            .as_array()
+            .expect("unmatched")
+            .is_empty()
+    );
 
     let missing = orrery(&args(
         &base(dir.path(), &[]),
         &["eval", "compare", a, "run-nope"],
     ));
     assert_eq!(missing.status.code(), Some(2));
-    assert!(missing.stdout.is_empty(), "stdout is data, and there is none");
+    assert!(
+        missing.stdout.is_empty(),
+        "stdout is data, and there is none"
+    );
 }
 
 /// `eval replay` re-opens one case's transcript out of a finished run.
@@ -199,14 +207,7 @@ fn a_case_replays_out_of_a_run() {
 
     let out = orrery(&args(
         &base(dir.path(), &[]),
-        &[
-            "--json",
-            "eval",
-            "replay",
-            run,
-            "--case",
-            "reads-the-file",
-        ],
+        &["--json", "eval", "replay", run, "--case", "reads-the-file"],
     ));
     assert_eq!(
         out.status.code(),

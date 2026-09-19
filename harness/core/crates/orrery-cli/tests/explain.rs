@@ -66,7 +66,9 @@ fn permissions_explain_is_json_on_request() {
     assert_eq!(v["rule"]["layer"], "user");
     assert_eq!(v["rule"]["line"], 2);
     assert!(
-        v["rule"]["file"].as_str().is_some_and(|f| f.ends_with("config.toml")),
+        v["rule"]["file"]
+            .as_str()
+            .is_some_and(|f| f.ends_with("config.toml")),
         "{v}"
     );
 }

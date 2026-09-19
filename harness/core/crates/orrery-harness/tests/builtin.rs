@@ -409,10 +409,18 @@ allow = [\"tool(*)\", \"read(./src/**)\"]
 ",
     );
     std::fs::create_dir_all(rig.path("src")).unwrap();
-    std::fs::write(rig.path("src/a.rs"), "needle here
-").unwrap();
-    std::fs::write(rig.path("secret.txt"), "needle here too
-").unwrap();
+    std::fs::write(
+        rig.path("src/a.rs"),
+        "needle here
+",
+    )
+    .unwrap();
+    std::fs::write(
+        rig.path("secret.txt"),
+        "needle here too
+",
+    )
+    .unwrap();
 
     let outcome = BuiltinTools::new()
         .call(
@@ -426,7 +434,10 @@ allow = [\"tool(*)\", \"read(./src/**)\"]
         .await
         .expect("the harness carried the call");
     let text = text_of(&outcome);
-    assert!(text.contains("a.rs"), "the readable match is reported: {text}");
+    assert!(
+        text.contains("a.rs"),
+        "the readable match is reported: {text}"
+    );
     assert!(
         !text.contains("secret.txt"),
         "the unreadable one is not, by name or by line: {text}"

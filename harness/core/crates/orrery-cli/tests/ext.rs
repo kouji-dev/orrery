@@ -42,7 +42,10 @@ read = [\"$WORKSPACE/**\"]
 
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("fixture-ext"), "it names it: {stdout}");
-    assert!(stdout.contains("hello"), "…and what it contributes: {stdout}");
+    assert!(
+        stdout.contains("hello"),
+        "…and what it contributes: {stdout}"
+    );
     assert!(
         stdout.contains("no model, no network"),
         "…and says what it did not need: {stdout}"
@@ -75,10 +78,7 @@ fn list_shows_the_ledger() {
     for tool in ["read", "write", "edit", "bash", "grep", "glob"] {
         assert!(stdout.contains(tool), "`{tool}` is missing: {stdout}");
     }
-    assert!(
-        stdout.contains("ok"),
-        "and it says how it loaded: {stdout}"
-    );
+    assert!(stdout.contains("ok"), "and it says how it loaded: {stdout}");
 }
 
 /// Round 5, item 4: `ext test <name>` works on a name, not only a path.
@@ -93,7 +93,10 @@ fn test_takes_the_name_of_a_compiled_in_bundle() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(0), "stderr was: {stderr}");
     assert!(stdout.contains("builtin"), "it names it: {stdout}");
-    assert!(stdout.contains("bash"), "…and what it contributes: {stdout}");
+    assert!(
+        stdout.contains("bash"),
+        "…and what it contributes: {stdout}"
+    );
     assert!(
         stdout.contains("no model, no network"),
         "…and says what it did not need: {stdout}"
@@ -183,7 +186,10 @@ fn list_shows_an_installed_extension() {
         stdout.contains("builtin"),
         "…and the compiled-in set is still there: {stdout}"
     );
-    assert!(stdout.contains("user"), "…and which layer it came from: {stdout}");
+    assert!(
+        stdout.contains("user"),
+        "…and which layer it came from: {stdout}"
+    );
 }
 
 /// Round 5, item 1: the section 6.7 floor and the section 4.6 roles ship in the

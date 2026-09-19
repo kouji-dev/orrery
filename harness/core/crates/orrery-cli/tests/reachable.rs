@@ -54,7 +54,10 @@ fn every_listed_bundle_loads_clean() {
         .lines()
         .filter(|l| l.contains("  degraded  "))
         .collect();
-    assert!(degraded.is_empty(), "{degraded:?}\n\nfull listing:\n{listed}");
+    assert!(
+        degraded.is_empty(),
+        "{degraded:?}\n\nfull listing:\n{listed}"
+    );
 }
 
 /// The git bundle's five verbs are reachable, named, and it is the read-only
@@ -69,7 +72,10 @@ fn the_git_bundle_offers_the_read_only_verbs() {
     for verb in ["status", "log", "show", "diff", "blame"] {
         assert!(line.contains(verb), "`{verb}` missing from: {line}");
     }
-    assert!(!line.contains("commit"), "a verb nothing implements: {line}");
+    assert!(
+        !line.contains("commit"),
+        "a verb nothing implements: {line}"
+    );
 }
 
 /// The language-server bundle's four verbs are reachable and named.
@@ -84,7 +90,10 @@ fn the_lsp_bundle_offers_its_four_verbs() {
         assert!(line.contains(verb), "`{verb}` missing from: {line}");
     }
     // `symbols` was declared while the crate was a scaffold and never existed.
-    assert!(!line.contains("symbols"), "a verb nothing implements: {line}");
+    assert!(
+        !line.contains("symbols"),
+        "a verb nothing implements: {line}"
+    );
 }
 
 /// `ext test` runs a first-party manifest through the same load a session uses,
@@ -95,7 +104,11 @@ fn ext_test_runs_a_first_party_manifest_with_no_model_and_no_network() {
         .join("../../../extensions/crates/orrery-ext-git/orrery.toml");
     let out = orrery(&["ext", "test", &manifest.display().to_string()]);
     let text = String::from_utf8_lossy(&out.stdout);
-    assert!(out.status.success(), "{text}\n{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{text}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(text.contains("no model, no network"), "{text}");
     assert!(text.contains("git"), "{text}");
 }

@@ -81,8 +81,12 @@ fn report(cli: &Cli, which: &str) -> RunReport {
             format!("no run `{which}` ({}): {e}", path.display()),
         )
     });
-    serde_json::from_str(&text)
-        .unwrap_or_else(|e| fail(Exit::Usage, format!("{} is not a run report: {e}", path.display())))
+    serde_json::from_str(&text).unwrap_or_else(|e| {
+        fail(
+            Exit::Usage,
+            format!("{} is not a run report: {e}", path.display()),
+        )
+    })
 }
 
 /// Run a suite.
@@ -171,7 +175,11 @@ fn save(cli: &Cli, report: &RunReport) {
 
 /// The report, in the shape that was asked for.
 fn emit(cli: &Cli, report: &RunReport, format: Option<&str>) {
-    let format = format.unwrap_or(if layers::wants_json(cli) { "json" } else { "text" });
+    let format = format.unwrap_or(if layers::wants_json(cli) {
+        "json"
+    } else {
+        "text"
+    });
     match format {
         // One object on one line, like every other `--json` surface in this
         // binary: `RunReport::to_json` pretty-prints, which is right for the
@@ -210,8 +218,8 @@ fn compare(cli: &Cli, run_a: &str, run_b: &str) -> ! {
     // `force` is false: two runs that pinned different things are not
     // comparable, and this command has no flag that says otherwise, because a
     // flag that says otherwise belongs where somebody can explain themselves.
-    let comparison = orrery_eval::compare(&before, &after, false)
-        .unwrap_or_else(|e| fail(Exit::Usage, e));
+    let comparison =
+        orrery_eval::compare(&before, &after, false).unwrap_or_else(|e| fail(Exit::Usage, e));
 
     if layers::wants_json(cli) {
         match serde_json::to_string(&comparison) {

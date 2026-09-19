@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{args, base, event_types, jsonl, orrery, workspace, CONTENTS, FINAL_TEXT};
+use common::{CONTENTS, FINAL_TEXT, args, base, event_types, jsonl, orrery, workspace};
 
 /// Run one turn against a stream and hand back the session id and the frames.
 fn a_live_turn(dir: &std::path::Path, streams: &[&str]) -> (String, Vec<String>) {

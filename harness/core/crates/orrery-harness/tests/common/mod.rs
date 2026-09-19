@@ -427,8 +427,10 @@ impl Rig {
                 _ => None,
             })
             .collect::<Vec<_>>()
-            .join("
-")
+            .join(
+                "
+",
+            )
     }
 
     /// A lease on the root branch.

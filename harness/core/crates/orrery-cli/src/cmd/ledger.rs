@@ -162,7 +162,10 @@ fn line(record: &AuditRecord) -> String {
             out
         }
         AuditEvent::ToolCall {
-            tool, outcome, call, ..
+            tool,
+            outcome,
+            call,
+            ..
         } => format!("call  {tool} {call} {outcome:?}"),
         AuditEvent::ToolName {
             name,

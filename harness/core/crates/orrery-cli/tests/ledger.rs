@@ -90,7 +90,10 @@ fn a_session_filter_selects_one_run() {
         ],
     ));
     assert_eq!(missing.status.code(), Some(2));
-    assert!(missing.stdout.is_empty(), "stdout is data, and there is none");
+    assert!(
+        missing.stdout.is_empty(),
+        "stdout is data, and there is none"
+    );
 }
 
 /// `--subject` narrows to who asked. `agent` is the one every fixture turn has.
@@ -112,7 +115,10 @@ fn a_subject_filter_narrows_the_ledger() {
         &base(dir.path(), &[]),
         &["--json", "ledger", "--subject", "agent:nobody"],
     ));
-    assert!(nobody.status.success(), "no matches is an answer, not an error");
+    assert!(
+        nobody.status.success(),
+        "no matches is an answer, not an error"
+    );
     assert!(nobody.stdout.is_empty());
 
     let bad = orrery(&args(
@@ -132,7 +138,10 @@ fn a_limit_keeps_the_latest() {
     let rows = jsonl(&all.stdout);
     assert!(rows.len() > 1, "there is something to trim");
 
-    let tail = orrery(&args(&base(dir.path(), &[]), &["--json", "ledger", "-n", "1"]));
+    let tail = orrery(&args(
+        &base(dir.path(), &[]),
+        &["--json", "ledger", "-n", "1"],
+    ));
     let trimmed = jsonl(&tail.stdout);
     assert_eq!(trimmed.len(), 1);
     assert_eq!(trimmed[0], *rows.last().expect("a last record"));

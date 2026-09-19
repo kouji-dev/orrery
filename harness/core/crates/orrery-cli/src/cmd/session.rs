@@ -93,10 +93,7 @@ fn list(cli: &Cli) -> ! {
         } else {
             println!(
                 "{}  {:>4} turns  {}  {}",
-                s.session,
-                s.turns,
-                s.profile,
-                s.workspace
+                s.session, s.turns, s.profile, s.workspace
             );
         }
     }
@@ -203,7 +200,9 @@ fn rm(cli: &Cli, id: &str, yes: bool) -> ! {
     if !yes {
         fail(
             Exit::Usage,
-            format!("refusing to delete {session} without `--yes`: history cannot be reconstructed"),
+            format!(
+                "refusing to delete {session} without `--yes`: history cannot be reconstructed"
+            ),
         );
     }
     let Some(store) = store(cli) else {

@@ -114,5 +114,8 @@ async fn a_turn_records_what_memory_contributed() {
     // is content in the tree and not a query to re-run.
     let replayed = rig.materialised().await;
     assert_eq!(replayed, before, "same rows, same context");
-    assert!(!replayed.contains("spaces"), "nothing re-queried: {replayed}");
+    assert!(
+        !replayed.contains("spaces"),
+        "nothing re-queried: {replayed}"
+    );
 }

@@ -6,7 +6,7 @@
 
 mod common;
 
-use common::{args, base, event_types, jsonl, orrery, workspace, FINAL_TEXT};
+use common::{FINAL_TEXT, args, base, event_types, jsonl, orrery, workspace};
 
 /// Run one turn, so there is a session on disk to list.
 fn one_turn(dir: &std::path::Path, stream: &str) {
@@ -26,7 +26,11 @@ fn list_shows_the_stored_sessions() {
     one_turn(dir.path(), "text-turn.jsonl");
 
     let out = orrery(&args(&base(dir.path(), &[]), &["session", "list"]));
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let text = String::from_utf8_lossy(&out.stdout);
     assert_eq!(
         text.lines().count(),
@@ -45,7 +49,10 @@ fn list_is_jsonl_on_request() {
     let dir = workspace();
     one_turn(dir.path(), "text-turn.jsonl");
 
-    let out = orrery(&args(&base(dir.path(), &[]), &["--json", "session", "list"]));
+    let out = orrery(&args(
+        &base(dir.path(), &[]),
+        &["--json", "session", "list"],
+    ));
     assert!(out.status.success());
     let rows = jsonl(&out.stdout);
     assert_eq!(rows.len(), 1);
@@ -65,14 +72,21 @@ fn show_prints_the_transcript() {
     let dir = workspace();
     one_turn(dir.path(), "text-turn.jsonl");
 
-    let listed = orrery(&args(&base(dir.path(), &[]), &["--json", "session", "list"]));
+    let listed = orrery(&args(
+        &base(dir.path(), &[]),
+        &["--json", "session", "list"],
+    ));
     let id = jsonl(&listed.stdout)[0]["session"]
         .as_str()
         .expect("an id")
         .to_owned();
 
     let out = orrery(&args(&base(dir.path(), &[]), &["session", "show", &id]));
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(text.contains("hello"), "the prompt is in it: {text}");
     assert!(
@@ -124,7 +138,10 @@ fn a_listed_session_is_the_one_the_turn_wrote() {
     assert!(out.status.success());
     assert!(event_types(&out.stdout).iter().any(|t| t == "RUN_STARTED"));
 
-    let listed = orrery(&args(&base(dir.path(), &[]), &["--json", "session", "list"]));
+    let listed = orrery(&args(
+        &base(dir.path(), &[]),
+        &["--json", "session", "list"],
+    ));
     assert_eq!(jsonl(&listed.stdout).len(), 1);
 }
 
@@ -139,7 +156,10 @@ fn rm_deletes_one_session_and_leaves_the_other() {
     one_turn(dir.path(), "text-turn.jsonl");
     one_turn(dir.path(), "text-turn.jsonl");
 
-    let listed = orrery(&args(&base(dir.path(), &[]), &["--json", "session", "list"]));
+    let listed = orrery(&args(
+        &base(dir.path(), &[]),
+        &["--json", "session", "list"],
+    ));
     let rows = jsonl(&listed.stdout);
     assert_eq!(rows.len(), 2);
     let doomed = rows[0]["session"].as_str().expect("an id").to_owned();
@@ -155,15 +175,15 @@ fn rm_deletes_one_session_and_leaves_the_other() {
         String::from_utf8_lossy(&out.stderr)
     );
 
-    let listed = orrery(&args(&base(dir.path(), &[]), &["--json", "session", "list"]));
+    let listed = orrery(&args(
+        &base(dir.path(), &[]),
+        &["--json", "session", "list"],
+    ));
     let rows = jsonl(&listed.stdout);
     assert_eq!(rows.len(), 1, "one session is gone");
     assert_eq!(rows[0]["session"], keeper.as_str());
 
-    let shown = orrery(&args(
-        &base(dir.path(), &[]),
-        &["session", "show", &doomed],
-    ));
+    let shown = orrery(&args(&base(dir.path(), &[]), &["session", "show", &doomed]));
     assert_eq!(shown.status.code(), Some(2), "and it cannot be shown");
 
     let shown = orrery(&args(&base(dir.path(), &[]), &["session", "show", &keeper]));

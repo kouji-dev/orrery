@@ -80,7 +80,10 @@ fn parse_call(text: &str) -> Result<PendingCall, String> {
 
     // `net(domain: x)` and `net(url: x)` are how the grammar writes a host.
     if aspect == Aspect::Net {
-        if let Some(rest) = inner.strip_prefix("domain:").or_else(|| inner.strip_prefix("url:")) {
+        if let Some(rest) = inner
+            .strip_prefix("domain:")
+            .or_else(|| inner.strip_prefix("url:"))
+        {
             return Ok(PendingCall::new(aspect, rest.trim()));
         }
     }

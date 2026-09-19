@@ -105,10 +105,7 @@ fn resolve(cli: &Cli, target: Option<&Path>) -> (ExtensionManifest, Option<Strin
     // Not a path, so it is a name. Compiled-in first: that set is fixed at build
     // time and cannot be shadowed by something on disk.
     let name = target.to_string_lossy();
-    if let Some(manifest) = compiled_in()
-        .into_iter()
-        .find(|m| m.name.as_str() == name)
-    {
+    if let Some(manifest) = compiled_in().into_iter().find(|m| m.name.as_str() == name) {
         return (manifest, None);
     }
     if let Some(found) = installed(cli)

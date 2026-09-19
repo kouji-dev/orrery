@@ -217,7 +217,12 @@ fn keyring(managed: Option<&ManagedRegistry>) -> Keyring {
     let Some(key) = managed.and_then(|m| m.key.as_deref()) else {
         return Keyring::default();
     };
-    match PublicKey::new("managed", key, "1970-01-01T00:00:00Z", "9999-12-31T23:59:59Z") {
+    match PublicKey::new(
+        "managed",
+        key,
+        "1970-01-01T00:00:00Z",
+        "9999-12-31T23:59:59Z",
+    ) {
         Ok(key) => Keyring::new(vec![key]),
         Err(e) => fail(Exit::Usage, e),
     }
@@ -234,8 +239,8 @@ fn local_index(url: &str) -> Option<PathBuf> {
 fn read_index(path: &Path) -> Index {
     let text = std::fs::read_to_string(path)
         .unwrap_or_else(|e| fail(Exit::Usage, format!("{}: {e}", path.display())));
-    let index = Index::parse(&text, path.display().to_string())
-        .unwrap_or_else(|e| fail(Exit::Usage, e));
+    let index =
+        Index::parse(&text, path.display().to_string()).unwrap_or_else(|e| fail(Exit::Usage, e));
     // The document signature is checked when one is next to it. An index with
     // no `.sig` is usable only for what it pins per entry, and the entry
     // signatures are checked regardless.

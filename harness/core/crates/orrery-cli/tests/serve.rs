@@ -55,7 +55,8 @@ fn serve(dir: &std::path::Path, streams: &[&str]) -> Served {
         "the second endpoint is HTTP: {http}"
     );
     let mut session = String::new();
-    err.read_line(&mut session).expect("serve named its session");
+    err.read_line(&mut session)
+        .expect("serve named its session");
     let session = session
         .trim()
         .strip_prefix("orrery: session ")
@@ -116,10 +117,7 @@ fn two_renderers_one_session() {
         json_out.contains("RUN_FINISHED"),
         "the json renderer saw the turn end: {json_out}"
     );
-    assert!(
-        json_out.contains(FINAL_TAIL),
-        "…and its text: {json_out}"
-    );
+    assert!(json_out.contains(FINAL_TAIL), "…and its text: {json_out}");
 
     let tui_out = String::from_utf8_lossy(&tui.stdout);
     assert!(
@@ -205,17 +203,16 @@ fn attach_over_http_renders_the_turn() {
     let served = serve(dir.path(), &["tool-call.jsonl", "text-turn.jsonl"]);
 
     // The watcher: HTTP, passive, replaying from the start of the session.
-    let watcher = attach(
-        dir.path(),
-        &[&served.http, "--ui", "json", "--since", "0"],
-    );
+    let watcher = attach(dir.path(), &[&served.http, "--ui", "json", "--since", "0"]);
     // The submitter: the pipe, because one of them has to ask.
     let submitter = attach(
         dir.path(),
         &[&served.pipe, "--ui", "json", "-p", "what is in Cargo.toml?"],
     );
 
-    let submitter = submitter.wait_with_output().expect("the submitter finishes");
+    let submitter = submitter
+        .wait_with_output()
+        .expect("the submitter finishes");
     assert!(
         String::from_utf8_lossy(&submitter.stdout).contains("RUN_FINISHED"),
         "the pipe client saw the turn end"
@@ -226,10 +223,7 @@ fn attach_over_http_renders_the_turn() {
         seen.contains("RUN_FINISHED"),
         "the HTTP client saw the turn end: {seen}"
     );
-    assert!(
-        seen.contains(FINAL_TAIL),
-        "…and what it said: {seen}"
-    );
+    assert!(seen.contains(FINAL_TAIL), "…and what it said: {seen}");
 }
 
 /// `--ui ink` with no Node says so in a sentence rather than a spawn trace.
@@ -251,7 +245,11 @@ fn ink_reports_what_is_missing() {
         .output()
         .expect("the orrery binary runs");
 
-    assert_eq!(out.status.code(), Some(2), "a misconfiguration, not a crash");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "a misconfiguration, not a crash"
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("not built") || stderr.contains("needs Node"),
@@ -277,8 +275,8 @@ fn ink_reports_what_is_missing() {
 /// command owns. Skipped when Node or the built bundle is absent.
 #[test]
 fn the_ink_client_reaches_the_kernel() {
-    let bundle = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../clients/ink/dist/index.js");
+    let bundle =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../clients/ink/dist/index.js");
     if !bundle.exists() || Command::new("node").arg("--version").output().is_err() {
         eprintln!("skipped: no node, or `pnpm -C harness/clients/ink build` has not been run");
         return;

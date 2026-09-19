@@ -56,7 +56,11 @@ fn a_local_path_installs_into_the_user_layer() {
         work.path(),
         &args(
             &quiet(work.path()),
-            &["install", &format!("./{}", relative(&pkg, work.path())), "--yes"],
+            &[
+                "install",
+                &format!("./{}", relative(&pkg, work.path())),
+                "--yes",
+            ],
         ),
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -76,7 +80,11 @@ fn a_local_path_installs_into_the_user_layer() {
         work.path(),
         &args(&quiet(work.path()), &["remove", "buildgraph"]),
     );
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(!landed.exists());
 }
 
@@ -100,7 +108,11 @@ fn the_workspace_layer_is_a_flag() {
             ],
         ),
     );
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(
         work.path()
             .join(".orrery/extensions/buildgraph/orrery.toml")
@@ -125,7 +137,11 @@ fn remove_across_two_layers_asks_rather_than_guessing() {
                 &["install", &source, "--to", layer, "--yes"],
             ),
         );
-        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
     }
 
     let out = run(
@@ -133,11 +149,18 @@ fn remove_across_two_layers_asks_rather_than_guessing() {
         work.path(),
         &args(&quiet(work.path()), &["remove", "buildgraph"]),
     );
-    assert_eq!(out.status.code(), Some(2), "an ambiguous remove is a usage error");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "an ambiguous remove is a usage error"
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("user"), "{stderr}");
     assert!(stderr.contains("workspace"), "{stderr}");
-    assert!(out.stdout.is_empty(), "stdout is data, and nothing was removed");
+    assert!(
+        out.stdout.is_empty(),
+        "stdout is data, and nothing was removed"
+    );
 
     // Naming one removes exactly that one.
     let out = run(
@@ -148,7 +171,11 @@ fn remove_across_two_layers_asks_rather_than_guessing() {
             &["remove", "buildgraph", "--from", "workspace"],
         ),
     );
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(home.path().join(".orrery/extensions/buildgraph").exists());
 }
 
@@ -186,7 +213,11 @@ fn a_denied_capability_is_denied_by_default_and_the_install_still_lands() {
             &["install", &format!("./{}", relative(&pkg, work.path()))],
         ),
     );
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(
         home.path()
             .join(".orrery/extensions/buildgraph/orrery.toml")
@@ -194,7 +225,10 @@ fn a_denied_capability_is_denied_by_default_and_the_install_still_lands() {
     );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("--yes"), "{stderr}");
-    assert!(stderr.contains("read"), "the lost capability is named: {stderr}");
+    assert!(
+        stderr.contains("read"),
+        "the lost capability is named: {stderr}"
+    );
 }
 
 #[test]

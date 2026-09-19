@@ -82,11 +82,17 @@ fn json_is_parseable() {
     assert!(!frames.is_empty(), "something was emitted");
     for frame in &frames {
         assert!(
-            frame.get("seq").and_then(serde_json::Value::as_u64).is_some(),
+            frame
+                .get("seq")
+                .and_then(serde_json::Value::as_u64)
+                .is_some(),
             "every frame carries a seq: {frame}"
         );
         assert!(
-            frame.get("type").and_then(serde_json::Value::as_str).is_some(),
+            frame
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .is_some(),
             "every frame carries an event type: {frame}"
         );
     }
