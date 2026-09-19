@@ -73,6 +73,7 @@ fn main() {
         Some(Command::Remove { name, from, user }) => {
             cmd::install::remove(&cli, name, from.or(user.then_some(args::Layer::User)))
         }
+        Some(Command::Registry { command }) => cmd::registry::dispatch(&cli, command),
         Some(Command::Ext { command }) => cmd::ext::dispatch(&cli, command),
         Some(Command::Permissions { command }) => cmd::permissions::dispatch(&cli, command),
         Some(Command::Config { command }) => cmd::config::dispatch(&cli, command),

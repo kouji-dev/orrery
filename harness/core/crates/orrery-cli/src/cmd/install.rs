@@ -24,6 +24,13 @@
 //! broker, which means a session. `orrery install <bare name>` with no index
 //! configured says exactly that, and never falls through to another host.
 //!
+//! The index itself is made by [`crate::cmd::registry`]: `orrery registry
+//! init|add|sign|verify`. Until round 7 it was made by nothing at all, which
+//! made "an admin pins a version set" a sentence about a file nobody here could
+//! produce. `registry add` stages from [`mirror_dir`] - the same directory this
+//! command's fetcher reads - so the hash an admin pins is the hash an install
+//! computes.
+//!
 //! Implementation plan: `harness/docs/plans/15-registry-supply-chain.md`.
 
 use std::io::{IsTerminal, Write};
@@ -66,7 +73,7 @@ pub fn install(
     let state = state_dir(cli);
     let hooks = NoHooks;
     let git = SystemGit;
-    let fetcher = orrery_registry::DirFetcher::new(state.join("registry/mirror"));
+    let fetcher = orrery_registry::DirFetcher::new(mirror_dir(&state));
 
     let installer = Installer {
         layout: layout.clone(),
@@ -202,10 +209,27 @@ fn layout(cli: &Cli) -> Layout {
     Layout::new(user_dir, workspace)
 }
 
-fn state_dir(cli: &Cli) -> PathBuf {
+/// The mirror a package's bytes are staged from.
+///
+/// **One answer**, asked by the installer and by `orrery registry add`. An
+/// admin pinning a hash computed from a directory the installer never reads
+/// would be pinning nothing, and that is exactly the shape of defect this
+/// round is about.
+pub fn mirror_dir(state: &Path) -> PathBuf {
+    state.join("registry/mirror")
+}
+
+pub fn state_dir(cli: &Cli) -> PathBuf {
     cli.state_dir.clone().unwrap_or_else(|| {
         orrery_config::layer::user_dir().unwrap_or_else(|| PathBuf::from(".orrery"))
     })
+}
+
+/// The keys the managed layer distributes, for a command with no managed
+/// registry of its own in hand. `orrery registry verify` checks against the
+/// very keyring an install would.
+pub fn managed_keyring() -> Keyring {
+    keyring(managed_registry().as_ref())
 }
 
 fn managed_registry() -> Option<ManagedRegistry> {
@@ -275,7 +299,7 @@ fn read_index(path: &Path) -> Index {
 /// The one place in this crate that reads a clock: everything under
 /// `orrery-registry` takes the instant as an argument, which is what lets its
 /// tests pin an expiry with a literal.
-fn now() -> Timestamp {
+pub fn now() -> Timestamp {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
@@ -287,7 +311,7 @@ fn now() -> Timestamp {
 /// Written out rather than taken from a date crate, because one conversion in
 /// one direction is not worth a dependency, and `orrery-registry` deliberately
 /// has no clock of its own to borrow.
-fn rfc3339(secs: u64) -> String {
+pub fn rfc3339(secs: u64) -> String {
     let days = secs / 86_400;
     let rest = secs % 86_400;
     let (h, m, s) = (rest / 3600, (rest % 3600) / 60, rest % 60);
@@ -305,6 +329,15 @@ fn rfc3339(secs: u64) -> String {
     let month = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = if month <= 2 { y + 1 } else { y };
     format!("{year:04}-{month:02}-{d:02}T{h:02}:{m:02}:{s:02}Z")
+}
+
+/// That same instant, a number of days on. What `orrery registry init` gives a
+/// fresh index for its validity window, through the one clock this crate has.
+pub fn plus_days(days: u64) -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    rfc3339(secs.saturating_add(days.saturating_mul(86_400)))
 }
 
 #[cfg(test)]

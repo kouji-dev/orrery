@@ -152,6 +152,15 @@ pub enum Command {
         #[arg(long, conflicts_with = "from")]
         user: bool,
     },
+    /// Author a signed registry index: the pin set an organisation enforces.
+    ///
+    /// The other side of `[registry] unpinned = "refuse"`. Offline: the
+    /// packages come from the same mirror directory an install stages from.
+    Registry {
+        /// What to do with an index.
+        #[command(subcommand)]
+        command: RegistryCommand,
+    },
     /// Inspect and manage extensions.
     Ext {
         /// What to do with them.
@@ -310,6 +319,66 @@ pub enum ExtCommand {
         /// The extension directory. Defaults to the current one.
         #[arg(value_name = "PATH")]
         path: Option<std::path::PathBuf>,
+    },
+}
+
+/// `orrery registry ...`
+///
+/// Section 8 phase 8 asks an admin to pin a version set. Until these landed
+/// there was no way to **make** one: the binary could verify a signed index and
+/// could not produce a signed index. Everything here is local; nothing fetches.
+#[derive(Debug, Subcommand)]
+pub enum RegistryCommand {
+    /// Make a signing key and an empty index to fill.
+    Init {
+        /// Where the index goes.
+        #[arg(long, value_name = "PATH")]
+        index: std::path::PathBuf,
+        /// Where the signing key goes. Defaults to `signing-key.toml` beside
+        /// the index. **It is a secret**; the public half is printed.
+        #[arg(long, value_name = "PATH")]
+        key: Option<std::path::PathBuf>,
+        /// How signatures name the key.
+        #[arg(long = "key-id", value_name = "ID", default_value = "managed")]
+        key_id: String,
+        /// When the index stops being accepted, RFC 3339 UTC. Defaults to a
+        /// year out: an index nobody maintains should eventually expire.
+        #[arg(long, value_name = "INSTANT")]
+        expires: Option<String>,
+    },
+    /// Pin one version, by staging it the way an install will.
+    Add {
+        /// The index to extend.
+        #[arg(long, value_name = "PATH")]
+        index: std::path::PathBuf,
+        /// The extension's namespace.
+        #[arg(long, value_name = "ID")]
+        id: String,
+        /// The exact version. Not a range: a range is not a pin.
+        #[arg(long, value_name = "VERSION")]
+        version: String,
+        /// Where the bytes come from: `crates-io:<name>`, `npm:<name>` or
+        /// `url:<url>`. The registry indexes; it does not host.
+        #[arg(long, value_name = "SOURCE")]
+        source: String,
+    },
+    /// Sign every pin and then the document.
+    Sign {
+        /// The index to sign.
+        #[arg(long, value_name = "PATH")]
+        index: std::path::PathBuf,
+        /// The signing key `init` wrote.
+        #[arg(long, value_name = "PATH")]
+        key: std::path::PathBuf,
+    },
+    /// Check an index back, the way an install checks it.
+    Verify {
+        /// The index to check.
+        #[arg(long, value_name = "PATH")]
+        index: std::path::PathBuf,
+        /// The public key, as hex. Without it, the managed layer's.
+        #[arg(long, value_name = "HEX")]
+        key: Option<String>,
     },
 }
 

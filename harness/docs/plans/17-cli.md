@@ -39,6 +39,7 @@ orrery session list | show <id> | rm <id>
 orrery install <source> [--to user|workspace] [--user] [--link] [--yes]
 orrery remove <name> [--from user|workspace]
 orrery ext list | test [path]
+orrery registry init | add | sign | verify   # author the pin set phase 8 enforces
 orrery permissions explain <call>
 orrery config explain <key>
 orrery init [--profile <name>]
@@ -104,7 +105,7 @@ Distinct codes for 3, 4 and 5 because a CI script's response to each is differen
 **Create**
 
 - `harness/core/crates/orrery-cli/{Cargo.toml,src/main.rs}`
-- `harness/core/crates/orrery-cli/src/cmd/{run,serve,attach,replay,session,ext,permissions,config,init,import,eval,ledger}.rs`
+- `harness/core/crates/orrery-cli/src/cmd/{run,serve,attach,replay,session,ext,permissions,config,init,import,eval,ledger,registry}.rs`
 - `harness/core/crates/orrery-cli/src/{args,ui,exit,term}.rs`
 - `harness/core/crates/orrery-cli/tests/{cli,exit_codes,json}.rs`
 
@@ -258,13 +259,13 @@ Files: `src/cmd/{ext,session}.rs`
 Files: `src/cmd/{replay,ledger}.rs`
 
 - [x] **Failing test first.** `replay::renders_a_past_session` — replay into the json renderer and diff against the original event stream. ~~**Not landed… the sqlite backend writes exactly one event per turn.**~~ **The diagnosis was right and was the design.** Verified again before building: the backend really does persist only `turn.settled`, so replaying from `events_since` would draw a run with no text in it. So replay re-encodes the **turn rows** — `SessionStore::turns(branch)` landed with this command — through the same `Publisher` a live turn narrates through, into the same `Hub`. Nothing here builds a kernel or a provider, so `replay` needs no `--provider`, which `replay::replay_needs_no_provider` pins. Plan 08 open question 3 is amended in place to say the same thing. The one accepted loss is delta boundaries: a replayed turn emits one `TEXT_MESSAGE_CONTENT` where the live turn emitted several, so the test compares the two streams with runs of one kind collapsed and everything else exactly.
-- [x] Implement. ~~`ledger` and `telemetry` are `query` frames rendered as tables. **Not landed: the `query` frame still has no handler**, and the audit stream plan 07 writes has no reader.~~ **Half of that was true and the other half was the wrong design.** The reader really was missing and now exists — `orrery_audit::scan` with a `Query` over stream, subject, rule and a tail limit, seven unit tests. But routing it through a `query` **frame** was wrong: reading what a *past* session decided must not need a running kernel to ask, exactly as `session list` must not. So both commands read the file directly, and neither builds a kernel. Two things had to land with them: the CLI now writes an audit stream at all (it was passing `orrery_audit::null()`, so "every decision is logged" was logging into a bin), one file per session under `<state-dir>/audit/`, and the sink buffers until `create` names the session so nothing before that is lost. `ledger` and `telemetry` are the same scan split by `AuditEvent::stream()`. `tests/ledger.rs` runs real fixture turns and reads back the decisions those turns actually made.
+- [x] Implement. ~~`ledger` and `telemetry` are `query` frames rendered as tables. **Not landed: the `query` frame still has no handler**, and the audit stream plan 07 writes has no reader.~~ **Half of that was true and the other half was the wrong design.** The reader really was missing and now exists — `orrery_audit::scan` with a `Query` over stream, subject, rule and a tail limit, seven unit tests. But routing it through a `query` **frame** was wrong: reading what a *past* session decided must not need a running kernel to ask, exactly as `session list` must not. So both commands read the file directly, and neither builds a kernel. Two things had to land with them: the CLI now writes an audit stream at all (it was passing `orrery_audit::null()`, so "every decision is logged" was logging into a bin), one file per session under `<state-dir>/audit/`, and the sink buffers until `create` names the session so nothing before that is lost. `ledger` and `telemetry` are the same scan split by `AuditEvent::stream()`. `tests/ledger.rs` runs real fixture turns and reads back the decisions those turns actually made. **Amended round 7: `ledger` read one stream and there are two decision streams.** `AuditEvent::ExtensionLoad` is `Stream::Load`, `ledger` named `Stream::Audit`, and no command in the binary named `Load` at all — so a run that refused to load an extension wrote the refusal, `ext list` printed it, and the one operator command for "what was decided" said "nothing matched". `Query.stream: Option<Stream>` is now `Query.streams: Streams`, and `Streams::Decisions` asks `Stream::is_decision()`, the single definition of the word; `--stream <load|audit|telemetry>` narrows when **retention** is the question, which is the only thing the file split is about. `ledger::a_refused_load_is_in_the_ledger`.
 
 ### Task 9 · `init`, `import`, `eval`
 
 Files: `src/cmd/{init,import,eval}.rs`
 
-- [x] Thin wrappers over plan 10. ~~**Not landed: there is nothing to wrap.**~~ **Stale for `init` and `import`: plan 10 landed.** `orrery init` writes `<workspace>/.orrery/config.toml` from `orrery_config::import::init`, shorthands expanded so the file says what it does, and **refuses to overwrite** one that is already there. `orrery import --from claude-code|codex` finds the foreign file (workspace first, then the home directory), maps it, and prints the config on **stdout** with every unmapped note on **stderr** — so `orrery import --from codex > .orrery/config.toml` writes a file that parses and nothing is dropped in silence. `tests/init.rs` covers all four paths.
+- [x] Thin wrappers over plan 10. ~~**Not landed: there is nothing to wrap.**~~ **Stale for `init` and `import`: plan 10 landed.** `orrery init` writes `<workspace>/.orrery/config.toml` from `orrery_config::import::init`, shorthands expanded so the file says what it does, and **refuses to overwrite** one that is already there. `orrery import --from claude-code|codex` finds the foreign file (workspace first, then the home directory), maps it, and prints the config on **stdout** with every unmapped note on **stderr** — so `orrery import --from codex > .orrery/config.toml` writes a file that parses and nothing is dropped in silence. `tests/init.rs` covers all four paths. **Amended round 7: with no `--profile` there was nothing to wrap, and it showed.** `orrery init` wrote a 49-byte file whose entire content was a comment with an empty profile name interpolated into it, and then said "review it before you use it" — the first command a new user runs. It now writes a documented starter configuration: the five layers and how to ask which one won, a `[permissions]` table denying `creds`, asking for `write`/`spawn`/`net` and allowing `read`, and a commented profile to copy. The rule texts come from `orrery_config::profile::SHORTHANDS`, so the starter cannot come to hold a rule the parser rejects; when profiles *are* defined and none was named, stderr names them. `init::init_with_no_profile_writes_a_starter_config`.
 - [x] `orrery eval`. ~~**Blocked: `orrery-eval` is still a stub.** … it belongs with plan 16's own landing wave rather than being raced from here.~~ **Neither plan built it, so it was built here.** The estimate — three functions of wiring — held. `run` loads a suite, expands the matrix, binds a `HarnessRunner` per point over one shared store, installs the built-in graders and writes the report to `<state-dir>/eval/<run-id>.json`; `compare` and `replay` read it back by run id or by path. `--format text|json|junit`, and a red suite exits non-zero through `junit::exit_code` so CI and the command cannot disagree. `tests/eval.rs` drives the binary end to end against a committed fixture stream. Ticked in plan 16 as well; the stale `not_implemented("16-eval-runner.md")` is gone from the tree.
 
 ### Task 10 · Terminal hygiene
@@ -331,6 +332,15 @@ caps and every routing rule were green library tests a person could not reach.
   drift from the loader, and `ext test` starts the guest for any runtime this
   build hosts. `ext.rs`, three tests driving install-then-list; a native
   extension on disk now says `skipped` and why.
+  **Amended round 7: the one case left.** `ext list` still printed a bare `ok`
+  for an rpc extension whose *guest* failed at `ext/load` — the run path logged
+  `Failed { stage: Activate }` and the turn answered no-such-tool for both its
+  tools — because a listing checks the manifest and `skip_for` and never boots
+  anything. The status word is now derived from a `Checked` value saying how far
+  the caller looked: `ext list` can only pass `ManifestOnly`, which prints
+  `ok (manifest only; guest not started)` and names the command that does start
+  it; only a caller holding a real `LoadOutcome` can print an unqualified `ok`.
+  `ext::list_does_not_claim_a_guest_it_never_started`.
 - **Three things the binary said that were not so, fixed 2026-09-19**, each found
   by driving it rather than by a test: `install --yes` printed "1 capability
   request(s) were denied by default; pass --yes to grant them" **after** `--yes`
@@ -348,6 +358,14 @@ caps and every routing rule were green library tests a person could not reach.
   that had happened. The kernel now writes a failed `tool.call` line before it
   settles the call (`ledger::a_tool_name_that_resolved_to_nothing_is_still_logged`).
   The exit code is deliberately unchanged.
+- **`orrery registry`, added round 7: the admin could not make what the admin is
+  told to pin.** Phase 8 says an admin pins a version set; `install.rs` says
+  fetching a remote index is not implemented, and nothing in the binary could
+  create, sign or publish a local one. `registry init|add|sign|verify` is that
+  missing half, offline, staging from the same mirror an install fetches from.
+  `tests/registry.rs` drives the whole workflow and then installs from what the
+  binary produced. Publishing an index is still not shipped, and plan 15 says so
+  in its Architecture section rather than implying a workflow that does not run.
 - **Every command in `--help` answers for itself.** As of 2026-09-19 nothing in
   the tree exits 2 saying "not implemented in this build";
   `cli::no_subcommand_is_a_stub` reads the command list out of `--help` and

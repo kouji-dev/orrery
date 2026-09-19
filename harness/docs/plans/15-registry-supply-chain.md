@@ -46,6 +46,51 @@ From [`00-overview.md`](00-overview.md):
 
 `remove` finds the extension across layers and, if it is installed at more than one, names them and asks which rather than guessing.
 
+### Authoring an index — added 2026-09-19, round 7
+
+**The plan described a workflow whose first step did not exist.** Everything
+below "an admin pins a version set" assumed a signed index had somehow been
+produced: `orrery install` states that fetching a remote index is not
+implemented, and no command in the binary could **create, sign or publish** a
+local one. So phase 8 was reachable only by handing the admin a file made by a
+tool that does not ship here. The tests proved the client; nothing proved the
+workflow, because the workflow had a missing half.
+
+Four verbs now close it, `orrery-cli/src/cmd/registry.rs` over
+`orrery-registry/src/author.rs`:
+
+```text
+orrery registry init   --index <path> [--key <path>] [--key-id <id>] [--expires <instant>]
+orrery registry add    --index <path> --id <id> --version <v> --source <crates-io:|npm:|url:>
+orrery registry sign   --index <path> --key <path>
+orrery registry verify --index <path> [--key <hex>]
+```
+
+- **Offline.** `add` stages the package out of the *same mirror directory the
+  installer fetches from* (`cmd::install::mirror_dir`, one function) through the
+  same `PackageFetcher::stage` + `tree_sha256` pair `fetch_and_verify` uses. A
+  hash the install would never compute is not expressible.
+- **`requires` is read out of the staged manifest**, not typed: the index's
+  `requires` exists to be compared against that manifest, and an admin typing it
+  by hand would be pinning their own transcription.
+- **One rendering, one signature.** `author::sign_index` returns the bytes it
+  signed, and `author::write_signed` writes those bytes plus the `.sig`.
+  `author::signature_path` is the single answer to where the `.sig` lives, asked
+  by the writer and by `cmd::install`'s reader.
+- **The private key is a file, and says so.** `init` writes the seed with a
+  header saying it is a secret, and prints the public half for `managed.toml`.
+  There is no key store, no agent and no passphrase — stated here rather than
+  implied away.
+
+**What is still not shipped**, and no line in this plan should imply otherwise:
+publishing. There is no index *host*, no `orrery registry publish`, and
+`orrery install <bare name>` still resolves only a **local** index file —
+`--index <path>`, or a `[registry] index` in the managed layer that names a
+path. Distributing the index and the mirror is the organisation's own job
+(a share, a checkout, an image layer). Fetching an index over the network
+remains out of this build, for the reason `cmd/install.rs` gives: a `net` call
+goes through the broker, which means a session.
+
 ### The security consequence, stated rather than discovered later
 
 The registry exists because a pin list is what makes a supply chain auditable. **Five of the seven source forms above bypass it.** That is a deliberate ergonomic choice, and it is only safe because the boundary is explicit:
@@ -136,7 +181,11 @@ With `unpinned = "refuse"`, anything not in the index is `Skipped { reason: Unsi
 **Create**
 
 - `harness/core/crates/orrery-registry/src/{lib,index,verify,fetch,pin,diff,error}.rs`
-- `harness/core/crates/orrery-registry/tests/{verify,pin,diff,tamper}.rs`
+  — plus `author.rs`, added round 7: making an index, not only reading one.
+- `harness/core/crates/orrery-registry/tests/{verify,pin,diff,tamper,author}.rs`
+- `harness/core/crates/orrery-cli/src/cmd/registry.rs` and
+  `harness/core/crates/orrery-cli/tests/registry.rs` — the four admin verbs, and
+  the phase-8 workflow driven end to end through the built binary.
 - `harness/core/crates/orrery-registry/tests/fixtures/` — a signed index, a tampered index, key pairs
 
 ---
@@ -258,6 +307,16 @@ This is the task that keeps the ergonomics honest.
 - [x] An admin pins a version set; unpinned extensions refuse to load and say why.
   *(`pin::unpinned_refuses_under_managed`, plus `pin::version_set_is_exact` for
   the pin being a version rather than a range.)*
+  **Amended round 7: an admin can now MAKE the version set.** Until this round
+  the sentence assumed a signed index that no part of the product could produce:
+  the client verified one, and nothing created, signed or published one.
+  `orrery registry init|add|sign|verify` is the missing half, and
+  `orrery-cli/tests/registry.rs::an_admin_can_produce_the_pin_set_they_are_meant_to_pin`
+  drives the whole of it through the built binary — key, index, pin, signature,
+  check-back, then a local path refused and the pinned version installed and
+  recorded "pinned by key managed". What is **not** shipped is publishing: no
+  index host, no network fetch, `--index <path>` or a managed `[registry] index`
+  naming a path. See "Authoring an index" in Architecture.
   **Amended round 6: this was true of install and not of load.** An extension
   installed *before* an admin set `unpinned = "refuse"` went on loading
   afterwards, because `ManagedRegistry::read` was reached from
@@ -283,6 +342,13 @@ This is the task that keeps the ergonomics honest.
   `orrery_config::discover` from a **different** workspace.)*
 
 ## State
+
+**Round 7, 2026-09-19: the authoring half landed.** `orrery registry
+init|add|sign|verify` (`src/author.rs`, `orrery-cli/src/cmd/registry.rs`) makes
+the signed index this crate could previously only read, offline, from the mirror
+the installer stages from. Phase 8 is MET as a workflow rather than as a client.
+Publishing is still not shipped, and the Architecture section says so in the one
+place somebody would look.
 
 **All ten tasks are done, and `orrery install` / `orrery remove` are in the
 command tree (plan 17 task 7).** `cargo test -p orrery-registry` is 42 tests

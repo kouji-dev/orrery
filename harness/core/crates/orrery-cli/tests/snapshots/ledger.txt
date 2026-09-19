@@ -29,8 +29,13 @@ Options:
       --json
           Shorthand for `--ui json`
 
-  -n, --limit <N>
-          Show at most this many, counted from the end
+      --stream <STREAM>
+          Only one stream. Without it, every stream that carries a decision: what was loaded and what was refused as well as what was allowed
+
+          Possible values:
+          - load:      What loaded, what degraded and what was refused
+          - audit:     Decisions, calls and consent. The evidence stream
+          - telemetry: Counts and timings. Also `orrery telemetry`
 
       --consent <MODE>
           Override the profile's consent mode, within the managed clamp
@@ -39,6 +44,9 @@ Options:
           - always: Ask every time
           - once:   Ask once per matching call, then remember for the session
           - never:  Never ask: deny instead, so CI cannot hang
+
+  -n, --limit <N>
+          Show at most this many, counted from the end
 
   -v...
           Log level on stderr. Never mixed into `--json` stdout. Repeatable

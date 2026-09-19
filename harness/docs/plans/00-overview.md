@@ -388,7 +388,7 @@ Also flagged, not yet decided:
 | 5 | 10 | Two profiles produce measurably different agents from one binary. |
 | 6 | 11, 12 | A verify loop terminates on its own cap, budget enforced by the kernel. |
 | 7 | 13 | An existing `SKILL.md` and an existing MCP server both work unmodified. **Amended 2026-09-19: true of a turn now, not only of an inspection command.** `orrery mcp tools fixture` did a real handshake and listed `mcp.fixture.echo` while a turn calling it answered `no-such-tool`, because `orrery-cli` depended on `orrery-mcp` and `orrery-skills` and `orrery-harness` — which builds what a turn runs — depended on neither. The run path now registers declared servers as ordinary `mcp.<server>` extensions in the ordinary registry behind the ordinary gate, connect-on-need, with `list_changed` growth refused **and recorded**; discovered `SKILL.md`s reach section 4 of the same turn's system prompt. Proof drives the binary: `orrery-cli/tests/mcp_turn.rs`. |
-| 8 | 15 | An admin pins a version set and unpinned extensions refuse to load. |
+| 8 | 15 | An admin pins a version set and unpinned extensions refuse to load. **Both halves, since round 7: `orrery registry init\|add\|sign\|verify` makes the pin set, and managed `unpinned = "refuse"` enforces it. Publishing an index over a network is out of this build.** |
 | 9 | 16 | One suite runs against two profiles and one competing harness, same graders, reproducible cost numbers. |
 | 10 | 06 (python/process) | An existing internal service works as an extension with no rewrite. |
 

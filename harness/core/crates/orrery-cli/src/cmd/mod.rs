@@ -13,6 +13,7 @@ pub mod layers;
 pub mod ledger;
 pub mod mcp;
 pub mod permissions;
+pub mod registry;
 pub mod replay;
 pub mod run;
 pub mod serve;

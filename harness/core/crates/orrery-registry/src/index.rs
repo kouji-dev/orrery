@@ -118,6 +118,45 @@ pub enum EntrySource {
     },
 }
 
+impl std::str::FromStr for EntrySource {
+    type Err = RegistryError;
+
+    /// The same spelling [`EntrySource`] prints, so `orrery registry add
+    /// --source crates-io:x` and what the index shows are one string.
+    ///
+    /// Deliberately **not** the `orrery install` source grammar: that one has
+    /// seven forms and five of them bypass the index entirely. What can go
+    /// *into* an index is the three the registry can pin.
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let bad = |message: &str| RegistryError::SourceSyntax {
+            input: text.to_owned(),
+            message: message.to_owned(),
+        };
+        let (kind, rest) = text.split_once(':').ok_or_else(|| {
+            bad("expected `crates-io:<name>`, `npm:<name>` or `url:<url>`")
+        })?;
+        if rest.is_empty() {
+            return Err(bad("names nothing after the `:`"));
+        }
+        Ok(match kind {
+            "crates-io" => EntrySource::CratesIo {
+                name: rest.to_owned(),
+            },
+            "npm" => EntrySource::Npm {
+                name: rest.to_owned(),
+            },
+            "url" => EntrySource::Url {
+                url: rest.to_owned(),
+            },
+            other => {
+                return Err(bad(&format!(
+                    "`{other}` is not something an index can pin; the registry indexes crates-io, npm and url"
+                )));
+            }
+        })
+    }
+}
+
 impl fmt::Display for EntrySource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

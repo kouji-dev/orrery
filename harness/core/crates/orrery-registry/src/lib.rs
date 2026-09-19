@@ -37,6 +37,15 @@
 //! `process` runtimes do not. Saying so is the threat model; implying otherwise
 //! would be the bug.
 //!
+//! # The admin can make the index, not only read one
+//!
+//! [`author`] is the other half, added 2026-09-19: an index is created, entries
+//! are added by staging the package the way an install will, the document is
+//! signed with the ed25519 keys this crate already verifies, and the result is
+//! checked back. Without it "an admin pins a version set" meant "somebody hands
+//! the admin a file made by a tool that does not exist here". Offline, like
+//! everything else in this crate.
+//!
 //! # Nothing executes before its signature is verified
 //!
 //! Fetching a crate is a download, not a `cargo install`: no build script and no
@@ -46,6 +55,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+pub mod author;
 pub mod diff;
 pub mod error;
 pub mod fetch;
@@ -55,10 +65,16 @@ pub mod pin;
 pub mod source;
 pub mod verify;
 
+pub use author::{
+    Signed, entry_from_fetch, generate_seed, new_index, sign_index, signature_path, write_signed,
+};
 pub use diff::{Approval, Decision, GrantDiff, GrantRow, RowState};
 pub use error::RegistryError;
 pub use fetch::{DirFetcher, NoHooks, PackageFetcher, PackageHooks, Verified, tree_sha256};
 pub use index::{Entry, EntrySource, Index, SCHEMA, Timestamp};
+// Re-exported so a caller can spell a pinned version without taking `semver`
+// itself: an exact version is part of this crate's vocabulary.
+pub use semver::Version;
 pub use install::{InstallOptions, InstallRecord, Installer, Layout, Target, remove};
 pub use pin::{
     ManagedRegistry, PinDecision, RECEIPTS_DIR, SupplyChainLedger, SupplyChainRecord, Unpinned,

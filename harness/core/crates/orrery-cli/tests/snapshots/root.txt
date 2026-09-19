@@ -10,6 +10,7 @@ Commands:
   session      Inspect stored sessions
   install      Install an extension. A bare name is the signed registry
   remove       Remove an installed extension
+  registry     Author a signed registry index: the pin set an organisation enforces
   ext          Inspect and manage extensions
   permissions  Explain a permission decision
   config       Explain resolved configuration

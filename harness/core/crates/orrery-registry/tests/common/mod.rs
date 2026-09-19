@@ -143,11 +143,15 @@ pub fn index_of(entries: Vec<Entry>) -> Index {
 }
 
 /// The index text, and the detached signature over it.
+///
+/// Delegates to [`orrery_registry::author::sign_index`] rather than rendering
+/// and signing again: a fixture that signs a different rendering from the one
+/// the product signs is a fixture that can pass while the product is broken.
 #[must_use]
 pub fn sign_index(signer: &SigningKey, index: &Index) -> (String, String) {
-    let text = index.to_toml().expect("an index that serialises");
-    let sig = signer.sign(text.as_bytes());
-    (text, sig)
+    let mut index = index.clone();
+    let signed = orrery_registry::author::sign_index(&mut index, signer).expect("it signs");
+    (signed.text, signed.signature)
 }
 
 /// A crates.io-shaped mirror directory: `<root>/orrery-ext-<id>/` is the
