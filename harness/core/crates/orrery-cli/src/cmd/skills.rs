@@ -145,7 +145,18 @@ fn show(cli: &Cli, name: &str) -> ! {
 /// to, which is the whole reason a skill here is safer than a skill anywhere
 /// else.
 fn discover(cli: &Cli) -> orrery_skills::discover::Found {
-    let resolved = layers::resolve(cli);
+    discover_in(&layers::resolve(cli))
+}
+
+/// The same, off layers somebody has already resolved.
+///
+/// `cmd::setup` calls this so the skills a turn is given are the skills this
+/// command prints. They were two different things: `orrery skills list` walked
+/// the layer roots and `KernelConfig::skills` stayed empty, so a skill was
+/// documentation the model never saw.
+pub(crate) fn discover_in(
+    resolved: &orrery_config::ResolvedConfig,
+) -> orrery_skills::discover::Found {
     let roots: Vec<LayerRoot> = resolved
         .layers
         .iter()
@@ -156,7 +167,7 @@ fn discover(cli: &Cli) -> orrery_skills::discover::Found {
             })
         })
         .collect();
-    orrery_skills::discover(&roots, &settings(&resolved))
+    orrery_skills::discover(&roots, &settings(resolved))
 }
 
 /// What configuration says about each skill, by name.

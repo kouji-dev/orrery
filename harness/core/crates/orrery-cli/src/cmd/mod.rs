@@ -167,6 +167,22 @@ pub fn setup(cli: &Cli) -> Setup {
         // What `orrery ext list` prints and what a turn can actually call have
         // to be the same set, or installing an extension is theatre.
         extensions: orrery_harness::extension_sources(&resolved),
+        // Same argument again, for plan 13: `orrery mcp tools <server>` did a
+        // real handshake and listed real tools, and a turn calling one of them
+        // got `no-such-tool` - because `orrery-cli` depended on `orrery-mcp`
+        // and `orrery-harness` did not, so the run path never saw a server.
+        // One list, read here, used by both.
+        mcp_servers: mcp::declared_in(&resolved),
+        // And for the other half of plan 13. `for_agent` is not "list then
+        // refuse": a skill scoped to another agent is **absent** from this
+        // one's context, which is the same answer `orrery skills list --agent`
+        // gives.
+        skills: skills::discover_in(&resolved)
+            .skills
+            .for_agent("main")
+            .into_iter()
+            .cloned()
+            .collect(),
         // Same argument, for `[permissions]`: what `permissions explain` says
         // and what a turn is allowed to do have to be the one rule set, or a
         // denial the operator was shown is a denial nothing enforces.

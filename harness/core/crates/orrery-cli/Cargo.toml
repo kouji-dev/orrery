@@ -16,6 +16,18 @@ publish = false
 name = "orrery"
 path = "src/main.rs"
 
+# The committed, spec-conformant MCP server `orrery-mcp` tests its client
+# against, built beside this crate's test binaries so `tests/mcp_turn.rs` can
+# declare a **real** server and watch a **real** turn call one of its tools.
+# The same file, not a copy: two fixture servers would be two protocols.
+# `orrery-mcp` ships it as a `[[bin]]`, and cargo does not build a dependency's
+# binaries, so an example is how a test in this crate gets one.
+[[example]]
+name = "mcp_fixture_server"
+path = "../orrery-mcp/tests/fixtures/server/main.rs"
+test = false
+doc = false
+
 # The two providers that link a TLS stack. **Off by default, and off in CI**:
 # the default build must reach no network. They are passthroughs rather than
 # absent because without them the binary had no way at all to turn either one
@@ -27,6 +39,12 @@ path = "src/main.rs"
 [features]
 default = []
 anthropic = ["orrery-harness/anthropic"]
+# Phase 4's three ported example extensions, compiled in rather than discovered
+# on disk (a `native` extension is linked, not loaded). Off by default: a
+# shipped binary has no business carrying demos.
+#
+#     cargo build -p orrery-cli --features example-extensions
+example-extensions = ["orrery-harness/example-extensions"]
 openai-compat = ["orrery-harness/openai-compat"]
 
 [dependencies]

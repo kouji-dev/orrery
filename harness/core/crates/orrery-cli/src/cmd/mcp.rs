@@ -143,7 +143,16 @@ fn tools(cli: &Cli, server: &str) -> ! {
 /// because asking what is declared must work with no model in sight — the same
 /// rule `permissions explain` and `config explain` follow.
 fn declared(cli: &Cli) -> Vec<ServerSpec> {
-    let resolved = layers::resolve(cli);
+    declared_in(&layers::resolve(cli))
+}
+
+/// The same, off layers somebody has already resolved.
+///
+/// `cmd::setup` calls this: what a turn can reach and what `orrery mcp list`
+/// prints have to be the one set, read once, or the listing is theatre - which
+/// is exactly what it was, because `orrery-harness` depended on `orrery-mcp`
+/// for nothing and the run path had never heard of any of these servers.
+pub(crate) fn declared_in(resolved: &orrery_config::ResolvedConfig) -> Vec<ServerSpec> {
     let mut out = Vec::new();
     let mut seen = BTreeMap::new();
 

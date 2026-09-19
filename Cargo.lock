@@ -5680,6 +5680,7 @@ dependencies = [
  "orrery-host-rpc",
  "orrery-host-wasm",
  "orrery-kernel",
+ "orrery-mcp",
  "orrery-memory",
  "orrery-orchestrator",
  "orrery-policy",
@@ -5688,15 +5689,19 @@ dependencies = [
  "orrery-registry",
  "orrery-router",
  "orrery-session",
+ "orrery-skills",
  "orrery-surface",
  "orrery-tools",
  "parking_lot",
+ "patch-review",
+ "release-train",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
+ "workspace-census",
 ]
 
 [[package]]

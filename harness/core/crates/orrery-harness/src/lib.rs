@@ -34,8 +34,10 @@ pub mod config;
 pub mod features;
 #[cfg(feature = "fixture-provider")]
 pub mod fixture;
+pub mod mcp;
 pub mod memory;
 pub mod plan;
+pub mod skills;
 pub mod steps;
 pub mod surfaces;
 

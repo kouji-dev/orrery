@@ -31,6 +31,17 @@ default = [
   "memory-file", "rpc-extensions", "wasm-extensions", "graders",
   "git-tools", "lsp-tools",
 ]
+# The three ported example extensions (phase 4). **Off by default**: they are
+# demos, and a shipped binary has no business carrying them. On, they are
+# registered through the same door the builtin tools go through, so `orrery ext
+# list` lists them and a real turn can call them - which is the only way the
+# phase-4 criterion ("three ported extensions render with no drawing code of
+# their own") can be exercised through the binary at all. Compiled in rather
+# than discovered on disk, because `features::host_for` returns `None` for
+# `native` and that answer is correct: a native extension is linked, not loaded.
+example-extensions = [
+  "dep:workspace-census", "dep:patch-review", "dep:release-train",
+]
 builtin-tools = ["dep:orrery-ext-tools-builtin"]
 # Read-only git verbs over gitoxide, and a managed language-server client.
 # Ordinary extensions - manifest, ledger entry, deny rule - which is the point.
@@ -88,6 +99,13 @@ orrery-broker = { workspace = true }
 # The memory half of plan 12. Named here and nowhere else in `core/`: the kernel
 # owns a typed hole, this crate is the one allowed to fill it.
 orrery-memory = { workspace = true }
+# Plan 13's two crates. Named here because the RUN PATH is what phase 7 is
+# about: `orrery-cli` depended on both and `orrery-harness` on neither, so an
+# inspection command could list an MCP tool that no turn could call and a
+# discovered `SKILL.md` reached no system prompt. The crates were green; the
+# product was broken. Same defect class as the inert `[permissions]`.
+orrery-mcp = { path = "../orrery-mcp" }
+orrery-skills = { path = "../orrery-skills" }
 # The grader trait, so `features::graders` has a return type that does not
 # depend on the extension being compiled in.
 orrery-grader = { workspace = true }
@@ -133,6 +151,11 @@ orrery-ext-graders ={ path = "../../../extensions/crates/orrery-ext-graders", op
 orrery-ext-views-default = { path = "../../../extensions/crates/orrery-ext-views-default", optional = true }
 orrery-ext-agents-default = { path = "../../../extensions/crates/orrery-ext-agents-default", optional = true }
 orrery-ext-memory-file = { path = "../../../extensions/crates/orrery-ext-memory-file", optional = true }
+
+# Phase 4's three ported examples, behind `example-extensions`.
+workspace-census = { path = "../../../extensions/examples/workspace-census", optional = true }
+patch-review = { path = "../../../extensions/examples/patch-review", optional = true }
+release-train = { path = "../../../extensions/examples/release-train", optional = true }
 
 # The other extension runtimes. Real dependencies, on by default: a build that
 # cannot start a node or python extension is not a harness, it is a demo, and

@@ -531,6 +531,14 @@ pub struct Setup {
     pub routing_toml: Option<String>,
     /// The extensions discovery found, beyond the compiled-in set.
     pub extensions: Vec<orrery_harness::ExtensionSource>,
+    /// The MCP servers configuration declares.
+    ///
+    /// The same list `orrery mcp list` prints, read once in `cmd::setup`. A
+    /// server an inspection command can hand-shake with and a turn cannot call
+    /// is the phase-7 defect in one sentence.
+    pub mcp_servers: Vec<orrery_mcp::ServerSpec>,
+    /// The skills the discovery pass found, scoped to the agent that will run.
+    pub skills: Vec<orrery_skills::SkillRef>,
     /// The permission rules the layers on disk resolved to, profile shorthands
     /// included.
     ///
@@ -608,6 +616,12 @@ impl Session {
         config.audit = audit;
         config.kernel = setup.kernel.clone();
         config.extensions = setup.extensions.clone();
+        // Plan 13 on the run path: the declared servers' tools go into the same
+        // registry, behind the same gate, and the discovered `SKILL.md`s into
+        // the same system prompt. Both were reachable only from an inspection
+        // command before this line existed.
+        config.mcp_servers = setup.mcp_servers.clone();
+        config.skills = setup.skills.clone();
         // The rules `orrery permissions explain` prints, handed to the engine
         // every tool call is checked against. One rule set, two readers.
         config.policy = Some(setup.policy.clone());

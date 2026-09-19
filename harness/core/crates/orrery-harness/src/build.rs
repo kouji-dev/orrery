@@ -225,6 +225,19 @@ pub struct ResolvedConfig {
     /// Empty is the honest default for a caller that built this by hand; a
     /// caller that resolved config gets whatever the layers in force declare.
     pub extensions: Vec<ExtensionSource>,
+    /// The MCP servers configuration declares.
+    ///
+    /// Here rather than only in `orrery mcp list` because phase 7's criterion
+    /// is about a **turn**: `orrery-cli` depended on `orrery-mcp` and this
+    /// crate depended on neither it nor `orrery-skills`, so the inspection
+    /// command performed a real handshake and the run path had never heard of
+    /// the server. See [`crate::mcp`].
+    pub mcp_servers: Vec<orrery_mcp::ServerSpec>,
+    /// The skills discovery found, already scoped to the agent that will run.
+    ///
+    /// Rendered into the system prompt at assemble time: `KernelConfig::skills`
+    /// has existed since plan 05 and nothing filled it. See [`crate::skills`].
+    pub skills: Vec<orrery_skills::SkillRef>,
     /// The permission rules, already resolved and compiled.
     ///
     /// `None` takes the workspace default ([`DEFAULT_RULES`]): read, write and
@@ -290,6 +303,8 @@ impl ResolvedConfig {
             provider,
             store,
             extensions: extension_sources(resolved),
+            mcp_servers: Vec::new(),
+            skills: Vec::new(),
             policy: None,
             routing_toml: None,
             surfaces: None,
@@ -310,6 +325,8 @@ impl ResolvedConfig {
             provider: ProviderChoice::Fixture { passes },
             store: StoreChoice::Sqlite,
             extensions: Vec::new(),
+            mcp_servers: Vec::new(),
+            skills: Vec::new(),
             policy: None,
             routing_toml: None,
             surfaces: None,
@@ -474,8 +491,31 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
     let mut native = NativeRegistry::new();
     crate::features::register_native(&mut native);
     let host = Arc::new(NativeHost::new(native));
-    let mut registry =
-        Registry::with_host(table.clone()).with_policy(Arc::new(EngineGate::new(engine.clone())));
+
+    // 5a · The MCP servers configuration declares. Discovery starts nothing;
+    //      what it builds is the host an `mcp.<server>` reference is routed to,
+    //      which has to exist before the registry does because a registry has
+    //      exactly one host. Everything else about an MCP tool - the namespace,
+    //      the policy gate, the audit line - is the ordinary path.
+    let mcp = if config.mcp_servers.is_empty() {
+        None
+    } else {
+        let watch = Arc::new(orrery_mcp::ListChangedWatch::new());
+        let servers = Arc::new(
+            orrery_mcp::Servers::discover(config.mcp_servers.clone())
+                .with_handler(watch.clone()),
+        );
+        Some((servers, watch))
+    };
+    let tool_host: Arc<dyn orrery_tools::ToolHost> = match &mcp {
+        Some((servers, _)) => Arc::new(crate::mcp::RoutingHost::new(
+            table.clone(),
+            Arc::new(orrery_mcp::McpHost::new(servers.clone())),
+        )),
+        None => table.clone(),
+    };
+    let gate = Arc::new(EngineGate::new(engine.clone()));
+    let mut registry = Registry::with_host(tool_host).with_policy(gate.clone());
     for manifest in host.manifests() {
         let ext = manifest.name.clone();
         let outcome = table
@@ -551,6 +591,18 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
                 "an installed extension is skipped"
             );
             table.ledger().record(skip.outcome(&ext));
+            // ...and into the stream, not only the in-memory ledger. A refusal
+            // to load is a decision, and section 8 phase 3 says every decision
+            // is logged: a fresh run under `unpinned = "refuse"` left
+            // `audit/*.jsonl` holding two `model.request` lines and nothing
+            // about the extension it had just refused, so `orrery ledger` was
+            // empty about the one thing that had happened.
+            config.audit.append(orrery_audit::AuditEvent::ExtensionLoad {
+                ext: ext.clone(),
+                status: "skipped".to_owned(),
+                contributions: Vec::new(),
+                problems: vec![skip.why.clone()],
+            });
             continue;
         }
 
@@ -586,6 +638,28 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
         }
     }
 
+    // 5c · What each declared MCP server offers, in the same registry behind the
+    //      same gate. This is the step whose absence made phase 7 PARTIAL: the
+    //      tools were listed by an inspection command and no turn could reach
+    //      one, because nothing ever put them in a registry a turn dispatches
+    //      through.
+    if let Some((servers, watch)) = &mcp {
+        let admitted = crate::mcp::install(
+            &mut registry,
+            servers,
+            &Subject::Agent,
+            gate.as_ref(),
+            &config.audit,
+        )
+        .await;
+        crate::mcp::watch_for_growth(
+            servers.clone(),
+            watch.clone(),
+            config.audit.clone(),
+            admitted,
+        );
+    }
+
     // 6 · The router. Declared rules, or none at all: an empty set is not a
     //     router that refuses, it is one that decides on its own ladder, so a
     //     workspace with no `[[route]]` list behaves exactly as it did before
@@ -602,15 +676,17 @@ pub(crate) async fn assemble(config: &ResolvedConfig) -> Result<Assembled, Build
     })
     .with_audit(config.audit.clone());
 
-    // 7 · The provider, and the kernel over all of it.
+    // 7 · The provider, and the kernel over all of it. The skills discovery
+    //     found are rendered into section 4 of the system prompt here, which is
+    //     the only place that can do it: `KernelConfig` is taken by value and
+    //     the kernel is built once.
     let provider = provider_for(&config.provider)?;
     let registry = Arc::new(registry);
-    let kernel = Kernel::new(
-        store.clone(),
-        provider,
-        registry.clone(),
-        config.kernel.clone(),
-    )
+    let mut kernel_config = config.kernel.clone();
+    kernel_config
+        .skills
+        .extend(crate::skills::render(&config.skills));
+    let kernel = Kernel::new(store.clone(), provider, registry.clone(), kernel_config)
     .with_audit(config.audit.clone())
     .with_revoker(LedgerRevoker::new(engine.ledger().clone()));
 
