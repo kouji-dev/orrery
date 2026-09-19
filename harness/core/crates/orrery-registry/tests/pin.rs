@@ -85,7 +85,7 @@ fn warn_mode_loads_with_a_ledger_warning() {
 #[test]
 fn version_set_is_exact() {
     // A pinned 1.2.0 refuses 1.2.1: a pin is a version, not a range.
-    let fixture = common::Fixture::new();
+    let mut fixture = common::Fixture::new();
     fixture.publish("buildgraph", "1.2.0", "read = [\"./**\"]", &["read(./**)"]);
     let asked = Source::from_str("buildgraph@1.2.1").unwrap();
     let err = resolve_entry(&fixture.index, &asked, common::INDEX_URL).unwrap_err();
@@ -97,7 +97,7 @@ fn version_set_is_exact() {
 
 #[test]
 fn non_registry_source_is_recorded_unpinned() {
-    let fixture = common::Fixture::new();
+    let mut fixture = common::Fixture::new();
     let pkg = fixture.publish("signed", "1.0.0", "read = [\"./**\"]", &["read(./**)"]);
     let loose = common::write_package(
         &fixture.tmp.path().join("loose"),
@@ -180,7 +180,7 @@ fn managed_refuse_blocks_every_non_registry_source() {
 
 #[test]
 fn warn_mode_installs_loudly() {
-    let fixture = common::Fixture::new();
+    let mut fixture = common::Fixture::new();
     fixture.managed("warn");
     let loose = common::write_package(
         &fixture.tmp.path().join("loose"),
